@@ -2,6 +2,7 @@
 
 ## Requisitos previos
 - Node.js 18+ instalado
+- PostgreSQL instalado y corriendo (configura la conexión en `backend/.env`)
 - **Una sola terminal** (todo se maneja desde la raíz)
 
 ---
@@ -41,12 +42,11 @@ Abre **http://localhost:5173** en tu navegador. ¡Listo!
 Proyecto_FitLoyalty/
 ├── backend/
 │   ├── src/
-│   │   ├── db/         → base de datos SQLite + seed
+│   │   ├── db/         → conexión PostgreSQL + seed
 │   │   ├── middleware/ → autenticación JWT
 │   │   ├── routes/     → auth.js (login, register, me, logout)
 │   │   └── index.js    → servidor Express
-│   ├── data/           → fitloyalty.db (se crea al correr seed)
-│   ├── .env            → variables de entorno
+│   ├── .env            → variables de entorno (conexión a PostgreSQL)
 │   └── package.json
 └── frontend/
     ├── src/
