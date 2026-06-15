@@ -69,6 +69,33 @@
 }
 .dash-header__logout:hover { border-color: var(--primary); color: var(--primary); }
 
+/* ── Navegación entre secciones ──────────────────────────────────────────── */
+.dash-nav {
+  display: flex;
+  gap: 8px;
+  padding: 0 28px;
+  background: var(--white);
+  border-bottom: 1px solid var(--border);
+  max-width: 100%;
+  overflow-x: auto;
+}
+.dash-nav__link {
+  padding: 12px 14px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+}
+.dash-nav__link:hover { color: var(--secondary); text-decoration: none; }
+.dash-nav__link--active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+}
+
+/* Permite scroll horizontal en tablas anchas */
+.dash-table-scroll { overflow-x: auto; }
+
 /* ── Contenido ───────────────────────────────────────────────────────────── */
 .dash-main {
   max-width: 960px;

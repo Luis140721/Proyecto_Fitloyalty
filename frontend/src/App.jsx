@@ -5,7 +5,8 @@ import LoginPage          from './pages/LoginPage';
 import RegisterPage       from './pages/RegisterPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ResetPasswordPage  from './pages/ResetPasswordPage';
-import DashboardUsuario   from './pages/DashboardUsuario';
+import DashboardUsuario      from './pages/DashboardUsuario';
+import VistaMiembrosActivos  from './pages/VistaMiembrosActivos';
 
 // ─── Dashboards placeholder ─────────────────────────────────────────────────
 // Cada uno será desarrollado en su propia sesión
@@ -81,6 +82,11 @@ export default function App() {
           <Route path="/dashboard/member" element={
             <ProtectedRoute roles={['admin', 'receptionist', 'member']}>
               <DashboardUsuario />
+            </ProtectedRoute>
+          }/>
+          <Route path="/dashboard/vista-miembros" element={
+            <ProtectedRoute roles={['admin', 'receptionist', 'member']}>
+              <VistaMiembrosActivos />
             </ProtectedRoute>
           }/>
 

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth, api } from '../context/AuthContext';
 import '../styles/dashboard.css';
 
@@ -52,6 +53,12 @@ export default function DashboardUsuario() {
           <button className="dash-header__logout" onClick={logout}>Cerrar sesión</button>
         </div>
       </header>
+
+      {/* Navegación entre secciones */}
+      <nav className="dash-nav">
+        <Link to="/dashboard/receptionist" className="dash-nav__link dash-nav__link--active">Historial de asistencia</Link>
+        <Link to="/dashboard/vista-miembros" className="dash-nav__link">Miembros activos (Vista SQL)</Link>
+      </nav>
 
       {/* Contenido */}
       <main className="dash-main">
