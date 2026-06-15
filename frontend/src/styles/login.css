@@ -133,6 +133,17 @@
   color: var(--error);
   border: 1px solid #fecaca;
 }
+.login-alert--success {
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
+}
+.login-alert--success a {
+  color: #047857;
+  font-weight: 600;
+  text-decoration: underline;
+  word-break: break-all;
+}
 
 /* ── Formulario ──────────────────────────────────────────────────────────── */
 .login-form {

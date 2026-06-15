@@ -213,4 +213,123 @@ router.post('/logout', authenticate, (req, res) => {
   res.json({ message: 'Sesion cerrada correctamente' });
 });
 
+// --------------------------------------------------------------------------
+// POST /api/auth/forgot-password  (C2 - solicitar recuperacion)
+// --------------------------------------------------------------------------
+/**
+ * Recibe:   { email }
+ * Devuelve: { message }  (+ devResetUrl/devToken solo en desarrollo)
+ *
+ * Genera un token de recuperacion (JWT con purpose 'reset', vence en 1h) y
+ * arma el enlace que el usuario usara para cambiar su contrasena.
+ *
+ * El ENVIO REAL del correo es la tarea T-05 (Santiago). Mientras tanto,
+ * el enlace se imprime en consola y se devuelve en la respuesta para poder
+ * probar el flujo de extremo a extremo sin correo real.
+ *
+ * Por seguridad respondemos SIEMPRE el mismo mensaje, exista o no el email
+ * (asi no se revela que correos estan registrados).
+ */
+router.post('/forgot-password', async (req, res) => {
+  const { email } = req.body;
+
+  if (!email) {
+    return res.status(400).json({ error: 'El correo es requerido' });
+  }
+
+  const respuestaGenerica = {
+    message: 'Si el correo esta registrado, te enviamos un enlace para recuperar tu contrasena.',
+  };
+
+  try {
+    const { rows } = await pool.query(
+      'SELECT id_usuario, nombre, email FROM usuario WHERE email = $1 AND activo = TRUE',
+      [email.toLowerCase().trim()]
+    );
+    const usuario = rows[0];
+
+    // Si no existe, respondemos igual (sin pistas) y no generamos token.
+    if (!usuario) {
+      return res.json(respuestaGenerica);
+    }
+
+    // Token de un solo proposito: 'reset'. Vence en 1 hora.
+    const resetToken = jwt.sign(
+      { id: usuario.id_usuario, purpose: 'reset' },
+      process.env.JWT_SECRET,
+      { expiresIn: '1h' }
+    );
+
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const resetUrl = `${frontendUrl}/reset-password?token=${resetToken}`;
+
+    // TODO (T-05, Santiago): enviar 'resetUrl' por correo real (Nodemailer / SendGrid).
+    console.log(`\n[RECUPERACION] Enlace para ${usuario.email}:\n  ${resetUrl}\n`);
+
+    // En desarrollo devolvemos el enlace para poder probar sin correo real.
+    return res.json({
+      ...respuestaGenerica,
+      devResetUrl: resetUrl,
+      devToken: resetToken,
+    });
+
+  } catch (err) {
+    console.error('[POST /forgot-password] Error:', err.message);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+// --------------------------------------------------------------------------
+// POST /api/auth/reset-password  (C2 - restablecer contrasena)
+// --------------------------------------------------------------------------
+/**
+ * Recibe:   { token, password }
+ * Devuelve: { message }
+ *
+ * Verifica el token de recuperacion y, si es valido, guarda la nueva
+ * contrasena (hasheada con bcrypt).
+ */
+router.post('/reset-password', async (req, res) => {
+  const { token, password } = req.body;
+
+  if (!token || !password) {
+    return res.status(400).json({ error: 'Token y nueva contrasena son requeridos' });
+  }
+  if (password.length < 6) {
+    return res.status(400).json({ error: 'La contrasena debe tener al menos 6 caracteres' });
+  }
+
+  // 1. Verificar el token (firma + vencimiento)
+  let payload;
+  try {
+    payload = jwt.verify(token, process.env.JWT_SECRET);
+  } catch (err) {
+    return res.status(400).json({ error: 'El enlace es invalido o ya expiro. Solicita uno nuevo.' });
+  }
+
+  // 2. Asegurar que es un token de recuperacion, no un token de sesion normal
+  if (payload.purpose !== 'reset') {
+    return res.status(400).json({ error: 'Token invalido' });
+  }
+
+  try {
+    // 3. Hashear la nueva contrasena y guardarla
+    const password_hash = await bcrypt.hash(password, 10);
+    const { rowCount } = await pool.query(
+      'UPDATE usuario SET password_hash = $1 WHERE id_usuario = $2 AND activo = TRUE',
+      [password_hash, payload.id]
+    );
+
+    if (rowCount === 0) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+
+    res.json({ message: 'Contrasena actualizada. Ya puedes iniciar sesion con tu nueva contrasena.' });
+
+  } catch (err) {
+    console.error('[POST /reset-password] Error:', err.message);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
 module.exports = router;

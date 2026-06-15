@@ -1,8 +1,12 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
-import LoginPage    from './pages/LoginPage';
-import RegisterPage from './pages/RegisterPage';
+import LoginPage          from './pages/LoginPage';
+import RegisterPage       from './pages/RegisterPage';
+import ForgotPasswordPage from './pages/ForgotPasswordPage';
+import ResetPasswordPage  from './pages/ResetPasswordPage';
+import DashboardUsuario      from './pages/DashboardUsuario';
+import VistaMiembrosActivos  from './pages/VistaMiembrosActivos';
 
 // ─── Dashboards placeholder ─────────────────────────────────────────────────
 // Cada uno será desarrollado en su propia sesión
@@ -59,8 +63,10 @@ export default function App() {
       <AuthProvider>
         <Routes>
           {/* Públicas */}
-          <Route path="/login"    element={<LoginPage />} />
-          <Route path="/register" element={<RegisterPage />} />
+          <Route path="/login"           element={<LoginPage />} />
+          <Route path="/register"        element={<RegisterPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password"  element={<ResetPasswordPage />} />
 
           {/* Dashboards protegidos */}
           <Route path="/dashboard/admin" element={
@@ -70,12 +76,17 @@ export default function App() {
           }/>
           <Route path="/dashboard/receptionist" element={
             <ProtectedRoute roles={['admin', 'receptionist']}>
-              <DashboardPlaceholder label="Recepcionista" />
+              <DashboardUsuario />
             </ProtectedRoute>
           }/>
           <Route path="/dashboard/member" element={
             <ProtectedRoute roles={['admin', 'receptionist', 'member']}>
-              <DashboardPlaceholder label="Miembro" />
+              <DashboardUsuario />
+            </ProtectedRoute>
+          }/>
+          <Route path="/dashboard/vista-miembros" element={
+            <ProtectedRoute roles={['admin', 'receptionist', 'member']}>
+              <VistaMiembrosActivos />
             </ProtectedRoute>
           }/>
 
