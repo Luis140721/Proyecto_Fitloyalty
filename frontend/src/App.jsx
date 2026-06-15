@@ -5,6 +5,7 @@ import LoginPage          from './pages/LoginPage';
 import RegisterPage       from './pages/RegisterPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ResetPasswordPage  from './pages/ResetPasswordPage';
+import DashboardUsuario   from './pages/DashboardUsuario';
 
 // ─── Dashboards placeholder ─────────────────────────────────────────────────
 // Cada uno será desarrollado en su propia sesión
@@ -74,12 +75,12 @@ export default function App() {
           }/>
           <Route path="/dashboard/receptionist" element={
             <ProtectedRoute roles={['admin', 'receptionist']}>
-              <DashboardPlaceholder label="Recepcionista" />
+              <DashboardUsuario />
             </ProtectedRoute>
           }/>
           <Route path="/dashboard/member" element={
             <ProtectedRoute roles={['admin', 'receptionist', 'member']}>
-              <DashboardPlaceholder label="Miembro" />
+              <DashboardUsuario />
             </ProtectedRoute>
           }/>
 

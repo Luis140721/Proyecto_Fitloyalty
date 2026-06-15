@@ -3,7 +3,8 @@ const express = require('express');
 const cors    = require('cors');
 const pool    = require('./db/db');
 
-const authRoutes = require('./routes/auth');
+const authRoutes       = require('./routes/auth');
+const asistenciaRoutes = require('./routes/asistencia');
 
 const app  = express();
 const PORT = process.env.PORT || 3001;
@@ -17,6 +18,7 @@ app.use(express.json());
 
 // Rutas
 app.use('/api/auth', authRoutes);
+app.use('/api/asistencia', asistenciaRoutes);
 
 // Health check: verifica que la BD responde
 app.get('/api/health', async (req, res) => {

@@ -1,0 +1,179 @@
+/* ── Layout general ──────────────────────────────────────────────────────── */
+.dash {
+  min-height: 100vh;
+  background: var(--bg);
+}
+
+/* ── Header ──────────────────────────────────────────────────────────────── */
+.dash-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 28px;
+  background: var(--white);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.dash-header__brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.dash-header__logo { font-size: 1.5rem; }
+.dash-header__title {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--secondary);
+}
+
+.dash-header__user {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.dash-header__info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.2;
+}
+.dash-header__name { font-weight: 600; color: var(--secondary); font-size: 0.92rem; }
+.dash-header__role { font-size: 0.78rem; color: var(--text-muted); }
+
+.dash-header__avatar {
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+
+.dash-header__logout {
+  padding: 8px 16px;
+  border: 1.5px solid var(--border);
+  background: var(--white);
+  border-radius: 9px;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--secondary);
+  cursor: pointer;
+  font-family: inherit;
+  transition: border-color 0.18s, color 0.18s;
+}
+.dash-header__logout:hover { border-color: var(--primary); color: var(--primary); }
+
+/* ── Contenido ───────────────────────────────────────────────────────────── */
+.dash-main {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 32px 28px;
+}
+
+.dash-h1 {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--secondary);
+}
+.dash-sub {
+  color: var(--text-muted);
+  font-size: 0.92rem;
+  margin-top: 2px;
+  margin-bottom: 24px;
+}
+
+/* ── Tarjetas de resumen ─────────────────────────────────────────────────── */
+.dash-cards {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  margin-bottom: 28px;
+}
+.dash-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px 22px;
+  box-shadow: var(--shadow);
+}
+.dash-card__icon {
+  font-size: 1.8rem;
+  width: 52px; height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--primary-light);
+  border-radius: 12px;
+}
+.dash-card__value {
+  font-size: 1.8rem;
+  font-weight: 800;
+  color: var(--secondary);
+  line-height: 1;
+}
+.dash-card__label {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+/* ── Tabla ───────────────────────────────────────────────────────────────── */
+.dash-table-wrap {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.dash-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+.dash-table thead th {
+  text-align: left;
+  padding: 13px 18px;
+  background: var(--bg);
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  border-bottom: 1px solid var(--border);
+}
+.dash-table tbody td {
+  padding: 13px 18px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+}
+.dash-table tbody tr:last-child td { border-bottom: none; }
+.dash-table tbody tr:hover { background: var(--primary-light); }
+
+.dash-loading {
+  display: flex;
+  justify-content: center;
+  padding: 48px;
+}
+.dash-empty, .dash-alert {
+  padding: 28px;
+  text-align: center;
+  color: var(--text-muted);
+}
+.dash-alert { color: var(--error); }
+
+/* ── Responsive ──────────────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .dash-cards { grid-template-columns: 1fr; }
+  .dash-header__info { display: none; }
+  .dash-main { padding: 24px 16px; }
+}
