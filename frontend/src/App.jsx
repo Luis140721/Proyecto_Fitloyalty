@@ -5,44 +5,10 @@ import LoginPage          from './pages/LoginPage';
 import RegisterPage       from './pages/RegisterPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ResetPasswordPage  from './pages/ResetPasswordPage';
-import DashboardUsuario      from './pages/DashboardUsuario';
-import VistaMiembrosActivos  from './pages/VistaMiembrosActivos';
-
-// ─── Dashboards placeholder ─────────────────────────────────────────────────
-// Cada uno será desarrollado en su propia sesión
-function DashboardPlaceholder({ role, label }) {
-  const { user, logout } = useAuth();
-  return (
-    <div style={{
-      minHeight: '100vh', background: '#f8fafc',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      flexDirection: 'column', gap: 24, fontFamily: 'Inter, sans-serif'
-    }}>
-      <div style={{ fontSize: 56 }}>🏋️</div>
-      <div style={{ textAlign: 'center' }}>
-        <h1 style={{ fontSize: '1.8rem', fontWeight: 700, color: '#1e293b' }}>
-          ¡Bienvenido, {user?.name}!
-        </h1>
-        <p style={{ color: '#64748b', marginTop: 6 }}>
-          Dashboard de <strong style={{ color: '#f97316' }}>{label}</strong> — próximamente
-        </p>
-        <p style={{ color: '#94a3b8', fontSize: 13, marginTop: 4 }}>
-          Rol: {user?.role} · Email: {user?.email}
-        </p>
-      </div>
-      <button
-        onClick={logout}
-        style={{
-          padding: '10px 24px', background: '#f97316', color: '#fff',
-          border: 'none', borderRadius: 10, fontWeight: 600,
-          cursor: 'pointer', fontSize: 15
-        }}
-      >
-        Cerrar sesión
-      </button>
-    </div>
-  );
-}
+import DashboardAdmin      from './pages/DashboardAdmin';
+import DashboardUsuario    from './pages/DashboardUsuario';
+import ReporteAsistencia   from './pages/ReporteAsistencia';
+import VistaMiembrosActivos from './pages/VistaMiembrosActivos';
 
 // Redirige al dashboard correcto según el rol del usuario autenticado
 function RootRedirect() {
@@ -56,7 +22,6 @@ function RootRedirect() {
   }
 }
 
-// ─── App ────────────────────────────────────────────────────────────────────
 export default function App() {
   return (
     <BrowserRouter>
@@ -71,7 +36,12 @@ export default function App() {
           {/* Dashboards protegidos */}
           <Route path="/dashboard/admin" element={
             <ProtectedRoute roles={['admin']}>
-              <DashboardPlaceholder label="Administrador" />
+              <DashboardAdmin />
+            </ProtectedRoute>
+          }/>
+          <Route path="/dashboard/reporte-sp" element={
+            <ProtectedRoute roles={['admin']}>
+              <ReporteAsistencia />
             </ProtectedRoute>
           }/>
           <Route path="/dashboard/receptionist" element={
