@@ -53,6 +53,12 @@
   justify-content: center;
   font-weight: 700;
   font-size: 1.05rem;
+  flex-shrink: 0;
+}
+.dash-header__avatar--img {
+  object-fit: cover;
+  border: 2px solid var(--primary-light);
+  background: var(--white);
 }
 
 .dash-header__logout {
@@ -118,7 +124,7 @@
 /* ── Tarjetas de resumen ─────────────────────────────────────────────────── */
 .dash-cards {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 16px;
   margin-bottom: 28px;
 }
@@ -151,6 +157,66 @@
   font-size: 0.85rem;
   color: var(--text-muted);
   margin-top: 4px;
+}
+
+/* ── Formularios y Filtros (Reporte SP) ──────────────────────────────────── */
+.dash-filters-form {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 16px 20px;
+  margin-bottom: 24px;
+}
+.dash-filters-group {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+.form-group-inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.form-label-inline {
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--secondary);
+}
+.form-input-inline {
+  padding: 8px 12px;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.88rem;
+  font-family: inherit;
+  color: var(--secondary);
+  background: var(--white);
+  outline: none;
+}
+.form-input-inline:focus {
+  border-color: var(--primary);
+}
+.btn-filter {
+  padding: 9px 18px;
+  background: var(--primary);
+  color: var(--white);
+  border: none;
+  border-radius: 8px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: opacity 0.15s;
+}
+.btn-filter:hover {
+  opacity: 0.9;
+}
+.dash-table-meta {
+  padding: 14px 18px 0 18px;
+  font-size: 0.86rem;
+  color: var(--text);
+  margin-bottom: -4px;
 }
 
 /* ── Tabla ───────────────────────────────────────────────────────────────── */

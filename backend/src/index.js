@@ -6,6 +6,7 @@ const pool    = require('./db/db');
 const authRoutes       = require('./routes/auth');
 const asistenciaRoutes = require('./routes/asistencia');
 const vistaRoutes      = require('./routes/vista');
+const adminRoutes = require('./routes/admin');
 
 const app  = express();
 const PORT = process.env.PORT || 3001;
@@ -19,6 +20,7 @@ app.use(express.json());
 
 // Rutas
 app.use('/api/auth', authRoutes);
+app.use('/api/admin', adminRoutes);
 app.use('/api/asistencia', asistenciaRoutes);
 app.use('/api/vista', vistaRoutes);
 
