@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { useAuth, api } from '../context/AuthContext';
+import DashboardHeader, { adminNavLinks, userNavLinks } from '../components/DashboardHeader';
 import '../styles/dashboard.css';
 
-// Formatea una fecha ISO a dd/mm/yyyy. Si viene vacía, muestra "—".
 function formatFecha(iso) {
   if (!iso) return '—';
   return new Date(iso).toLocaleDateString('es-CO', {
@@ -14,17 +14,27 @@ function formatFecha(iso) {
 const val = (v) => (v === null || v === undefined || v === '' ? '—' : v);
 
 export default function VistaMiembrosActivos() {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
+  const { pathname } = useLocation();
 
   const [miembros, setMiembros] = useState([]);
   const [total, setTotal]       = useState(0);
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState('');
 
+  const navLinks = user.role === 'admin'
+    ? adminNavLinks(pathname)
+    : userNavLinks(pathname);
+
   useEffect(() => {
     let activo = true;
     api.get('/vista/miembros-activos')
-      .then(({ data }) => { if (activo) { setMiembros(data.miembros); setTotal(data.total); } })
+      .then(({ data }) => {
+        if (activo) {
+          setMiembros(data.miembros);
+          setTotal(data.total);
+        }
+      })
       .catch((err) => {
         if (activo) setError(err.response?.data?.error || 'No se pudo cargar la vista.');
       })
@@ -34,33 +44,13 @@ export default function VistaMiembrosActivos() {
 
   return (
     <div className="dash">
-      {/* Header */}
-      <header className="dash-header">
-        <div className="dash-header__brand">
-          <span className="dash-header__logo">🏋️</span>
-          <span className="dash-header__title">FitLoyalty</span>
-        </div>
-        <div className="dash-header__user">
-          <div className="dash-header__info">
-            <span className="dash-header__name">{user?.name}</span>
-            <span className="dash-header__role">{user?.role === 'receptionist' ? 'Recepcionista' : user?.role === 'admin' ? 'Administrador' : 'Miembro'}</span>
-          </div>
-          <div className="dash-header__avatar">{user?.name?.charAt(0).toUpperCase()}</div>
-          <button className="dash-header__logout" onClick={logout}>Cerrar sesión</button>
-        </div>
-      </header>
+      <DashboardHeader navLinks={navLinks} />
 
-      {/* Navegación entre secciones */}
-      <nav className="dash-nav">
-        <Link to="/dashboard/receptionist" className="dash-nav__link">Historial de asistencia</Link>
-        <Link to="/dashboard/vista-miembros" className="dash-nav__link dash-nav__link--active">Miembros activos (Vista SQL)</Link>
-      </nav>
-
-      {/* Contenido */}
       <main className="dash-main">
         <h1 className="dash-h1">Miembros activos</h1>
         <p className="dash-sub">
-          Listado generado desde la <strong>vista SQL</strong> <code>vista_miembros_activos</code>
+          Listado generado desde la <strong>vista SQL</strong>{' '}
+          <code>vista_miembros_activos</code>
           {!loading && ` · ${total} miembros`}.
         </p>
 

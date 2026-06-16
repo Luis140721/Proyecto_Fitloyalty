@@ -1,16 +1,15 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { useAuth, api } from '../context/AuthContext';
+import DashboardHeader, { userNavLinks } from '../components/DashboardHeader';
 import '../styles/dashboard.css';
 
-// Etiqueta legible para el método de ingreso
 const METODO_LABEL = {
   QR:           '📱 QR',
   CODIGOBARRAS: '🏷️ Código de barras',
   MANUAL:       '✍️ Manual',
 };
 
-// Formatea "2026-06-14T08:30:00" -> { fecha: '14/06/2026', hora: '08:30' }
 function formatFechaHora(iso) {
   const d = new Date(iso);
   const fecha = d.toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -19,7 +18,7 @@ function formatFechaHora(iso) {
 }
 
 export default function DashboardUsuario() {
-  const { user, logout } = useAuth();
+  const { pathname } = useLocation();
 
   const [data, setData]       = useState({ asistencias: [], total: 0, hoy: 0 });
   const [loading, setLoading] = useState(true);
@@ -38,34 +37,12 @@ export default function DashboardUsuario() {
 
   return (
     <div className="dash">
-      {/* Header */}
-      <header className="dash-header">
-        <div className="dash-header__brand">
-          <span className="dash-header__logo">🏋️</span>
-          <span className="dash-header__title">FitLoyalty</span>
-        </div>
-        <div className="dash-header__user">
-          <div className="dash-header__info">
-            <span className="dash-header__name">{user?.name}</span>
-            <span className="dash-header__role">{user?.role === 'receptionist' ? 'Recepcionista' : 'Miembro'}</span>
-          </div>
-          <div className="dash-header__avatar">{user?.name?.charAt(0).toUpperCase()}</div>
-          <button className="dash-header__logout" onClick={logout}>Cerrar sesión</button>
-        </div>
-      </header>
+      <DashboardHeader navLinks={userNavLinks(pathname)} />
 
-      {/* Navegación entre secciones */}
-      <nav className="dash-nav">
-        <Link to="/dashboard/receptionist" className="dash-nav__link dash-nav__link--active">Historial de asistencia</Link>
-        <Link to="/dashboard/vista-miembros" className="dash-nav__link">Miembros activos (Vista SQL)</Link>
-      </nav>
-
-      {/* Contenido */}
       <main className="dash-main">
         <h1 className="dash-h1">Historial de asistencia</h1>
         <p className="dash-sub">Registro de ingresos al gimnasio.</p>
 
-        {/* Tarjetas de resumen */}
         <div className="dash-cards">
           <div className="dash-card">
             <span className="dash-card__icon">📊</span>
@@ -83,7 +60,6 @@ export default function DashboardUsuario() {
           </div>
         </div>
 
-        {/* Tabla de asistencia */}
         <div className="dash-table-wrap">
           {error && <div className="dash-alert">{error}</div>}
 
