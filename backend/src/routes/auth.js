@@ -9,6 +9,7 @@
 const express = require('express');
 const bcrypt  = require('bcryptjs');
 const jwt     = require('jsonwebtoken');
+const nodemailer = require('nodemailer');
 const pool    = require('../db/db');
 const { authenticate } = require('../middleware/auth');
 
@@ -47,16 +48,26 @@ function generarToken(usuario) {
 }
 
 /**
+ * URL de avatar: usa foto_url de BD o genera una por defecto con ui-avatars.
+ */
+function avatarUrl(u) {
+  if (u.foto_url) return u.foto_url;
+  const name = encodeURIComponent(u.nombre || 'Usuario');
+  return `https://ui-avatars.com/api/?name=${name}&background=f97316&color=fff&size=128`;
+}
+
+/**
  * Devuelve el objeto usuario sin campos sensibles.
  * Este es el objeto que llega al frontend.
  */
 function usuarioSeguro(u) {
   return {
-    id:    u.id_usuario,
-    name:  u.nombre,
-    email: u.email,
-    role:  mapRol(u.rol),
-    gymId: u.id_gimnasio,
+    id:       u.id_usuario,
+    name:     u.nombre,
+    email:    u.email,
+    role:     mapRol(u.rol),
+    gymId:    u.id_gimnasio,
+    photoUrl: avatarUrl(u),
   };
 }
 
@@ -263,15 +274,53 @@ router.post('/forgot-password', async (req, res) => {
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
     const resetUrl = `${frontendUrl}/reset-password?token=${resetToken}`;
 
-    // TODO (T-05, Santiago): enviar 'resetUrl' por correo real (Nodemailer / SendGrid).
-    console.log(`\n[RECUPERACION] Enlace para ${usuario.email}:\n  ${resetUrl}\n`);
-
-    // En desarrollo devolvemos el enlace para poder probar sin correo real.
-    return res.json({
-      ...respuestaGenerica,
-      devResetUrl: resetUrl,
-      devToken: resetToken,
+    // T-05 (Santiago): Enviar correo de recuperación real con Nodemailer
+    const transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST || 'smtp.gmail.com',
+      port: parseInt(process.env.SMTP_PORT || '587'),
+      secure: process.env.SMTP_PORT === '465',
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASSWORD,
+      },
     });
+
+    const mailOptions = {
+      from: process.env.SMTP_FROM || '"FitLoyalty Soporte" <no-reply@fitloyalty.com>',
+      to: usuario.email,
+      subject: 'Recuperación de Contraseña - FitLoyalty',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
+          <div style="text-align: center; margin-bottom: 20px;">
+            <span style="font-size: 40px;">🏋️</span>
+            <h1 style="color: #1e293b; margin: 10px 0 0 0; font-size: 24px;">FitLoyalty</h1>
+          </div>
+          <p style="color: #475569; font-size: 16px; line-height: 1.6;">Hola <strong>${usuario.nombre}</strong>,</p>
+          <p style="color: #475569; font-size: 16px; line-height: 1.6;">Has solicitado restablecer tu contraseña para tu cuenta de personal en FitLoyalty. Haz clic en el siguiente botón para continuar:</p>
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${resetUrl}" style="background-color: #f97316; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">Restablecer Contraseña</a>
+          </div>
+          <p style="color: #64748b; font-size: 14px; line-height: 1.6;">Este enlace expirará en 1 hora por razones de seguridad.</p>
+          <p style="color: #94a3b8; font-size: 12px; border-top: 1px solid #e2e8f0; padding-top: 20px; margin-top: 20px; text-align: center;">Si no solicitaste este cambio, puedes ignorar este correo de forma segura.</p>
+        </div>
+      `,
+    };
+
+    if (process.env.SMTP_USER && process.env.SMTP_PASSWORD) {
+      await transporter.sendMail(mailOptions);
+      console.log(`[SMTP] Correo de recuperación enviado a ${usuario.email}`);
+    } else {
+      console.log(`[SMTP] Sin credenciales configuradas. Enlace generado: ${resetUrl}`);
+    }
+
+    const payload = { ...respuestaGenerica };
+
+    // Solo en desarrollo (sin SMTP) devolvemos el enlace para pruebas locales
+    if (process.env.NODE_ENV !== 'production' && !process.env.SMTP_USER) {
+      payload.devResetUrl = resetUrl;
+    }
+
+    return res.json(payload);
 
   } catch (err) {
     console.error('[POST /forgot-password] Error:', err.message);
