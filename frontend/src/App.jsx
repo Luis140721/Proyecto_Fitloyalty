@@ -1,14 +1,16 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { useEffect } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import LoginPage          from './pages/LoginPage';
 import RegisterPage       from './pages/RegisterPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ResetPasswordPage  from './pages/ResetPasswordPage';
-import DashboardAdmin      from './pages/DashboardAdmin';
-import DashboardUsuario    from './pages/DashboardUsuario';
-import ReporteAsistencia   from './pages/ReporteAsistencia';
-import VistaMiembrosActivos from './pages/VistaMiembrosActivos';
+import DashboardAdmin          from './pages/DashboardAdmin';
+import CrearRecepcionistaPage   from './pages/CrearRecepcionistaPage';
+import DashboardUsuario         from './pages/DashboardUsuario';
+import ReporteAsistencia        from './pages/ReporteAsistencia';
+import VistaMiembrosActivos     from './pages/VistaMiembrosActivos';
 
 // Redirige al dashboard correcto según el rol del usuario autenticado
 function RootRedirect() {
@@ -23,6 +25,24 @@ function RootRedirect() {
 }
 
 export default function App() {
+  useEffect(() => {
+    const sanitizeCopy = (event) => {
+      const target = event.target;
+      if (!target || target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+        return;
+      }
+
+      const selection = window.getSelection()?.toString();
+      if (selection) {
+        event.preventDefault();
+        event.clipboardData.setData('text/plain', selection);
+      }
+    };
+
+    document.addEventListener('copy', sanitizeCopy);
+    return () => document.removeEventListener('copy', sanitizeCopy);
+  }, []);
+
   return (
     <BrowserRouter>
       <AuthProvider>
@@ -42,6 +62,11 @@ export default function App() {
           <Route path="/dashboard/reporte-sp" element={
             <ProtectedRoute roles={['admin']}>
               <ReporteAsistencia />
+            </ProtectedRoute>
+          }/>
+          <Route path="/dashboard/crear-recepcionista" element={
+            <ProtectedRoute roles={['admin']}>
+              <CrearRecepcionistaPage />
             </ProtectedRoute>
           }/>
           <Route path="/dashboard/receptionist" element={
