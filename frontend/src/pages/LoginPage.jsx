@@ -40,7 +40,8 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const user = await login(form.email, form.password);
-      const dest = from || getDashboardPath(user.role);
+      // Siempre enviar a admins al dashboard de KPIs; para otros roles respetar 'from' si existe
+      const dest = user.role === 'admin' ? getDashboardPath('admin') : (from || getDashboardPath(user.role));
       navigate(dest, { replace: true });
     } catch (err) {
       const msg = err.response?.data?.error || 'Error al iniciar sesión. Intenta de nuevo.';
