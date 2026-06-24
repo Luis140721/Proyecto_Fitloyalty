@@ -148,3 +148,4 @@ export default function DashboardAdmin() {
       </main>
     </div>
   );
+}
