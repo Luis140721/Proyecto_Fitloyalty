@@ -1,14 +1,24 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../context/AuthContext';
 import '../styles/login.css';
 
 export default function ForgotPasswordPage() {
-  const [email, setEmail]     = useState('');
-  const [error, setError]     = useState('');
-  const [message, setMessage] = useState('');
-  const [devUrl, setDevUrl]   = useState('');   // Solo desarrollo: enlace de prueba
-  const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
+  const [email, setEmail]         = useState('');
+  const [error, setError]         = useState('');
+  const [message, setMessage]     = useState('');
+  const [devCode, setDevCode]     = useState('');
+  const [loading, setLoading]     = useState(false);
+  const [resendTimer, setResendTimer] = useState(0);
+
+  useEffect(() => {
+    if (resendTimer <= 0) return;
+    const timer = window.setInterval(() => {
+      setResendTimer((current) => Math.max(0, current - 1));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [resendTimer]);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -20,13 +30,13 @@ export default function ForgotPasswordPage() {
     setLoading(true);
     setError('');
     setMessage('');
-    setDevUrl('');
+    setDevCode('');
 
     try {
       const { data } = await api.post('/auth/forgot-password', { email });
       setMessage(data.message);
-      // En desarrollo el backend devuelve el enlace para poder probar sin correo real.
-      if (data.devResetUrl) setDevUrl(data.devResetUrl);
+      if (data.devCode) setDevCode(data.devCode);
+      setResendTimer(data.resendAfterSeconds || 60);
     } catch (err) {
       setError(err.response?.data?.error || 'Ocurrió un error. Intenta de nuevo.');
     } finally {
@@ -36,7 +46,6 @@ export default function ForgotPasswordPage() {
 
   return (
     <div className="login-bg">
-      {/* Panel izquierdo — branding */}
       <div className="login-brand">
         <div className="login-brand__content">
           <div className="login-logo">
@@ -47,13 +56,12 @@ export default function ForgotPasswordPage() {
         </div>
       </div>
 
-      {/* Panel derecho — formulario */}
       <div className="login-form-panel">
         <div className="login-card">
           <div className="login-card__header">
             <h2 className="login-card__title">¿Olvidaste tu contraseña?</h2>
             <p className="login-card__sub">
-              Ingresa tu correo y te enviaremos un enlace para restablecerla.
+              Ingresa tu correo y te enviaremos un código para restablecerla.
             </p>
           </div>
 
@@ -66,43 +74,56 @@ export default function ForgotPasswordPage() {
           {message && (
             <div className="login-alert login-alert--success" role="status">
               <span>✅</span> {message}
-            </div>
-          )}
-
-          {/* Enlace de prueba (solo desarrollo, mientras no haya correo real) */}
-          {devUrl && (
-            <div className="login-alert login-alert--success" role="status">
-              <span>🔗</span>{' '}
-              <a href={devUrl}>Abrir enlace de recuperación (modo prueba)</a>
-            </div>
-          )}
-
-          {!message && (
-            <form onSubmit={handleSubmit} className="login-form" noValidate>
-              <div className="form-group">
-                <label htmlFor="email" className="form-label">
-                  Correo electrónico
-                </label>
-                <input
-                  id="email"
-                  type="email"
-                  name="email"
-                  className="form-input"
-                  placeholder="tu@correo.com"
-                  value={email}
-                  onChange={(e) => { setEmail(e.target.value); if (error) setError(''); }}
-                  autoComplete="email"
-                  disabled={loading}
-                  required
-                />
+              <div style={{ marginTop: 8, fontSize: '0.88rem', color: '#065f46' }}>
+                Usa el código en la página de restablecer contraseña. Revisa tu bandeja de entrada o spam.
               </div>
+            </div>
+          )}
 
-              <button type="submit" className="btn-login" disabled={loading}>
-                {loading
-                  ? <span className="btn-login__loading"><span className="spinner-sm" /> Enviando...</span>
-                  : 'Enviar enlace de recuperación'}
-              </button>
-            </form>
+          {devCode && (
+            <div className="login-alert login-alert--success" role="status">
+              <span>🔢</span>{' '}
+              Código de prueba: <strong>{devCode}</strong>
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="login-form" noValidate>
+            <div className="form-group">
+              <label htmlFor="email" className="form-label">
+                Correo electrónico
+              </label>
+              <input
+                id="email"
+                type="email"
+                name="email"
+                className="form-input"
+                placeholder="tu@correo.com"
+                value={email}
+                onChange={(e) => { setEmail(e.target.value); if (error) setError(''); }}
+                autoComplete="email"
+                disabled={loading}
+                required
+              />
+            </div>
+
+            <button type="submit" className="btn-login" disabled={loading || resendTimer > 0}>
+              {loading
+                ? <span className="btn-login__loading"><span className="spinner-sm" /> Enviando...</span>
+                : resendTimer > 0
+                  ? `Reenviar código en ${resendTimer}s`
+                  : 'Enviar código de recuperación'}
+            </button>
+          </form>
+
+          {message && (
+            <button
+              type="button"
+              className="btn-login"
+              style={{ marginTop: 12 }}
+              onClick={() => navigate('/reset-password', { state: { email } })}
+            >
+              Ir a restablecer contraseña
+            </button>
           )}
 
           <div className="login-divider"><span>¿Ya la recordaste?</span></div>

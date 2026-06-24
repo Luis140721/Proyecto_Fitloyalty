@@ -32,6 +32,7 @@ router.get('/metrics', async (req, res) => {
       'SELECT COUNT(*)::int AS total FROM miembro WHERE id_gimnasio = $1 AND activo = TRUE',
       [gymId]
     );
+    const totalMiembros = miembrosQuery.rows[0].total;
 
     // 2. Asistencias (checkins) del día de hoy
     const checkinsQuery = await pool.query(
@@ -41,7 +42,7 @@ router.get('/metrics', async (req, res) => {
       [gymId]
     );
 
-    // 3. Membresías por vencer en los próximos 7 días (activas y que finalizan pronto)
+    // 3. Membresías por vencer en los próximos 7 días (activas)
     const vencimientosQuery = await pool.query(
       `SELECT COUNT(*)::int AS total 
        FROM membresia m
@@ -52,10 +53,94 @@ router.get('/metrics', async (req, res) => {
       [gymId]
     );
 
+    // 4. Retention (miembros con al menos 1 checkin en ultimos 90 dias)
+    const retenQuery = await pool.query(
+      `SELECT COUNT(DISTINCT m.id_miembro)::int AS activos_90
+       FROM miembro m
+       INNER JOIN checkin c ON c.id_miembro = m.id_miembro
+       WHERE m.id_gimnasio = $1 AND m.activo = TRUE AND c.fecha_hora >= CURRENT_DATE - INTERVAL '90 days'`,
+      [gymId]
+    );
+    const activos90 = retenQuery.rows[0].activos_90 || 0;
+    const retentionRate = totalMiembros > 0 ? Math.round((activos90 / totalMiembros) * 100) : 0;
+
+    // 5. En riesgo de abandono: miembros sin checkin en los ultimos 15 dias
+    const enRiesgoQuery = await pool.query(
+      `SELECT COUNT(*)::int AS total FROM miembro m
+       LEFT JOIN LATERAL (
+         SELECT fecha_hora FROM checkin c WHERE c.id_miembro = m.id_miembro ORDER BY fecha_hora DESC LIMIT 1
+       ) lastc ON TRUE
+       WHERE m.id_gimnasio = $1 AND m.activo = TRUE
+         AND (lastc.fecha_hora IS NULL OR lastc.fecha_hora < NOW() - INTERVAL '15 days')`,
+      [gymId]
+    );
+
+    // 6. Flow por hora (hoy) — devolvemos mapa hour->count
+    const flowQuery = await pool.query(
+      `SELECT EXTRACT(HOUR FROM fecha_hora)::int AS hour, COUNT(*)::int AS count
+       FROM checkin
+       WHERE id_gimnasio = $1 AND fecha_hora::date = CURRENT_DATE AND valido = TRUE
+       GROUP BY hour ORDER BY hour`,
+      [gymId]
+    );
+
+    // 7. Asistencia semanal (desde inicio de la semana)
+    const weeklyQuery = await pool.query(
+      `SELECT EXTRACT(DOW FROM fecha_hora)::int AS dow, COUNT(*)::int AS count
+       FROM checkin
+       WHERE id_gimnasio = $1 AND fecha_hora >= date_trunc('week', CURRENT_DATE) AND valido = TRUE
+       GROUP BY dow ORDER BY dow`,
+      [gymId]
+    );
+
+    // 8. Clientes a recuperar (alertas de abandono pendientes)
+    const recuperarQuery = await pool.query(
+      `SELECT a.id_alerta, m.nombre, m.documento, a.dias_inactivo, a.nivel, a.fecha_alerta
+       FROM alerta_abandono a
+       INNER JOIN miembro m ON m.id_miembro = a.id_miembro
+       WHERE a.id_gimnasio = $1 AND a.estado = 'PENDIENTE'
+       ORDER BY a.fecha_alerta DESC LIMIT 6`,
+      [gymId]
+    );
+
+    // 9. Membresias por vencer (detallado, proximos 30 dias)
+    const proximasQuery = await pool.query(
+      `SELECT mb.nombre AS miembro, mb.documento, p.nombre AS plan, me.fecha_fin,
+              (me.fecha_fin - CURRENT_DATE)::int AS dias_restantes
+       FROM membresia me
+       INNER JOIN miembro mb ON mb.id_miembro = me.id_miembro
+       INNER JOIN plan_membresia p ON p.id_plan = me.id_plan
+       WHERE mb.id_gimnasio = $1 AND me.estado = 'ACTIVA'
+         AND me.fecha_fin BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '30 days'
+       ORDER BY me.fecha_fin ASC LIMIT 10`,
+      [gymId]
+    );
+
+    // Transformar flowQuery en arreglo de 24 horas
+    const flowByHour = Array.from({ length: 24 }, (_, i) => ({ hour: i, count: 0 }));
+    for (const r of flowQuery.rows) {
+      const h = parseInt(r.hour, 10);
+      if (!Number.isNaN(h) && h >= 0 && h < 24) flowByHour[h].count = r.count;
+    }
+
+    // Transformar weeklyQuery en objeto con claves Lun..Dom (0=Dom in Postgres)
+    const days = ['Dom', 'Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab'];
+    const weekly = days.map((d, idx) => ({ day: d, count: 0 }));
+    for (const r of weeklyQuery.rows) {
+      const idx = parseInt(r.dow, 10);
+      if (!Number.isNaN(idx)) weekly[idx].count = r.count;
+    }
+
     res.json({
-      totalMiembros: miembrosQuery.rows[0].total,
+      totalMiembros,
       asistenciasHoy: checkinsQuery.rows[0].total,
       membresiasPorVencer: vencimientosQuery.rows[0].total,
+      retentionRate,
+      enRiesgo: enRiesgoQuery.rows[0].total,
+      flowByHour,
+      weeklyAttendance: weekly,
+      clientesRecuperar: recuperarQuery.rows,
+      proximasVencimientos: proximasQuery.rows,
     });
 
   } catch (err) {

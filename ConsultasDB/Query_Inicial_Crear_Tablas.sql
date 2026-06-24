@@ -12,7 +12,9 @@ CREATE TABLE gimnasio (
     email VARCHAR(150),
     logo_url TEXT,
     activo BOOLEAN NOT NULL DEFAULT TRUE,
-    fecha_registro TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    fecha_registro TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    -- Trial SaaS: fecha de fin del periodo de prueba (por defecto 7 dias desde registro)
+    trial_ends_at TIMESTAMP NOT NULL DEFAULT (CURRENT_TIMESTAMP + INTERVAL '7 days')
 );
 
 -- =========================================================
