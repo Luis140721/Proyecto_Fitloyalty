@@ -109,6 +109,22 @@ function avatarUrl(u) {
   return `https://ui-avatars.com/api/?name=${name}&background=f97316&color=fff&size=128`;
 }
 
+function validarEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((email || '').toString().trim().toLowerCase());
+}
+
+function validarContrasena(password) {
+  if (!password || typeof password !== 'string') return false;
+  const trimmed = password.trim();
+  return trimmed.length >= 6 && trimmed === password && /\d/.test(password);
+}
+
+function validarTelefonoColombiano(phone) {
+  if (!phone || typeof phone !== 'string') return false;
+  const digits = phone.replace(/\D/g, '');
+  return /^[3]\d{9}$/.test(digits);
+}
+
 /**
  * Devuelve el objeto usuario sin campos sensibles.
  * Este es el objeto que llega al frontend.
@@ -191,6 +207,12 @@ router.post('/login', async (req, res) => {
   if (!email || !password) {
     return res.status(400).json({ error: 'Email y contrasena son requeridos' });
   }
+  if (!validarEmail(email)) {
+    return res.status(400).json({ error: 'El email no tiene un formato valido' });
+  }
+  if (!validarContrasena(password)) {
+    return res.status(400).json({ error: 'La contrasena debe tener al menos 6 caracteres, contener al menos un numero y no incluir espacios' });
+  }
 
   const emailNorm = (email || '').toString().toLowerCase().trim();
 
@@ -257,8 +279,11 @@ router.post('/register', authenticate, async (req, res) => {
   if (!name || !email || !password) {
     return res.status(400).json({ error: 'Nombre, email y contrasena son requeridos' });
   }
-  if (password.length < 6) {
-    return res.status(400).json({ error: 'La contrasena debe tener al menos 6 caracteres' });
+  if (!validarEmail(email)) {
+    return res.status(400).json({ error: 'El email no tiene un formato valido' });
+  }
+  if (!validarContrasena(password)) {
+    return res.status(400).json({ error: 'La contrasena debe tener al menos 6 caracteres, contener al menos un numero y no incluir espacios' });
   }
 
   const idGimnasio = gymId || req.user.gymId || 1;
@@ -313,16 +338,26 @@ router.post('/signup', async (req, res) => {
   if (!gymName || !gymPhone || !ownerName || !ownerEmail || !password) {
     return res.status(400).json({ error: 'gymName, gymPhone, ownerName, ownerEmail y password son requeridos' });
   }
-  if (password.length < 6) {
-    return res.status(400).json({ error: 'La contrasena debe tener al menos 6 caracteres' });
+  if (!validarEmail(ownerEmail)) {
+    return res.status(400).json({ error: 'El correo del administrador no es valido' });
+  }
+  if (gymEmail && !validarEmail(gymEmail)) {
+    return res.status(400).json({ error: 'El correo del gimnasio no es valido' });
+  }
+  if (!validarTelefonoColombiano(gymPhone)) {
+    return res.status(400).json({ error: 'El telefono debe tener 10 digitos colombianos y comenzar con 3' });
+  }
+  if (!validarContrasena(password)) {
+    return res.status(400).json({ error: 'La contrasena debe tener al menos 6 caracteres, contener al menos un numero y no incluir espacios' });
   }
 
   try {
     // 1. Crear gimnasio
     const gymEmailNorm = gymEmail ? normEmail(gymEmail) : null;
+    const gymPhoneNorm = gymPhone.replace(/\D/g, '');
     const { rows: gymRows } = await pool.query(
       `INSERT INTO gimnasio (nombre, telefono, email) VALUES ($1, $2, $3) RETURNING *`,
-      [gymName.trim(), gymPhone.trim(), gymEmailNorm]
+      [gymName.trim(), gymPhoneNorm, gymEmailNorm]
     );
     const gym = gymRows[0];
 

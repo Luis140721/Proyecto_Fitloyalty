@@ -3,6 +3,15 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import '../styles/login.css';
 
+function validarEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function validarTelefonoColombiano(phone) {
+  const digits = (phone || '').toString().replace(/\D/g, '');
+  return /^[3]\d{9}$/.test(digits);
+}
+
 export default function RegisterPage() {
   const { register } = useAuth();
   const navigate = useNavigate();
@@ -18,10 +27,20 @@ export default function RegisterPage() {
 
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!form.gymName || !form.gymPhone || !form.ownerName || !form.ownerEmail || !form.password) {
+    if (!form.gymName || !form.gymPhone || !form.ownerName || !form.ownerEmail || !form.password || !form.confirm) {
       return setError('Todos los campos marcados son obligatorios.');
     }
+    if (!validarEmail(form.ownerEmail)) {
+      return setError('Ingresa un correo electrónico válido para el administrador.');
+    }
+    if (form.gymEmail && !validarEmail(form.gymEmail)) {
+      return setError('Ingresa un correo electrónico válido para el gimnasio.');
+    }
+    if (!validarTelefonoColombiano(form.gymPhone)) {
+      return setError('El teléfono debe tener 10 dígitos colombianos y comenzar con 3.');
+    }
     if (form.password.length < 6) return setError('La contraseña debe tener al menos 6 caracteres.');
+    if (form.password.includes(' ')) return setError('La contraseña no puede contener espacios.');
     if (form.password !== form.confirm) return setError('Las contraseñas no coinciden.');
 
     setLoading(true);
@@ -69,7 +88,19 @@ export default function RegisterPage() {
 
             <div className="form-group">
               <label className="form-label">Teléfono del gimnasio</label>
-              <input name="gymPhone" type="tel" className="form-input" placeholder="+57 300 123 4567" value={form.gymPhone} onChange={handleChange} disabled={loading} required />
+              <input
+                name="gymPhone"
+                type="tel"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                className="form-input"
+                placeholder="3001234567"
+                value={form.gymPhone}
+                onChange={handleChange}
+                disabled={loading}
+                required
+              />
+              <div className="form-help">Número móvil colombiano de 10 dígitos que comienza con 3.</div>
             </div>
 
             <div className="form-group">
@@ -85,6 +116,7 @@ export default function RegisterPage() {
             <div className="form-group">
               <label className="form-label">Contraseña</label>
               <input name="password" type="password" className="form-input" placeholder="Mínimo 6 caracteres" value={form.password} onChange={handleChange} disabled={loading} required />
+              <div className="form-help">La contraseña debe tener al menos 6 caracteres y no puede contener espacios.</div>
             </div>
 
             <div className="form-group">

@@ -164,16 +164,29 @@ router.get('/reporte-asistencia', async (req, res) => {
     return res.status(400).json({ error: 'Las fechas de inicio y fin son obligatorias.' });
   }
 
+  const page = Math.max(0, Number.parseInt(req.query.page, 10) || 0);
+  const pageSize = Number.parseInt(req.query.pageSize, 10);
+  const limit = Number.isNaN(pageSize) ? 10 : Math.min(Math.max(pageSize, 1), 100);
+  const offset = page * limit;
+
   try {
-    // El SP devuelve: miembro (varchar), documento (varchar), fecha (date), hora (time), metodo (varchar)
-    const resultado = await pool.query(
-      'SELECT * FROM sp_reporte_asistencia($1, $2, $3)',
+    const totalQuery = await pool.query(
+      'SELECT COUNT(*)::int AS total FROM sp_reporte_asistencia($1, $2, $3)',
       [gymId, startDate, endDate]
+    );
+
+    const resultado = await pool.query(
+      `SELECT * FROM sp_reporte_asistencia($1, $2, $3)
+       ORDER BY fecha DESC, hora DESC
+       LIMIT $4 OFFSET $5`,
+      [gymId, startDate, endDate, limit, offset]
     );
 
     res.json({
       reporte: resultado.rows,
-      total: resultado.rowCount,
+      total: totalQuery.rows[0].total,
+      page,
+      pageSize: limit,
     });
 
   } catch (err) {

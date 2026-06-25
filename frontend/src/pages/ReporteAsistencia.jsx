@@ -39,23 +39,29 @@ export default function ReporteAsistencia() {
 
   const [reporte, setReporte] = useState([]);
   const [total, setTotal]     = useState(0);
+  const [page, setPage]       = useState(0);
+  const [pageSize, setPageSize] = useState(10);
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState('');
 
   useEffect(() => {
-    ejecutarReporte();
-  }, []);
+    cargarPagina(page);
+  }, [page]);
 
-  async function ejecutarReporte(e) {
-    if (e) e.preventDefault();
+  async function cargarPagina(requestPage, overridePageSize = pageSize) {
+    const currentPageSize = Number.isNaN(overridePageSize) ? 10 : overridePageSize;
     setLoading(true);
     setError('');
+    setPage(requestPage);
+    setPageSize(currentPageSize);
 
     try {
       const { data } = await api.get('/admin/reporte-asistencia', {
         params: {
           startDate: filtros.startDate,
           endDate: filtros.endDate,
+          page: requestPage,
+          pageSize: currentPageSize,
         },
       });
       setReporte(data.reporte);
@@ -67,18 +73,25 @@ export default function ReporteAsistencia() {
     }
   }
 
+  async function manejarEnvioReporte(e) {
+    e.preventDefault();
+    await cargarPagina(0);
+  }
+
+  async function cambiarPageSize(value) {
+    const amount = Number.parseInt(value, 10);
+    if (Number.isNaN(amount) || amount < 1) return;
+    await cargarPagina(0, amount);
+  }
+
   return (
     <div className="dash">
       <DashboardHeader navLinks={adminNavLinks(pathname)} />
 
       <main className="dash-main">
         <h1 className="dash-h1">Reporte de Asistencia</h1>
-        <p className="dash-sub">
-          Resultados generados ejecutando el procedimiento almacenado{' '}
-          <code>sp_reporte_asistencia</code>.
-        </p>
 
-        <form onSubmit={ejecutarReporte} className="dash-filters-form">
+        <form onSubmit={manejarEnvioReporte} className="dash-filters-form">
           <div className="dash-filters-group">
             <div className="form-group-inline">
               <label htmlFor="startDate" className="form-label-inline">Desde:</label>
@@ -102,6 +115,21 @@ export default function ReporteAsistencia() {
                 required
               />
             </div>
+            <label className="form-label-inline" htmlFor="pageSize">Mostrar:</label>
+            <select
+              id="pageSize"
+              className="form-input-inline"
+              value={`${pageSize}`}
+              onChange={(e) => cambiarPageSize(e.target.value)}
+            >
+              <option value="5">5</option>
+              <option value="10">10</option>
+              <option value="15">15</option>
+              <option value="20">20</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+            </select>
+            <span className="form-label-inline">filas</span>
             <button type="submit" className="btn-filter" disabled={loading}>
               {loading ? 'Consultando...' : '🔍 Generar Reporte'}
             </button>
@@ -117,9 +145,9 @@ export default function ReporteAsistencia() {
             <div className="dash-empty">No se encontraron asistencias en el rango de fechas seleccionado.</div>
           ) : (
             <>
-              <p className="dash-table-meta">
-                Total registros encontrados: <strong>{total}</strong>
-              </p>
+              <div className="dash-table-meta">
+                Mostrando <strong>{Math.min(total, page * pageSize + 1)}</strong> - <strong>{Math.min(total, page * pageSize + reporte.length)}</strong> de <strong>{total}</strong> registros.
+              </div>
               <div className="dash-table-scroll">
                 <table className="dash-table">
                   <thead>
@@ -143,6 +171,23 @@ export default function ReporteAsistencia() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+              <div className="dash-pagination">
+                <span>Mostrando <strong>{Math.min(total, page * pageSize + 1)}</strong> - <strong>{Math.min(total, page * pageSize + reporte.length)}</strong> de <strong>{total}</strong> registros.</span>
+                <div className="dash-pagination-controls">
+                  <button
+                    type="button"
+                    className="dash-pagination-button"
+                    onClick={() => cargarPagina(Math.max(0, page - 1))}
+                    disabled={page === 0 || loading}
+                  >Anterior</button>
+                  <button
+                    type="button"
+                    className="dash-pagination-button"
+                    onClick={() => cargarPagina(page + 1)}
+                    disabled={page + 1 >= Math.ceil(total / pageSize) || loading}
+                  >Siguiente</button>
+                </div>
               </div>
             </>
           )}
