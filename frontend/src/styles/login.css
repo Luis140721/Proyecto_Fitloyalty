@@ -221,6 +221,23 @@
   margin-top: 4px;
 }
 
+.form-input-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.input-note {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.input-note.error {
+  color: #e11d48;
+}
+
 /* Wrapper del input de contraseña */
 .input-password-wrapper {
   position: relative;

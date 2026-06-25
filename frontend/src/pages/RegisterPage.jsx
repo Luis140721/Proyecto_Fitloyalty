@@ -18,11 +18,26 @@ export default function RegisterPage() {
 
   const [form, setForm]       = useState({ gymName: '', gymPhone: '', gymEmail: '', ownerName: '', ownerEmail: '', password: '', confirm: '' });
   const [error, setError]     = useState('');
+  const [phoneError, setPhoneError] = useState('');
   const [loading, setLoading] = useState(false);
 
   function handleChange(e) {
-    setForm(prev => ({ ...prev, [e.target.name]: e.target.value }));
-    if (error) setError('');
+    let value = e.target.value;
+    if (e.target.name === 'gymPhone') {
+      value = value.toString().replace(/\D/g, '').slice(0, 10);
+      if (value.length > 0 && value[0] !== '3') {
+        setPhoneError('El teléfono debe comenzar con 3.');
+      } else {
+        setPhoneError('');
+      }
+      if (error) {
+        setError('');
+      }
+    } else if (error) {
+      setError('');
+    }
+
+    setForm(prev => ({ ...prev, [e.target.name]: value }));
   }
 
   async function handleSubmit(e) {
@@ -88,19 +103,23 @@ export default function RegisterPage() {
 
             <div className="form-group">
               <label className="form-label">Teléfono del gimnasio</label>
-              <input
-                name="gymPhone"
-                type="tel"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                className="form-input"
-                placeholder="3001234567"
-                value={form.gymPhone}
-                onChange={handleChange}
-                disabled={loading}
-                required
-              />
-              <div className="form-help">Número móvil colombiano de 10 dígitos que comienza con 3.</div>
+              <div className="form-input-row">
+                <input
+                  name="gymPhone"
+                  type="tel"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  className="form-input"
+                  placeholder="3001234567"
+                  value={form.gymPhone}
+                  onChange={handleChange}
+                  disabled={loading}
+                  required
+                />
+                <span className={`input-note ${phoneError ? 'error' : ''}`} role="status" aria-live="polite">
+                  {phoneError || '10 dígitos, comienza con 3'}
+                </span>
+              </div>
             </div>
 
             <div className="form-group">
