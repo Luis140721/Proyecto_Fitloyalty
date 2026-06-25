@@ -6,6 +6,7 @@ import LoginPage          from './pages/LoginPage';
 import RegisterPage       from './pages/RegisterPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ResetPasswordPage  from './pages/ResetPasswordPage';
+import LandingPage        from './pages/LandingPage';
 import DashboardAdmin          from './pages/DashboardAdmin';
 import CrearRecepcionistaPage   from './pages/CrearRecepcionistaPage';
 import DashboardUsuario         from './pages/DashboardUsuario';
@@ -94,8 +95,9 @@ export default function App() {
             </div>
           }/>
 
-          {/* Raíz y catch-all */}
-          <Route path="/" element={<RootRedirect />} />
+          {/* Raíz y landing page */}
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/landing" element={<LandingPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </AuthProvider>

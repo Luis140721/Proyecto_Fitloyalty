@@ -13,6 +13,10 @@ function getDashboardPath(role) {
   }
 }
 
+function validarEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
 export default function LoginPage() {
   const { login } = useAuth();
   const navigate  = useNavigate();
@@ -34,6 +38,18 @@ export default function LoginPage() {
     e.preventDefault();
     if (!form.email || !form.password) {
       setError('Por favor completa todos los campos.');
+      return;
+    }
+    if (!validarEmail(form.email)) {
+      setError('Por favor ingresa un correo electrónico válido.');
+      return;
+    }
+    if (form.password.length < 6) {
+      setError('La contraseña debe tener al menos 6 caracteres.');
+      return;
+    }
+    if (form.password.includes(' ')) {
+      setError('La contraseña no puede contener espacios.');
       return;
     }
 
@@ -142,6 +158,7 @@ export default function LoginPage() {
                   {showPass ? '🙈' : '👁️'}
                 </button>
               </div>
+              <div className="form-help">La contraseña debe tener al menos 6 caracteres y no contener espacios.</div>
             </div>
 
             <div className="login-form__options">

@@ -215,6 +215,12 @@
 .form-input:disabled { opacity: 0.55; cursor: not-allowed; }
 .form-input::placeholder { color: #a0aec0; }
 
+.form-help {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
 /* Wrapper del input de contraseña */
 .input-password-wrapper {
   position: relative;
