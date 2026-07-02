@@ -17,7 +17,7 @@
   --shadow:        0 4px 24px rgba(0,0,0,0.08);
 }
 
-html { font-size: 16px; }
+html { font-size: 16px; overflow-x: hidden; }
 
 body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -25,6 +25,7 @@ body {
   color: var(--text);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
 }
 
 a { color: var(--primary); text-decoration: none; }

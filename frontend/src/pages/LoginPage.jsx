@@ -13,6 +13,10 @@ function getDashboardPath(role) {
   }
 }
 
+function validarEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
 export default function LoginPage() {
   const { login } = useAuth();
   const navigate  = useNavigate();
@@ -36,11 +40,24 @@ export default function LoginPage() {
       setError('Por favor completa todos los campos.');
       return;
     }
+    if (!validarEmail(form.email)) {
+      setError('Por favor ingresa un correo electrónico válido.');
+      return;
+    }
+    if (form.password.length < 6) {
+      setError('La contraseña debe tener al menos 6 caracteres.');
+      return;
+    }
+    if (form.password.includes(' ')) {
+      setError('La contraseña no puede contener espacios.');
+      return;
+    }
 
     setLoading(true);
     try {
       const user = await login(form.email, form.password);
-      const dest = from || getDashboardPath(user.role);
+      // Siempre enviar a admins al dashboard de KPIs; para otros roles respetar 'from' si existe
+      const dest = user.role === 'admin' ? getDashboardPath('admin') : (from || getDashboardPath(user.role));
       navigate(dest, { replace: true });
     } catch (err) {
       const msg = err.response?.data?.error || 'Error al iniciar sesión. Intenta de nuevo.';
@@ -141,6 +158,7 @@ export default function LoginPage() {
                   {showPass ? '🙈' : '👁️'}
                 </button>
               </div>
+              <div className="form-help">La contraseña debe tener al menos 6 caracteres y no contener espacios.</div>
             </div>
 
             <div className="login-form__options">

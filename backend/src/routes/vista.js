@@ -24,7 +24,13 @@ router.use(authenticate);
  * Demostramos que el listado sale de una vista SQL, no de una tabla directa.
  */
 router.get('/miembros-activos', async (req, res) => {
+  const page = Math.max(0, Number.parseInt(req.query.page, 10) || 0);
+  const pageSize = Number.parseInt(req.query.pageSize, 10);
+  const limit = Number.isNaN(pageSize) ? 10 : Math.min(Math.max(pageSize, 1), 100);
+  const offset = page * limit;
+
   try {
+    const totalQuery = await pool.query('SELECT COUNT(*)::int AS total FROM vista_miembros_activos');
     const resultado = await pool.query(
       `SELECT nombre,
               documento,
@@ -36,10 +42,17 @@ router.get('/miembros-activos', async (req, res) => {
               fecha_fin,
               plan
        FROM vista_miembros_activos
-       ORDER BY nombre ASC`
+       ORDER BY nombre ASC
+       LIMIT $1 OFFSET $2`,
+      [limit, offset]
     );
 
-    res.json({ miembros: resultado.rows, total: resultado.rowCount });
+    res.json({
+      miembros: resultado.rows,
+      total: totalQuery.rows[0].total,
+      page,
+      pageSize: limit,
+    });
 
   } catch (err) {
     console.error('[GET /vista/miembros-activos] Error:', err.message);

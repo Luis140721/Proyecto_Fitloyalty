@@ -53,9 +53,10 @@ export default function DashboardHeader({ navLinks = [] }) {
 /** Navegación del panel de administrador */
 export function adminNavLinks(activePath) {
   return [
-    { to: '/dashboard/admin',        label: 'Resumen General',           active: activePath === '/dashboard/admin' },
-    { to: '/dashboard/reporte-sp',   label: 'Reporte Asistencia (SP)',   active: activePath === '/dashboard/reporte-sp' },
-    { to: '/dashboard/vista-miembros', label: 'Miembros activos (Vista SQL)', active: activePath === '/dashboard/vista-miembros' },
+    { to: '/dashboard/admin',        label: 'Resumen general',         active: activePath === '/dashboard/admin' },
+    { to: '/dashboard/reporte-sp',   label: 'Reporte asistencia',      active: activePath === '/dashboard/reporte-sp' },
+    { to: '/dashboard/vista-miembros', label: 'Miembros activos',       active: activePath === '/dashboard/vista-miembros' },
+    { to: '/dashboard/crear-recepcionista', label: 'Crear recepcionista', active: activePath === '/dashboard/crear-recepcionista' },
   ];
 }
 
@@ -69,7 +70,7 @@ export function userNavLinks(activePath) {
     },
     {
       to: '/dashboard/vista-miembros',
-      label: 'Miembros activos (Vista SQL)',
+      label: 'Miembros activos',
       active: activePath === '/dashboard/vista-miembros',
     },
   ];
