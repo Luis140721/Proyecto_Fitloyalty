@@ -16,7 +16,7 @@ export default function RegisterPage() {
   const { register } = useAuth();
   const navigate = useNavigate();
 
-  const [form, setForm]       = useState({ gymName: '', gymPhone: '', gymEmail: '', ownerName: '', ownerEmail: '', password: '', confirm: '' });
+  const [form, setForm]       = useState({ gymName: '', gymPhone: '', gymEmail: '', ownerFirstName: '', ownerLastName: '', ownerEmail: '', password: '', confirm: '' });
   const [error, setError]     = useState('');
   const [phoneError, setPhoneError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -42,7 +42,7 @@ export default function RegisterPage() {
 
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!form.gymName || !form.gymPhone || !form.ownerName || !form.ownerEmail || !form.password || !form.confirm) {
+    if (!form.gymName || !form.gymPhone || !form.ownerFirstName || !form.ownerLastName || !form.ownerEmail || !form.password || !form.confirm) {
       return setError('Todos los campos marcados son obligatorios.');
     }
     if (!validarEmail(form.ownerEmail)) {
@@ -60,7 +60,7 @@ export default function RegisterPage() {
 
     setLoading(true);
     try {
-      await register(form.gymName, form.gymPhone, form.ownerName, form.ownerEmail, form.password);
+      await register(form.gymName, form.gymPhone, form.ownerFirstName, form.ownerLastName, form.ownerEmail, form.password);
       // redirigir al onboarding/dashboard
       navigate('/dashboard', { replace: true });
     } catch (err) {
@@ -122,9 +122,15 @@ export default function RegisterPage() {
               </div>
             </div>
 
-            <div className="form-group">
-              <label className="form-label">Nombre del administrador</label>
-              <input name="ownerName" type="text" className="form-input" placeholder="Carlos Pérez" value={form.ownerName} onChange={handleChange} disabled={loading} required />
+            <div className="form-row">
+              <div className="form-group">
+                <label className="form-label">Nombre</label>
+                <input name="ownerFirstName" type="text" className="form-input" placeholder="Carlos" value={form.ownerFirstName} onChange={handleChange} disabled={loading} required />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Apellido</label>
+                <input name="ownerLastName" type="text" className="form-input" placeholder="Pérez" value={form.ownerLastName} onChange={handleChange} disabled={loading} required />
+              </div>
             </div>
 
             <div className="form-group">

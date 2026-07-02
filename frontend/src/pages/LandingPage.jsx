@@ -55,6 +55,11 @@ export default function LandingPage() {
 
         <div className="landing-hero__visual">
           <div className="hero-card">
+            <img 
+              src="/images/hero-gym.png" 
+              alt="Gimnasio moderno con equipamiento fitness" 
+              className="hero-card__image"
+            />
             <div className="hero-card__badge">Panel KPI</div>
             <div className="hero-card__header">
               <div>
@@ -85,14 +90,17 @@ export default function LandingPage() {
 
       <section className="landing-feature-grid">
         <article className="feature-card feature-card--accent">
+          <img src="/images/fideliza.png" alt="Entrenamiento personal" className="feature-image" />
           <h3>Fideliza a tus socios</h3>
           <p>Detecta señales de abandono y actúa antes de que cancelen su membresía.</p>
         </article>
         <article className="feature-card">
+          <img src="/images/reportes.png" alt="Dashboard de análisis" className="feature-image" />
           <h3>Reportes y datos claros</h3>
           <p>Visualiza flujo de clientes, membresías y resultados del día sin perder tiempo.</p>
         </article>
         <article className="feature-card">
+          <img src="/images/equipo.png" alt="Equipo de gimnasio" className="feature-image" />
           <h3>Equipo conectado</h3>
           <p>Gestiona recepcionistas y permisos desde un mismo panel.</p>
         </article>
@@ -105,16 +113,19 @@ export default function LandingPage() {
         </div>
         <div className="process-grid">
           <div className="process-step">
+            <img src="/images/registro.png" alt="Registro de gimnasio" className="process-image" />
             <span>1</span>
             <h4>Registra tu gimnasio</h4>
             <p>Crea tu cuenta y configura recepcionistas en minutos.</p>
           </div>
           <div className="process-step">
+            <img src="/images/asistencias.png" alt="Monitoreo de asistencias" className="process-image" />
             <span>2</span>
             <h4>Monitorea asistencias</h4>
             <p>Sigue los ingresos diarios y las tendencias de comportamiento.</p>
           </div>
           <div className="process-step">
+            <img src="/images/fideliza.png" alt="Alertas y acciones" className="process-image" />
             <span>3</span>
             <h4>Actúa con información</h4>
             <p>Recibe alertas y ayuda a tus clientes antes de que abandonen.</p>
@@ -155,7 +166,15 @@ export default function LandingPage() {
           </div>
           <div>
             <h4>WhatsApp</h4>
-            <p>+57 300 123 4567</p>
+            <p>+57 302 717 1522</p>
+            <a 
+              href="https://wa.me/573027171522" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="btn-whatsapp"
+            >
+              <span>💬</span> Contactar por WhatsApp
+            </a>
           </div>
           <div>
             <h4>Soporte</h4>

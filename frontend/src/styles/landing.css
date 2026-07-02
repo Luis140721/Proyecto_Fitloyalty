@@ -168,6 +168,16 @@
   border-radius: 36px;
   padding: 32px;
   box-shadow: 0 28px 68px rgba(30,41,59,0.12);
+  position: relative;
+  overflow: hidden;
+}
+
+.hero-card__image {
+  width: 100%;
+  height: 140px;
+  object-fit: cover;
+  border-radius: 24px;
+  margin-bottom: 20px;
 }
 
 .hero-card__badge {
@@ -272,6 +282,14 @@
   line-height: 1.8;
 }
 
+.feature-image {
+  width: 100%;
+  height: 180px;
+  object-fit: cover;
+  border-radius: 20px;
+  margin-bottom: 20px;
+}
+
 .landing-process {
   padding: 72px 64px;
   background: var(--landing-surface-soft);
@@ -313,6 +331,14 @@
 .process-step p {
   color: var(--landing-muted);
   line-height: 1.75;
+}
+
+.process-image {
+  width: 100%;
+  height: 160px;
+  object-fit: cover;
+  border-radius: 18px;
+  margin-bottom: 16px;
 }
 
 .landing-testimonials {
@@ -370,6 +396,28 @@
   line-height: 1.8;
 }
 
+.btn-whatsapp {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 12px 20px;
+  background: #25D366;
+  color: white;
+  text-decoration: none;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 0.9rem;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease;
+  box-shadow: 0 4px 12px rgba(37, 211, 102, 0.3);
+}
+
+.btn-whatsapp:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(37, 211, 102, 0.4);
+  background: #20bd5a;
+}
+
 .testimonial-grid p {
   color: var(--landing-muted);
   line-height: 1.8;
@@ -379,6 +427,48 @@
 .testimonial-grid strong {
   display: block;
   color: var(--landing-strong);
+}
+
+.testimonial-stars {
+  color: #f59e0b;
+  font-size: 1.1rem;
+  letter-spacing: 2px;
+  margin-bottom: 16px;
+}
+
+.testimonial-author {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: auto;
+  padding-top: 16px;
+  border-top: 1px solid rgba(30,41,59,0.06);
+}
+
+.testimonial-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.85rem;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+
+.testimonial-author span {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--landing-muted);
+  margin-top: 2px;
+}
+
+.testimonial-grid article {
+  display: flex;
+  flex-direction: column;
 }
 
 .landing-cta-strip--wide {

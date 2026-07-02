@@ -40,8 +40,9 @@ export function AuthProvider({ children }) {
     return data.user; // Para redirigir según el rol
   }, []);
 
-  const register = useCallback(async (gymName, gymPhone, ownerName, ownerEmail, password) => {
+  const register = useCallback(async (gymName, gymPhone, ownerFirstName, ownerLastName, ownerEmail, password) => {
     // Public signup: crear gimnasio + admin owner
+    const ownerName = `${ownerFirstName.trim()} ${ownerLastName.trim()}`;
     const payload = { gymName, gymPhone, ownerName, ownerEmail, password };
     const { data } = await api.post('/auth/signup', payload);
     if (data.token) {
