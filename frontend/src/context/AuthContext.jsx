@@ -40,10 +40,15 @@ export function AuthProvider({ children }) {
     return data.user; // Para redirigir según el rol
   }, []);
 
-  const register = useCallback(async (name, email, password, phone) => {
-    const { data } = await api.post('/auth/register', { name, email, password, phone });
-    localStorage.setItem('fitloyalty_token', data.token);
-    setUser(data.user);
+  const register = useCallback(async (gymName, gymPhone, ownerFirstName, ownerLastName, ownerEmail, password) => {
+    // Public signup: crear gimnasio + admin owner
+    const ownerName = `${ownerFirstName.trim()} ${ownerLastName.trim()}`;
+    const payload = { gymName, gymPhone, ownerName, ownerEmail, password };
+    const { data } = await api.post('/auth/signup', payload);
+    if (data.token) {
+      localStorage.setItem('fitloyalty_token', data.token);
+      setUser(data.user);
+    }
     return data.user;
   }, []);
 
