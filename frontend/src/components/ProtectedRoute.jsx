@@ -1,32 +1,20 @@
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
-/**
- * Protege una ruta. Si el usuario no está autenticado, redirige a /login.
- * Si se pasa `roles`, verifica que el usuario tenga el rol necesario.
- *
- * Uso:
- *   <ProtectedRoute>                  → solo autenticado
- *   <ProtectedRoute roles={['admin']} → solo admins
- */
-export default function ProtectedRoute({ children, roles }) {
+export default function ProtectedRoute({ roles, children }) {
   const { user, loading } = useAuth();
   const location = useLocation();
 
   if (loading) {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
-        <div className="spinner" />
-      </div>
-    );
+    return <div className="boot-shell"><div className="spinner" /></div>;
   }
 
   if (!user) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
+    return <Navigate to="/login" state={{ from: location.pathname }} replace />;
   }
 
   if (roles && !roles.includes(user.role)) {
-    return <Navigate to="/unauthorized" replace />;
+    return <Navigate to="/login" replace />;
   }
 
   return children;
