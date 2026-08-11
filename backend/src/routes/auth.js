@@ -182,6 +182,8 @@ router.post('/login', async (req, res) => {
   if (!parsed.ok) return res.status(parsed.status).json({ error: parsed.error });
   const { email, password } = parsed.data;
 
+  console.log('[POST /auth/login] intento:', email);
+
   try {
     const { rows } = await pool.query(
       `SELECT u.id_usuario, u.nombre, u.email, u.password_hash, u.id_gimnasio, u.activo,
