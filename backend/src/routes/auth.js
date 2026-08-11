@@ -202,7 +202,13 @@ router.post('/login', async (req, res) => {
     const ok = await bcrypt.compare(password, usuario.password_hash);
     if (!ok) return res.status(401).json({ error: 'Credenciales incorrectas' });
 
-    const token = generarToken(usuario);
+    let token;
+    try {
+      token = generarToken(usuario);
+    } catch (tokenErr) {
+      console.error('[POST /auth/login] Error firmando JWT:', tokenErr.message, tokenErr.stack);
+      return res.status(500).json({ error: 'Error generando token de sesion' });
+    }
 
     return res.json({
       message: 'Inicio de sesion exitoso',
