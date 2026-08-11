@@ -184,7 +184,9 @@ router.post('/login', async (req, res) => {
 
   try {
     const { rows } = await pool.query(
-      `SELECT u.*, g.activo AS gym_activo, g.trial_ends_at, r.nombre AS rol_nombre
+      `SELECT u.id_usuario, u.nombre, u.email, u.password_hash, u.id_gimnasio, u.activo,
+              g.activo AS gym_activo, g.trial_ends_at,
+              COALESCE(u.rol, r.nombre, CASE WHEN u.id_rol = 1 THEN 'ADMINISTRADOR' ELSE 'RECEPCIONISTA' END) AS rol_nombre
        FROM usuario u
        INNER JOIN gimnasio g ON g.id_gimnasio = u.id_gimnasio
        LEFT JOIN rol r ON r.id_rol = u.id_rol
@@ -210,7 +212,7 @@ router.post('/login', async (req, res) => {
       },
     });
   } catch (err) {
-    console.error('[POST /auth/login] Error:', err.message);
+    console.error('[POST /auth/login] Error:', err.message, err.stack);
     return res.status(500).json({ error: 'Error interno del servidor' });
   }
 });
