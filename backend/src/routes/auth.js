@@ -186,10 +186,11 @@ router.post('/login', async (req, res) => {
     const { rows } = await pool.query(
       `SELECT u.id_usuario, u.nombre, u.email, u.password_hash, u.id_gimnasio, u.activo,
               g.activo AS gym_activo, g.trial_ends_at,
-              COALESCE(u.rol, r.nombre, CASE WHEN u.id_rol = 1 THEN 'ADMINISTRADOR' ELSE 'RECEPCIONISTA' END) AS rol_nombre
+              CASE WHEN u.id_rol = 1 THEN 'ADMINISTRADOR'
+                   WHEN u.id_rol = 2 THEN 'RECEPCIONISTA'
+                   ELSE COALESCE(u.rol, 'RECEPCIONISTA') END AS rol_nombre
        FROM usuario u
        INNER JOIN gimnasio g ON g.id_gimnasio = u.id_gimnasio
-       LEFT JOIN rol r ON r.id_rol = u.id_rol
        WHERE LOWER(u.email) = $1 AND u.activo = TRUE`,
       [email.toLowerCase()]
     );
