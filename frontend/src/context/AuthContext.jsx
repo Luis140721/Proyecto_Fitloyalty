@@ -3,10 +3,9 @@ import axios from 'axios';
 
 const AuthContext = createContext(null);
 
-// Instancia de axios con base URL
+// Instancia de axios con base URL. Adjunta el JWT a cada request automaticamente.
 const api = axios.create({ baseURL: '/api' });
 
-// Interceptor: adjunta el token JWT a cada request automáticamente
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('fitloyalty_token');
   if (token) {
@@ -17,40 +16,42 @@ api.interceptors.request.use((config) => {
 
 export function AuthProvider({ children }) {
   const [user, setUser]       = useState(null);
-  const [loading, setLoading] = useState(true); // Verificando sesión al iniciar
+  const [loading, setLoading] = useState(true);
 
-  // Al montar, intentar restaurar sesión desde el token guardado
   useEffect(() => {
     const token = localStorage.getItem('fitloyalty_token');
     if (!token) {
       setLoading(false);
       return;
     }
-
     api.get('/auth/me')
       .then(({ data }) => setUser(data.user))
       .catch(() => localStorage.removeItem('fitloyalty_token'))
       .finally(() => setLoading(false));
   }, []);
 
-  const login = useCallback(async (email, password) => {
-    const { data } = await api.post('/auth/login', { email, password });
-    localStorage.setItem('fitloyalty_token', data.token);
-    setUser(data.user);
-    return data.user; // Para redirigir según el rol
-  }, []);
-
-  const register = useCallback(async (gymName, gymPhone, ownerFirstName, ownerLastName, ownerEmail, password) => {
-    // Public signup: crear gimnasio + admin owner
-    const ownerName = `${ownerFirstName.trim()} ${ownerLastName.trim()}`;
-    const payload = { gymName, gymPhone, ownerName, ownerEmail, password };
-    const { data } = await api.post('/auth/signup', payload);
+  const handleAuthResponse = useCallback((data) => {
     if (data.token) {
       localStorage.setItem('fitloyalty_token', data.token);
       setUser(data.user);
     }
     return data.user;
   }, []);
+
+  const login = useCallback(async (email, password) => {
+    const { data } = await api.post('/auth/login', { email, password });
+    return handleAuthResponse(data);
+  }, [handleAuthResponse]);
+
+  const register = useCallback(async (payload) => {
+    const { data } = await api.post('/auth/signup', payload);
+    return handleAuthResponse(data);
+  }, [handleAuthResponse]);
+
+  const acceptInvite = useCallback(async (token, password) => {
+    const { data } = await api.post('/auth/accept-invite', { token, password });
+    return handleAuthResponse(data);
+  }, [handleAuthResponse]);
 
   const logout = useCallback(async () => {
     try { await api.post('/auth/logout'); } catch (_) {}
@@ -59,7 +60,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, api }}>
+    <AuthContext.Provider value={{ user, loading, login, register, acceptInvite, logout, api }}>
       {children}
     </AuthContext.Provider>
   );
