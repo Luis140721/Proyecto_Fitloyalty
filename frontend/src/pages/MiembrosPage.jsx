@@ -1,12 +1,5 @@
 import { useEffect, useState } from 'react';
-import axios from 'axios';
-
-const api = axios.create({ baseURL: '/api' });
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('fitloyalty_token');
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  return config;
-});
+import { api } from '../api';
 
 const empty = { nombre: '', documento: '', telefono: '', email: '' };
 

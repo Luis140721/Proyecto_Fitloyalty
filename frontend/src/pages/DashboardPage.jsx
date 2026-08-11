@@ -1,14 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useTrial } from '../context/TrialContext';
-import axios from 'axios';
-
-const api = axios.create({ baseURL: '/api' });
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('fitloyalty_token');
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  return config;
-});
+import { api } from '../api';
 
 export default function DashboardPage() {
   const { user } = useAuth();

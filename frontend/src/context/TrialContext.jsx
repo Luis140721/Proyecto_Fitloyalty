@@ -1,13 +1,5 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import axios from 'axios';
-
-// Instancia local con auth (no usamos el del AuthContext para simplificar uso fuera del provider).
-const api = axios.create({ baseURL: '/api' });
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('fitloyalty_token');
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  return config;
-});
+import { api } from '../api';
 
 const TrialContext = createContext(null);
 
