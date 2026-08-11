@@ -1,0 +1,7 @@
+# Archivos generados en pruebas E2E (NO subir a git)
+signup.json
+signup_b.json
+invited_token.txt
+.server.out.log
+.server.err.log
+.server.log

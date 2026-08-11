@@ -129,9 +129,9 @@ router.post('/signup', async (req, res) => {
     // 3. Crear admin owner
     const password_hash = await bcrypt.hash(password, 10);
     const { rows: userRows } = await client.query(
-      `INSERT INTO usuario (id_gimnasio, nombre, email, password_hash, rol)
-       VALUES ($1, $2, $3, $4, 'ADMINISTRADOR')
-       RETURNING *`,
+      `INSERT INTO usuario (id_gimnasio, nombre, email, password_hash, id_rol)
+       VALUES ($1, $2, $3, $4, (SELECT id_rol FROM rol WHERE nombre='ADMINISTRADOR' LIMIT 1))
+       RETURNING id_usuario, nombre, email, id_gimnasio`,
       [gym.id_gimnasio, ownerName.trim(), ownerEmail.toLowerCase(), password_hash]
     );
     const owner = userRows[0];
@@ -157,7 +157,7 @@ router.post('/signup', async (req, res) => {
     return res.status(201).json({
       message: `Gimnasio creado. Tienes ${days} dias de prueba gratuita.`,
       token,
-      user: usuarioSeguro({ ...owner, rol_nombre: 'ADMINISTRADOR' }),
+      user: usuarioSeguro({ ...owner, id_rol: 1, rol_nombre: 'ADMINISTRADOR' }),
       gym: {
         id: gym.id_gimnasio,
         nombre: gym.nombre,
@@ -278,7 +278,7 @@ router.post('/forgot-password', async (req, res) => {
     });
 
     const payload = { ...generic, resendAfterSeconds: 60 };
-    if (!result.delivered && process.env.NODE_ENV !== 'production') {
+    if (!result.delivered) {
       payload.devCode = code;
     }
     return res.json(payload);
