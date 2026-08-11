@@ -1,26 +1,88 @@
-# ── Dependencias ─────────────────────────────────────────────────────────────
+# ============================================================
+# FITLOYALTY · .gitignore raíz del monorepo
+# ============================================================
+
+# --- Dependencias
 node_modules/
 **/node_modules/
 
-# ── Variables de entorno (NUNCA subir al repo) ────────────────────────────────
-.env
-**/.env
+# --- Build artifacts
+dist/
+build/
+.next/
+out/
+**/dist/
+**/build/
+.vite/
 
-# ── Build del frontend ────────────────────────────────────────────────────────
-frontend/dist/
-
-# ── Logs ──────────────────────────────────────────────────────────────────────
+# --- Logs
 *.log
+*.log.*
+*.err.log
+*.out.log
 npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-# ── OS ────────────────────────────────────────────────────────────────────────
+# --- Variables de entorno (nunca se commitean)
+.env
+.env.local
+.env.*.local
+**/.env
+**/.env.local
+
+# --- Editor / OS
 .DS_Store
 Thumbs.db
-
-# ── IDEs ──────────────────────────────────────────────────────────────────────
-.vscode/
 .idea/
-
-# ── Artefactos de la app Context Code (no son parte del proyecto) ──────────────
-.context/
+.vscode/
+*.swp
+*.swo
+*~
+*.tmp
 nul
+*.bak
+
+# --- Tests / coverage
+coverage/
+.nyc_output/
+src/coverage/
+
+# --- Cache
+.cache/
+.parcel-cache/
+.turbo/
+.eslintcache
+
+# --- Carpetas y artefactos de.Context Code (no son código)
+.context/
+.fitloyalty-*.png
+.fitloyalty-*.jpg
+kinetic-*.png
+fitloyalty-*.png
+backend/signup*.json
+backend/invited_token.txt
+backend/.server*.log
+backend/.gitignore_local
+frontend/.vite.out.log
+frontend/.vite.err.log
+
+# --- Stitch: referencias de diseño generadas
+stitch_fitloyalty_gesti_n_de_gimnasios/
+stitch_*/
+
+# --- Backend: artefactos locales de Postgres
+backend/data/
+backend/*.sqlite
+backend/*.db
+
+# --- Frontend
+frontend/coverage/
+frontend/.vite/
+
+# --- Servidor
+*.pid
+*.sock
+
+# --- Vercel
+.vercel
