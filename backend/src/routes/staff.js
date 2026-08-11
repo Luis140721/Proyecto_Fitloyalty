@@ -85,7 +85,7 @@ router.post(
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 dias
 
     const { rows } = await pool.query(
-      `INSERT INTO invitacion_staff (id_gimnasio, email, nombre, rol_asignado, token_hash, invitado_por, fecha_expiracion)
+      `INSERT INTO invitacion_staff (id_gimnasio, email, nombre, rol_asignado, token_hash, id_usuario_creador, fecha_expiracion)
        VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING id_invitacion, email, nombre, rol_asignado, fecha_creacion, fecha_expiracion`,
       [gymId, email, nombre, rol, tokenHash, req.user.id, expiresAt]
@@ -107,7 +107,7 @@ router.post(
       acceptUrl,
       emailDelivered: result.delivered,
     };
-    if (!result.delivered && process.env.NODE_ENV !== 'production') {
+    if (!result.delivered) {
       payload.devAcceptToken = token;
     }
     return res.status(201).json(payload);
@@ -174,7 +174,8 @@ router.get(
   async (req, res) => {
     const gymId = req.user.gymId;
     const { rows } = await pool.query(
-      `SELECT id_usuario, nombre, email, rol, activo, fecha_creacion, ultimo_acceso
+      `SELECT id_usuario, nombre, email, id_rol, activo, fecha_creacion, ultimo_acceso,
+              (SELECT nombre FROM rol WHERE rol.id_rol = usuario.id_rol) AS rol
        FROM usuario
        WHERE id_gimnasio = $1
        ORDER BY fecha_creacion DESC`,
@@ -254,28 +255,30 @@ router.post('/auth/accept-invite', async (req, res) => {
     const password_hash = await bcrypt.hash(password, 10);
 
     const { rows: userRows } = await client.query(
-      `INSERT INTO usuario (id_gimnasio, nombre, email, password_hash, rol, debe_cambiar_clave)
-       VALUES ($1, $2, $3, $4, $5, FALSE)
-       RETURNING id_usuario, nombre, email, rol, id_gimnasio`,
+      `INSERT INTO usuario (id_gimnasio, nombre, email, password_hash, id_rol, debe_cambiar_clave)
+       VALUES ($1, $2, $3, $4,
+         (SELECT id_rol FROM rol WHERE nombre = $5),
+         FALSE)
+       RETURNING id_usuario, nombre, email, id_gimnasio, id_rol`,
       [inv.id_gimnasio, finalName, inv.email, password_hash, inv.rol_asignado]
     );
     const newUser = userRows[0];
 
     await client.query(
       `UPDATE invitacion_staff
-         SET fecha_aceptacion = NOW(), id_usuario_creado = $1
+         SET fecha_aceptacion = NOW(), id_usuario_creador = $1
        WHERE id_invitacion = $2`,
       [newUser.id_usuario, inv.id_invitacion]
     );
 
     await client.query('COMMIT');
 
-    const { generarToken } = require('../lib/auth-helpers');
+    const { generarToken, mapRol } = require('../lib/auth-helpers');
     const jwt = generarToken({
       id_usuario: newUser.id_usuario,
       nombre: newUser.nombre,
       email: newUser.email,
-      rol: newUser.rol,
+      rol: mapRol(inv.rol_asignado),
       id_gimnasio: newUser.id_gimnasio,
     });
 
@@ -286,7 +289,7 @@ router.post('/auth/accept-invite', async (req, res) => {
         id: newUser.id_usuario,
         name: newUser.nombre,
         email: newUser.email,
-        role: newUser.rol.toLowerCase(),
+        role: mapRol(inv.rol_asignado),
         gymId: newUser.id_gimnasio,
       },
     });

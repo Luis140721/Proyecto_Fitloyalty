@@ -16,14 +16,18 @@ let cachedTransporter = null;
 function getTransporter() {
   if (cachedTransporter) return cachedTransporter;
   if (!process.env.SMTP_USER || !process.env.SMTP_PASSWORD) return null;
+  const port = parseInt(process.env.SMTP_PORT || '587', 10);
   cachedTransporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST || 'smtp.gmail.com',
-    port: parseInt(process.env.SMTP_PORT || '587', 10),
-    secure: process.env.SMTP_PORT === '465',
+    port,
+    secure: port === 465,
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASSWORD,
     },
+    tls: { rejectUnauthorized: false },
+    connectionTimeout: 5000,
+    socketTimeout: 5000,
   });
   return cachedTransporter;
 }
@@ -41,14 +45,20 @@ async function sendMail({ to, subject, text, html }) {
     console.log(`[EMAIL-DEV] Cuerpo:\n${text}\n`);
     return { delivered: false, reason: 'no-smtp' };
   }
-  await transporter.sendMail({
-    from: process.env.SMTP_FROM || '"FitLoyalty" <no-reply@fitloyalty.com>',
-    to,
-    subject,
-    text,
-    html,
-  });
-  return { delivered: true };
+  try {
+    await transporter.sendMail({
+      from: process.env.SMTP_FROM || '"FitLoyalty" <no-reply@fitloyalty.com>',
+      to,
+      subject,
+      text,
+      html,
+    });
+    return { delivered: true };
+  } catch (err) {
+    console.warn(`[EMAIL-WARN] SMTP fallo (${err.message}), fallback a consola.`);
+    console.log(`[EMAIL-DEV-FALLBACK] Para: ${to} | Asunto: ${subject}\n${text}`);
+    return { delivered: false, reason: 'smtp-error', error: err.message };
+  }
 }
 
 module.exports = { sendMail };
