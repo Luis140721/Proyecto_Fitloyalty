@@ -1,30 +1,62 @@
+/**
+ * src/index.js
+ *
+ * Servidor Express de FitLoyalty (MVP reescrito).
+ *
+ * Rutas MVP:
+ *   /api/auth         -> signup, login, me, logout, forgot/verify/reset, accept-invite
+ *   /api/billing      -> trial-status
+ *   /api/admin/staff  -> invite, list, revoke
+ *   /api/admin/miembros -> CRUD miembros
+ *   /api/admin/checkin  -> check-in manual/QR
+ *   /api/admin/dashboard -> KPIs
+ *   /api/health       -> healthcheck
+ */
 require('dotenv').config();
 const express = require('express');
 const cors    = require('cors');
+const rateLimit = require('express-rate-limit');
 const pool    = require('./db/db');
+const { applyMigrations } = require('./db/migrate');
 
-const authRoutes       = require('./routes/auth');
-const asistenciaRoutes = require('./routes/asistencia');
-const vistaRoutes      = require('./routes/vista');
-const adminRoutes = require('./routes/admin');
+const authRoutes     = require('./routes/auth');
+const staffRoutes    = require('./routes/staff');
+const miembrosRoutes = require('./routes/miembros');
+const checkinRoutes  = require('./routes/checkin');
+const billingRoutes  = require('./routes/billing');
+const dashboardRoutes = require('./routes/dashboard');
 
 const app  = express();
 const PORT = process.env.PORT || 3001;
+const IS_PROD = process.env.NODE_ENV === 'production';
 
-// Middlewares globales
 app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:5173',
   credentials: true,
 }));
 app.use(express.json());
 
-// Rutas
-app.use('/api/auth', authRoutes);
-app.use('/api/admin', adminRoutes);
-app.use('/api/asistencia', asistenciaRoutes);
-app.use('/api/vista', vistaRoutes);
+// Rate limits: login 5/min, forgot 3/min
+const loginLimiter = rateLimit({
+  windowMs: 60 * 1000, max: 5,
+  standardHeaders: true, legacyHeaders: false,
+  message: { error: 'Demasiados intentos. Intenta de nuevo en un minuto.' },
+});
+const forgotLimiter = rateLimit({
+  windowMs: 60 * 1000, max: 3,
+  standardHeaders: true, legacyHeaders: false,
+  message: { error: 'Demasiadas solicitudes. Intenta de nuevo en un minuto.' },
+});
 
-// Health check: verifica que la BD responde
+app.use('/api/auth/login', loginLimiter);
+app.use('/api/auth/forgot-password', forgotLimiter);
+app.use('/api/auth', authRoutes);
+app.use('/api', staffRoutes);
+app.use('/api', miembrosRoutes);
+app.use('/api', checkinRoutes);
+app.use('/api', billingRoutes);
+app.use('/api', dashboardRoutes);
+
 app.get('/api/health', async (req, res) => {
   try {
     await pool.query('SELECT 1');
@@ -34,32 +66,39 @@ app.get('/api/health', async (req, res) => {
   }
 });
 
-// 404 catch-all
 app.use((req, res) => {
-  res.status(404).json({ error: `Ruta no encontrada: ${req.method} ${req.path}` });
+  if (!IS_PROD) return res.status(404).json({ error: `Ruta no encontrada: ${req.method} ${req.path}` });
+  return res.status(404).json({ error: 'Ruta no encontrada' });
 });
 
-// Error handler global
 app.use((err, req, res, next) => {
   console.error('[ERROR]', err);
   res.status(500).json({ error: 'Error interno del servidor' });
 });
 
-// Inicia el servidor verificando primero la conexion a PostgreSQL
 async function iniciar() {
   try {
     const { rows } = await pool.query('SELECT NOW() AS hora');
     console.log('\n[OK] PostgreSQL conectado -- ' + rows[0].hora);
   } catch (err) {
     console.error('\n[ERROR] No se pudo conectar a PostgreSQL:', err.message);
-    console.error('  >> Revisa DB_PASSWORD en backend/.env\n');
     process.exit(1);
   }
 
+  try {
+    await applyMigrations();
+  } catch (err) {
+    console.error('[migrate] Migraciones pendientes o con error:', err.message);
+  }
+
   app.listen(PORT, () => {
-    console.log('[OK] FitLoyalty API corriendo en http://localhost:' + PORT);
-    console.log('[OK] Health check: http://localhost:' + PORT + '/api/health\n');
+    console.log(`[OK] FitLoyalty API corriendo en http://localhost:${PORT}`);
+    console.log(`[OK] Health: http://localhost:${PORT}/api/health\n`);
   });
 }
 
-iniciar();
+if (require.main === module) {
+  iniciar();
+}
+
+module.exports = { app, iniciar };
