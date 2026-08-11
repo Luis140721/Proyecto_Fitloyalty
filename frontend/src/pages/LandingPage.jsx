@@ -38,61 +38,12 @@ const ICONS = {
 };
 
 export default function LandingPage() {
-  const [headerVisible, setHeaderVisible] = useState(true);
-  const [headerSolid, setHeaderSolid] = useState(false);
-  const lastYRef = useRef(0);
-  const tickingRef = useRef(false);
-
-  useEffect(() => {
-    lastYRef.current = window.scrollY;
-
-    const onScroll = () => {
-      if (tickingRef.current) return;
-      tickingRef.current = true;
-
-      window.requestAnimationFrame(() => {
-        const y = window.scrollY;
-        const lastY = lastYRef.current;
-
-        // Sólido con borde solo cuando ya pasaste el hero
-        setHeaderSolid(y > 24);
-
-        // Dirección del scroll
-        if (y <= 24) {
-          // Arriba del todo: siempre visible
-          setHeaderVisible(true);
-        } else if (y > lastY) {
-          // Scroll abajo: ocultar
-          setHeaderVisible(false);
-        } else if (y < lastY) {
-          // Scroll arriba: aparece y se queda
-          setHeaderVisible(true);
-        }
-
-        lastYRef.current = y;
-        tickingRef.current = false;
-      });
-    };
-
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
-  }, []);
-
   return (
-    <div className="landing-page">
+    <div>
       {/* ============================================================
-          HEADER — sticky con hide-on-scroll-down / show-on-scroll-up
-          Liquid glass translúcido sobre el contenido
+          HEADER — navegación principal con anclas
           ============================================================ */}
-      <header
-        className={[
-          'landing-header',
-          'glass',
-          'glass-strong',
-          headerSolid ? 'landing-header-solid' : '',
-          headerVisible ? 'landing-header-visible' : 'landing-header-hidden',
-        ].filter(Boolean).join(' ')}
-      >
+      <header className="landing-header">
         <Link to="/" className="brand-row" aria-label="FitLoyalty, ir al inicio">
           <div className="brand-mark">FL</div>
           <div className="brand-name">FitLoyalty</div>
