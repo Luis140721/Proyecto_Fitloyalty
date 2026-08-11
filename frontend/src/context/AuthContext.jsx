@@ -1,18 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import axios from 'axios';
+import { api } from '../api';
 
 const AuthContext = createContext(null);
-
-// Instancia de axios con base URL. Adjunta el JWT a cada request automaticamente.
-const api = axios.create({ baseURL: '/api' });
-
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('fitloyalty_token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
 
 export function AuthProvider({ children }) {
   const [user, setUser]       = useState(null);
