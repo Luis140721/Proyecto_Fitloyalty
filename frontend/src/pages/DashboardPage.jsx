@@ -52,10 +52,10 @@ export default function DashboardPage() {
               <div className="kpi-label">Vencen en 7 dias</div>
               <div className="kpi-value">{data.vencen7}</div>
             </div>
-            <div className="kpi-card">
+            <div className="kpi-card risk">
               <div className="kpi-label">En riesgo</div>
               <div className="kpi-value">{data.enRiesgo}</div>
-              <div className="kpi-suffix">15+ dias sin ir</div>
+              <div className="kpi-trend">15+ dias sin ir</div>
             </div>
             <div className="kpi-card">
               <div className="kpi-label">Retencion 90d</div>
