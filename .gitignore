@@ -20,3 +20,7 @@ Thumbs.db
 # ── IDEs ──────────────────────────────────────────────────────────────────────
 .vscode/
 .idea/
+
+# ── Artefactos de la app Context Code (no son parte del proyecto) ──────────────
+.context/
+nul
