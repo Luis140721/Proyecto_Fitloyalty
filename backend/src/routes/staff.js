@@ -253,6 +253,71 @@ router.post(
 //   - Selecciona `fecha_creacion` y `ultimo_acceso` solo si existen.
 //   - Ordena por la primera columna disponible (fecha_creacion -> id_usuario).
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// GET /api/admin/diagnostics (admin)
+// Diagnostico en vivo: ejecuta la query REAL del handler contra la BD y
+// devuelve lo que pase (rows, error con code y message). Solo accesible
+// al admin del gimnasio autenticado.
+// ---------------------------------------------------------------------------
+router.get(
+  '/admin/diagnostics',
+  authenticate,
+  authorize('admin'),
+  asyncHandler(async (req, res) => {
+    const out = { checks: {} };
+    try {
+      const r = await pool.query(`
+        SELECT
+          to_regclass('public.rol')   AS rol_reg,
+          to_regclass('public.roles') AS roles_reg,
+          EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='usuario' AND column_name='fecha_creacion') AS has_fecha_creacion,
+          EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='usuario' AND column_name='ultimo_acceso') AS has_ultimo_acceso
+      `);
+      out.checks.rolReg           = r.rows[0].rol_reg;
+      out.checks.rolesReg         = r.rows[0].roles_reg;
+      out.checks.hasFechaCreacion = r.rows[0].has_fecha_creacion;
+      out.checks.hasUltimoAcceso  = r.rows[0].has_ultimo_acceso;
+    } catch (e) {
+      out.checks.introspection = { code: e.code, message: e.message };
+    }
+    try {
+      const r = await pool.query(`SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='usuario' ORDER BY ordinal_position`);
+      out.checks.usuarioColumns = r.rows.map((x) => x.column_name);
+    } catch (e) {
+      out.checks.usuarioColumns = { code: e.code, message: e.message };
+    }
+    // Replay de la query EXACTA que dispara 503.
+    try {
+      const cols = ['id_usuario', 'nombre', 'email', 'id_rol', 'activo'];
+      if (out.checks.hasFechaCreacion) cols.push('fecha_creacion');
+      if (out.checks.hasUltimoAcceso)  cols.push('ultimo_acceso');
+      const sql = `SELECT ${cols.join(', ')}, CASE usuario.id_rol WHEN 1 THEN 'ADMINISTRADOR' WHEN 2 THEN 'RECEPCIONISTA' WHEN 3 THEN 'ENTRENADOR' ELSE 'ROL_' || usuario.id_rol::text END AS rol FROM usuario WHERE id_gimnasio = $1 ORDER BY ${out.checks.hasFechaCreacion ? 'fecha_creacion' : 'id_usuario'} DESC`;
+      out.checks.sql = sql;
+      const r = await pool.query(sql, [req.user.gymId]);
+      out.checks.replay = { ok: true, rowCount: r.rowCount, sample: r.rows.slice(0, 2) };
+    } catch (e) {
+      out.checks.replay = { ok: false, code: e.code, message: e.message, hint: e.hint, detail: e.detail, position: e.position, where: e.where };
+    }
+    return res.json(out);
+  })
+);
+
+// ---------------------------------------------------------------------------
+// GET /api/admin/staff   (lista usuarios staff del gimnasio)
+// Query defensiva: detecta columnas opcionales, deriva rol por CASE.
+// ---------------------------------------------------------------------------
+async function listStaffInternal(gymId) {
+  const schema = await detectStaffSchema();
+  const selectCols = ['id_usuario', 'nombre', 'email', 'id_rol', 'activo'];
+  if (schema.hasFechaCreacion) selectCols.push('fecha_creacion');
+  if (schema.hasUltimoAcceso)  selectCols.push('ultimo_acceso');
+  const rolExpr = `CASE usuario.id_rol WHEN 1 THEN 'ADMINISTRADOR' WHEN 2 THEN 'RECEPCIONISTA' WHEN 3 THEN 'ENTRENADOR' ELSE 'ROL_' || usuario.id_rol::text END AS rol`;
+  const orderCol = schema.hasFechaCreacion ? 'fecha_creacion' : 'id_usuario';
+  const sql = `SELECT ${selectCols.join(', ')}, ${rolExpr} FROM usuario WHERE id_gimnasio = $1 ORDER BY ${orderCol} DESC`;
+  const { rows } = await pool.query(sql, [gymId]);
+  return rows;
+}
+
 router.get(
   '/admin/staff',
   authenticate,
@@ -260,46 +325,13 @@ router.get(
   requireActiveTrial(pool),
   asyncHandler(async (req, res) => {
     const gymId = req.user.gymId;
-
-    // Detectar schema (rol/roles + columnas opcionales) UNA vez por proceso.
-    // Si la BD cambia de shape entre deploys, basta con redesplegar.
-    const schema = await detectStaffSchema();
-
-    // Construir SELECT con SOLO columnas que sabemos existen.
-    // Critico: no referenciar `rol` directamente, porque si la tabla no
-    // existe o falla, el handler cae en DB_UNREACHABLE y se pierde la causa.
-    const selectCols = ['id_usuario', 'nombre', 'email', 'id_rol', 'activo'];
-    if (schema.hasFechaCreacion) selectCols.push('fecha_creacion');
-    if (schema.hasUltimoAcceso)  selectCols.push('ultimo_acceso');
-
-    // CASE puro sobre id_rol. Ninguna dependencia externa: 1=ADMINISTRADOR,
-    // 2=RECEPCIONISTA, 3=ENTRENADOR. Si hay un rol custom (id_rol>=4),
-    // cae al ELSE y devuelve el id como texto (mejor que reventar).
-    const rolExpr = `CASE usuario.id_rol
-                       WHEN 1 THEN 'ADMINISTRADOR'
-                       WHEN 2 THEN 'RECEPCIONISTA'
-                       WHEN 3 THEN 'ENTRENADOR'
-                       ELSE 'ROL_' || usuario.id_rol::text
-                     END AS rol`;
-
-    const orderCol = schema.hasFechaCreacion ? 'fecha_creacion' : 'id_usuario';
-
-    const sql = `SELECT ${selectCols.join(', ')}, ${rolExpr}
-                 FROM usuario
-                 WHERE id_gimnasio = $1
-                 ORDER BY ${orderCol} DESC`;
-
-    let rows;
     try {
-      ({ rows } = await pool.query(sql, [gymId]));
+      const rows = await listStaffInternal(gymId);
+      return res.json({ staff: rows });
     } catch (err) {
-      // Logueamos la causa real en consola para diagnosstico en Render.
-      console.error('[GET /admin/staff] SQL real:', sql);
-      console.error('[GET /admin/staff] Error pg:', err.code, err.message);
+      console.error('[GET /admin/staff] code:', err.code, 'msg:', err.message, 'sql:', err.sql || '(invisible)');
       throw new AppError(503, 'No pudimos listar el equipo. Intenta de nuevo.', 'DB_UNREACHABLE');
     }
-
-    return res.json({ staff: rows });
   })
 );
 
