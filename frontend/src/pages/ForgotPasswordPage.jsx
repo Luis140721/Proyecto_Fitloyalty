@@ -1,6 +1,13 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
+import AuthPanel from '../components/AuthPanel';
+
+const STEPS = [
+  { id: 1, title: 'Tu correo',     desc: 'Te enviaremos un código de 6 dígitos.' },
+  { id: 2, title: 'Verifica',      desc: 'Ingrésalo abajo. Vence en 15 minutos.' },
+  { id: 3, title: 'Nueva clave',   desc: 'Mínimo 6 caracteres y un número.' },
+];
 
 export default function ForgotPasswordPage() {
   const [step, setStep] = useState(1);
@@ -10,7 +17,28 @@ export default function ForgotPasswordPage() {
   const [info, setInfo] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  const codeRefs = useRef([]);
+
+  useEffect(() => {
+    if (step === 2) {
+      setTimeout(() => codeRefs.current[0]?.focus(), 80);
+    }
+  }, [step]);
+
   const onChange = (e) => setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
+
+  const handleCodeChange = (idx, value) => {
+    const v = value.replace(/\D/g, '').slice(0, 1);
+    const next = (form.code + v).slice(0, 6);
+    setForm((f) => ({ ...f, code: next }));
+    if (v && idx < 5) codeRefs.current[idx + 1]?.focus();
+  };
+
+  const handleCodeKey = (idx, e) => {
+    if (e.key === 'Backspace' && !form.code[idx] && idx > 0) {
+      codeRefs.current[idx - 1]?.focus();
+    }
+  };
 
   const sendCode = async (e) => {
     e.preventDefault();
@@ -18,11 +46,11 @@ export default function ForgotPasswordPage() {
     setSubmitting(true);
     try {
       const { data } = await axios.post('/api/auth/forgot-password', { email: form.email.trim() });
-      setInfo(data.message || 'Si el correo esta registrado, enviamos un codigo.');
-      if (data.devCode) setInfo((prev) => `${prev} (codigo dev: ${data.devCode})`);
+      setInfo(data.message || 'Si el correo está registrado, enviamos un código.');
+      if (data.devCode) setInfo((prev) => `${prev} (código dev: ${data.devCode})`);
       setStep(2);
     } catch (err) {
-      setError(err.response?.data?.error || 'No se pudo enviar el codigo.');
+      setError(err.response?.data?.error || 'No se pudo enviar el código.');
     } finally {
       setSubmitting(false);
     }
@@ -31,6 +59,7 @@ export default function ForgotPasswordPage() {
   const verifyCode = async (e) => {
     e.preventDefault();
     setError(''); setInfo('');
+    if (form.code.length !== 6) { setError('El código debe tener 6 dígitos'); return; }
     setSubmitting(true);
     try {
       const { data } = await axios.post('/api/auth/verify-reset-code', {
@@ -40,7 +69,7 @@ export default function ForgotPasswordPage() {
       setResetToken(data.resetToken);
       setStep(3);
     } catch (err) {
-      setError(err.response?.data?.error || 'Codigo invalido.');
+      setError(err.response?.data?.error || 'Código inválido.');
     } finally {
       setSubmitting(false);
     }
@@ -51,11 +80,7 @@ export default function ForgotPasswordPage() {
     setError(''); setInfo('');
     setSubmitting(true);
     try {
-      await axios.post('/api/auth/reset-password', {
-        resetToken,
-        password: form.password,
-      });
-      setInfo('Contrasena actualizada. Ya puedes iniciar sesion.');
+      await axios.post('/api/auth/reset-password', { resetToken, password: form.password });
       setStep(4);
     } catch (err) {
       setError(err.response?.data?.error || 'No se pudo actualizar.');
@@ -64,67 +89,160 @@ export default function ForgotPasswordPage() {
     }
   };
 
+  const panelHeadline = (
+    <>Recupera tu acceso en <em>3 pasos</em>.</>
+  );
+
   return (
     <div className="auth-page">
-      <aside className="auth-side">
-        <div className="brand-row">
-          <div className="brand-mark">FL</div>
-          <div className="brand-name">FitLoyalty</div>
-        </div>
-        <h1>Recuperar contrasena</h1>
-        <p>Te enviaremos un codigo de 6 digitos a tu correo. Es valido por 15 minutos.</p>
-      </aside>
+      <AuthPanel
+        eyebrow="RECUPERACIÓN"
+        headline={panelHeadline}
+        sub="Te enviaremos un código de 6 dígitos a tu correo. Es válido por 15 minutos y solo sirve una vez."
+        points={[
+          { icon: 'mark_email_read', title: 'Sin enredos',         text: 'Tres pasos claros: correo, código, nueva contraseña.' },
+          { icon: 'lock_clock',      title: 'Códigos seguros',     text: 'Caducan en 15 min y se invalidan al usarse.' },
+          { icon: 'verified_user',   title: 'Solo el dueño',       text: 'Solo el dueño del correo puede resetear la clave.' },
+        ]}
+        footNote="Códigos cifrados · Vencen en 15 minutos"
+      />
 
-      <main className="auth-main">
-        <div className="auth-card">
-          <h2>Restablecer contrasena</h2>
-          {error && <div className="alert alert-error">{error}</div>}
-          {info && <div className="alert alert-info">{info}</div>}
+      <main className="auth-page__form">
+        <section className="auth-form-card auth-form-card--wide" aria-labelledby="forgot-title">
+          <span className="auth-form-eyebrow">RECUPERAR CONTRASEÑA</span>
+          <h1 className="auth-form-title" id="forgot-title">Restablecer contraseña</h1>
+          <p className="auth-form-lead">
+            Paso {Math.min(step, 3)} de 3 — {STEPS[step - 1]?.title}
+          </p>
+
+          {/* Stepper visual */}
+          <div style={{
+            display: 'flex',
+            gap: 8,
+            marginBottom: 24,
+          }}>
+            {STEPS.map((s) => {
+              const done = step > s.id;
+              const active = step === s.id;
+              return (
+                <div
+                  key={s.id}
+                  aria-current={active ? 'step' : undefined}
+                  style={{
+                    flex: 1, height: 4, borderRadius: 9999,
+                    background: done || active ? 'var(--primary)' : 'var(--surface-container-high)',
+                    transition: 'background var(--dur) var(--ease-out)',
+                    boxShadow: active ? '0 0 8px var(--primary)' : 'none',
+                  }}
+                />
+              );
+            })}
+          </div>
+
+          {error && (
+            <div className="alert alert-error" role="alert">
+              <span className="material-symbols-outlined icon">error</span>
+              <span>{error}</span>
+            </div>
+          )}
+          {info && (
+            <div className="alert alert-info" role="status">
+              <span className="material-symbols-outlined icon">info</span>
+              <span>{info}</span>
+            </div>
+          )}
 
           {step === 1 && (
-            <form onSubmit={sendCode}>
-              <div className="field">
-                <label>Tu correo</label>
-                <input name="email" type="email" required value={form.email} onChange={onChange} />
-              </div>
-              <button className="btn btn-primary" type="submit" disabled={submitting} style={{ width: '100%' }}>
-                {submitting ? 'Enviando...' : 'Enviar codigo'}
+            <form className="auth-form" onSubmit={sendCode} noValidate>
+              <label className="field">
+                <span className="field-label">Tu correo registrado</span>
+                <input
+                  className="field-input"
+                  name="email" type="email" required
+                  value={form.email} onChange={onChange}
+                  placeholder="tunombre@fitgym.co"
+                  autoComplete="email"
+                />
+              </label>
+              <button className="btn btn-primary btn-block btn-lg" type="submit" disabled={submitting}>
+                {submitting ? 'Enviando...' : 'Enviar código'}
+                {!submitting && <span className="material-symbols-outlined icon">arrow_forward</span>}
               </button>
             </form>
           )}
 
           {step === 2 && (
-            <form onSubmit={verifyCode}>
-              <div className="field">
-                <label>Codigo de 6 digitos</label>
-                <input name="code" required value={form.code} onChange={onChange} maxLength={6} inputMode="numeric" />
-              </div>
-              <button className="btn btn-primary" type="submit" disabled={submitting} style={{ width: '100%' }}>
-                {submitting ? 'Verificando...' : 'Verificar codigo'}
+            <form className="auth-form" onSubmit={verifyCode} noValidate>
+              <label className="field">
+                <span className="field-label">Código de 6 dígitos</span>
+                <div className="pin-grid">
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <input
+                      key={i}
+                      ref={(el) => (codeRefs.current[i] = el)}
+                      className="pin-cell"
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      maxLength={1}
+                      value={form.code[i] || ''}
+                      onChange={(e) => handleCodeChange(i, e.target.value)}
+                      onKeyDown={(e) => handleCodeKey(i, e)}
+                      aria-label={`Dígito ${i + 1}`}
+                    />
+                  ))}
+                </div>
+              </label>
+              <button className="btn btn-primary btn-block btn-lg" type="submit" disabled={submitting}>
+                {submitting ? 'Verificando...' : 'Verificar código'}
+                {!submitting && <span className="material-symbols-outlined icon">arrow_forward</span>}
               </button>
+              <p className="auth-form-foot">
+                ¿No te llegó?{' '}
+                <button
+                  type="button"
+                  onClick={sendCode}
+                  className="auth-form-link"
+                  style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, font: 'inherit' }}
+                >
+                  Reenviar código
+                </button>
+              </p>
             </form>
           )}
 
           {step === 3 && (
-            <form onSubmit={applyNew}>
-              <div className="field">
-                <label>Nueva contrasena</label>
-                <input name="password" type="password" required minLength={6} value={form.password} onChange={onChange} />
-              </div>
-              <button className="btn btn-primary" type="submit" disabled={submitting} style={{ width: '100%' }}>
-                {submitting ? 'Guardando...' : 'Guardar nueva contrasena'}
+            <form className="auth-form" onSubmit={applyNew} noValidate>
+              <label className="field">
+                <span className="field-label">Nueva contraseña</span>
+                <input
+                  className="field-input"
+                  name="password" type="password" required minLength={6}
+                  value={form.password} onChange={onChange}
+                  placeholder="Mínimo 6 caracteres y un número"
+                  autoComplete="new-password"
+                />
+              </label>
+              <button className="btn btn-primary btn-block btn-lg" type="submit" disabled={submitting}>
+                {submitting ? 'Guardando...' : 'Guardar nueva contraseña'}
+                {!submitting && <span className="material-symbols-outlined icon">check</span>}
               </button>
             </form>
           )}
 
           {step === 4 && (
-            <div className="alert alert-success">
-              Contrasena actualizada. <Link to="/login">Inicia sesion</Link>.
+            <div className="alert alert-success" role="status" style={{ marginTop: 8 }}>
+              <span className="material-symbols-outlined icon">celebration</span>
+              <span>
+                ¡Contraseña actualizada! Ya puedes iniciar sesión. <Link to="/login" className="auth-form-link">Ir al login</Link>
+              </span>
             </div>
           )}
 
-          <p className="helper"><Link to="/login">Volver al inicio de sesion</Link></p>
-        </div>
+          <p className="auth-form-foot">
+            <Link to="/login" className="auth-form-link">← Volver al inicio de sesión</Link>
+          </p>
+        </section>
       </main>
     </div>
   );
