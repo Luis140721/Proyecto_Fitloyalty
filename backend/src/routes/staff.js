@@ -85,11 +85,14 @@ async function detectStaffSchema() {
     STAFF_SCHEMA.hasFechaCreacion = Boolean(r.has_fecha_creacion);
     STAFF_SCHEMA.hasUltimoAcceso  = Boolean(r.has_ultimo_aceso);
   } catch (e) {
-    // Fallback conservador: asumimos la forma local (rol existe y columnas existen).
-    STAFF_SCHEMA.rolTable         = 'rol';
-    STAFF_SCHEMA.hasFechaCreacion = true;
-    STAFF_SCHEMA.hasUltimoAcceso  = true;
-    console.warn('[staff] No se pudo inspeccionar information_schema, usando fallback local:', e.message);
+    // Fallback DEFENSIVO: si NO pudimos inspeccionar information_schema no
+    // podemos confiar en que `rol` exista. Asumimos la forma minima posible:
+    // sin subselect de rol (se devuelve por CASE), sin columnas opcionales.
+    // Esto evita 503 falsos cuando la introspeccion falla por permisos/red.
+    STAFF_SCHEMA.rolTable         = null;
+    STAFF_SCHEMA.hasFechaCreacion = false;
+    STAFF_SCHEMA.hasUltimoAcceso  = false;
+    console.warn('[staff] No se pudo inspeccionar information_schema, usando fallback defensivo (sin rol, sin cols opcionales):', e.message);
   }
   STAFF_SCHEMA.checked = true;
   return STAFF_SCHEMA;
