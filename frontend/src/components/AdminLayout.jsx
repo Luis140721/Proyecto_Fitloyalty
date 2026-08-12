@@ -1,13 +1,21 @@
 import { useEffect, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTrial } from '../context/TrialContext';
 import Sidebar from './Sidebar';
+import UserAvatar from './UserAvatar';
+import '../styles/admin.css';
+
+const PAGE_META = {
+  '/admin/dashboard': { title: 'Dashboard',  icon: 'space_dashboard' },
+  '/admin/miembros':  { title: 'Miembros',   icon: 'group'            },
+  '/admin/checkin':   { title: 'Check-in',   icon: 'qr_code_scanner'  },
+  '/admin/staff':     { title: 'Equipo',     icon: 'badge'            },
+};
 
 /**
- * AdminLayout: layout comun para todas las pantallas del admin.
- * - Protegido: solo admin y recepcionista.
- * - Si el trial esta vencido, muestra un banner bloqueante encima del contenido.
+ * AdminLayout: layout común para todas las pantallas del admin.
+ * Sidebar fijo a la izquierda (drawer en mobile) + header sticky en main.
  */
 export default function AdminLayout({ children }) {
   const { user, loading, logout } = useAuth();
@@ -18,51 +26,115 @@ export default function AdminLayout({ children }) {
   useEffect(() => { refresh(); }, [refresh]);
 
   if (loading) {
-    return <div className="boot-shell"><div className="spinner" /></div>;
+    return (
+      <div style={{
+        minHeight: '100vh',
+        display: 'grid', placeItems: 'center',
+        background: 'var(--bg)',
+      }}>
+        <div className="spinner" />
+      </div>
+    );
   }
 
   const trialVencido = trial.expired === true;
   const trialUrgente  = trial.active && Number.isFinite(trial.daysLeft) && trial.daysLeft <= 3;
+  const meta = PAGE_META[location.pathname] || { title: 'Panel', icon: 'space_dashboard' };
 
   return (
     <div className="admin-shell">
-      <Sidebar current={location.pathname} onNavigate={() => setSidebarOpen(false)} open={sidebarOpen} />
+      <div
+        className={`admin-overlay ${sidebarOpen ? 'show' : ''}`}
+        onClick={() => setSidebarOpen(false)}
+        aria-hidden="true"
+      />
+      <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       <div className="admin-main">
         <header className="admin-header">
-          <button className="hamburger" onClick={() => setSidebarOpen((o) => !o)} aria-label="Abrir menu">{'\\u2630'}</button>
-          <div className="admin-header-title">FitLoyalty</div>
-          <div className="admin-header-right">
-            <span className="user-chip">{user?.name}</span>
-            <span className="role-chip">{user?.role}</span>
-            <button className="btn btn-secondary btn-sm" onClick={logout}>Cerrar sesion</button>
+          <div className="admin-header__left">
+            <button
+              className="admin-header__hamburger"
+              onClick={() => setSidebarOpen((o) => !o)}
+              aria-label="Abrir menú"
+            >
+              <span className="material-symbols-outlined icon">menu</span>
+            </button>
+            <div className="admin-header__greeting">
+              <small>{new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })}</small>
+              <strong style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span className="material-symbols-outlined icon" style={{ color: 'var(--primary)', fontSize: 22 }}>
+                  {meta.icon}
+                </span>
+                {meta.title}
+              </strong>
+            </div>
+          </div>
+
+          <div className="admin-header__right">
+            <div className="admin-header__actions">
+              <button className="admin-header__action" aria-label="Buscar" title="Buscar">
+                <span className="material-symbols-outlined icon">search</span>
+              </button>
+              <button className="admin-header__action admin-header__action--badge" aria-label="Notificaciones" title="Notificaciones">
+                <span className="material-symbols-outlined icon">notifications</span>
+              </button>
+              <button className="admin-header__action" aria-label="Ayuda" title="Ayuda">
+                <span className="material-symbols-outlined icon">help</span>
+              </button>
+            </div>
+            <div className="admin-header__user">
+              <UserAvatar user={user} size={36} />
+              <button className="btn btn-secondary btn-sm" onClick={logout}>
+                <span className="material-symbols-outlined icon">logout</span>
+                <span className="admin-header__label">Salir</span>
+              </button>
+            </div>
           </div>
         </header>
 
-        {trialVencido && (
-          <div className="trial-banner trial-banner-danger">
-            <strong>Tu prueba gratuita ha finalizado.</strong>
-            <span> Activa tu plan para seguir usando FitLoyalty.</span>
-          </div>
-        )}
-        {trialUrgente && (
-          <div className="trial-banner trial-banner-warning">
-            <strong>Te quedan {trial.daysLeft} {trial.daysLeft === 1 ? 'dia' : 'dias'} de prueba.</strong>
-            <span> Empieza a configurar tus miembros para aprovecharla.</span>
-          </div>
-        )}
-
-        <main className="admin-content">
-          {trialVencido ? (
-            <div className="trial-empty">
-              <h2>Acceso bloqueado</h2>
-              <p>Tu periodo de prueba vencio el {new Date(trial.endsAt).toLocaleDateString('es-CO')}.</p>
-              <p>Para continuar, contacta al equipo de FitLoyalty para activar tu plan.</p>
+        <div className="admin-main__inner">
+          {trialVencido && (
+            <div className="alert alert-error" role="alert" style={{ marginBottom: 24 }}>
+              <span className="material-symbols-outlined icon">block</span>
+              <span>
+                <strong>Tu prueba gratuita ha finalizado.</strong> Activa tu plan para seguir usando FitLoyalty.
+              </span>
             </div>
-          ) : (
-            children
           )}
-        </main>
+          {trialUrgente && !trialVencido && (
+            <div className="trial-banner">
+              <div className="trial-banner__icon">
+                <span className="material-symbols-outlined icon">schedule</span>
+              </div>
+              <div className="trial-banner__text">
+                <strong>Te quedan {trial.daysLeft} {trial.daysLeft === 1 ? 'día' : 'días'} de prueba</strong>
+                <span>Empieza a configurar tus miembros para aprovecharla al máximo.</span>
+              </div>
+              <button className="btn btn-primary">Activar plan</button>
+            </div>
+          )}
+
+          {trialVencido ? (
+            <article className="chart-card" style={{ maxWidth: 520, margin: '40px auto', textAlign: 'center' }}>
+              <header className="chart-card__head" style={{ justifyContent: 'center' }}>
+                <div>
+                  <h3 style={{ color: 'var(--error)' }}>Acceso bloqueado</h3>
+                  <p>Tu período de prueba venció el {new Date(trial.endsAt).toLocaleDateString('es-CO')}.</p>
+                </div>
+              </header>
+              <p style={{ color: 'var(--on-surface-variant)', fontSize: 14, marginBottom: 20 }}>
+                Para continuar, contacta al equipo de FitLoyalty para activar tu plan.
+              </p>
+              <a className="btn btn-primary btn-lg" href="mailto:hola@fitloyalty.co">
+                <span className="material-symbols-outlined icon">mail</span>
+                Contactar al equipo
+              </a>
+            </article>
+          ) : (
+            (children !== undefined ? children : <Outlet />)
+          )}
+        </div>
       </div>
     </div>
   );
