@@ -271,23 +271,18 @@ router.get(
       if (schema.hasFechaCreacion) selectCols.push('fecha_creacion');
       if (schema.hasUltimoAcceso)  selectCols.push('ultimo_acceso');
 
-      // Si detect encontro la tabla de roles la usamos (mejor nombre legible
-      // si hay roles custom); si NO la encontro (entornos sin `rol`), derivamos
-      // por id_rol. El COALESCE garantiza que NUNCA devolvemos NULL en la
-      // columna 'rol': si el subselect falla, cae al CASE.
-      let rolExpr;
-      if (schema.rolTable) {
-        rolExpr = `COALESCE((SELECT r.nombre FROM ${schema.rolTable} r WHERE r.id_rol = usuario.id_rol),
-                          CASE WHEN usuario.id_rol = 1 THEN 'ADMINISTRADOR'
-                               WHEN usuario.id_rol = 2 THEN 'RECEPCIONISTA'
-                               WHEN usuario.id_rol = 3 THEN 'ENTRENADOR'
-                               ELSE 'DESCONOCIDO' END) AS rol`;
-      } else {
-        rolExpr = `CASE WHEN usuario.id_rol = 1 THEN 'ADMINISTRADOR'
-                        WHEN usuario.id_rol = 2 THEN 'RECEPCIONISTA'
-                        WHEN usuario.id_rol = 3 THEN 'ENTRENADOR'
-                        ELSE 'DESCONOCIDO' END AS rol`;
-      }
+      // El subselect escalar (SELECT r.nombre FROM rol r WHERE r.id_rol =
+      // usuario.id_rol) ha sido INESTABLE en Render: a veces la introspeccion
+      // pasa pero el query en si revienta con 'more than one row returned by
+      // a subquery' (si la tabla rol tiene duplicados) o con un error de
+      // planificacion. Para garantizar 200 en TODOS los entornos usamos
+      // SIEMPRE el CASE sobre id_rol: 1=ADMINISTRADOR, 2=RECEPCIONISTA,
+      // 3=ENTRENADOR. Si la BD tiene un rol custom, lo agregamos al CASE.
+      const rolExpr = `CASE WHEN usuario.id_rol = 1 THEN 'ADMINISTRADOR'
+                              WHEN usuario.id_rol = 2 THEN 'RECEPCIONISTA'
+                              WHEN usuario.id_rol = 3 THEN 'ENTRENADOR'
+                              ELSE (SELECT r.nombre FROM ${schema.rolTable || 'rol'} r WHERE r.id_rol = usuario.id_rol LIMIT 1)
+                         END AS rol`;
 
       const orderCol = schema.hasFechaCreacion ? 'fecha_creacion' : 'id_usuario';
 
