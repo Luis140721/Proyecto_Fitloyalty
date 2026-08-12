@@ -9,11 +9,16 @@
  *   POST  /api/auth/accept-invite            -> publico: completa el registro con el token
  *   GET   /api/auth/accept-invite/:token     -> publico: devuelve datos de la invitacion (preview)
  *   GET   /api/admin/staff                   -> admin: lista usuarios staff del gimnasio
+ *
+ * Cada handler async va envuelto con asyncHandler para que rechazos lleguen
+ * al errorHandler central. Los errores controlados se lanzan con AppError.
  */
 const express = require('express');
 const bcrypt  = require('bcryptjs');
 const pool    = require('../db/db');
 const { authenticate, authorize } = require('../middleware/auth');
+const asyncHandler = require('../lib/asyncHandler');
+const { AppError } = require('../lib/errors');
 const { requireActiveTrial } = require('../lib/trial');
 const { sendMail } = require('../lib/email');
 const { generateToken, hashToken } = require('../lib/invitations');
@@ -36,7 +41,7 @@ const acceptSchema = z.object({
 
 function parse(schema, payload) {
   const result = schema.safeParse(payload || {});
-  if (!result.success) return { ok: false, status: 400, error: formatZodError(result.error) };
+  if (!result.success) return { ok: false, status: 400, error: formatZodError(result.error), issues: result.error.issues };
   return { ok: true, data: result.data };
 }
 
@@ -53,9 +58,9 @@ router.post(
   authenticate,
   authorize('admin'),
   requireActiveTrial(pool),
-  async (req, res) => {
+  asyncHandler(async (req, res) => {
     const parsed = parse(inviteSchema, req.body);
-    if (!parsed.ok) return res.status(parsed.status).json({ error: parsed.error });
+    if (!parsed.ok) throw new AppError(parsed.status, parsed.error, 'VALIDATION_ERROR', { issues: parsed.issues });
     const { email, nombre, rol } = parsed.data;
     const gymId = req.user.gymId;
 
@@ -65,7 +70,7 @@ router.post(
       [email, gymId]
     );
     if (existingUser.length > 0) {
-      return res.status(409).json({ error: 'Ese correo ya pertenece a un usuario de este gimnasio.' });
+      throw new AppError(409, 'Ese correo ya pertenece a un usuario de este gimnasio.', 'USER_EMAIL_TAKEN');
     }
 
     // No duplicar invitaciones pendientes activas
@@ -77,29 +82,41 @@ router.post(
       [email, gymId]
     );
     if (existingInv.length > 0) {
-      return res.status(409).json({ error: 'Ya hay una invitacion activa para ese correo. Espera a que expire o revocala.' });
+      throw new AppError(409, 'Ya hay una invitacion activa para ese correo. Espera a que expire o revocala.', 'INVITE_DUPLICATED');
     }
 
     const token = generateToken();
     const tokenHash = hashToken(token);
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 dias
 
-    const { rows } = await pool.query(
-      `INSERT INTO invitacion_staff (id_gimnasio, email, nombre, rol_asignado, token_hash, id_usuario_creador, fecha_expiracion)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       RETURNING id_invitacion, email, nombre, rol_asignado, fecha_creacion, fecha_expiracion`,
-      [gymId, email, nombre, rol, tokenHash, req.user.id, expiresAt]
-    );
+    let inv;
+    try {
+      const { rows } = await pool.query(
+        `INSERT INTO invitacion_staff (id_gimnasio, email, nombre, rol_asignado, token_hash, id_usuario_creador, fecha_expiracion)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         RETURNING id_invitacion, email, nombre, rol_asignado, fecha_creacion, fecha_expiracion`,
+        [gymId, email, nombre, rol, tokenHash, req.user.id, expiresAt]
+      );
+      inv = rows[0];
+    } catch (err) {
+      console.error('[POST /admin/staff/invite] Error insertando invitacion:', err.message);
+      throw new AppError(503, 'No pudimos crear la invitacion. Intenta de nuevo.', 'DB_UNREACHABLE');
+    }
 
-    const inv = rows[0];
     const acceptUrl = buildAcceptUrl(token);
 
-    const result = await sendMail({
-      to: email,
-      subject: 'Te invitaron a FitLoyalty',
-      text: `Hola ${nombre},\n\n${req.user.name} te invito a unirte a FitLoyalty como ${rol}. Crea tu contrasena aqui (link valido 7 dias):\n\n${acceptUrl}\n`,
-      html: `<p>Hola <strong>${nombre}</strong>,</p><p><strong>${req.user.name}</strong> te invito a FitLoyalty como <strong>${rol}</strong>.</p><p><a href="${acceptUrl}" style="display:inline-block;padding:12px 20px;background:#f97316;color:#fff;border-radius:8px;text-decoration:none;">Aceptar invitacion</a></p><p>El link expira en 7 dias.</p>`,
-    });
+    let result;
+    try {
+      result = await sendMail({
+        to: email,
+        subject: 'Te invitaron a FitLoyalty',
+        text: `Hola ${nombre},\n\n${req.user.name} te invito a unirse a FitLoyalty como ${rol}. Crea tu contrasena aqui (link valido 7 dias):\n\n${acceptUrl}\n`,
+        html: `<p>Hola <strong>${nombre}</strong>,</p><p><strong>${req.user.name}</strong> te invito a FitLoyalty como <strong>${rol}</strong>.</p><p><a href="${acceptUrl}" style="display:inline-block;padding:12px 20px;background:#f97316;color:#fff;border-radius:8px;text-decoration:none;">Aceptar invitacion</a></p><p>El link expira en 7 dias.</p>`,
+      });
+    } catch (err) {
+      console.error('[POST /admin/staff/invite] Error enviando mail (no bloqueante):', err.message);
+      result = { delivered: false };
+    }
 
     const payload = {
       message: 'Invitacion creada.',
@@ -111,7 +128,7 @@ router.post(
       payload.devAcceptToken = token;
     }
     return res.status(201).json(payload);
-  }
+  })
 );
 
 // ---------------------------------------------------------------------------
@@ -122,20 +139,25 @@ router.get(
   authenticate,
   authorize('admin'),
   requireActiveTrial(pool),
-  async (req, res) => {
+  asyncHandler(async (req, res) => {
     const gymId = req.user.gymId;
-    const { rows } = await pool.query(
-      `SELECT id_invitacion, email, nombre, rol_asignado, fecha_creacion, fecha_expiracion,
-              fecha_aceptacion, fecha_revocado,
-              (fecha_aceptacion IS NULL AND fecha_revocado IS NULL AND fecha_expiracion > NOW()) AS pendiente
-       FROM invitacion_staff
-       WHERE id_gimnasio = $1
-       ORDER BY fecha_creacion DESC
-       LIMIT 100`,
-      [gymId]
-    );
-    return res.json({ invitations: rows });
-  }
+    try {
+      const { rows } = await pool.query(
+        `SELECT id_invitacion, email, nombre, rol_asignado, fecha_creacion, fecha_expiracion,
+                fecha_aceptacion, fecha_revocado,
+                (fecha_aceptacion IS NULL AND fecha_revocado IS NULL AND fecha_expiracion > NOW()) AS pendiente
+         FROM invitacion_staff
+         WHERE id_gimnasio = $1
+         ORDER BY fecha_creacion DESC
+         LIMIT 100`,
+        [gymId]
+      );
+      return res.json({ invitations: rows });
+    } catch (err) {
+      console.error('[GET /admin/staff/invitations] Error:', err.message);
+      throw new AppError(503, 'No pudimos listar las invitaciones. Intenta de nuevo.', 'DB_UNREACHABLE');
+    }
+  })
 );
 
 // ---------------------------------------------------------------------------
@@ -146,21 +168,27 @@ router.post(
   authenticate,
   authorize('admin'),
   requireActiveTrial(pool),
-  async (req, res) => {
+  asyncHandler(async (req, res) => {
     const gymId = req.user.gymId;
     const id = parseInt(req.params.id, 10);
-    if (!Number.isFinite(id)) return res.status(400).json({ error: 'Id invalido' });
+    if (!Number.isFinite(id)) throw new AppError(400, 'Id invalido', 'VALIDATION_ERROR');
 
-    const { rows } = await pool.query(
-      `UPDATE invitacion_staff
-       SET fecha_revocado = NOW()
-       WHERE id_invitacion = $1 AND id_gimnasio = $2 AND fecha_aceptacion IS NULL AND fecha_revocado IS NULL
-       RETURNING id_invitacion, fecha_revocado`,
-      [id, gymId]
-    );
-    if (rows.length === 0) return res.status(404).json({ error: 'Invitacion no encontrada o ya finalizo.' });
+    let rows;
+    try {
+      ({ rows } = await pool.query(
+        `UPDATE invitacion_staff
+         SET fecha_revocado = NOW()
+         WHERE id_invitacion = $1 AND id_gimnasio = $2 AND fecha_aceptacion IS NULL AND fecha_revocado IS NULL
+         RETURNING id_invitacion, fecha_revocado`,
+        [id, gymId]
+      ));
+    } catch (err) {
+      console.error('[POST /admin/staff/invitations/:id/revoke] Error:', err.message);
+      throw new AppError(503, 'No pudimos revocar la invitacion. Intenta de nuevo.', 'DB_UNREACHABLE');
+    }
+    if (rows.length === 0) throw new AppError(404, 'Invitacion no encontrada o ya finalizo.', 'INVITE_NOT_FOUND');
     return res.json({ message: 'Invitacion revocada.', invitation: rows[0] });
-  }
+  })
 );
 
 // ---------------------------------------------------------------------------
@@ -171,40 +199,51 @@ router.get(
   authenticate,
   authorize('admin'),
   requireActiveTrial(pool),
-  async (req, res) => {
+  asyncHandler(async (req, res) => {
     const gymId = req.user.gymId;
-    const { rows } = await pool.query(
-      `SELECT id_usuario, nombre, email, id_rol, activo, fecha_creacion, ultimo_acceso,
-              (SELECT nombre FROM rol WHERE rol.id_rol = usuario.id_rol) AS rol
-       FROM usuario
-       WHERE id_gimnasio = $1
-       ORDER BY fecha_creacion DESC`,
-      [gymId]
-    );
-    return res.json({ staff: rows });
-  }
+    try {
+      const { rows } = await pool.query(
+        `SELECT id_usuario, nombre, email, id_rol, activo, fecha_creacion, ultimo_acceso,
+                (SELECT nombre FROM rol WHERE rol.id_rol = usuario.id_rol) AS rol
+         FROM usuario
+         WHERE id_gimnasio = $1
+         ORDER BY fecha_creacion DESC`,
+        [gymId]
+      );
+      return res.json({ staff: rows });
+    } catch (err) {
+      console.error('[GET /admin/staff] Error:', err.message);
+      throw new AppError(503, 'No pudimos listar el equipo. Intenta de nuevo.', 'DB_UNREACHABLE');
+    }
+  })
 );
 
 // ---------------------------------------------------------------------------
 // GET /api/auth/accept-invite/:token   (preview publico)
 // ---------------------------------------------------------------------------
-router.get('/auth/accept-invite/:token', async (req, res) => {
+router.get('/auth/accept-invite/:token', asyncHandler(async (req, res) => {
   const token = String(req.params.token || '');
   const tokenHash = hashToken(token);
-  const { rows } = await pool.query(
-    `SELECT i.email, i.nombre, i.rol_asignado, i.fecha_expiracion,
-            i.fecha_aceptacion, i.fecha_revocado,
-            g.nombre AS gym_nombre
-       FROM invitacion_staff i
-       INNER JOIN gimnasio g ON g.id_gimnasio = i.id_gimnasio
-      WHERE i.token_hash = $1`,
-    [tokenHash]
-  );
-  const inv = rows[0];
-  if (!inv) return res.status(404).json({ error: 'Invitacion no encontrada' });
-  if (inv.fecha_aceptacion) return res.status(410).json({ error: 'Esta invitacion ya fue aceptada.' });
-  if (inv.fecha_revocado) return res.status(410).json({ error: 'Esta invitacion fue revocada.' });
-  if (new Date(inv.fecha_expiracion) < new Date()) return res.status(410).json({ error: 'Esta invitacion expiro.' });
+  let inv;
+  try {
+    const { rows } = await pool.query(
+      `SELECT i.email, i.nombre, i.rol_asignado, i.fecha_expiracion,
+              i.fecha_aceptacion, i.fecha_revocado,
+              g.nombre AS gym_nombre
+         FROM invitacion_staff i
+         INNER JOIN gimnasio g ON g.id_gimnasio = i.id_gimnasio
+        WHERE i.token_hash = $1`,
+      [tokenHash]
+    );
+    inv = rows[0];
+  } catch (err) {
+    console.error('[GET /auth/accept-invite/:token] Error:', err.message);
+    throw new AppError(503, 'No pudimos validar la invitacion. Intenta de nuevo.', 'DB_UNREACHABLE');
+  }
+  if (!inv) throw new AppError(404, 'Invitacion no encontrada', 'INVITE_NOT_FOUND');
+  if (inv.fecha_aceptacion) throw new AppError(410, 'Esta invitacion ya fue aceptada.', 'INVITE_ALREADY_ACCEPTED');
+  if (inv.fecha_revocado)   throw new AppError(410, 'Esta invitacion fue revocada.', 'INVITE_REVOKED');
+  if (new Date(inv.fecha_expiracion) < new Date()) throw new AppError(410, 'Esta invitacion expiro.', 'INVITE_EXPIRED');
   return res.json({
     email: inv.email,
     nombre: inv.nombre,
@@ -212,14 +251,14 @@ router.get('/auth/accept-invite/:token', async (req, res) => {
     gym: inv.gym_nombre,
     expiresAt: inv.fecha_expiracion,
   });
-});
+}));
 
 // ---------------------------------------------------------------------------
 // POST /api/auth/accept-invite   (crea el usuario)
 // ---------------------------------------------------------------------------
-router.post('/auth/accept-invite', async (req, res) => {
+router.post('/auth/accept-invite', asyncHandler(async (req, res) => {
   const parsed = parse(acceptSchema, req.body);
-  if (!parsed.ok) return res.status(parsed.status).json({ error: parsed.error });
+  if (!parsed.ok) throw new AppError(parsed.status, parsed.error, 'VALIDATION_ERROR', { issues: parsed.issues });
   const { token, password, nombre } = parsed.data;
   const tokenHash = hashToken(token);
 
@@ -236,10 +275,22 @@ router.post('/auth/accept-invite', async (req, res) => {
       [tokenHash]
     );
     const inv = rows[0];
-    if (!inv) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Invitacion no encontrada' }); }
-    if (inv.fecha_aceptacion) { await client.query('ROLLBACK'); return res.status(410).json({ error: 'Esta invitacion ya fue aceptada.' }); }
-    if (inv.fecha_revocado) { await client.query('ROLLBACK'); return res.status(410).json({ error: 'Esta invitacion fue revocada.' }); }
-    if (new Date(inv.fecha_expiracion) < new Date()) { await client.query('ROLLBACK'); return res.status(410).json({ error: 'Esta invitacion expiro.' }); }
+    if (!inv) {
+      await client.query('ROLLBACK');
+      throw new AppError(404, 'Invitacion no encontrada', 'INVITE_NOT_FOUND');
+    }
+    if (inv.fecha_aceptacion) {
+      await client.query('ROLLBACK');
+      throw new AppError(410, 'Esta invitacion ya fue aceptada.', 'INVITE_ALREADY_ACCEPTED');
+    }
+    if (inv.fecha_revocado) {
+      await client.query('ROLLBACK');
+      throw new AppError(410, 'Esta invitacion fue revocada.', 'INVITE_REVOKED');
+    }
+    if (new Date(inv.fecha_expiracion) < new Date()) {
+      await client.query('ROLLBACK');
+      throw new AppError(410, 'Esta invitacion expiro.', 'INVITE_EXPIRED');
+    }
 
     // Si el email ya existe en este gym, no crear duplicado
     const { rows: existingUser } = await client.query(
@@ -248,7 +299,7 @@ router.post('/auth/accept-invite', async (req, res) => {
     );
     if (existingUser.length > 0) {
       await client.query('ROLLBACK');
-      return res.status(409).json({ error: 'Ya existe un usuario con ese correo en este gimnasio.' });
+      throw new AppError(409, 'Ya existe un usuario con ese correo en este gimnasio.', 'USER_EMAIL_TAKEN');
     }
 
     const finalName = (nombre || inv.nombre).trim();
@@ -294,12 +345,13 @@ router.post('/auth/accept-invite', async (req, res) => {
       },
     });
   } catch (err) {
-    await client.query('ROLLBACK');
-    console.error('[POST /auth/accept-invite] Error:', err.message);
-    return res.status(500).json({ error: 'Error al aceptar la invitacion.' });
+    try { await client.query('ROLLBACK'); } catch (_) {}
+    if (err instanceof AppError) throw err;
+    console.error('[POST /auth/accept-invite] Error:', err.message, err.stack);
+    throw new AppError(503, 'Error al aceptar la invitacion. Intenta de nuevo.', 'DB_UNREACHABLE');
   } finally {
     client.release();
   }
-});
+}));
 
 module.exports = router;

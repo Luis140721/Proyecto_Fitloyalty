@@ -6,10 +6,14 @@
  * SEGURIDAD MULTI-GIMNASIO:
  * Todo se filtra por el id_gimnasio del token (req.user.gymId), asi un usuario
  * solo ve la asistencia de SU gimnasio, nunca la de otro.
+ *
+ * Handler con asyncHandler para errores consistentes.
  */
 const express = require('express');
 const pool    = require('../db/db');
 const { authenticate } = require('../middleware/auth');
+const asyncHandler = require('../lib/asyncHandler');
+const { AppError } = require('../lib/errors');
 
 const router = express.Router();
 
@@ -19,18 +23,9 @@ router.use(authenticate);
 // --------------------------------------------------------------------------
 // GET /api/asistencia
 // --------------------------------------------------------------------------
-/**
- * Devuelve los check-ins (asistencias) del gimnasio del usuario logueado,
- * mas un pequeno resumen (total y cuantas fueron hoy).
- *
- * Cada fila trae el nombre y documento del miembro, la fecha/hora y el metodo
- * de ingreso (QR, codigo de barras o manual).
- */
-router.get('/', async (req, res) => {
+router.get('/', asyncHandler(async (req, res) => {
   const gymId = req.user.gymId;
-
   try {
-    // 1. Historial de asistencia (ultimas 50, mas recientes primero)
     const historial = await pool.query(
       `SELECT m.nombre      AS miembro,
               m.documento   AS documento,
@@ -44,7 +39,6 @@ router.get('/', async (req, res) => {
       [gymId]
     );
 
-    // 2. Resumen: total de asistencias y cuantas fueron hoy
     const resumen = await pool.query(
       `SELECT
          COUNT(*)::int AS total,
@@ -59,11 +53,10 @@ router.get('/', async (req, res) => {
       total: resumen.rows[0].total,
       hoy:   resumen.rows[0].hoy,
     });
-
   } catch (err) {
     console.error('[GET /asistencia] Error:', err.message);
-    res.status(500).json({ error: 'Error interno del servidor' });
+    throw new AppError(503, 'No pudimos cargar la asistencia. Intenta de nuevo.', 'DB_UNREACHABLE');
   }
-});
+}));
 
 module.exports = router;

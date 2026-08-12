@@ -4,10 +4,14 @@
  * Metricas para la pantalla principal del admin.
  *
  *   GET /api/admin/dashboard  -> KPIs + listas cortas
+ *
+ * Handler con asyncHandler: cualquier rechazo va al errorHandler central.
  */
 const express = require('express');
 const pool = require('../db/db');
 const { authenticate, authorize } = require('../middleware/auth');
+const asyncHandler = require('../lib/asyncHandler');
+const { AppError } = require('../lib/errors');
 const { requireActiveTrial } = require('../lib/trial');
 
 const router = express.Router();
@@ -17,7 +21,7 @@ router.get(
   authenticate,
   authorize('admin'),
   requireActiveTrial(pool),
-  async (req, res) => {
+  asyncHandler(async (req, res) => {
     const gymId = req.user.gymId;
 
     try {
@@ -105,9 +109,9 @@ router.get(
       });
     } catch (err) {
       console.error('[GET /admin/dashboard] Error:', err.message);
-      return res.status(500).json({ error: 'Error al obtener las metricas.' });
+      throw new AppError(503, 'No pudimos cargar las metricas del dashboard. Intenta de nuevo.', 'DB_UNREACHABLE');
     }
-  }
+  })
 );
 
 module.exports = router;

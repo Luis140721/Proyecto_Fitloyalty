@@ -3,27 +3,21 @@
  *
  *   GET /api/vista/miembros-activos  -> Lista desde la vista vista_miembros_activos
  *
- * La vista ya esta definida en la base de datos (ver Query_Inicial_Crear_Tablas.sql)
- * y NO expone columnas de ID: trae nombre, documento, telefono, email, codigo_qr,
- * estado de la membresia, fechas y plan. Justo lo que pide el instructor:
- * "todos los campos excepto el ID".
+ * La vista ya esta definida en la base de datos y NO expone columnas de ID.
+ *
+ * Handler con asyncHandler.
  */
 const express = require('express');
 const pool    = require('../db/db');
 const { authenticate } = require('../middleware/auth');
+const asyncHandler = require('../lib/asyncHandler');
+const { AppError } = require('../lib/errors');
 
 const router = express.Router();
 
 router.use(authenticate);
 
-// --------------------------------------------------------------------------
-// GET /api/vista/miembros-activos
-// --------------------------------------------------------------------------
-/**
- * Devuelve el resultado de la VISTA vista_miembros_activos.
- * Demostramos que el listado sale de una vista SQL, no de una tabla directa.
- */
-router.get('/miembros-activos', async (req, res) => {
+router.get('/miembros-activos', asyncHandler(async (req, res) => {
   const page = Math.max(0, Number.parseInt(req.query.page, 10) || 0);
   const pageSize = Number.parseInt(req.query.pageSize, 10);
   const limit = Number.isNaN(pageSize) ? 10 : Math.min(Math.max(pageSize, 1), 100);
@@ -53,11 +47,10 @@ router.get('/miembros-activos', async (req, res) => {
       page,
       pageSize: limit,
     });
-
   } catch (err) {
     console.error('[GET /vista/miembros-activos] Error:', err.message);
-    res.status(500).json({ error: 'Error interno del servidor' });
+    throw new AppError(503, 'No pudimos cargar los miembros activos. Intenta de nuevo.', 'DB_UNREACHABLE');
   }
-});
+}));
 
 module.exports = router;

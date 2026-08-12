@@ -15,12 +15,16 @@
  *   - Codigos de error: 400 validacion, 401 credenciales, 403 sin permiso, 409 duplicado, 500 servidor.
  *   - Auth: JWT (HS256) emitido por helpers/auth-helpers.gererateToken.
  *   - El signup NO requiere auth previa. Toda otra ruta requiere `authenticate`.
+ *   - Todos los handlers async van envueltos con asyncHandler para que los
+ *     rechazos lleguen al errorHandler central con respuesta consistente.
  */
 const express = require('express');
 const bcrypt  = require('bcryptjs');
 const jwt     = require('jsonwebtoken');
 const pool    = require('../db/db');
 const { authenticate } = require('../middleware/auth');
+const asyncHandler     = require('../lib/asyncHandler');
+const { AppError }     = require('../lib/errors');
 const {
   validarEmail, validarContrasena, normEmail,
   usuarioSeguro, generarToken, generarResetToken, random6,
@@ -38,7 +42,7 @@ const _v = { validarEmail, validarContrasena, normEmail };
 
 function parse(schema, payload) {
   const result = schema.safeParse(payload || {});
-  if (!result.success) return { ok: false, status: 400, error: formatZodError(result.error) };
+  if (!result.success) return { ok: false, status: 400, error: formatZodError(result.error), issues: result.error.issues };
   return { ok: true, data: result.data };
 }
 
@@ -92,9 +96,9 @@ async function invalidateUserSessions(id_usuario) {
 // POST /api/auth/signup
 // Crea un gimnasio + admin owner. Inicia trial de 7 dias.
 // --------------------------------------------------------------------------
-router.post('/signup', async (req, res) => {
+router.post('/signup', asyncHandler(async (req, res) => {
   const parsed = parse(signupSchema, req.body);
-  if (!parsed.ok) return res.status(parsed.status).json({ error: parsed.error });
+  if (!parsed.ok) throw new AppError(parsed.status, parsed.error, 'VALIDATION_ERROR', { issues: parsed.issues });
   const { gymName, gymPhone, gymEmail, ownerName, ownerEmail, password } = parsed.data;
 
   const client = await pool.connect();
@@ -106,14 +110,14 @@ router.post('/signup', async (req, res) => {
       const { rows } = await client.query('SELECT id_gimnasio FROM gimnasio WHERE LOWER(email) = $1', [gymEmail.toLowerCase()]);
       if (rows.length > 0) {
         await client.query('ROLLBACK');
-        return res.status(409).json({ error: 'Ya existe un gimnasio registrado con ese correo.' });
+        throw new AppError(409, 'Ya existe un gimnasio registrado con ese correo.', 'GYM_EMAIL_TAKEN');
       }
     }
 
     const { rows: dupUser } = await client.query('SELECT id_usuario FROM usuario WHERE LOWER(email) = $1', [ownerEmail.toLowerCase()]);
     if (dupUser.length > 0) {
       await client.query('ROLLBACK');
-      return res.status(409).json({ error: 'Ya existe un usuario con ese correo.' });
+      throw new AppError(409, 'Ya existe un usuario con ese correo.', 'USER_EMAIL_TAKEN');
     }
 
     // 2. Crear gimnasio con trial_ends_at = NOW() + 7d (o TRIAL_DAYS)
@@ -166,24 +170,27 @@ router.post('/signup', async (req, res) => {
       },
     });
   } catch (err) {
-    await client.query('ROLLBACK');
-    console.error('[POST /auth/signup] Error:', err.message);
-    return res.status(500).json({ error: 'Error al crear el gimnasio y la cuenta.' });
+    if (!(err instanceof AppError)) {
+      try { await client.query('ROLLBACK'); } catch (_) {}
+      console.error('[POST /auth/signup] Error:', err.message, err.stack);
+    }
+    throw err;
   } finally {
     client.release();
   }
-});
+}));
 
 // --------------------------------------------------------------------------
 // POST /api/auth/login
 // --------------------------------------------------------------------------
-router.post('/login', async (req, res) => {
+router.post('/login', asyncHandler(async (req, res) => {
   const parsed = parse(loginSchema, req.body);
-  if (!parsed.ok) return res.status(parsed.status).json({ error: parsed.error });
+  if (!parsed.ok) throw new AppError(parsed.status, parsed.error, 'VALIDATION_ERROR', { issues: parsed.issues });
   const { email, password } = parsed.data;
 
   console.log('[POST /auth/login] intento:', email);
 
+  let usuario;
   try {
     const { rows } = await pool.query(
       `SELECT u.id_usuario, u.nombre, u.email, u.password_hash, u.id_gimnasio, u.activo,
@@ -197,40 +204,47 @@ router.post('/login', async (req, res) => {
        WHERE LOWER(u.email) = $1 AND u.activo = TRUE`,
       [email.toLowerCase()]
     );
-    const usuario = rows[0];
-    if (!usuario) return res.status(401).json({ error: 'Credenciales incorrectas' });
-
-    const ok = await bcrypt.compare(password, usuario.password_hash);
-    if (!ok) return res.status(401).json({ error: 'Credenciales incorrectas' });
-
-    let token;
-    try {
-      token = generarToken(usuario);
-    } catch (tokenErr) {
-      console.error('[POST /auth/login] Error firmando JWT:', tokenErr.message, tokenErr.stack);
-      return res.status(500).json({ error: 'Error generando token de sesion' });
-    }
-
-    return res.json({
-      message: 'Inicio de sesion exitoso',
-      token,
-      user: usuarioSeguro(usuario),
-      gym: {
-        id: usuario.id_gimnasio,
-        trialEndsAt: usuario.trial_ends_at,
-        active: usuario.gym_activo,
-      },
-    });
+    usuario = rows[0];
   } catch (err) {
-    console.error('[POST /auth/login] Error:', err.message, err.stack);
-    return res.status(500).json({ error: 'Error interno del servidor' });
+    console.error('[POST /auth/login] Error consultando usuario:', err.message);
+    throw new AppError(503, 'No pudimos validar tus credenciales. Intenta de nuevo.', 'DB_UNREACHABLE');
   }
-});
+
+  if (!usuario) throw new AppError(401, 'Credenciales incorrectas', 'BAD_CREDENTIALS');
+
+  let ok = false;
+  try {
+    ok = await bcrypt.compare(password, usuario.password_hash);
+  } catch (err) {
+    console.error('[POST /auth/login] Error comparando password:', err.message);
+    throw new AppError(500, 'Error validando la contrasena', 'PASSWORD_CHECK_FAILED');
+  }
+  if (!ok) throw new AppError(401, 'Credenciales incorrectas', 'BAD_CREDENTIALS');
+
+  let token;
+  try {
+    token = generarToken(usuario);
+  } catch (tokenErr) {
+    console.error('[POST /auth/login] Error firmando JWT:', tokenErr.message, tokenErr.stack);
+    throw new AppError(500, 'Error generando token de sesion', 'TOKEN_SIGN_FAILED');
+  }
+
+  return res.json({
+    message: 'Inicio de sesion exitoso',
+    token,
+    user: usuarioSeguro(usuario),
+    gym: {
+      id: usuario.id_gimnasio,
+      trialEndsAt: usuario.trial_ends_at,
+      active: usuario.gym_activo,
+    },
+  });
+}));
 
 // --------------------------------------------------------------------------
 // GET /api/auth/me
 // --------------------------------------------------------------------------
-router.get('/me', authenticate, async (req, res) => {
+router.get('/me', authenticate, asyncHandler(async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT u.*, g.activo AS gym_activo, g.trial_ends_at
@@ -240,16 +254,17 @@ router.get('/me', authenticate, async (req, res) => {
       [req.user.id]
     );
     const u = rows[0];
-    if (!u) return res.status(404).json({ error: 'Usuario no encontrado' });
+    if (!u) throw new AppError(404, 'Usuario no encontrado', 'USER_NOT_FOUND');
     return res.json({
       user: usuarioSeguro(u),
       gym: { id: u.id_gimnasio, active: u.gym_activo, trialEndsAt: u.trial_ends_at },
     });
   } catch (err) {
+    if (err instanceof AppError) throw err;
     console.error('[GET /auth/me] Error:', err.message);
-    return res.status(500).json({ error: 'Error interno del servidor' });
+    throw new AppError(503, 'No pudimos cargar tu perfil. Intenta de nuevo.', 'DB_UNREACHABLE');
   }
-});
+}));
 
 // --------------------------------------------------------------------------
 // POST /api/auth/logout
@@ -263,21 +278,27 @@ router.post('/logout', authenticate, (req, res) => {
 // --------------------------------------------------------------------------
 // POST /api/auth/forgot-password
 // --------------------------------------------------------------------------
-router.post('/forgot-password', async (req, res) => {
+router.post('/forgot-password', asyncHandler(async (req, res) => {
   const parsed = parse(forgotPasswordSchema, req.body);
-  if (!parsed.ok) return res.status(parsed.status).json({ error: parsed.error });
+  if (!parsed.ok) throw new AppError(parsed.status, parsed.error, 'VALIDATION_ERROR', { issues: parsed.issues });
   const email = parsed.data.email.toLowerCase();
 
   const generic = { message: 'Si el correo esta registrado, te enviamos un codigo para recuperar tu contrasena.' };
 
+  let usuario;
   try {
     const { rows } = await pool.query(
       'SELECT id_usuario, nombre, email FROM usuario WHERE LOWER(email) = $1 AND activo = TRUE',
       [email]
     );
-    const usuario = rows[0];
-    if (!usuario) return res.json({ ...generic, resendAfterSeconds: 60 });
+    usuario = rows[0];
+  } catch (err) {
+    console.error('[POST /auth/forgot-password] Error consultando usuario:', err.message);
+    throw new AppError(503, 'No pudimos procesar la solicitud. Intenta de nuevo.', 'DB_UNREACHABLE');
+  }
+  if (!usuario) return res.json({ ...generic, resendAfterSeconds: 60 });
 
+  try {
     await ensureResetTable();
     const code = random6();
     await storeResetCode(usuario.id_usuario, code, 15);
@@ -296,90 +317,114 @@ router.post('/forgot-password', async (req, res) => {
     return res.json(payload);
   } catch (err) {
     console.error('[POST /auth/forgot-password] Error:', err.message);
-    return res.status(500).json({ error: 'Error interno del servidor' });
+    // Si falla el envio de mail, devolvemos OK generico igual (no filtramos existencia)
+    // y dejamos que el front sepa por consola / siguiente intento.
+    return res.json({ ...generic, resendAfterSeconds: 60 });
   }
-});
+}));
 
 // --------------------------------------------------------------------------
 // POST /api/auth/verify-reset-code
 // --------------------------------------------------------------------------
-router.post('/verify-reset-code', async (req, res) => {
+router.post('/verify-reset-code', asyncHandler(async (req, res) => {
   const parsed = parse(verifyResetCodeSchema, req.body);
-  if (!parsed.ok) return res.status(parsed.status).json({ error: parsed.error });
+  if (!parsed.ok) throw new AppError(parsed.status, parsed.error, 'VALIDATION_ERROR', { issues: parsed.issues });
   const { email, code } = parsed.data;
 
+  let usuario;
   try {
     const { rows } = await pool.query(
       'SELECT id_usuario, nombre FROM usuario WHERE LOWER(email) = $1 AND activo = TRUE',
       [email.toLowerCase()]
     );
-    const usuario = rows[0];
-    if (!usuario) return res.status(400).json({ error: 'Usuario no encontrado' });
-
-    const ver = await verifyAndConsumeCode(usuario.id_usuario, code);
-    if (!ver.ok) {
-      const reason = ver.reason === 'expirado' ? 'Codigo expirado'
-        : ver.reason === 'usado' ? 'Codigo ya usado'
-        : 'Codigo invalido';
-      return res.status(400).json({ error: reason });
-    }
-
-    const resetToken = generarResetToken(usuario);
-    return res.json({ message: 'Codigo verificado. Define tu nueva contrasena.', resetToken });
+    usuario = rows[0];
   } catch (err) {
-    console.error('[POST /auth/verify-reset-code] Error:', err.message);
-    return res.status(500).json({ error: 'Error interno del servidor' });
+    console.error('[POST /auth/verify-reset-code] Error consultando usuario:', err.message);
+    throw new AppError(503, 'No pudimos validar el codigo. Intenta de nuevo.', 'DB_UNREACHABLE');
   }
-});
+  if (!usuario) throw new AppError(400, 'Codigo invalido', 'BAD_CODE');
+
+  let ver;
+  try {
+    ver = await verifyAndConsumeCode(usuario.id_usuario, code);
+  } catch (err) {
+    console.error('[POST /auth/verify-reset-code] Error verificando codigo:', err.message);
+    throw new AppError(503, 'No pudimos validar el codigo. Intenta de nuevo.', 'DB_UNREACHABLE');
+  }
+  if (!ver.ok) {
+    const reason = ver.reason === 'expirado' ? 'Codigo expirado'
+      : ver.reason === 'usado' ? 'Codigo ya usado'
+      : 'Codigo invalido';
+    throw new AppError(400, reason, 'BAD_CODE');
+  }
+
+  const resetToken = generarResetToken(usuario);
+  return res.json({ message: 'Codigo verificado. Define tu nueva contrasena.', resetToken });
+}));
 
 // --------------------------------------------------------------------------
 // POST /api/auth/reset-password
 // --------------------------------------------------------------------------
-router.post('/reset-password', async (req, res) => {
+router.post('/reset-password', asyncHandler(async (req, res) => {
   const parsed = parse(resetPasswordSchema, req.body);
-  if (!parsed.ok) return res.status(parsed.status).json({ error: parsed.error });
+  if (!parsed.ok) throw new AppError(parsed.status, parsed.error, 'VALIDATION_ERROR', { issues: parsed.issues });
   const { email, code, password, resetToken } = parsed.data;
 
-  try {
-    let usuarioId = null;
+  let usuarioId = null;
 
-    if (resetToken) {
-      try {
-        const payload = jwt.verify(resetToken, process.env.JWT_SECRET);
-        if (payload.purpose !== 'reset') throw new Error('Token invalido');
-        usuarioId = payload.id;
-      } catch (_) {
-        return res.status(400).json({ error: 'Token de restablecimiento invalido o expirado' });
-      }
-    } else {
-      if (!email || !code) return res.status(400).json({ error: 'Email y codigo son requeridos' });
+  if (resetToken) {
+    try {
+      const payload = jwt.verify(resetToken, process.env.JWT_SECRET);
+      if (payload.purpose !== 'reset') throw new Error('Token invalido');
+      usuarioId = payload.id;
+    } catch (_) {
+      throw new AppError(400, 'Token de restablecimiento invalido o expirado', 'BAD_RESET_TOKEN');
+    }
+  } else {
+    if (!email || !code) throw new AppError(400, 'Email y codigo son requeridos', 'VALIDATION_ERROR');
+    let u;
+    try {
       const { rows } = await pool.query(
         'SELECT id_usuario FROM usuario WHERE LOWER(email) = $1 AND activo = TRUE',
         [email.toLowerCase()]
       );
-      const u = rows[0];
-      if (!u) return res.status(404).json({ error: 'Usuario no encontrado' });
-      const ver = await verifyAndConsumeCode(u.id_usuario, code);
-      if (!ver.ok) {
-        const reason = ver.reason === 'expirado' ? 'Codigo expirado'
-          : ver.reason === 'usado' ? 'Codigo ya usado'
-          : 'Codigo invalido';
-        return res.status(400).json({ error: reason });
-      }
-      usuarioId = u.id_usuario;
+      u = rows[0];
+    } catch (err) {
+      console.error('[POST /auth/reset-password] Error consultando usuario:', err.message);
+      throw new AppError(503, 'No pudimos procesar la solicitud. Intenta de nuevo.', 'DB_UNREACHABLE');
     }
+    if (!u) throw new AppError(404, 'Usuario no encontrado', 'USER_NOT_FOUND');
 
-    const password_hash = await bcrypt.hash(password, 10);
-    const { rowCount } = await pool.query('UPDATE usuario SET password_hash = $1 WHERE id_usuario = $2', [password_hash, usuarioId]);
-    if (rowCount === 0) return res.status(404).json({ error: 'Usuario no encontrado' });
-
-    await invalidateUserSessions(usuarioId);
-
-    return res.json({ message: 'Contrasena actualizada. Ya puedes iniciar sesion.' });
-  } catch (err) {
-    console.error('[POST /auth/reset-password] Error:', err.message);
-    return res.status(500).json({ error: 'Error interno del servidor' });
+    let ver;
+    try {
+      ver = await verifyAndConsumeCode(u.id_usuario, code);
+    } catch (err) {
+      console.error('[POST /auth/reset-password] Error verificando codigo:', err.message);
+      throw new AppError(503, 'No pudimos procesar la solicitud. Intenta de nuevo.', 'DB_UNREACHABLE');
+    }
+    if (!ver.ok) {
+      const reason = ver.reason === 'expirado' ? 'Codigo expirado'
+        : ver.reason === 'usado' ? 'Codigo ya usado'
+        : 'Codigo invalido';
+      throw new AppError(400, reason, 'BAD_CODE');
+    }
+    usuarioId = u.id_usuario;
   }
-});
+
+  let rowCount;
+  try {
+    const password_hash = await bcrypt.hash(password, 10);
+    const r = await pool.query('UPDATE usuario SET password_hash = $1 WHERE id_usuario = $2', [password_hash, usuarioId]);
+    rowCount = r.rowCount;
+  } catch (err) {
+    console.error('[POST /auth/reset-password] Error actualizando password:', err.message);
+    throw new AppError(503, 'No pudimos actualizar la contrasena. Intenta de nuevo.', 'DB_UNREACHABLE');
+  }
+  if (rowCount === 0) throw new AppError(404, 'Usuario no encontrado', 'USER_NOT_FOUND');
+
+  await invalidateUserSessions(usuarioId);
+
+  return res.json({ message: 'Contrasena actualizada. Ya puedes iniciar sesion.' });
+}));
 
 module.exports = router;
