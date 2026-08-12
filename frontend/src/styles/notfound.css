@@ -1,0 +1,128 @@
+/* ============================================================
+   NotFound (404) — FitLoyalty Ultraviolet
+   Card centrada, cifra enorme Anybody 800 con glow púrpura.
+   ============================================================ */
+
+.notfound {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  background: var(--bg);
+  /* halo radial sutil para reforzar el ambiente ultraviolet */
+  background-image: radial-gradient(
+    ellipse at top,
+    var(--primary-soft) 0%,
+    transparent 55%
+  );
+}
+
+.notfound__card {
+  width: 100%;
+  max-width: 480px;
+  background: var(--surface-container);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 40px 28px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  position: relative;
+  overflow: hidden;
+  /* halo púrpura muy tenue detrás del card */
+  box-shadow: 0 0 0 1px var(--primary-faint);
+}
+
+.notfound__card::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.05),
+    transparent 30%
+  );
+}
+
+.notfound__icon {
+  font-family: 'Material Symbols Outlined';
+  font-size: 40px;
+  color: var(--on-surface-variant);
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 48;
+  line-height: 1;
+}
+
+.notfound__code {
+  font-family: var(--font-headline);
+  font-weight: 800;
+  font-size: clamp(120px, 22vw, 240px);
+  line-height: 0.9;
+  letter-spacing: -0.04em;
+  color: var(--primary);
+  margin: 0;
+  /* glow púrpura */
+  text-shadow:
+    0 0 24px var(--primary-glow),
+    0 0 64px rgba(168, 85, 247, 0.18);
+}
+
+.notfound__title {
+  font-family: var(--font-headline);
+  font-weight: 700;
+  font-size: clamp(22px, 5vw, 28px);
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  color: var(--on-surface);
+  margin: 0;
+}
+
+.notfound__copy {
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--on-surface-variant);
+  margin: 0;
+  max-width: 36ch;
+}
+
+.notfound__path {
+  font-family: var(--font-label);
+  font-size: 12px;
+  color: var(--on-surface-variant);
+  background: var(--surface-container-high);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  padding: 6px 10px;
+  word-break: break-all;
+  max-width: 100%;
+}
+
+.notfound__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+  width: 100%;
+}
+
+/* Mobile pequeño (360px) — el card sigue siendo usable */
+@media (max-width: 480px) {
+  .notfound {
+    padding: 16px 12px;
+  }
+  .notfound__card {
+    padding: 28px 20px;
+    gap: 14px;
+  }
+}
+
+/* Accesibilidad: focus visible consistente con el design system */
+.notfound__actions .btn:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}

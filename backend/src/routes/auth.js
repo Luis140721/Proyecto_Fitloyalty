@@ -190,7 +190,8 @@ router.post('/login', async (req, res) => {
               g.activo AS gym_activo, g.trial_ends_at,
               CASE WHEN u.id_rol = 1 THEN 'ADMINISTRADOR'
                    WHEN u.id_rol = 2 THEN 'RECEPCIONISTA'
-                   ELSE COALESCE(u.rol, 'RECEPCIONISTA') END AS rol_nombre
+                   WHEN u.id_rol = 3 THEN 'ENTRENADOR'
+                   ELSE 'RECEPCIONISTA' END AS rol_nombre
        FROM usuario u
        INNER JOIN gimnasio g ON g.id_gimnasio = u.id_gimnasio
        WHERE LOWER(u.email) = $1 AND u.activo = TRUE`,
