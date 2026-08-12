@@ -3,6 +3,32 @@ import { api } from '../api';
 
 const AuthContext = createContext(null);
 
+/**
+ * Normaliza el rol que devuelve el backend (`ADMINISTRADOR`, `RECEPCIONISTA`,
+ * `ENTRENADOR`) a un slug estable que entiende el resto del front
+ * (`admin` | `receptionist` | `trainer`).
+ * Si el backend ya envía el slug en `role` o `rol`, lo respeta.
+ */
+function normalizeRole(raw) {
+  const v = String(raw || '').trim().toLowerCase();
+  if (!v) return 'receptionist';
+  if (v === 'admin' || v === 'administrador') return 'admin';
+  if (v === 'receptionist' || v === 'recepcionista' || v === 'recepción') return 'receptionist';
+  if (v === 'trainer' || v === 'entrenador') return 'trainer';
+  return v;
+}
+
+function normalizeUser(u) {
+  if (!u) return u;
+  const role = normalizeRole(u.role ?? u.rol ?? u.rol_nombre);
+  return {
+    ...u,
+    role,
+    // Mantener también el nombre del backend por si alguna página lo usa
+    rol_nombre: u.rol_nombre ?? u.rol ?? role,
+  };
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser]       = useState(null);
   const [loading, setLoading] = useState(true);
@@ -14,7 +40,7 @@ export function AuthProvider({ children }) {
       return;
     }
     api.get('/auth/me')
-      .then(({ data }) => setUser(data.user))
+      .then(({ data }) => setUser(normalizeUser(data.user)))
       .catch(() => localStorage.removeItem('fitloyalty_token'))
       .finally(() => setLoading(false));
   }, []);
@@ -22,7 +48,7 @@ export function AuthProvider({ children }) {
   const handleAuthResponse = useCallback((data) => {
     if (data.token) {
       localStorage.setItem('fitloyalty_token', data.token);
-      setUser(data.user);
+      setUser(normalizeUser(data.user));
     }
     return data.user;
   }, []);

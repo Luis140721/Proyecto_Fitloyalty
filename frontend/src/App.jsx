@@ -9,6 +9,7 @@ import LoginPage from './pages/LoginPage';
 import RegisterOwnerPage from './pages/RegisterOwnerPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import AcceptInvitePage from './pages/AcceptInvitePage';
+import NotFoundPage from './pages/NotFoundPage';
 
 import DashboardPage from './pages/DashboardPage';
 import MiembrosPage from './pages/MiembrosPage';
@@ -24,7 +25,9 @@ export default function App() {
             {/* Public routes */}
             <Route path="/" element={<LandingPage />} />
             <Route path="/login" element={<LoginPage />} />
-            <Route path="/register" element={<RegisterOwnerPage />} />
+            {/* Retro-compatibilidad: /register → /register-owner */}
+            <Route path="/register" element={<Navigate to="/register-owner" replace />} />
+            <Route path="/register-owner" element={<RegisterOwnerPage />} />
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
             <Route path="/accept-invite" element={<AcceptInvitePage />} />
 
@@ -63,7 +66,10 @@ export default function App() {
             />
 
             <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
+
+            {/* 404 dedicada + catch-all que redirige a ella */}
+            <Route path="/404" element={<NotFoundPage />} />
+            <Route path="*" element={<Navigate to="/404" replace />} />
           </Routes>
         </TrialProvider>
       </AuthProvider>
