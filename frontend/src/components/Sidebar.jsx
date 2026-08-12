@@ -18,7 +18,7 @@ function roleName(r) {
 
 export default function Sidebar({ open, onNavigate }) {
   const { user, logout } = useAuth();
-  const role = user?.rol || user?.role || 'unknown';
+  const role = user?.role || user?.rol || user?.rol_nombre || 'receptionist';
   const visible = links.filter((l) => l.roles.includes(role));
 
   const handleLogout = (e) => {

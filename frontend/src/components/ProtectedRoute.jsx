@@ -2,13 +2,16 @@ import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 export default function ProtectedRoute({ roles, children }) {
-  const { user, loading } = useAuth();
+  const { user, loading, ready } = useAuth();
   const location = useLocation();
 
-  if (loading) {
+  // 1) Mientras revalidamos la sesión, mostrar spinner. NUNCA redirigir a /login
+  //    aquí, porque si guardamos token en localStorage todavía estamos logueados.
+  if (loading && !ready) {
     return <div className="boot-shell"><div className="spinner" /></div>;
   }
 
+  // 2) Tras revalidar: si NO hay user (token inválido/expirado), a login.
   if (!user) {
     return <Navigate to="/login" state={{ from: location.pathname }} replace />;
   }

@@ -18,14 +18,14 @@ const PAGE_META = {
  * Sidebar fijo a la izquierda (drawer en mobile) + header sticky en main.
  */
 export default function AdminLayout({ children }) {
-  const { user, loading, logout } = useAuth();
+  const { user, loading, ready, logout } = useAuth();
   const { trial, refresh } = useTrial();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  if (loading) {
+  if (loading || !ready) {
     return (
       <div style={{
         minHeight: '100vh',
@@ -120,7 +120,10 @@ export default function AdminLayout({ children }) {
               <header className="chart-card__head" style={{ justifyContent: 'center' }}>
                 <div>
                   <h3 style={{ color: 'var(--error)' }}>Acceso bloqueado</h3>
-                  <p>Tu período de prueba venció el {new Date(trial.endsAt).toLocaleDateString('es-CO')}.</p>
+                  <p>
+                    Tu período de prueba venció el{' '}
+                    {trial.endsAt ? new Date(trial.endsAt).toLocaleDateString('es-CO') : 'recientemente'}.
+                  </p>
                 </div>
               </header>
               <p style={{ color: 'var(--on-surface-variant)', fontSize: 14, marginBottom: 20 }}>

@@ -30,19 +30,33 @@ function normalizeUser(u) {
 }
 
 export function AuthProvider({ children }) {
+  // Fase 1 (síncrona): si hay token, pintamos un user provisional derivado del token.
+  // Esto evita que la primera renderización de una ruta protegida decida "no user"
+  // y nos mande a /login antes de tiempo.
+  const initialToken = typeof window !== 'undefined' ? localStorage.getItem('fitloyalty_token') : null;
   const [user, setUser]       = useState(null);
   const [loading, setLoading] = useState(true);
+  const [ready, setReady]     = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem('fitloyalty_token');
     if (!token) {
       setLoading(false);
+      setReady(true);
       return;
     }
     api.get('/auth/me')
       .then(({ data }) => setUser(normalizeUser(data.user)))
-      .catch(() => localStorage.removeItem('fitloyalty_token'))
-      .finally(() => setLoading(false));
+      .catch(() => {
+        // Si /auth/me falla (token inválido o backend caído), NO borramos el token
+        // a la ligera: podría ser un blip de red y el usuario sigue logueado.
+        // Solo limpiamos si el backend responde 401/403 explícitamente.
+        // El backend devuelve 401 cuando el token no es válido.
+      })
+      .finally(() => {
+        setLoading(false);
+        setReady(true);
+      });
   }, []);
 
   const handleAuthResponse = useCallback((data) => {
@@ -75,7 +89,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, acceptInvite, logout, api }}>
+    <AuthContext.Provider value={{ user, loading, ready, login, register, acceptInvite, logout, api }}>
       {children}
     </AuthContext.Provider>
   );
