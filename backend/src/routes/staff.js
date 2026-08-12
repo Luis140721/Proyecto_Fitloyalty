@@ -51,6 +51,51 @@ function buildAcceptUrl(token) {
 }
 
 // ---------------------------------------------------------------------------
+// Deteccion defensiva de esquema para GET /api/admin/staff
+//
+// La query original hacia un subselect contra la tabla `rol` que NO existe en
+// el entorno de Render (desfase entre BD local y BD de prod). Ademas se
+// referenciaban columnas (`fecha_creacion`, `ultimo_acceso`) que en teoria
+// pueden no existir en algun entorno.
+//
+// Cache en memoria por proceso: la primera request detecta el shape del
+// esquema con `to_regclass` + `information_schema.columns` y las siguientes
+// reutilizan el resultado. Si Render cambia el shape, basta con redesplegar.
+// ---------------------------------------------------------------------------
+const STAFF_SCHEMA = { checked: false, rolTable: null, hasFechaCreacion: false, hasUltimoAcceso: false };
+
+async function detectStaffSchema() {
+  if (STAFF_SCHEMA.checked) return STAFF_SCHEMA;
+  try {
+    const { rows } = await pool.query(`
+      SELECT
+        to_regclass('public.rol')   IS NOT NULL AS rol_exists,
+        to_regclass('public.roles') IS NOT NULL AS roles_exists,
+        EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema='public' AND table_name='usuario' AND column_name='fecha_creacion'
+        ) AS has_fecha_creacion,
+        EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema='public' AND table_name='usuario' AND column_name='ultimo_acceso'
+        ) AS has_ultimo_aceso
+    `);
+    const r = rows[0] || {};
+    STAFF_SCHEMA.rolTable         = r.rol_exists ? 'rol' : (r.roles_exists ? 'roles' : null);
+    STAFF_SCHEMA.hasFechaCreacion = Boolean(r.has_fecha_creacion);
+    STAFF_SCHEMA.hasUltimoAcceso  = Boolean(r.has_ultimo_aceso);
+  } catch (e) {
+    // Fallback conservador: asumimos la forma local (rol existe y columnas existen).
+    STAFF_SCHEMA.rolTable         = 'rol';
+    STAFF_SCHEMA.hasFechaCreacion = true;
+    STAFF_SCHEMA.hasUltimoAcceso  = true;
+    console.warn('[staff] No se pudo inspeccionar information_schema, usando fallback local:', e.message);
+  }
+  STAFF_SCHEMA.checked = true;
+  return STAFF_SCHEMA;
+}
+
+// ---------------------------------------------------------------------------
 // POST /api/admin/staff/invite
 // ---------------------------------------------------------------------------
 router.post(
@@ -193,6 +238,12 @@ router.post(
 
 // ---------------------------------------------------------------------------
 // GET /api/admin/staff   (lista usuarios staff del gimnasio)
+//
+// Query defensiva:
+//   - Detecta si la tabla de roles existe como `rol` o `roles`. Si no existe
+//     (caso Render), deriva el nombre del rol desde `id_rol` con un CASE.
+//   - Selecciona `fecha_creacion` y `ultimo_acceso` solo si existen.
+//   - Ordena por la primera columna disponible (fecha_creacion -> id_usuario).
 // ---------------------------------------------------------------------------
 router.get(
   '/admin/staff',
@@ -202,12 +253,32 @@ router.get(
   asyncHandler(async (req, res) => {
     const gymId = req.user.gymId;
     try {
+      const schema = await detectStaffSchema();
+
+      const selectCols = ['id_usuario', 'nombre', 'email', 'id_rol', 'activo'];
+      if (schema.hasFechaCreacion) selectCols.push('fecha_creacion');
+      if (schema.hasUltimoAcceso)  selectCols.push('ultimo_acceso');
+
+      let rolExpr;
+      if (schema.rolTable) {
+        // Subselect sobre la tabla de roles detectada. Usa alias `r` para
+        // evitar choques si el `FROM` principal tuviera un alias `rol`.
+        rolExpr = `(SELECT r.nombre FROM ${schema.rolTable} r WHERE r.id_rol = usuario.id_rol) AS rol`;
+      } else {
+        // Fallback deterministico por id_rol (mapea los roles base de FitLoyalty).
+        rolExpr = `CASE WHEN usuario.id_rol = 1 THEN 'ADMINISTRADOR'
+                        WHEN usuario.id_rol = 2 THEN 'RECEPCIONISTA'
+                        WHEN usuario.id_rol = 3 THEN 'ENTRENADOR'
+                        ELSE 'DESCONOCIDO' END AS rol`;
+      }
+
+      const orderCol = schema.hasFechaCreacion ? 'fecha_creacion' : 'id_usuario';
+
       const { rows } = await pool.query(
-        `SELECT id_usuario, nombre, email, id_rol, activo, fecha_creacion, ultimo_acceso,
-                (SELECT nombre FROM rol WHERE rol.id_rol = usuario.id_rol) AS rol
+        `SELECT ${selectCols.join(', ')}, ${rolExpr}
          FROM usuario
          WHERE id_gimnasio = $1
-         ORDER BY fecha_creacion DESC`,
+         ORDER BY ${orderCol} DESC`,
         [gymId]
       );
       return res.json({ staff: rows });

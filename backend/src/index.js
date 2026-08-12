@@ -32,6 +32,13 @@ const app  = express();
 const PORT = process.env.PORT || 3001;
 const IS_PROD = process.env.NODE_ENV === 'production';
 
+// Render (y la mayoria de PaaS) envian X-Forwarded-For desde su proxy.
+// express-rate-limit exige declarar cuantos proxies se confian para
+// poder tomar la IP real del cliente; sin esto lanza
+// ERR_ERL_UNEXPECTED_X_FORWARDED_FOR y limita por IP del proxy
+// (todos los request caen en el mismo cubo).
+app.set('trust proxy', 1);
+
 const allowedOrigins = (process.env.FRONTEND_URL || 'http://localhost:5173')
   .split(',')
   .map(s => s.trim())
