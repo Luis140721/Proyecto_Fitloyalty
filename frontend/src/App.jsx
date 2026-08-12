@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { TrialProvider } from './context/TrialContext';
+import { ErrorProvider } from './components/ErrorBanner';
 import ProtectedRoute from './components/ProtectedRoute';
 import AdminLayout from './components/AdminLayout';
 
@@ -19,8 +20,9 @@ import StaffPage from './pages/StaffPage';
 export default function App() {
   return (
     <BrowserRouter>
-      <AuthProvider>
-        <TrialProvider>
+      <ErrorProvider>
+        <AuthProvider>
+          <TrialProvider>
           <Routes>
             {/* Public routes */}
             <Route path="/" element={<LandingPage />} />
@@ -73,6 +75,7 @@ export default function App() {
           </Routes>
         </TrialProvider>
       </AuthProvider>
+      </ErrorProvider>
     </BrowserRouter>
   );
 }

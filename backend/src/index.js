@@ -18,6 +18,8 @@ const cors    = require('cors');
 const rateLimit = require('express-rate-limit');
 const pool    = require('./db/db');
 const { applyMigrations } = require('./db/migrate');
+const { notFound, errorHandler } = require('./middleware/errorHandler');
+const asyncHandler = require('./lib/asyncHandler');
 
 const authRoutes     = require('./routes/auth');
 const staffRoutes    = require('./routes/staff');
@@ -65,25 +67,24 @@ app.use('/api', miembrosRoutes);
 app.use('/api', checkinRoutes);
 app.use('/api', billingRoutes);
 app.use('/api', dashboardRoutes);
+app.use('/api/asistencia', require('./routes/asistencia'));
+app.use('/api/vista',     require('./routes/vista'));
 
-app.get('/api/health', async (req, res) => {
+app.get('/api/health', asyncHandler(async (req, res) => {
   try {
     await pool.query('SELECT 1');
     res.json({ status: 'ok', db: 'PostgreSQL conectado', app: 'FitLoyalty API', timestamp: new Date().toISOString() });
   } catch (e) {
-    res.status(500).json({ status: 'error', db: 'Sin conexion a PostgreSQL' });
+    res.status(503).json({ status: 'error', db: 'Sin conexion a PostgreSQL', code: 'DB_UNREACHABLE' });
   }
-});
+}));
 
-app.use((req, res) => {
-  if (!IS_PROD) return res.status(404).json({ error: `Ruta no encontrada: ${req.method} ${req.path}` });
-  return res.status(404).json({ error: 'Ruta no encontrada' });
-});
+// 404 para cualquier ruta /api/* que no haya matcheado antes.
+app.use('/api', notFound);
 
-app.use((err, req, res, next) => {
-  console.error('[ERROR]', err && err.stack ? err.stack : err);
-  res.status(500).json({ error: 'Error interno del servidor' });
-});
+// Handler central SIEMPRE al final. Convierte cualquier error no controlado
+// en una respuesta JSON consistente, sin filtrar stack traces en prod.
+app.use(errorHandler);
 
 async function iniciar() {
   try {
