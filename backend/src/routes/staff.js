@@ -260,44 +260,46 @@ router.get(
   requireActiveTrial(pool),
   asyncHandler(async (req, res) => {
     const gymId = req.user.gymId;
+
+    // Detectar schema (rol/roles + columnas opcionales) UNA vez por proceso.
+    // Si la BD cambia de shape entre deploys, basta con redesplegar.
+    const schema = await detectStaffSchema();
+
+    // Construir SELECT con SOLO columnas que sabemos existen.
+    // Critico: no referenciar `rol` directamente, porque si la tabla no
+    // existe o falla, el handler cae en DB_UNREACHABLE y se pierde la causa.
+    const selectCols = ['id_usuario', 'nombre', 'email', 'id_rol', 'activo'];
+    if (schema.hasFechaCreacion) selectCols.push('fecha_creacion');
+    if (schema.hasUltimoAcceso)  selectCols.push('ultimo_acceso');
+
+    // CASE puro sobre id_rol. Ninguna dependencia externa: 1=ADMINISTRADOR,
+    // 2=RECEPCIONISTA, 3=ENTRENADOR. Si hay un rol custom (id_rol>=4),
+    // cae al ELSE y devuelve el id como texto (mejor que reventar).
+    const rolExpr = `CASE usuario.id_rol
+                       WHEN 1 THEN 'ADMINISTRADOR'
+                       WHEN 2 THEN 'RECEPCIONISTA'
+                       WHEN 3 THEN 'ENTRENADOR'
+                       ELSE 'ROL_' || usuario.id_rol::text
+                     END AS rol`;
+
+    const orderCol = schema.hasFechaCreacion ? 'fecha_creacion' : 'id_usuario';
+
+    const sql = `SELECT ${selectCols.join(', ')}, ${rolExpr}
+                 FROM usuario
+                 WHERE id_gimnasio = $1
+                 ORDER BY ${orderCol} DESC`;
+
+    let rows;
     try {
-      // Construimos una query minima que NUNCA depende de tablas opcionales
-      // (rol/roles) y NUNCA referencia columnas opcionales (fecha_creacion,
-      // ultimo_acceso) hasta confirmar via information_schema. Ordenamos por
-      // id_usuario, que es PK serial: no requiere introspeccion.
-      const schema = await detectStaffSchema();
-
-      const selectCols = ['id_usuario', 'nombre', 'email', 'id_rol', 'activo'];
-      if (schema.hasFechaCreacion) selectCols.push('fecha_creacion');
-      if (schema.hasUltimoAcceso)  selectCols.push('ultimo_acceso');
-
-      // El subselect escalar (SELECT r.nombre FROM rol r WHERE r.id_rol =
-      // usuario.id_rol) ha sido INESTABLE en Render: a veces la introspeccion
-      // pasa pero el query en si revienta con 'more than one row returned by
-      // a subquery' (si la tabla rol tiene duplicados) o con un error de
-      // planificacion. Para garantizar 200 en TODOS los entornos usamos
-      // SIEMPRE el CASE sobre id_rol: 1=ADMINISTRADOR, 2=RECEPCIONISTA,
-      // 3=ENTRENADOR. Si la BD tiene un rol custom, lo agregamos al CASE.
-      const rolExpr = `CASE WHEN usuario.id_rol = 1 THEN 'ADMINISTRADOR'
-                              WHEN usuario.id_rol = 2 THEN 'RECEPCIONISTA'
-                              WHEN usuario.id_rol = 3 THEN 'ENTRENADOR'
-                              ELSE (SELECT r.nombre FROM ${schema.rolTable || 'rol'} r WHERE r.id_rol = usuario.id_rol LIMIT 1)
-                         END AS rol`;
-
-      const orderCol = schema.hasFechaCreacion ? 'fecha_creacion' : 'id_usuario';
-
-      const { rows } = await pool.query(
-        `SELECT ${selectCols.join(', ')}, ${rolExpr}
-         FROM usuario
-         WHERE id_gimnasio = $1
-         ORDER BY ${orderCol} DESC`,
-        [gymId]
-      );
-      return res.json({ staff: rows });
+      ({ rows } = await pool.query(sql, [gymId]));
     } catch (err) {
-      console.error('[GET /admin/staff] Error:', err.message);
+      // Logueamos la causa real en consola para diagnosstico en Render.
+      console.error('[GET /admin/staff] SQL real:', sql);
+      console.error('[GET /admin/staff] Error pg:', err.code, err.message);
       throw new AppError(503, 'No pudimos listar el equipo. Intenta de nuevo.', 'DB_UNREACHABLE');
     }
+
+    return res.json({ staff: rows });
   })
 );
 
