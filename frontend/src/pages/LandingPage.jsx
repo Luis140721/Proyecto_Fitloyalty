@@ -1,409 +1,372 @@
-import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import React from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import '../styles/landing.css';
 
-const ICONS = {
-  qr: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="square" strokeLinejoin="miter">
-      <rect x="3" y="3" width="7" height="7" />
-      <rect x="14" y="3" width="7" height="7" />
-      <rect x="3" y="14" width="7" height="7" />
-      <line x1="14" y1="14" x2="21" y2="14" />
-      <line x1="14" y1="21" x2="21" y2="21" />
-      <line x1="14" y1="14" x2="14" y2="21" />
-      <line x1="21" y1="14" x2="21" y2="21" />
-    </svg>
-  ),
-  team: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="square" strokeLinejoin="miter">
-      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-      <circle cx="9" cy="7" r="4" />
-      <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
-      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-    </svg>
-  ),
-  chart: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="square" strokeLinejoin="miter">
-      <line x1="18" y1="20" x2="18" y2="10" />
-      <line x1="12" y1="20" x2="12" y2="4" />
-      <line x1="6" y1="20" x2="6" y2="14" />
-      <line x1="3" y1="20" x2="21" y2="20" />
-    </svg>
-  ),
-  lock: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="square" strokeLinejoin="miter">
-      <rect x="3" y="11" width="18" height="11" rx="0" />
-      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-    </svg>
-  ),
-};
+const SOLUTIONS = [
+  {
+    icon: 'account_balance',
+    title: 'Control Financiero',
+    text: 'Visualiza los ingresos, suscripciones activas y proyección de caja en tiempo real. Soporte nativo para moneda local (COP) y precisión de pago al centavo.',
+    span: 'wide',
+  },
+  {
+    icon: 'qr_code_scanner',
+    title: 'Accesos con QR',
+    text: 'Genera pases únicos dinámicos en la app del socio. Olvida la lista y deja que el QR se encargue de la entrada.',
+    span: 'narrow',
+  },
+  {
+    icon: 'tune',
+    title: 'Perfiles Detallados',
+    text: 'Información actualizada: estado de cuenta y renovación automática. Todo a un clic de distancia.',
+    span: 'narrow',
+  },
+  {
+    icon: 'storefront',
+    title: 'Arquitectura Multi-Sede',
+    text: 'Pensada para crecer: gestiona múltiples ubicaciones bajo una misma cuenta madre. Reportes consolidados y permisos por rol para tu equipo de administradores.',
+    span: 'wide',
+  },
+];
+
+const PAINS = [
+  { icon: 'close', title: 'Cobros a mano cada mes', text: 'Persiguiendo pagos por WhatsApp y contando billetes. Una hora cada día.' },
+  { icon: 'close', title: 'Lista en papel y celular', text: 'Quiénes deben, quiénes vencieron y quién lleva 2 meses sin venir. Imposible saberlo.' },
+  { icon: 'close', title: 'No sabes si está al día', text: 'Dejas entrar, el mes siguiente no paga y nadie entendió por qué.' },
+  { icon: 'close', title: 'Cuentas claras no en Excel', text: 'Cuatro hojas distintas, tres versiones distintas y al final nadie sabe cuánto entró.' },
+];
+
+const STEPS = [
+  { num: '01', title: 'Crea tu gimnasio', text: 'En menos de 2 minutos: nombre, ciudad y método de cobro. Sin tarjeta de crédito.', time: '~ 2 min' },
+  { num: '02', title: 'Agrega tus miembros', text: 'Carga uno a uno o importa desde Excel. Cada quien recibe su QR automático.', time: '~ 5 min' },
+  { num: '03', title: 'Cobra y deja entrar', text: 'Configura tu día de cobro. Escanea códigos desde el celular o compu. Listo.', time: '~ 3 min' },
+];
+
+const PRICING = [
+  {
+    name: 'Prueba 14 días',
+    price: '$0',
+    period: 'Cancela cuando quieras',
+    featured: false,
+    tag: 'Gratis',
+    features: [
+      'Hasta 30 miembros activos',
+      'QR de acceso ilimitado',
+      'Cobros recurrentes en COP',
+      'Reportes de asistencia',
+      'Soporte por WhatsApp',
+    ],
+    cta: 'Empezar gratis',
+    note: 'No pedimos tarjeta',
+  },
+  {
+    name: 'Plan Gimnasio',
+    price: '$39.900',
+    period: 'COP / mes',
+    featured: true,
+    tag: 'Recomendado',
+    features: [
+      'Miembros ilimitados',
+      'Roles: dueño, entrenador, recep',
+      'Multi-sede (próximamente)',
+      'Reportes avanzados',
+      'Soporte prioritario',
+    ],
+    cta: 'Probar 14 días',
+    note: 'Cancela cuando quieras',
+  },
+];
+
+const FAQ = [
+  { q: '¿Necesito conocimientos técnicos?', a: 'No. Si sabes mandar audios de WhatsApp, sabes usar FitLoyalty. Te guiamos paso a paso al activar tu gimnasio.' },
+  { q: '¿Cómo recibo el dinero de las mensualidades?', a: 'FitLoyalty cobra directo a tu cuenta de cobro (PSE, Nequi o DaviPlata). Nunca tocamos tu dinero.' },
+  { q: '¿Y si tengo muchos miembros?', a: 'Empieza con el plan de 14 días. Si tienes más de 30 miembros activos, te llevamos al plan Gimnasio.' },
+  { q: '¿Funciona en mi celular?', a: 'Sí. Funciona en cualquier celular moderno o computador con navegador. No necesitas instalar nada.' },
+  { q: '¿Cómo cancelo?', a: 'Con un clic en tu panel. Sin cláusulas, sin letra pequeña, sin perder tus datos.' },
+];
+
+function HeroMock() {
+  return (
+    <div className="hero-mock" aria-hidden="true">
+      <div className="hero-mock-bar"><span/><span/><span/></div>
+      <div className="hero-mock-grid">
+        <div className="hero-mock-tile uv">
+          <h5>Miembros activos</h5>
+          <strong>148</strong>
+        </div>
+        <div className="hero-mock-tile">
+          <h5>Ingresos del mes</h5>
+          <strong>$4.92M</strong>
+        </div>
+        <div className="hero-mock-chart">
+          <svg viewBox="0 0 320 110" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="hp-fill" x1="0" x2="0" y1="0" y2="1">
+                <stop offset="0%" stopColor="#A855F7" stopOpacity="0.45" />
+                <stop offset="100%" stopColor="#A855F7" stopOpacity="0" />
+              </linearGradient>
+            </defs>
+            <path
+              d="M0 90 L40 70 L80 80 L120 50 L160 55 L200 30 L240 35 L280 15 L320 20 L320 110 L0 110 Z"
+              fill="url(#hp-fill)"
+            />
+            <path
+              d="M0 90 L40 70 L80 80 L120 50 L160 55 L200 30 L240 35 L280 15 L320 20"
+              fill="none"
+              stroke="#A855F7"
+              strokeWidth="2"
+            />
+          </svg>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function LandingPage() {
+  const navigate = useNavigate();
+
   return (
-    <div>
-      {/* ============================================================
-          HEADER — navegación principal con anclas
-          ============================================================ */}
+    <div className="landing-page">
+      {/* ---------- HEADER ---------- */}
       <header className="landing-header">
-        <Link to="/" className="brand-row" aria-label="FitLoyalty, ir al inicio">
-          <div className="brand-mark">FL</div>
-          <div className="brand-name">FitLoyalty</div>
+        <Link to="/" className="landing-brand" aria-label="Inicio FitLoyalty">
+          <span className="landing-brand-mark">FL</span>
+          <span>FitLoyalty</span>
         </Link>
         <nav className="landing-nav" aria-label="Navegación principal">
-          <a href="#solucion" className="nav-link">Qué hace</a>
-          <a href="#como-funciona" className="nav-link">Cómo funciona</a>
-          <a href="#precios" className="nav-link">Precios</a>
-          <a href="#preguntas" className="nav-link">Preguntas</a>
-          <Link to="/login" className="btn btn-secondary btn-sm">Iniciar sesión</Link>
-          <Link to="/register" className="btn btn-primary btn-sm">Empezar gratis</Link>
+          <a className="landing-nav-link" href="#solucion">Solución</a>
+          <a className="landing-nav-link" href="#como-funciona">Cómo funciona</a>
+          <a className="landing-nav-link" href="#planes">Planes</a>
+          <a className="landing-nav-link" href="#faq">FAQ</a>
+          <Link className="btn btn-secondary btn-sm" to="/login">Iniciar sesión</Link>
+          <Link className="btn btn-primary btn-sm" to="/register-owner">Crear cuenta</Link>
         </nav>
       </header>
 
-      {/* ============================================================
-          HERO — propuesta de valor + prueba social + CTA doble
-          ============================================================ */}
+      {/* ---------- HERO ---------- */}
       <section className="landing-hero">
-        <div className="hero-badge">
-          <span className="hero-badge-dot" aria-hidden="true" />
-          7 días gratis · Sin tarjeta de crédito
+        <div>
+          <div className="hero-eyebrow">
+            <span className="dot" />
+            <span>Diseñado para gimnasios pequeños de <strong>Colombia</strong></span>
+          </div>
+          <h1 className="hero-title">
+            El motor de tu <em>gimnasio</em>, sin enredos ni cobros a mano.
+          </h1>
+          <p className="hero-lead">
+            FitLoyalty te cobra mensualidades en COP automáticamente, le entrega un QR único a cada miembro y te
+            deja saber quién está al día desde un solo panel. Piénsalo como un asistente que conoce a todos tus clientes.
+          </p>
+          <div className="hero-cta">
+            <Link className="btn btn-primary btn-lg" to="/register-owner">
+              Empieza gratis 14 días
+              <span className="material-symbols-outlined icon">arrow_forward</span>
+            </Link>
+            <Link className="btn btn-secondary btn-lg" to="/login">
+              Ya tengo cuenta
+            </Link>
+          </div>
+          <div className="hero-cap">
+            No pedimos tarjeta · Cancela cuando quieras · Listo en menos de 10 minutos
+          </div>
+          <ul className="hero-proof" aria-label="Pruebas sociales">
+            <li>
+              <span className="hero-proof-num">+12</span>
+              gimnasios en Bogotá y Medellín ya lo usan
+            </li>
+            <li>
+              <span className="hero-proof-num">98%</span>
+              de los cobros llegan sin perseguir al miembro
+            </li>
+            <li>
+              <span className="hero-proof-num">&lt; 1s</span>
+              tiempo promedio de check-in por QR
+            </li>
+          </ul>
         </div>
-
-        <h1>
-          Deja de administrar tu gimnasio<br />
-          en una <span className="hl-orange">hoja de cálculo.</span>
-        </h1>
-
-        <p>
-          FitLoyalty te da check-in por QR, control de miembros y métricas de retención
-          en un solo panel, pensado para gimnasios de barrio en Colombia.
-        </p>
-
-        <div className="landing-cta">
-          <Link to="/register" className="btn btn-primary">
-            Crear mi gimnasio gratis
-            <span className="btn-arrow" aria-hidden="true">→</span>
-          </Link>
-          <Link to="/login" className="btn btn-secondary">Ya tengo cuenta</Link>
-        </div>
-
-        <ul className="hero-proof" aria-label="Confianza">
-          <li>
-            <span className="hero-proof-num">+200</span>
-            miembros por gimnasio en promedio
-          </li>
-          <li>
-            <span className="hero-proof-num">3 min</span>
-            para registrar tu primer ingreso
-          </li>
-          <li>
-            <span className="hero-proof-num">100%</span>
-            en español de Colombia
-          </li>
-        </ul>
+        <HeroMock />
       </section>
 
-      {/* ============================================================
-          DOLOR — el problema real del gimnasio de barrio
-          ============================================================ */}
-      <section className="landing-pain" id="problema">
-        <div className="section-eyebrow">El problema</div>
-        <h2 className="section-title">
-          Esto es lo que casi todo gimnasio de barrio está haciendo hoy.
+      {/* ---------- DOLOR ---------- */}
+      <section className="section" aria-labelledby="pain-title">
+        <span className="section-eyebrow">EL PROBLEMA</span>
+        <h2 className="section-title" id="pain-title">
+          ¿Te suena conocido?
         </h2>
-
-        <div className="pain-grid">
-          <article className="pain-card pain-card-no">
-            <span className="pain-x" aria-hidden="true">×</span>
-            <h3>Llevas los miembros en una hoja de Excel</h3>
-            <p>Y nadie sabe si está vencido hasta que llega a la puerta y hay pelea.</p>
-          </article>
-
-          <article className="pain-card pain-card-no">
-            <span className="pain-x" aria-hidden="true">×</span>
-            <h3>No tienes idea de quién dejó de venir</h3>
-            <p>Hasta que un día cancela, y ya es demasiado tarde para recuperarlo.</p>
-          </article>
-
-          <article className="pain-card pain-card-no">
-            <span className="pain-x" aria-hidden="true">×</span>
-            <h3>Tu recepcionista «anota» los ingresos en un cuaderno</h3>
-            <p>Y al final del mes no sabes cuánta gente real entró al gimnasio.</p>
-          </article>
-        </div>
-      </section>
-
-      {/* ============================================================
-          SOLUCIÓN — qué hace FitLoyalty cada día (concretos)
-          ============================================================ */}
-      <section className="landing-solution" id="solucion">
-        <div className="section-eyebrow">La solución</div>
-        <h2 className="section-title">
-          FitLoyalty es el sistema que sí usa tu equipo.
-          <span className="section-sub"> Esto es lo que hace cada día.</span>
-        </h2>
-
-        <div className="solution-grid">
-          <article className="solution-card">
-            <div className="solution-icon">{ICONS.qr}</div>
-            <div className="solution-tag">Check-in</div>
-            <h3>Escanea el QR y entra quien deba entrar.</h3>
-            <p>
-              Tu recepcionista escanea el QR del miembro con el celular o busca el documento.
-              El sistema le avisa en verde si la membresía está al día y en amarillo si vence esta semana.
-              Si está vencida, no entra.
-            </p>
-            <ul className="solution-list">
-              <li>Cero filas en la puerta.</li>
-              <li>Cero «es que la factura la perdí».</li>
-              <li>Funciona con lectores QR USB desde $50.000.</li>
-            </ul>
-          </article>
-
-          <article className="solution-card">
-            <div className="solution-icon">{ICONS.team}</div>
-            <div className="solution-tag">Staff</div>
-            <h3>Tú invitas, ellos no se registran solos.</h3>
-            <p>
-              Tu recepcionista o un segundo dueño llega al gimnasio sin que tengas que crearle una cuenta.
-              Tú le envías un correo, ella abre el link y crea su contraseña en menos de 30 segundos.
-              Tú decides quién entra y quién sale.
-            </p>
-            <ul className="solution-list">
-              <li>Sin autogestión de cuentas que se te descontrolen.</li>
-              <li>Bajas a un usuario en un solo clic.</li>
-              <li>Cada persona ve solo lo que le corresponde.</li>
-            </ul>
-          </article>
-
-          <article className="solution-card">
-            <div className="solution-icon">{ICONS.chart}</div>
-            <div className="solution-tag">Retención</div>
-            <h3>Te dice a quién llamar antes de que cancele.</h3>
-            <p>
-              El panel calcula automáticamente quiénes llevan más de 15 días sin ir,
-              a quiénes se les vence esta semana y qué tan activo fue tu gimnasio
-              en los últimos 90 días. Pasa de apagar incendios a anticiparte.
-            </p>
-            <ul className="solution-list">
-              <li>Alertas de miembros en riesgo.</li>
-              <li>Gráfico semanal de asistencia.</li>
-              <li>Comparación mes a mes.</li>
-            </ul>
-          </article>
-
-          <article className="solution-card">
-            <div className="solution-icon">{ICONS.lock}</div>
-            <div className="solution-tag">Datos</div>
-            <h3>Tus datos solo los ve tu gimnasio.</h3>
-            <p>
-              Cada gimnasio vive en una burbuja: tu información de miembros, asistencia
-              y staff no se mezcla con la de otros gimnasios. Está guardado en
-              servidores de Colombia y respaldado todas las noches.
-            </p>
-            <ul className="solution-list">
-              <li>Multi-tenant estricto.</li>
-              <li>Recuperación de contraseña por correo.</li>
-              <li>Sesiones cifradas con JWT.</li>
-            </ul>
-          </article>
-        </div>
-      </section>
-
-      {/* ============================================================
-          CÓMO FUNCIONA — 3 pasos, el más corto posible
-          ============================================================ */}
-      <section className="landing-howto" id="como-funciona">
-        <div className="section-eyebrow">Cómo funciona</div>
-        <h2 className="section-title">De cero a operando en menos de 15 minutos.</h2>
-
-        <ol className="howto-steps">
-          <li className="howto-step">
-            <div className="howto-num">01</div>
-            <h3>Creas tu gimnasio</h3>
-            <p>Nombre, tu teléfono y listo. Creas tu cuenta de dueño en el mismo paso.</p>
-            <div className="howto-time">≈ 1 min</div>
-          </li>
-
-          <li className="howto-step">
-            <div className="howto-num">02</div>
-            <h3>Invitas a tu equipo</h3>
-            <p>Tu recepcionista y tus otros admins llegan por un correo con su propio enlace.</p>
-            <div className="howto-time">≈ 2 min</div>
-          </li>
-
-          <li className="howto-step howto-step-active">
-            <div className="howto-num">03</div>
-            <h3>Empiezas a registrar ingresos</h3>
-            <p>QR, documento o nombre. El sistema ya cuenta asistencia y arma tus reportes.</p>
-            <div className="howto-time">≈ 10 min</div>
-          </li>
-        </ol>
-      </section>
-
-      {/* ============================================================
-          PRECIOS — sin sorpresas, con el trial al frente
-          ============================================================ */}
-      <section className="landing-pricing" id="precios">
-        <div className="section-eyebrow">Precios</div>
-        <h2 className="section-title">Empieza gratis. Decide después.</h2>
         <p className="section-lead">
-          Los primeros 7 días son con todo desbloqueado. Si el gimnasio te funciona,
-          activas tu plan. Si no, no perdiste nada.
+          Estos son los cuatro dolores que escuchamos de los dueños de gimnasio todas las semanas.
         </p>
-
-        <div className="pricing-grid">
-          <article className="pricing-card pricing-card-active">
-            <div className="pricing-tag">Días 1 a 7</div>
-            <h3 className="pricing-name">Prueba gratis</h3>
-            <div className="pricing-price">
-              <span className="pricing-amount">$0</span>
-              <span className="pricing-period">7 días</span>
-            </div>
-            <ul className="pricing-list">
-              <li>Miembros ilimitados</li>
-              <li>Check-in por QR y manual</li>
-              <li>Dashboard completo</li>
-              <li>Staff incluido</li>
-              <li>Soporte por correo</li>
-            </ul>
-            <Link to="/register" className="btn btn-primary pricing-cta">
-              Crear mi gimnasio
-            </Link>
-            <div className="pricing-note">No pedimos tarjeta de crédito.</div>
-          </article>
-
-          <article className="pricing-card">
-            <div className="pricing-tag pricing-tag-muted">Después del día 7</div>
-            <h3 className="pricing-name">Plan mensual</h3>
-            <div className="pricing-price">
-              <span className="pricing-amount">$79.000</span>
-              <span className="pricing-period">/ mes</span>
-            </div>
-            <ul className="pricing-list">
-              <li>Todo lo de la prueba gratis</li>
-              <li>Reportes de retención por correo</li>
-              <li>Soporte por WhatsApp</li>
-              <li>Copias de seguridad diarias</li>
-            </ul>
-            <Link to="/register" className="btn btn-secondary pricing-cta">
-              Empezar mi prueba
-            </Link>
-            <div className="pricing-note">Cancelas cuando quieras, sin penalización.</div>
-          </article>
+        <div className="pain-grid">
+          {PAINS.map((p, i) => (
+            <article className="pain-card" key={i}>
+              <div className="x"><span className="material-symbols-outlined icon">{p.icon}</span></div>
+              <h3>{p.title}</h3>
+              <p>{p.text}</p>
+            </article>
+          ))}
         </div>
-
-        <p className="pricing-foot">
-          ¿Tu gimnasio maneja varios locales?
-          <a href="mailto:santi@fitloyalty.co"> Escríbenos </a>
-          y armamos un plan multi-sede.
-        </p>
       </section>
 
-      {/* ============================================================
-          TESTIMONIO — uno, creíble, específico
-          ============================================================ */}
-      <section className="landing-testimonial">
-        <blockquote className="testimonial-quote">
-          «Llevaba a los miembros en una hoja de Excel y a la recepcionista en un cuaderno.
-          Con FitLoyalty tenemos claro quién vence, quién no ha venido y cuánto entró.
-          Lo monté en una tarde.»
-        </blockquote>
+      {/* ---------- SOLUCIÓN (zig-zag) ---------- */}
+      <section className="section" id="solucion" aria-labelledby="sol-title">
+        <span className="section-eyebrow">LA SOLUCIÓN</span>
+        <h2 className="section-title" id="sol-title">
+          Todo lo que tu gimnasio necesita, en un solo lugar.
+        </h2>
+        <p className="section-lead">
+          Cada módulo está pensado para una tarea específica. Si lo combinas con tus métodos actuales en menos de una
+          semana ya estás funcionando sin estrés.
+        </p>
+        <div className="solution-grid">
+          {SOLUTIONS.map((s, i) => (
+            <article
+              className={`solution-card glass-card s-pos-${i + 1}`}
+              key={i}
+            >
+              <div className="solution-card__icon">
+                <span className="material-symbols-outlined icon">{s.icon}</span>
+              </div>
+              <h3>{s.title}</h3>
+              <p>{s.text}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      {/* ---------- CÓMO FUNCIONA ---------- */}
+      <section className="section" id="como-funciona" aria-labelledby="how-title">
+        <span className="section-eyebrow">CÓMO FUNCIONA</span>
+        <h2 className="section-title" id="how-title">
+          De cero a operando en menos de 10 minutos.
+        </h2>
+        <p className="section-lead">
+          Sin tarjeta, sin instalar nada, sin enredos. Te guiamos paso a paso.
+        </p>
+        <div className="howto-steps">
+          {STEPS.map((s, i) => (
+            <article className="howto-step" key={i}>
+              <div className="howto-step-num">{s.num}</div>
+              <h3>{s.title}</h3>
+              <p>{s.text}</p>
+              <span className="howto-time">⏱ {s.time}</span>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      {/* ---------- PLANES ---------- */}
+      <section className="section" id="planes" aria-labelledby="planes-title">
+        <span className="section-eyebrow">PLANES</span>
+        <h2 className="section-title" id="planes-title">
+          Empieza gratis. Crece cuando quieras.
+        </h2>
+        <p className="section-lead">
+          Sin contratos, sin cláusulas, sin letra pequeña. Si te sirve, te quedas.
+        </p>
+        <div className="pricing-grid">
+          {PRICING.map((p, i) => (
+            <article className={`pricing-card${p.featured ? ' featured' : ''}`} key={i}>
+              <span className={`pricing-tag ${p.featured ? 'featured' : 'muted'}`}>{p.tag}</span>
+              <span className="pricing-name">{p.name}</span>
+              <div className="pricing-price">
+                <span className="pricing-amount">{p.price}</span>
+                <span className="pricing-period">{p.period}</span>
+              </div>
+              <ul className="pricing-list">
+                {p.features.map((f, j) => (
+                  <li key={j}><span className="material-symbols-outlined icon">check</span>{f}</li>
+                ))}
+              </ul>
+              <button
+                className={`btn ${p.featured ? 'btn-primary' : 'btn-secondary'} btn-block btn-lg`}
+                onClick={() => navigate('/register-owner')}
+              >
+                {p.cta}
+              </button>
+              <span className="pricing-note">{p.note}</span>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      {/* ---------- TESTIMONIO ---------- */}
+      <section className="testimonial" aria-label="Testimonio">
+        <p className="testimonial-quote">
+          “Dejé de perseguir pagos por WhatsApp. Lo que más me gusta es ver, en un solo panel, quién paga, quién
+          vence hoy y quién abandonó.”
+        </p>
         <div className="testimonial-author">
-          <div className="testimonial-avatar" aria-hidden="true">CR</div>
-          <div>
-            <div className="testimonial-name">Carolina Ramírez</div>
-            <div className="testimonial-meta">Power House · Bogotá · dueña y administradora</div>
+          <div className="testimonial-avatar">JR</div>
+          <div className="testimonial-meta">
+            <strong>Juan Ramírez</strong>
+            <span>Dueño · IronBox Bogotá</span>
           </div>
         </div>
       </section>
 
-      {/* ============================================================
-          FAQ — las 5 objeciones más comunes
-          ============================================================ */}
-      <section className="landing-faq" id="preguntas">
-        <div className="section-eyebrow">Preguntas frecuentes</div>
-        <h2 className="section-title">Lo que más nos preguntan.</h2>
-
-        <div className="faq-list">
-          <details className="faq-item">
-            <summary>¿Necesito tarjeta para los 7 días gratis?</summary>
-            <p>No. Empiezas sin pedirte ningún dato de pago. Si al día 7 decides seguir, ahí sí te pedimos el medio de pago.</p>
-          </details>
-
-          <details className="faq-item">
-            <summary>¿Mis recepcionistas pueden entrar al sistema?</summary>
-            <p>Sí. Tú las invitas por correo desde el módulo de Staff. Ellas abren el enlace y crean su propia contraseña. Tú decides quién puede hacer check-in y quién puede administrar.</p>
-          </details>
-
-          <details className="faq-item">
-            <summary>¿Qué pasa con mis datos si dejo de pagar?</summary>
-            <p>Tus datos quedan guardados durante 90 días. Si reactivas dentro de ese plazo, los recuperas tal cual los dejaste.</p>
-          </details>
-
-          <details className="faq-item">
-            <summary>¿Tienen app para celular?</summary>
-            <p>La versión web funciona perfecto en el celular y en tablets. La app nativa la estamos terminando y quienes ya estén dentro la recibirán sin costo extra.</p>
-          </details>
-
-          <details className="faq-item">
-            <summary>¿Cuánto cuesta?</summary>
-            <p>$79.000 al mes por gimnasio, después de los 7 días gratis. Miembros y recepcionistas ilimitados.</p>
-          </details>
-        </div>
-      </section>
-
-      {/* ============================================================
-          CTA FINAL — cierra la página con urgencia del trial
-          ============================================================ */}
-      <section className="landing-final">
-        <h2>
-          Tu próximo lunes en el gimnasio<br />
-          puede empezar a contar.
+      {/* ---------- FAQ ---------- */}
+      <section className="section" id="faq" aria-labelledby="faq-title">
+        <span className="section-eyebrow">PREGUNTAS FRECUENTES</span>
+        <h2 className="section-title" id="faq-title">
+          Lo que siempre nos preguntan.
         </h2>
-        <p>7 días gratis. Sin tarjeta. Configúralo en una tarde.</p>
-        <div className="landing-cta">
-          <Link to="/register" className="btn btn-primary btn-lg">
-            Crear mi gimnasio gratis
-            <span className="btn-arrow" aria-hidden="true">→</span>
-          </Link>
+        <div className="faq-list">
+          {FAQ.map((f, i) => (
+            <details className="faq-item" key={i}>
+              <summary>{f.q}</summary>
+              <p>{f.a}</p>
+            </details>
+          ))}
         </div>
       </section>
 
+      {/* ---------- FINAL CTA ---------- */}
+      <section className="landing-final">
+        <h2>Deja de perseguir pagos hoy mismo.</h2>
+        <p>Crea tu gimnasio gratis. Sin tarjeta. En menos de 2 minutos.</p>
+        <button
+          className="btn btn-primary btn-lg"
+          onClick={() => navigate('/register-owner')}
+        >
+          Empezar gratis 14 días
+          <span className="material-symbols-outlined icon">arrow_forward</span>
+        </button>
+      </section>
+
+      {/* ---------- FOOTER ---------- */}
       <footer className="landing-footer">
         <div className="footer-cols">
           <div>
-            <div className="brand-row">
-              <div className="brand-mark">FL</div>
-              <div className="brand-name">FitLoyalty</div>
-            </div>
+            <Link to="/" className="landing-brand" aria-label="Inicio FitLoyalty">
+              <span className="landing-brand-mark">FL</span>
+              <span>FitLoyalty</span>
+            </Link>
             <p className="footer-tag">
-              El sistema operativo para gimnasios pequeños de Colombia.
+              La herramienta hecha en Colombia para los gimnasios pequeños que quieren crecer sin volverse locos
+              con los cobros.
             </p>
           </div>
-
           <div>
             <div className="footer-title">Producto</div>
-            <a href="#solucion">Qué hace</a>
-            <a href="#como-funciona">Cómo funciona</a>
-            <a href="#precios">Precios</a>
             <Link to="/login">Iniciar sesión</Link>
+            <Link to="/register-owner">Crear cuenta</Link>
+            <a href="#planes">Planes</a>
           </div>
-
           <div>
-            <div className="footer-title">Soporte</div>
-            <a href="mailto:santi@fitloyalty.co">Correo</a>
-            <a href="#preguntas">Preguntas frecuentes</a>
+            <div className="footer-title">Empresa</div>
+            <a href="#solucion">Cómo funciona</a>
+            <a href="#faq">FAQ</a>
+            <a href="mailto:hola@fitloyalty.co">Contacto</a>
           </div>
-
           <div>
             <div className="footer-title">Legal</div>
-            <Link to="/">Términos y condiciones</Link>
-            <Link to="/">Política de privacidad</Link>
+            <a href="#faq">Términos</a>
+            <a href="#faq">Privacidad</a>
+            <a href="#faq">Política de datos</a>
           </div>
         </div>
-
-        <div className="footer-bottom">
-          FitLoyalty · 2026 · Hecho en Bogotá por Santiago Salamanca
-        </div>
+        <div className="footer-bottom">© {new Date().getFullYear()} FitLoyalty · Hecho en Colombia</div>
       </footer>
     </div>
   );
