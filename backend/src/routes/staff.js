@@ -256,19 +256,29 @@ router.get(
   asyncHandler(async (req, res) => {
     const gymId = req.user.gymId;
     try {
+      // Construimos una query minima que NUNCA depende de tablas opcionales
+      // (rol/roles) y NUNCA referencia columnas opcionales (fecha_creacion,
+      // ultimo_acceso) hasta confirmar via information_schema. Ordenamos por
+      // id_usuario, que es PK serial: no requiere introspeccion.
       const schema = await detectStaffSchema();
 
       const selectCols = ['id_usuario', 'nombre', 'email', 'id_rol', 'activo'];
       if (schema.hasFechaCreacion) selectCols.push('fecha_creacion');
       if (schema.hasUltimoAcceso)  selectCols.push('ultimo_acceso');
 
+      // Si detect encontro la tabla de roles la usamos (mejor nombre legible
+      // si hay roles custom); si NO la encontro (entornos sin `rol`), derivamos
+      // por id_rol. Nota: el subselect usa LEFT JOIN logic (subselect escalar)
+      // y devuelve NULL si el id_rol no esta en la tabla, en cuyo caso caemos
+      // al CASE para que NUNCA devuelva null.
       let rolExpr;
       if (schema.rolTable) {
-        // Subselect sobre la tabla de roles detectada. Usa alias `r` para
-        // evitar choques si el `FROM` principal tuviera un alias `rol`.
-        rolExpr = `(SELECT r.nombre FROM ${schema.rolTable} r WHERE r.id_rol = usuario.id_rol) AS rol`;
+        rolExpr = `COALESCE((SELECT r.nombre FROM ${schema.rolTable} r WHERE r.id_rol = usuario.id_rol),
+                          CASE WHEN usuario.id_rol = 1 THEN 'ADMINISTRADOR'
+                               WHEN usuario.id_rol = 2 THEN 'RECEPCIONISTA'
+                               WHEN usuario.id_rol = 3 THEN 'ENTRENADOR'
+                               ELSE 'DESCONOCIDO' END) AS rol`;
       } else {
-        // Fallback deterministico por id_rol (mapea los roles base de FitLoyalty).
         rolExpr = `CASE WHEN usuario.id_rol = 1 THEN 'ADMINISTRADOR'
                         WHEN usuario.id_rol = 2 THEN 'RECEPCIONISTA'
                         WHEN usuario.id_rol = 3 THEN 'ENTRENADOR'
