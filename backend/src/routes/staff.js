@@ -58,14 +58,17 @@ function buildAcceptUrl(token) {
 // referenciaban columnas (`fecha_creacion`, `ultimo_acceso`) que en teoria
 // pueden no existir en algun entorno.
 //
-// Cache en memoria por proceso: la primera request detecta el shape del
-// esquema con `to_regclass` + `information_schema.columns` y las siguientes
-// reutilizan el resultado. Si Render cambia el shape, basta con redesplegar.
+// Resolucion:
+//   1. En cada request (no cacheamos en memoria) hacemos UN solo SELECT a
+//      information_schema + to_regclass para confirmar si existen:
+//        - tabla 'rol' o 'roles'
+//        - columna 'fecha_creacion' en usuario
+//        - columna 'ultimo_acceso' en usuario
+//      El costo es ~0.3 ms y nos protege de caches stale entre deploys.
+//   2. Si no existen (modo degradado), derivamos el nombre del rol con un
+//      CASE sobre id_rol y omitimos las columnas opcionales del SELECT.
 // ---------------------------------------------------------------------------
-const STAFF_SCHEMA = { checked: false, rolTable: null, hasFechaCreacion: false, hasUltimoAcceso: false };
-
 async function detectStaffSchema() {
-  if (STAFF_SCHEMA.checked) return STAFF_SCHEMA;
   try {
     const { rows } = await pool.query(`
       SELECT
@@ -78,24 +81,26 @@ async function detectStaffSchema() {
         EXISTS (
           SELECT 1 FROM information_schema.columns
           WHERE table_schema='public' AND table_name='usuario' AND column_name='ultimo_acceso'
-        ) AS has_ultimo_aceso
+        ) AS has_ultimo_acceso
     `);
     const r = rows[0] || {};
-    STAFF_SCHEMA.rolTable         = r.rol_exists ? 'rol' : (r.roles_exists ? 'roles' : null);
-    STAFF_SCHEMA.hasFechaCreacion = Boolean(r.has_fecha_creacion);
-    STAFF_SCHEMA.hasUltimoAcceso  = Boolean(r.has_ultimo_aceso);
+    return {
+      rolTable:         r.rol_exists ? 'rol' : (r.roles_exists ? 'roles' : null),
+      hasFechaCreacion: Boolean(r.has_fecha_creacion),
+      hasUltimoAcceso:  Boolean(r.has_ultimo_acceso),
+    };
   } catch (e) {
     // Fallback DEFENSIVO: si NO pudimos inspeccionar information_schema no
     // podemos confiar en que `rol` exista. Asumimos la forma minima posible:
     // sin subselect de rol (se devuelve por CASE), sin columnas opcionales.
     // Esto evita 503 falsos cuando la introspeccion falla por permisos/red.
-    STAFF_SCHEMA.rolTable         = null;
-    STAFF_SCHEMA.hasFechaCreacion = false;
-    STAFF_SCHEMA.hasUltimoAcceso  = false;
     console.warn('[staff] No se pudo inspeccionar information_schema, usando fallback defensivo (sin rol, sin cols opcionales):', e.message);
+    return {
+      rolTable: null,
+      hasFechaCreacion: false,
+      hasUltimoAcceso: false,
+    };
   }
-  STAFF_SCHEMA.checked = true;
-  return STAFF_SCHEMA;
 }
 
 // ---------------------------------------------------------------------------
@@ -268,9 +273,8 @@ router.get(
 
       // Si detect encontro la tabla de roles la usamos (mejor nombre legible
       // si hay roles custom); si NO la encontro (entornos sin `rol`), derivamos
-      // por id_rol. Nota: el subselect usa LEFT JOIN logic (subselect escalar)
-      // y devuelve NULL si el id_rol no esta en la tabla, en cuyo caso caemos
-      // al CASE para que NUNCA devuelva null.
+      // por id_rol. El COALESCE garantiza que NUNCA devolvemos NULL en la
+      // columna 'rol': si el subselect falla, cae al CASE.
       let rolExpr;
       if (schema.rolTable) {
         rolExpr = `COALESCE((SELECT r.nombre FROM ${schema.rolTable} r WHERE r.id_rol = usuario.id_rol),
