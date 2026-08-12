@@ -77,6 +77,8 @@ app.use('/api', dashboardRoutes);
 app.use('/api/asistencia', require('./routes/asistencia'));
 app.use('/api/vista',     require('./routes/vista'));
 
+app.get('/api/healthz', (_req, res) => res.json({ status: 'ok', uptime: process.uptime() }));
+
 app.get('/api/health', asyncHandler(async (req, res) => {
   try {
     await pool.query('SELECT 1');
