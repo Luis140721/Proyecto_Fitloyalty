@@ -263,6 +263,15 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
+  align-items: start;
+}
+.auth-form-row > .field { min-width: 0; }
+.auth-form-row > .field .field-label {
+  min-height: 34px;
+  display: flex;
+  align-items: flex-end;
+  margin-bottom: 6px;
+  line-height: 1.25;
 }
 @media (max-width: 520px) { .auth-form-row { grid-template-columns: 1fr; } }
 
