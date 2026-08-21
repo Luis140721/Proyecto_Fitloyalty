@@ -73,9 +73,12 @@ router.post('/seed-supremo', requireAdminToken, asyncHandler(async (req, res) =>
         [gymId]
       );
     } else {
+      // En Neon la columna trial_ends_at es NOT NULL (a diferencia de local).
+      // Para una cuenta suprema (sin suscripcion) usamos un valor muy lejano en
+      // el futuro (anio 2099) para evitar el NOT NULL y a la vez no activar el trial.
       const { rows: gymRows } = await client.query(
-        `INSERT INTO gimnasio (nombre, telefono, email, trial_ends_at, activo)
-         VALUES ($1, '3000000000', $2, NULL, TRUE)
+        `INSERT INTO gimnasio (nombre, telefono, email, trial_ends_at, activo, plan_activo)
+         VALUES ($1, '3000000000', $2, '2099-12-31 00:00:00+00', TRUE, 'SUSCRITO')
          RETURNING id_gimnasio`,
         [gymName, email]
       );
