@@ -20,7 +20,7 @@ const { authenticate, authorize } = require('../middleware/auth');
 const asyncHandler = require('../lib/asyncHandler');
 const { AppError } = require('../lib/errors');
 const { requireActiveTrial } = require('../lib/trial');
-const { sendMail } = require('../lib/email');
+const { sendStaffInvite } = require('../lib/email');
 const { generateToken, hashToken } = require('../lib/invitations');
 const { z } = require('zod');
 const { formatZodError } = require('../lib/validators');
@@ -160,11 +160,19 @@ router.post(
 
     let result;
     try {
-      result = await sendMail({
+      const { rows: gymRows } = await pool.query(
+        'SELECT nombre FROM gimnasio WHERE id_gimnasio = $1',
+        [gymId]
+      );
+      const gymName = gymRows[0]?.nombre || 'tu gimnasio';
+      result = await sendStaffInvite({
         to: email,
-        subject: 'Te invitaron a FitLoyalty',
-        text: `Hola ${nombre},\n\n${req.user.name} te invito a unirse a FitLoyalty como ${rol}. Crea tu contrasena aqui (link valido 7 dias):\n\n${acceptUrl}\n`,
-        html: `<p>Hola <strong>${nombre}</strong>,</p><p><strong>${req.user.name}</strong> te invito a FitLoyalty como <strong>${rol}</strong>.</p><p><a href="${acceptUrl}" style="display:inline-block;padding:12px 20px;background:#f97316;color:#fff;border-radius:8px;text-decoration:none;">Aceptar invitacion</a></p><p>El link expira en 7 dias.</p>`,
+        invitedName: nombre,
+        invitedBy: req.user.name,
+        gymName,
+        role: rol,
+        acceptUrl,
+        expiresDays: 7,
       });
     } catch (err) {
       console.error('[POST /admin/staff/invite] Error enviando mail (no bloqueante):', err.message);
