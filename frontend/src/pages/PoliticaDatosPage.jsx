@@ -110,7 +110,7 @@ export default function PoliticaDatosPage() {
       </ul>
       <h3>7.2 Administrativas</h3>
       <ul>
-        <li>Acceso restringido: solo el equipo de ingeniería de Context AI tiene acceso a la base de datos, bajo NDA.</li>
+        <li>Acceso restringido: solo el equipo de ingeniería de FitLoyalty tiene acceso a la base de datos, bajo NDA.</li>
         <li>Principio de mínimo privilegio en roles de la Plataforma.</li>
         <li>Logs de auditoría para acciones sensibles (creación de usuarios, eliminación de miembros).</li>
       </ul>

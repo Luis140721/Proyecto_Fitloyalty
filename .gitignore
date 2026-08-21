@@ -80,3 +80,20 @@ frontend/.vite/
 *.sock
 
 .vercel
+
+# --- Carpeta .context/ del agente (workspace local, NO subir al repo)
+.context/
+**/.context/
+
+# --- Logs y archivos locales de la raiz del proyecto (NO subir)
+.backend.log
+.seed.log
+.vite-dev.log
+.vite-preview.log
+nul
+*.tmp.json
+*.out.json
+render_*.json
+login_*.json
+clase_2_ui_*.html
+render.exe

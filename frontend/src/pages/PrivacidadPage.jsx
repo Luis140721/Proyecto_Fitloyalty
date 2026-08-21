@@ -9,7 +9,7 @@ export default function PrivacidadPage() {
     >
       <h2>1. Responsable del tratamiento</h2>
       <p>
-        Context AI, en su calidad de desarrollador y operador de FitLoyalty, actúa como{' '}
+        FitLoyalty, en su calidad de desarrollador y operador de la Plataforma, actúa como{' '}
         <strong>Encargado del Tratamiento</strong> de los datos personales que se procesan en la
         Plataforma. El <strong>Responsable del Tratamiento</strong> es cada gimnasio que usa
         FitLoyalty, ya que es quien decide qué datos de sus miembros recolecta y para qué fines.

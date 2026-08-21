@@ -42,7 +42,7 @@ export default function LegalLayout({ title, subtitle, updated, children }) {
             <Link to="/legal/eliminar-cuenta">Eliminar cuenta</Link>
           </nav>
           <span className="legal-footer__copy">
-            © {new Date().getFullYear()} FitLoyalty · Hecho en Colombia
+            © {new Date().getFullYear()} FitLoyalty
           </span>
         </div>
       </footer>

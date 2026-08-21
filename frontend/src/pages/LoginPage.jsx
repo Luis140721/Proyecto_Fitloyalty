@@ -48,7 +48,7 @@ export default function LoginPage() {
           { icon: 'shield_lock',  title: 'Sesiones cifradas',   text: 'Token JWT por sesión, hash bcrypt para contraseñas.' },
           { icon: 'devices',      title: 'Funciona en tu celu', text: 'Cualquier celular moderno o computador con navegador.' },
         ]}
-        footNote="Acceso seguro · Sesión cifrada · Hecho en Colombia"
+        footNote="Acceso seguro · Sesión cifrada"
       />
 
       <main className="auth-page__form">

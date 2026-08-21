@@ -361,12 +361,13 @@ export default function LandingPage() {
           </div>
           <div>
             <div className="footer-title">Legal</div>
-            <a href="#faq">Términos</a>
-            <a href="#faq">Privacidad</a>
-            <a href="#faq">Política de datos</a>
+            <Link to="/legal/terminos">Términos y condiciones</Link>
+            <Link to="/legal/privacidad">Política de privacidad</Link>
+            <Link to="/legal/datos">Política de datos</Link>
+            <Link to="/legal/eliminar-cuenta">Eliminar cuenta</Link>
           </div>
         </div>
-        <div className="footer-bottom">© {new Date().getFullYear()} FitLoyalty · Hecho en Colombia</div>
+        <div className="footer-bottom">© {new Date().getFullYear()} FitLoyalty</div>
       </footer>
     </div>
   );
