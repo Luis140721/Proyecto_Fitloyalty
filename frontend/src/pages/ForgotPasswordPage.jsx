@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
 import AuthPanel from '../components/AuthPanel';
+import { api } from '../api';
 
 const STEPS = [
   { id: 1, title: 'Tu correo',     desc: 'Te enviaremos un código de 6 dígitos.' },
@@ -47,7 +48,7 @@ export default function ForgotPasswordPage() {
     setError(''); setInfo('');
     setSubmitting(true);
     try {
-      const { data } = await axios.post('/api/auth/forgot-password', { email: form.email.trim() });
+      const { data } = await api.post('/auth/forgot-password', { email: form.email.trim() });
       setInfo(data.message || 'Si el correo está registrado, enviamos un código.');
       // El backend puede devolver devCode + showCodeInUI=true cuando:
       //  - Resend NO entregó (ej. plan free con destinatario externo)
@@ -70,7 +71,7 @@ export default function ForgotPasswordPage() {
     if (form.code.length !== 6) { setError('El código debe tener 6 dígitos'); return; }
     setSubmitting(true);
     try {
-      const { data } = await axios.post('/api/auth/verify-reset-code', {
+      const { data } = await api.post('/auth/verify-reset-code', {
         email: form.email.trim(),
         code: form.code.trim(),
       });
@@ -88,7 +89,7 @@ export default function ForgotPasswordPage() {
     setError(''); setInfo('');
     setSubmitting(true);
     try {
-      await axios.post('/api/auth/reset-password', { resetToken, password: form.password });
+      await api.post('/auth/reset-password', { resetToken, password: form.password });
       setStep(4);
     } catch (err) {
       setError(err.response?.data?.error || 'No se pudo actualizar.');
