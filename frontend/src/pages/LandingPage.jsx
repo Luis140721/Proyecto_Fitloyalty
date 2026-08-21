@@ -357,7 +357,7 @@ export default function LandingPage() {
             <div className="footer-title">Empresa</div>
             <a href="#solucion">Cómo funciona</a>
             <a href="#faq">FAQ</a>
-            <a href="mailto:hola@fitloyalty.co">Contacto</a>
+            <a href="mailto:fitloyaltysaas@gmail.com">Contacto</a>
           </div>
           <div>
             <div className="footer-title">Legal</div>

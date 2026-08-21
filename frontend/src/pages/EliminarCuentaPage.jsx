@@ -23,7 +23,7 @@ export default function EliminarCuentaPage() {
       logout();
       setDone(true);
     } catch (err) {
-      setError(err.response?.data?.error || 'No se pudo procesar la solicitud. Escríbenos a datos@fitloyalty.co.');
+      setError(err.response?.data?.error || 'No se pudo procesar la solicitud. Escríbenos a fitloyaltysaas@gmail.com.');
     } finally {
       setSubmitting(false);
     }
@@ -53,7 +53,7 @@ export default function EliminarCuentaPage() {
         <p>
           Una vez eliminados, los datos <strong>no se pueden recuperar</strong>. Si quieres volver a
           usar FitLoyalty, deberás crear una cuenta nueva desde cero. Si solo quieres pausar tu
-          cuenta temporalmente, escríbenos a <a href="mailto:hola@fitloyalty.co">hola@fitloyalty.co</a>{' '}
+          cuenta temporalmente, escríbenos a <a href="mailto:fitloyaltysaas@gmail.com">fitloyaltysaas@gmail.com</a>{' '}
           en lugar de eliminarla.
         </p>
       </div>
@@ -84,7 +84,7 @@ export default function EliminarCuentaPage() {
             <p>
               Tu solicitud se ha procesado correctamente. La eliminación completa se completará en
               un máximo de 10 días hábiles. Has sido cerrado sesión. Si tienes dudas, escribe a{' '}
-              <a href="mailto:datos@fitloyalty.co">datos@fitloyalty.co</a>.
+              <a href="mailto:fitloyaltysaas@gmail.com">fitloyaltysaas@gmail.com</a>.
             </p>
           </div>
           <div style={{ marginTop: 24 }}>
@@ -166,7 +166,7 @@ export default function EliminarCuentaPage() {
       <h2>Contacto</h2>
       <p>
         Si prefieres que eliminemos tu cuenta manualmente o tienes dudas sobre el proceso, escríbenos
-        a <a href="mailto:datos@fitloyalty.co">datos@fitloyalty.co</a> con el asunto "Eliminar
+        a <a href="mailto:fitloyaltysaas@gmail.com">fitloyaltysaas@gmail.com</a> con el asunto "Eliminar
         cuenta" e incluye el nombre de tu gimnasio.
       </p>
     </LegalLayout>

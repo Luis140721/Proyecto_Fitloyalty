@@ -536,7 +536,7 @@ router.delete('/account', authenticate, asyncHandler(async (req, res) => {
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
     console.error('[DELETE /auth/account] Error:', err.code, err.message);
-    throw new AppError(500, 'No pudimos eliminar la cuenta. Intenta de nuevo o escribe a datos@fitloyalty.co.', 'DELETE_FAILED');
+    throw new AppError(500, 'No pudimos eliminar la cuenta. Intenta de nuevo o escribe a fitloyaltysaas@gmail.com.', 'DELETE_FAILED');
   } finally {
     client.release();
   }
