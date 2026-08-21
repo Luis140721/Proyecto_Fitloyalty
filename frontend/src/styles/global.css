@@ -348,6 +348,54 @@ a:hover { color: var(--primary-fixed); }
   background-color: var(--bg) !important;
   color: var(--on-surface) !important;
 }
+
+/* ============================================================
+   Fix adicional para autofill en input type="tel" / type="number"
+   Chrome en algunos casos aplica el estilo solo cuando el input
+   coincide con selectors mas especificos. Cubre TODOS los tipos
+   de input de formulario, no solo .field-input.
+   ============================================================ */
+input[type="text"]:-webkit-autofill,
+input[type="email"]:-webkit-autofill,
+input[type="password"]:-webkit-autofill,
+input[type="tel"]:-webkit-autofill,
+input[type="number"]:-webkit-autofill,
+input[type="search"]:-webkit-autofill,
+input[type="url"]:-webkit-autofill,
+input[type="text"]:-webkit-autofill:hover,
+input[type="email"]:-webkit-autofill:hover,
+input[type="password"]:-webkit-autofill:hover,
+input[type="tel"]:-webkit-autofill:hover,
+input[type="number"]:-webkit-autofill:hover,
+input[type="search"]:-webkit-autofill:hover,
+input[type="url"]:-webkit-autofill:hover,
+input[type="text"]:-webkit-autofill:focus,
+input[type="email"]:-webkit-autofill:focus,
+input[type="password"]:-webkit-autofill:focus,
+input[type="tel"]:-webkit-autofill:focus,
+input[type="number"]:-webkit-autofill:focus,
+input[type="search"]:-webkit-autofill:focus,
+input[type="url"]:-webkit-autofill:focus,
+input[type="text"]:-webkit-autofill:active,
+input[type="email"]:-webkit-autofill:active,
+input[type="password"]:-webkit-autofill:active,
+input[type="tel"]:-webkit-autofill:active,
+input[type="number"]:-webkit-autofill:active,
+input[type="search"]:-webkit-autofill:active,
+input[type="url"]:-webkit-autofill:active {
+  -webkit-text-fill-color: var(--on-surface) !important;
+  -webkit-box-shadow: 0 0 0 1000px var(--bg) inset !important;
+  box-shadow: 0 0 0 1000px var(--bg) inset !important;
+  background-color: var(--bg) !important;
+  background-image: none !important;
+  caret-color: var(--on-surface);
+  border-color: var(--border-subtle);
+}
+input:-webkit-autofill::first-line {
+  color: var(--on-surface) !important;
+  font-family: var(--font-body) !important;
+  font-size: 15px !important;
+}
 @media (max-width: 600px) {
   .field-input,
   .field select,
