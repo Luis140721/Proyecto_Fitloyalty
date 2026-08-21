@@ -140,10 +140,11 @@ router.post('/signup', asyncHandler(async (req, res) => {
     const gym = gymRows[0];
 
     // 3. Crear admin owner
+    //    id_rol=1 = ADMINISTRADOR (hardcoded, no hay tabla 'rol' en BD)
     const password_hash = await bcrypt.hash(password, 10);
     const { rows: userRows } = await client.query(
       `INSERT INTO usuario (id_gimnasio, nombre, email, password_hash, id_rol)
-       VALUES ($1, $2, $3, $4, (SELECT id_rol FROM rol WHERE nombre='ADMINISTRADOR' LIMIT 1))
+       VALUES ($1, $2, $3, $4, 1)
        RETURNING id_usuario, nombre, email, id_gimnasio`,
       [gym.id_gimnasio, ownerName.trim(), ownerEmail.toLowerCase(), password_hash]
     );
