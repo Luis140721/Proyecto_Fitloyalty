@@ -91,7 +91,7 @@ ${preheader ? `<span style="display:none;font-size:1px;color:${BRAND.bg};line-he
               <a href="mailto:${BRAND.supportEmail}" style="color:${BRAND.primary};text-decoration:none;">${BRAND.supportEmail}</a>
             </p>
             <p style="margin:0;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:${BRAND.textMuted};opacity:0.6;">
-              © ${new Date().getFullYear()} ${BRAND.name} · Hecho en Colombia · Ley 1581/2012
+              © ${new Date().getFullYear()} ${BRAND.name} · Ley 1581/2012
             </p>
           </td>
         </tr>
@@ -233,7 +233,7 @@ function fallbackConsole({ to, subject, text }) {
 }
 
 function textVersion({ preheader, content }) {
-  return `${preheader ? preheader + '\n\n' : ''}${content}\n\n— Equipo FitLoyalty\n${BRAND.supportEmail}\n© ${new Date().getFullYear()} FitLoyalty · Hecho en Colombia`;
+  return `${preheader ? preheader + '\n\n' : ''}${content}\n\n— Equipo FitLoyalty\n${BRAND.supportEmail}\n© ${new Date().getFullYear()} FitLoyalty`;
 }
 
 // ---------- API publica ----------

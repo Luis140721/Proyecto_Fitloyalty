@@ -76,7 +76,7 @@ export default function RegisterOwnerPage() {
           { icon: 'schedule',     title: '14 días con todo activo',  text: 'Cancelas cuando quieras, sin cláusulas, sin perder datos.' },
           { icon: 'support_agent',title: 'Soporte por WhatsApp',    text: 'Te guiamos paso a paso si te trabas en algo.' },
         ]}
-        footNote="14 días gratis · Cancela cuando quieras · Hecho en Colombia"
+        footNote="14 días gratis · Cancela cuando quieras"
       />
 
       <main className="auth-page__form">

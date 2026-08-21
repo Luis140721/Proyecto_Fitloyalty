@@ -107,7 +107,7 @@ export default function TerminosPage() {
       <h2>7. Propiedad intelectual</h2>
       <p>
         FitLoyalty, su código, diseño, logos, nombres comerciales y la documentación asociada son
-        propiedad de Context AI. El Administrador conserva la propiedad de los datos de su
+        propiedad de FitLoyalty. El Administrador conserva la propiedad de los datos de su
         gimnasio y sus miembros.
       </p>
       <p>
