@@ -325,8 +325,16 @@ router.post('/forgot-password', asyncHandler(async (req, res) => {
     });
 
     const payload = { ...generic, resendAfterSeconds: 60 };
-    if (!result.delivered) {
+    // Modo demo / fallback: si SHOW_DEV_CODE_IN_UI=true (entorno de sustentacion
+    // sin dominio verificado en Resend) o si Resend no entrego el correo,
+    // exponemos el codigo en la respuesta para que la UI lo muestre al usuario.
+    const showDevInUI = process.env.SHOW_DEV_CODE_IN_UI === 'true' || !result.delivered;
+    if (showDevInUI) {
       payload.devCode = code;
+      payload.showCodeInUI = true;
+      payload.devCodeReason = result.delivered
+        ? 'demo-mode'
+        : (result.reason || 'no-resend');
     }
     return res.json(payload);
   } catch (err) {
