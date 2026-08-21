@@ -29,7 +29,7 @@ const BRAND = {
   text: '#F5F2FF',
   textMuted: '#CFC2D6',
   logoUrl: 'https://fitloyalty-zeta.vercel.app/logo-fitloyalty.svg',
-  supportEmail: 'hola@fitloyalty.co',
+  supportEmail: process.env.SUPPORT_EMAIL || 'fitloyaltysaas@gmail.com',
 };
 
 // ---------- Sanitizacion ----------

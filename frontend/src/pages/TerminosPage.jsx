@@ -99,7 +99,7 @@ export default function TerminosPage() {
       <h3>6.3 Cancelación</h3>
       <p>
         El Administrador puede cancelar su plan en cualquier momento desde la Plataforma o
-        contactando a hola@fitloyalty.co. La cancelación surte efecto al final del período facturado.
+        contactando a fitloyaltysaas@gmail.com. La cancelación surte efecto al final del período facturado.
         Los datos del gimnasio se conservan por 90 días posteriores a la cancelación, tras lo cual
         se eliminan permanentemente.
       </p>
@@ -134,7 +134,7 @@ export default function TerminosPage() {
       </p>
       <ul>
         <li>Recibir un servicio de calidad, idóneo y conforme a lo ofrecido.</li>
-        <li>Presentar quejas o reclamos ante FitLoyalty escribiendo a hola@fitloyalty.co.</li>
+        <li>Presentar quejas o reclamos ante FitLoyalty escribiendo a fitloyaltysaas@gmail.com.</li>
         <li>Obtener respuesta a su PQR en un plazo máximo de 15 días hábiles.</li>
         <li>Recibir información clara, veraz y oportuna sobre las condiciones del servicio.</li>
       </ul>
@@ -155,7 +155,7 @@ export default function TerminosPage() {
       <h2>12. Contacto</h2>
       <p>
         Para cualquier inquietud sobre estos Términos, puedes escribir a{' '}
-        <a href="mailto:hola@fitloyalty.co">hola@fitloyalty.co</a>.
+        <a href="mailto:fitloyaltysaas@gmail.com">fitloyaltysaas@gmail.com</a>.
       </p>
     </LegalLayout>
   );

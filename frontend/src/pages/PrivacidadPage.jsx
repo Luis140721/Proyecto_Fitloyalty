@@ -20,8 +20,8 @@ export default function PrivacidadPage() {
           Datos de contacto del Encargado
         </div>
         <p>
-          Correo: <a href="mailto:hola@fitloyalty.co">hola@fitloyalty.co</a><br />
-          Responsable de protección de datos (DPO): <a href="mailto:datos@fitloyalty.co">datos@fitloyalty.co</a>
+          Correo: <a href="mailto:fitloyaltysaas@gmail.com">fitloyaltysaas@gmail.com</a><br />
+          Responsable de protección de datos (DPO): <a href="mailto:fitloyaltysaas@gmail.com">fitloyaltysaas@gmail.com</a>
         </p>
       </div>
 
@@ -92,7 +92,7 @@ export default function PrivacidadPage() {
         <p>
           Los miembros deben dirigir su solicitud al gimnasio (Responsable). El gimnasio, si requiere
           que FitLoyalty ejecute la supresión o modificación, debe contactarnos a{' '}
-          <a href="mailto:datos@fitloyalty.co">datos@fitloyalty.co</a>. Atenderemos la solicitud en
+          <a href="mailto:fitloyaltysaas@gmail.com">fitloyaltysaas@gmail.com</a>. Atenderemos la solicitud en
           un plazo máximo de 10 días hábiles, prorrogable hasta 5 más según el artículo 14 del
           Decreto 1377 de 2013.
         </p>

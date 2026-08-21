@@ -82,7 +82,7 @@ export default function PoliticaDatosPage() {
         <p>
           Los miembros deben dirigir su solicitud al gimnasio. El gimnasio, si requiere que
           FitLoyalty ejecute la acción, debe escribir a{' '}
-          <a href="mailto:datos@fitloyalty.co">datos@fitloyalty.co</a> con el asunto
+          <a href="mailto:fitloyaltysaas@gmail.com">fitloyaltysaas@gmail.com</a> con el asunto
           "Solicitud ARCO" e incluir:
         </p>
       </div>

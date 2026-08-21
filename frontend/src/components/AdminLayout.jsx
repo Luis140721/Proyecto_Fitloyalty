@@ -129,7 +129,7 @@ export default function AdminLayout({ children }) {
               <p style={{ color: 'var(--on-surface-variant)', fontSize: 14, marginBottom: 20 }}>
                 Para continuar, contacta al equipo de FitLoyalty para activar tu plan.
               </p>
-              <a className="btn btn-primary btn-lg" href="mailto:hola@fitloyalty.co">
+              <a className="btn btn-primary btn-lg" href="mailto:fitloyaltysaas@gmail.com">
                 <span className="material-symbols-outlined icon">mail</span>
                 Contactar al equipo
               </a>
