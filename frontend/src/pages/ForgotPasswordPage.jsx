@@ -16,6 +16,8 @@ export default function ForgotPasswordPage() {
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [devCodeShown, setDevCodeShown] = useState('');
+  const [devCodeReason, setDevCodeReason] = useState('');
 
   const codeRefs = useRef([]);
 
@@ -47,7 +49,13 @@ export default function ForgotPasswordPage() {
     try {
       const { data } = await axios.post('/api/auth/forgot-password', { email: form.email.trim() });
       setInfo(data.message || 'Si el correo está registrado, enviamos un código.');
-      if (data.devCode) setInfo((prev) => `${prev} (código dev: ${data.devCode})`);
+      // El backend puede devolver devCode + showCodeInUI=true cuando:
+      //  - Resend NO entregó (ej. plan free con destinatario externo)
+      //  - SHOW_DEV_CODE_IN_UI=true (modo demo / sustentación)
+      if (data.showCodeInUI && data.devCode) {
+        setDevCodeShown(data.devCode);
+        setDevCodeReason(data.devCodeReason || 'demo');
+      }
       setStep(2);
     } catch (err) {
       setError(err.response?.data?.error || 'No se pudo enviar el código.');
@@ -149,6 +157,19 @@ export default function ForgotPasswordPage() {
             <div className="alert alert-info" role="status">
               <span className="material-symbols-outlined icon">info</span>
               <span>{info}</span>
+            </div>
+          )}
+
+          {devCodeShown && (
+            <div className="alert alert-warning" role="status" data-testid="dev-code-banner">
+              <span className="material-symbols-outlined icon">visibility</span>
+              <div>
+                <strong>Modo demo:</strong> el envío por correo está limitado en este entorno.
+                <br />
+                Tu código es <code className="dev-code">{devCodeShown}</code>
+                {devCodeReason === 'demo-mode' && <> (visible porque el backend está en modo demo)</>}
+                {devCodeReason !== 'demo-mode' && <> (visible porque Resend no pudo entregar)</>}
+              </div>
             </div>
           )}
 
