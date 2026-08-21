@@ -1,0 +1,386 @@
+/* ============================================================
+   FitLoyalty — motion.css
+   Base reusable de animaciones: keyframes globales, utility
+   classes, stagger delays, hover-lift, skeleton, ripple y
+   page-enter wrapper. Todo CSS + hooks rAF (sin librerias).
+
+   Convenciones:
+   - reusa --ease-out y --ease-soft de global.css si existen.
+   - define --ease-in-out localmente (no existe en global).
+   - mobile-first, sin filters por frame (GPU friendly).
+   - respeta prefers-reduced-motion.
+   ============================================================ */
+
+:root {
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+/* ---------- Keyframes globales ---------- */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translate3d(0, 12px, 0); }
+  to   { opacity: 1; transform: translate3d(0, 0,    0); }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale3d(0.96, 0.96, 1); }
+  to   { opacity: 1; transform: scale3d(1,    1,    1); }
+}
+
+@keyframes shimmer {
+  from { background-position: 200% 0; }
+  to   { background-position: -200% 0; }
+}
+
+@keyframes pulseSoft {
+  0%, 100% { transform: scale3d(1,    1,    1); }
+  50%      { transform: scale3d(1.04, 1.04, 1); }
+}
+
+@keyframes rippleExpand {
+  from { transform: scale3d(0, 0, 1); opacity: 0.35; }
+  to   { transform: scale3d(1, 1, 1); opacity: 0;    }
+}
+
+@keyframes slideInRight {
+  from { transform: translate3d(100%, 0, 0); opacity: 0; }
+  to   { transform: translate3d(0,     0, 0); opacity: 1; }
+}
+
+@keyframes slideInLeft {
+  from { transform: translate3d(-100%, 0, 0); opacity: 0; }
+  to   { transform: translate3d(0,      0, 0); opacity: 1; }
+}
+
+/* ---------- Utility animations ---------- */
+.anim-fade-up {
+  animation: fadeUp 420ms var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1)) both;
+  will-change: transform, opacity;
+}
+
+.anim-scale-in {
+  animation: scaleIn 280ms var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1)) both;
+  will-change: transform, opacity;
+}
+
+.anim-pulse {
+  animation: pulseSoft 1.6s var(--ease-in-out) infinite;
+  transform-origin: center;
+}
+
+.anim-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--surface-container-lowest) 0%,
+    var(--surface-container-low)    50%,
+    var(--surface-container-lowest) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+
+/* ---------- Stagger delays (100ms cada uno) ---------- */
+.anim-delay-1 { animation-delay: 100ms; }
+.anim-delay-2 { animation-delay: 200ms; }
+.anim-delay-3 { animation-delay: 300ms; }
+.anim-delay-4 { animation-delay: 400ms; }
+.anim-delay-5 { animation-delay: 500ms; }
+.anim-delay-6 { animation-delay: 600ms; }
+.anim-delay-7 { animation-delay: 700ms; }
+.anim-delay-8 { animation-delay: 800ms; }
+
+/* ---------- Hover lift (cards, botones) ---------- */
+.hover-lift {
+  transition:
+    transform 200ms var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1)),
+    box-shadow 200ms var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1));
+}
+.hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+
+/* ---------- Skeleton (alias de .anim-shimmer para semantic) ---------- */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--surface-container-lowest) 0%,
+    var(--surface-container-low)    50%,
+    var(--surface-container-lowest) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+  border-radius: var(--radius, 6px);
+}
+
+/* ---------- Ripple wave (botones) ---------- */
+.ripple-host {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.ripple-wave {
+  position: absolute;
+  border-radius: 50%;
+  transform: scale(0);
+  background: currentColor;
+  opacity: 0.35;
+  pointer-events: none;
+  animation: rippleExpand 600ms ease-out forwards;
+  z-index: 0;
+}
+
+/* ---------- Slide in (modals, drawers, toasts) ---------- */
+.anim-slide-in-right { animation: slideInRight 320ms var(--ease-out) both; }
+.anim-slide-in-left  { animation: slideInLeft  320ms var(--ease-out) both; }
+
+/* ---------- Page transition wrapper ---------- */
+.page-enter {
+  opacity: 0;
+  transform: translate3d(0, 8px, 0);
+}
+
+.page-enter-active {
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+  transition:
+    opacity   320ms ease,
+    transform 320ms var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1));
+}
+
+/* ---------- Reduced motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ============================================================
+   Extensiones para s2 — animaciones de feedback, modal y forms.
+   Reutilizan los easings y la paleta definidos arriba.
+   ============================================================ */
+
+/* ---------- Shake (errores en form) ---------- */
+@keyframes shake {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  10%, 30%, 50%, 70%, 90% { transform: translate3d(-6px, 0, 0); }
+  20%, 40%, 60%, 80%      { transform: translate3d(6px,  0, 0); }
+}
+.anim-shake {
+  animation: shake 400ms cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+/* ---------- Check pop (confirmaciones en form) ---------- */
+@keyframes checkPop {
+  0%   { transform: scale3d(0,   0,   1); opacity: 0; }
+  60%  { transform: scale3d(1.2, 1.2, 1); opacity: 1; }
+  100% { transform: scale3d(1,   1,   1); opacity: 1; }
+}
+.anim-check-pop {
+  animation: checkPop 360ms var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1)) both;
+}
+
+/* ---------- Flash de borde (Check-in success/warning) ---------- */
+@keyframes flashBorderSuccess {
+  0%   { box-shadow: 0 0 0 0    rgba(74, 222, 128, 0.0); border-color: var(--border-subtle); }
+  20%  { box-shadow: 0 0 0 6px  rgba(74, 222, 128, 0.45); border-color: var(--success); }
+  100% { box-shadow: 0 0 0 0    rgba(74, 222, 128, 0.0); border-color: var(--border-subtle); }
+}
+@keyframes flashBorderWarning {
+  0%   { box-shadow: 0 0 0 0    rgba(221, 183, 255, 0.0); border-color: var(--border-subtle); }
+  20%  { box-shadow: 0 0 0 6px  rgba(168, 85, 247, 0.45); border-color: var(--primary); }
+  100% { box-shadow: 0 0 0 0    rgba(168, 85, 247, 0.0); border-color: var(--border-subtle); }
+}
+.checkin-frame--flash-success {
+  animation: flashBorderSuccess 600ms ease-out both;
+}
+.checkin-frame--flash-warning {
+  animation: flashBorderWarning 600ms ease-out both;
+}
+
+/* ---------- Spin lento (QR placeholder) ---------- */
+@keyframes spinSlow {
+  to { transform: rotate(360deg); }
+}
+.anim-spin-slow {
+  animation: spinSlow 8s linear infinite;
+  transform-origin: center;
+}
+
+/* ---------- Modal: backdrop y dialog ---------- */
+@keyframes backdropIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.modal-backdrop-enter {
+  animation: backdropIn 180ms ease-out both;
+}
+
+@keyframes dialogIn {
+  from { opacity: 0; transform: scale3d(0.96, 0.96, 1); }
+  to   { opacity: 1; transform: scale3d(1,    1,    1); }
+}
+.modal-dialog-enter {
+  animation: dialogIn 220ms var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1)) both;
+}
+
+/* ---------- Form field feedback helpers ----------
+   Usa un wrapper ::after para mostrar el feedback visual (anillo exterior).
+   Asi evitamos los problemas de cascada del UA stylesheet de inputs en
+   Chromium, donde cambiar border-color/box-shadow no se aplica de forma
+   consistente mientras el input esta :focus.
+*/
+.field-input--shake { animation: shake 400ms cubic-bezier(0.36, 0.07, 0.19, 0.97) both; }
+
+/* Estado "ok": el input se mantiene igual, pero el wrapper recibe el anillo verde.
+   La animacion de check verde se hace via un <span> adyacente (no CSS-only). */
+.field-input--success,
+.field-input--success:focus {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  background-color: rgba(74, 222, 128, 0.10) !important;
+}
+.field-input--error,
+.field-input--error:focus {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  background-color: rgba(255, 180, 171, 0.10) !important;
+}
+
+/* ---------- Filter chip underline (subrayado animado al cambiar) ---------- */
+.chip {
+  position: relative;
+}
+.chip::after {
+  content: '';
+  position: absolute;
+  left: 12px; right: 12px; bottom: 2px;
+  height: 2px;
+  background: var(--primary);
+  border-radius: 2px;
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 200ms var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1));
+}
+.chip-active::after {
+  transform: scaleX(1);
+}
+
+/* ---------- Search input: focus ring animado ---------- */
+.search-input {
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur) var(--ease-out),
+    background var(--dur-fast) var(--ease-out);
+}
+.search-input:focus-within {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 4px rgba(168, 85, 247, 0.18),
+              0 0 20px rgba(168, 85, 247, 0.25);
+}
+
+/* ---------- Pulse badge (Staff: ultima invitacion al cargar) ---------- */
+@keyframes badgePulse {
+  0%, 100% { transform: scale3d(1,   1,   1); opacity: 1;   }
+  50%      { transform: scale3d(1.3, 1.3, 1); opacity: 0.7; }
+}
+.anim-badge-pulse {
+  animation: badgePulse 2s var(--ease-in-out) 2;
+  transform-origin: center;
+}
+
+/* ---------- Modal styles (compartidos) ---------- */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: grid;
+  place-items: center;
+  z-index: 100;
+  padding: 20px;
+}
+
+.modal-dialog {
+  position: relative;
+  width: min(560px, 100%);
+  max-height: min(85vh, 720px);
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: var(--radius-lg);
+  border-left-width: 3px;
+  border-left-color: var(--primary);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  outline: none;
+}
+.modal-dialog--danger { border-left-color: var(--error); }
+
+.modal-dialog__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.modal-dialog__head h3 {
+  font-family: var(--font-headline);
+  font-weight: 800;
+  font-size: 18px;
+  letter-spacing: -0.01em;
+  color: var(--on-surface);
+  margin: 0;
+  min-width: 0;
+}
+.modal-dialog__close {
+  width: 32px; height: 32px;
+  display: grid; place-items: center;
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  border-radius: 50%;
+  color: var(--on-surface-variant);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out),
+              color var(--dur-fast) var(--ease-out);
+  flex-shrink: 0;
+}
+.modal-dialog__close:hover {
+  background: var(--surface-container-high);
+  color: var(--on-surface);
+}
+
+.modal-dialog__body {
+  padding: 20px 22px;
+  overflow-y: auto;
+  max-height: 60vh;
+  overscroll-behavior: contain;
+  color: var(--on-surface);
+  font-size: 14px;
+  min-width: 0;
+}
+
+.modal-dialog__foot {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  padding: 16px 22px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--surface-container-lowest);
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+}
+
+@media (max-width: 600px) {
+  .modal-backdrop { padding: 12px; }
+  .modal-dialog { width: 100%; max-height: 90vh; }
+  .modal-dialog__head, .modal-dialog__body, .modal-dialog__foot { padding-left: 16px; padding-right: 16px; }
+}
