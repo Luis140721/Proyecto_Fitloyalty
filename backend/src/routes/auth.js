@@ -140,12 +140,13 @@ router.post('/signup', asyncHandler(async (req, res) => {
     const gym = gymRows[0];
 
     // 3. Crear admin owner
-    //    id_rol=1 = ADMINISTRADOR (hardcoded, no hay tabla 'rol' en BD)
+    //    id_rol=1 = ADMINISTRADOR. Neon aun tiene columna legacy 'rol' (varchar),
+    //    asi que la rellenamos tambien para no violar el NOT NULL constraint.
     const password_hash = await bcrypt.hash(password, 10);
     const { rows: userRows } = await client.query(
-      `INSERT INTO usuario (id_gimnasio, nombre, email, password_hash, id_rol)
-       VALUES ($1, $2, $3, $4, 1)
-       RETURNING id_usuario, nombre, email, id_gimnasio`,
+      `INSERT INTO usuario (id_gimnasio, nombre, email, password_hash, id_rol, rol)
+       VALUES ($1, $2, $3, $4, 1, 'ADMINISTRADOR')
+       RETURNING id_usuario, nombre, email, id_gimnasio, id_rol`,
       [gym.id_gimnasio, ownerName.trim(), ownerEmail.toLowerCase(), password_hash]
     );
     const owner = userRows[0];
@@ -173,7 +174,7 @@ router.post('/signup', asyncHandler(async (req, res) => {
         ? 'Cuenta de desarrollo creada. Trial desactivado (acceso ilimitado).'
         : `Gimnasio creado. Tienes ${days} dias de prueba gratuita.`,
       token,
-      user: usuarioSeguro({ ...owner, id_rol: 1, rol_nombre: 'ADMINISTRADOR' }),
+      user: usuarioSeguro({ ...owner, id_rol: owner.id_rol ?? 1, rol: 'ADMINISTRADOR', rol_nombre: 'ADMINISTRADOR' }),
       gym: {
         id: gym.id_gimnasio,
         nombre: gym.nombre,
