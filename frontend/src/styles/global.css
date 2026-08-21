@@ -311,6 +311,43 @@ a:hover { color: var(--primary-fixed); }
   box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.20);
 }
 .field-input:disabled { opacity: 0.55; cursor: not-allowed; }
+
+/* ============================================================
+   Autofill / Autocomplete del navegador
+   Chrome, Safari y Edge aplican un fondo amarillo/celeste al input
+   cuando el navegador rellena automaticamente (autofill). Esto
+   rompe el diseno dark. Forzamos los colores del tema en todos
+   los estados posibles del autofill (incluyendo el icono de la
+   lupa que Chrome dibuja en -internal-autofill-preview).
+   ============================================================ */
+.field-input:-webkit-autofill,
+.field-input:-webkit-autofill:hover,
+.field-input:-webkit-autofill:focus,
+.field-input:-webkit-autofill:active,
+.field select:-webkit-autofill,
+.field textarea:-webkit-autofill {
+  -webkit-text-fill-color: var(--on-surface) !important;
+  -webkit-box-shadow: 0 0 0 1000px var(--bg) inset !important;
+  box-shadow: 0 0 0 1000px var(--bg) inset !important;
+  background-color: var(--bg) !important;
+  background-image: none !important;
+  caret-color: var(--on-surface);
+  border-color: var(--border-subtle);
+  transition: background-color 99999s ease-in-out 0s, color 99999s ease-in-out 0s;
+}
+.field-input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 1000px var(--bg) inset,
+                     0 0 0 3px rgba(168, 85, 247, 0.20) !important;
+  box-shadow: 0 0 0 1000px var(--bg) inset,
+              0 0 0 3px rgba(168, 85, 247, 0.20) !important;
+  border-color: var(--primary);
+}
+
+/* Firefox no usa -webkit-autofill; usa :-moz-autofill (mas raro) */
+.field-input:-moz-autofill {
+  background-color: var(--bg) !important;
+  color: var(--on-surface) !important;
+}
 @media (max-width: 600px) {
   .field-input,
   .field select,
