@@ -121,13 +121,21 @@ router.post('/signup', asyncHandler(async (req, res) => {
       throw new AppError(409, 'Ya existe un usuario con ese correo.', 'USER_EMAIL_TAKEN');
     }
 
-    // 2. Crear gimnasio con trial_ends_at = NOW() + 7d (o TRIAL_DAYS)
+    // 2. Crear gimnasio con trial_ends_at = NOW() + Nd (o TRIAL_DAYS)
+    //    Si el email del owner pertenece a la lista de cuentas dev, NO tiene trial (NULL = suscrito).
     const days = trialDays();
+    const isDevAccount = (process.env.DEV_EMAILS || '')
+      .split(',')
+      .map(s => s.trim().toLowerCase())
+      .filter(Boolean)
+      .includes(ownerEmail.toLowerCase());
+    const trialDaysParam = isDevAccount ? '0' : String(days);
     const { rows: gymRows } = await client.query(
       `INSERT INTO gimnasio (nombre, telefono, email, trial_ends_at)
-       VALUES ($1, $2, $3, NOW() + ($4 || ' days')::INTERVAL)
+       VALUES ($1, $2, $3,
+         CASE WHEN $4::int = 0 THEN NULL ELSE NOW() + ($4 || ' days')::INTERVAL END)
        RETURNING id_gimnasio, nombre, telefono, email, trial_ends_at, activo`,
-      [gymName.trim(), gymPhone.replace(/\D/g, ''), gymEmail || null, String(days)]
+      [gymName.trim(), gymPhone.replace(/\D/g, ''), gymEmail || null, trialDaysParam]
     );
     const gym = gymRows[0];
 
@@ -160,7 +168,9 @@ router.post('/signup', asyncHandler(async (req, res) => {
     });
 
     return res.status(201).json({
-      message: `Gimnasio creado. Tienes ${days} dias de prueba gratuita.`,
+      message: isDevAccount
+        ? 'Cuenta de desarrollo creada. Trial desactivado (acceso ilimitado).'
+        : `Gimnasio creado. Tienes ${days} dias de prueba gratuita.`,
       token,
       user: usuarioSeguro({ ...owner, id_rol: 1, rol_nombre: 'ADMINISTRADOR' }),
       gym: {
@@ -168,6 +178,7 @@ router.post('/signup', asyncHandler(async (req, res) => {
         nombre: gym.nombre,
         trialEndsAt: gym.trial_ends_at,
         trialDays: days,
+        devAccount: isDevAccount,
       },
     });
   } catch (err) {
