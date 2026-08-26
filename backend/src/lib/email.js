@@ -17,7 +17,7 @@
  * Si falta RESEND_API_KEY, NO envia correo real: hace fallback a consola
  * (modo dev). El caller recibe { delivered:false, reason:'no-resend' }.
  */
-const { Resend } = require('resend');
+const { Brevo } = require('@getbrevo/brevo');
 
 const BRAND = {
   name: 'FitLoyalty',
@@ -196,30 +196,34 @@ function templateInviteStaff({ invitedName, invitedBy, gymName, role, acceptUrl,
   return { subject, html: baseLayout({ title: subject, preheader, body }) };
 }
 
-// ---------- Transporte ----------
-
 let cachedClient = null;
 function getClient() {
   if (cachedClient !== null) return cachedClient;
-  const key = process.env.RESEND_API_KEY;
+  const key = process.env.BREVO_API_KEY;
   if (!key) return (cachedClient = null);
-  cachedClient = new Resend(key);
+  cachedClient = new Brevo(key);
   return cachedClient;
 }
 
-async function deliverViaResend({ from, to, subject, html, text }) {
+async function deliverViaBrevo({ from, to, subject, html, text }) {
   const client = getClient();
-  if (!client) return { delivered: false, reason: 'no-resend' };
+  if (!client) return { delivered: false, reason: 'no-brevo' };
   try {
-    const { data, error } = await client.emails.send({ from, to, subject, html, text });
-    if (error) {
-      console.warn(`[EMAIL-WARN] Resend fallo: ${error.message || JSON.stringify(error)}`);
-      return { delivered: false, reason: 'resend-error', error: error.message };
-    }
-    return { delivered: true, id: data?.id };
+    const apiInstance = new Brevo.EmailApi();
+    const sender = { email: from.includes('<') ? from.split('<')[1].replace('>', '') : from, name: from.includes('<') ? from.split('<')[0].replace('>', '').trim() : 'FitLoyalty' };
+    const recipient = { email: to, name: to.split('@')[0] };
+    const sendSmtpEmail = {
+      to: [recipient],
+      from: sender,
+      subject: subject,
+      htmlContent: html,
+      textContent: text || html.replace(/<[^>]+>/g, ''),
+    };
+    await apiInstance.sendTransacEmail(sendSmtpEmail);
+    return { delivered: true };
   } catch (err) {
-    console.warn(`[EMAIL-WARN] Resend excepcion: ${err.message}`);
-    return { delivered: false, reason: 'resend-error', error: err.message };
+    console.warn(`[EMAIL-WARN] Brevo fallo: ${err.message}`);
+    return { delivered: false, reason: 'brevo-error', error: err.message };
   }
 }
 
@@ -244,13 +248,13 @@ async function sendRecoveryCode({ to, name, code, expiresMinutes = 15 }) {
     preheader: `Tu código de recuperación es ${code}.`,
     content: `Hola ${name},\nRecibimos un pedido para restablecer tu contraseña.\n\nTu código es: ${code}\n\nExpira en ${expiresMinutes} minutos. Si no solicitaste esto, ignora este correo.`,
   });
-  const from = process.env.MAIL_FROM || 'FitLoyalty <onboarding@resend.dev>';
+  const from = process.env.MAIL_FROM || 'FitLoyalty <onboarding@brevo.example>';
   const client = getClient();
   if (!client) {
     fallbackConsole({ to, subject: tpl.subject, text });
-    return { delivered: false, reason: 'no-resend' };
+    return { delivered: false, reason: 'no-brevo' };
   }
-  return deliverViaResend({ from, to, subject: tpl.subject, html: tpl.html, text });
+  return deliverViaBrevo({ from, to, subject: tpl.subject, html: tpl.html, text });
 }
 
 async function sendRecoveryLink({ to, name, resetUrl, expiresHours = 1 }) {
@@ -259,13 +263,13 @@ async function sendRecoveryLink({ to, name, resetUrl, expiresHours = 1 }) {
     preheader: 'Restablecé tu contraseña.',
     content: `Hola ${name},\nRecibiste este correo porque pediste restablecer tu contraseña.\n\nEntrá a este enlace para crear una nueva (expira en ${expiresHours}h):\n${resetUrl}\n\nSi no pediste esto, ignora este correo.`,
   });
-  const from = process.env.MAIL_FROM || 'FitLoyalty <onboarding@resend.dev>';
+  const from = process.env.MAIL_FROM || 'FitLoyalty <onboarding@brevo.example>';
   const client = getClient();
   if (!client) {
     fallbackConsole({ to, subject: tpl.subject, text });
-    return { delivered: false, reason: 'no-resend' };
+    return { delivered: false, reason: 'no-brevo' };
   }
-  return deliverViaResend({ from, to, subject: tpl.subject, html: tpl.html, text });
+  return deliverViaBrevo({ from, to, subject: tpl.subject, html: tpl.html, text });
 }
 
 async function sendStaffInvite({ to, invitedName, invitedBy, gymName, role, acceptUrl, expiresDays = 7 }) {
