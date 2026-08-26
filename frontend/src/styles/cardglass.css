@@ -1,0 +1,82 @@
+/* ============================================================
+   CardGlass — tarjeta "glass" del tema Ultraviolet (M3)
+   Usada por components/CardGlass.jsx
+   Todos los valores salen de las variables de global.css
+   ============================================================ */
+
+.card-glass {
+  position: relative;
+  min-width: 0;                 /* evita que el grid la desborde */
+  overflow: hidden;
+
+  /* --- background: superficie tonal translucida + vidrio --- */
+  background: color-mix(in srgb, var(--surface-container) 88%, transparent);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+
+  /* --- border: outline M3 + top highlight blanco 5% --- */
+  border: 1px solid var(--outline-variant);
+  border-top-color: rgba(255, 255, 255, 0.05);
+  border-radius: var(--radius-lg);
+
+  color: var(--on-surface);
+  transition:
+    transform   var(--dur) var(--ease-out),
+    border-color var(--dur) var(--ease-out),
+    box-shadow  var(--dur) var(--ease-out),
+    background  var(--dur) var(--ease-out);
+}
+
+/* Navegadores sin color-mix: fondo solido equivalente. */
+@supports not (background: color-mix(in srgb, red 50%, transparent)) {
+  .card-glass { background: var(--surface-container); }
+}
+
+/* ---------- Padding ---------- */
+.card-glass--p-none { padding: 0; }
+.card-glass--p-sm   { padding: 12px; }
+.card-glass--p-md   { padding: 18px; }
+.card-glass--p-lg   { padding: 28px; }
+
+@media (max-width: 600px) {
+  .card-glass--p-lg { padding: 18px 16px; }
+  .card-glass--p-md { padding: 14px; }
+}
+
+/* ---------- Interactiva: hover + focus ---------- */
+.card-glass--interactive {
+  cursor: pointer;
+  text-align: inherit;
+  font: inherit;
+  width: 100%;
+  display: block;
+}
+
+.card-glass--interactive:hover,
+.card-glass--interactive:focus-visible {
+  transform: translateY(-2px);
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--surface-container-high) 90%, transparent);
+  box-shadow:
+    0 8px 24px -8px rgba(0, 0, 0, 0.6),
+    0 0 0 1px var(--primary-soft),
+    0 0 18px -2px var(--primary-glow);
+}
+
+.card-glass--interactive:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.card-glass--interactive:active {
+  transform: translateY(0);
+  transition-duration: var(--dur-fast);
+}
+
+/* ---------- Respeto por reduced-motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .card-glass { transition: border-color var(--dur-fast) linear; }
+  .card-glass--interactive:hover,
+  .card-glass--interactive:focus-visible,
+  .card-glass--interactive:active { transform: none; }
+}
