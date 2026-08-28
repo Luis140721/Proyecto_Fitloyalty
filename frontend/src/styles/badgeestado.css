@@ -1,0 +1,60 @@
+/* ============================================================
+   BadgeEstado — badge de estado de miembro (M3 / Ultraviolet)
+   Usado por components/BadgeEstado.jsx
+   Colores desde las variables de estado de global.css
+   ============================================================ */
+
+.badge-estado {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  border: 1px solid transparent;
+  font-family: var(--font-label);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+
+.badge-estado__icono {
+  font-size: 14px;
+  line-height: 1;
+}
+
+/* ---------- Variantes de estado ---------- */
+.badge-estado--activo {
+  color: var(--success);
+  border-color: rgba(74, 222, 128, 0.50);
+  background: var(--success-container);
+}
+
+.badge-estado--moroso {
+  color: var(--primary-fixed);
+  border-color: rgba(221, 183, 255, 0.50);
+  background: var(--warning-container);
+}
+
+.badge-estado--vencido {
+  color: var(--error);
+  border-color: rgba(255, 180, 171, 0.50);
+  background: rgba(147, 0, 10, 0.20);
+}
+
+.badge-estado--riesgo {
+  color: var(--warning);
+  border-color: rgba(221, 183, 255, 0.35);
+  background: var(--warning-container);
+}
+
+.badge-estado--congelado {
+  color: var(--info);
+  border-color: rgba(96, 165, 250, 0.50);
+  background: var(--info-container);
+}
+
+@media (max-width: 600px) {
+  .badge-estado { padding: 3px 8px; font-size: 10px; }
+}
