@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api';
+import CardGlass from '../components/CardGlass';
 
 const empty = { nombre: '', documento: '', telefono: '', email: '' };
 const FILTROS = [
@@ -211,7 +212,7 @@ export default function MiembrosPage() {
         </div>
       </div>
 
-      <section className="table-card">
+      <section className="table-card miembros-table">
         {loading && <div className="bar-loader" />}
         <div className="table-scroll">
           <table className="table">
@@ -279,6 +280,52 @@ export default function MiembrosPage() {
               })}
             </tbody>
           </table>
+        </div>
+        {/* Vista movil (<900px): cada miembro es una CardGlass (tarea 21-ago).
+            En escritorio se muestra la tabla original; CSS decide cual se ve. */}
+        <div className="miembros-cards">
+          {filtrados.length === 0 && !loading && (
+            <p className="miembros-cards__empty">No hay miembros que coincidan con el filtro actual.</p>
+          )}
+          {filtrados.map((m) => {
+            const initials = (m.nombre || '?').split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase();
+            return (
+              <CardGlass as="article" key={m.id_miembro} className="miembro-card">
+                <header className="miembro-card__head">
+                  <span className="avatar avatar-primary">{initials}</span>
+                  <div className="miembro-card__id">
+                    <strong>{m.nombre}</strong>
+                    {m.email && <small>{m.email}</small>}
+                  </div>
+                  {statusChip(m)}
+                </header>
+                <dl className="miembro-card__data">
+                  <div>
+                    <dt>Documento</dt>
+                    <dd>{m.documento}</dd>
+                  </div>
+                  <div>
+                    <dt>Telefono</dt>
+                    <dd>{m.telefono}</dd>
+                  </div>
+                  <div className="miembro-card__qr">
+                    <dt>QR</dt>
+                    <dd><code>{m.codigo_qr}</code></dd>
+                  </div>
+                </dl>
+                <footer className="miembro-card__actions">
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => onDelete(m)}
+                    aria-label={`Desactivar a ${m.nombre}`}
+                  >
+                    <span className="material-symbols-outlined icon">person_remove</span>
+                    Desactivar
+                  </button>
+                </footer>
+              </CardGlass>
+            );
+          })}
         </div>
         <div className="table-card__foot">
           <span>Mostrando {filtrados.length} de {items.length} miembros</span>
