@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api';
 import CardGlass from '../components/CardGlass';
+import BadgeEstado, { estadoDeMiembro } from '../components/BadgeEstado';
 
 const empty = { nombre: '', documento: '', telefono: '', email: '' };
 const FILTROS = [
@@ -10,13 +11,6 @@ const FILTROS = [
   { id: 'vencido',label: 'Vencido' },
   { id: 'riesgo', label: 'En riesgo' },
 ];
-
-function statusChip(m) {
-  if (m.vencido)  return <span className="chip chip-status chip-status--expired">Vencido</span>;
-  if (m.vencePronto) return <span className="chip chip-status chip-status--warning">Vence pronto</span>;
-  if (m.enRiesgo) return <span className="chip chip-status chip-status--warning">En riesgo</span>;
-  return <span className="chip chip-status chip-status--active">Al día</span>;
-}
 
 export default function MiembrosPage() {
   const [items, setItems]   = useState([]);
@@ -265,7 +259,7 @@ export default function MiembrosPage() {
                         {m.codigo_qr}
                       </code>
                     </td>
-                    <td>{statusChip(m)}</td>
+                    <td><BadgeEstado estado={estadoDeMiembro(m)} /></td>
                     <td className="row-actions">
                       <button
                         className="btn btn-ghost btn-sm"
@@ -297,7 +291,7 @@ export default function MiembrosPage() {
                     <strong>{m.nombre}</strong>
                     {m.email && <small>{m.email}</small>}
                   </div>
-                  {statusChip(m)}
+                  <BadgeEstado estado={estadoDeMiembro(m)} />
                 </header>
                 <dl className="miembro-card__data">
                   <div>
