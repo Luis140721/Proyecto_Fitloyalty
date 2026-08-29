@@ -200,19 +200,24 @@ let cachedClient = null;
 function getClient() {
   if (cachedClient !== null) return cachedClient;
   const key = process.env.BREVO_API_KEY;
-  if (!key) return (cachedClient = null);
-  const brevo = require('@getbrevo/brevo');
-  const apiKey = key;
-  if (brevo.EmailApi) {
-    cachedClient = new brevo.EmailApi();
-    if (cachedClient.authentications && cachedClient.authentications['api-key']) {
-      cachedClient.authentications['api-key'].apiKey = apiKey;
-    } else if (typeof cachedClient.setApiKey === 'function') {
-      cachedClient.setApiKey(apiKey);
-    }
-    return cachedClient;
+  if (!key) {
+    console.warn('[EMAIL-DEBUG] BREVO_API_KEY no definida');
+    return (cachedClient = null);
   }
-  return (cachedClient = null);
+  try {
+    const brevo = require('@getbrevo/brevo');
+    console.warn('[EMAIL-DEBUG] modulo brevo cargado, keys:', Object.keys(brevo));
+    const { BrevoClient, BrevoEnvironment } = brevo;
+    console.warn('[EMAIL-DEBUG] BrevoClient:', typeof BrevoClient, 'BrevoEnvironment:', BrevoEnvironment);
+    const client = new BrevoClient({ apiKey: key, baseUrl: BrevoEnvironment.PRODUCTION });
+    console.warn('[EMAIL-DEBUG] cliente creado:', !!client);
+    cachedClient = client.transactionalEmails;
+    console.warn('[EMAIL-DEBUG] transactionalEmails:', !!cachedClient);
+    return cachedClient;
+  } catch (err) {
+    console.warn('[EMAIL-DEBUG] error getClient:', err.message);
+    return (cachedClient = null);
+  }
 }
 
 async function deliverViaBrevo({ from, to, subject, html, text }) {
@@ -221,17 +226,14 @@ async function deliverViaBrevo({ from, to, subject, html, text }) {
   try {
     const senderEmail = from.match(/<([^>]+)>/)?.[1] || from;
     const senderName = from.match(/^([^<]+)/)?.[1].trim() || 'FitLoyalty';
-    
-    const sendSmtpEmail = {
+    const result = await client.sendTransacEmail({
+      sender: { email: senderEmail, name: senderName },
       to: [{ email: to, name: to.split('@')[0] }],
-      from: { email: senderEmail, name: senderName },
       subject: subject,
       htmlContent: html,
       textContent: text || html.replace(/<[^>]+>/g, ''),
-    };
-    
-    await client.sendTransacEmail(sendSmtpEmail);
-    return { delivered: true };
+    });
+    return { delivered: true, result };
   } catch (err) {
     console.warn(`[EMAIL-WARN] Brevo fallo: ${err.message}`);
     return { delivered: false, reason: 'brevo-error', error: err.message };
