@@ -201,11 +201,18 @@ function getClient() {
   if (cachedClient !== null) return cachedClient;
   const key = process.env.BREVO_API_KEY;
   if (!key) return (cachedClient = null);
-  const { TransactionalEmailsApi } = require('@getbrevo/brevo');
-  const apiInstance = new TransactionalEmailsApi();
-  apiInstance.setApiKey(TransactionalEmailsApi.apiKeys['api-key'], key);
-  cachedClient = apiInstance;
-  return cachedClient;
+  const brevo = require('@getbrevo/brevo');
+  const apiKey = key;
+  if (brevo.EmailApi) {
+    cachedClient = new brevo.EmailApi();
+    if (cachedClient.authentications && cachedClient.authentications['api-key']) {
+      cachedClient.authentications['api-key'].apiKey = apiKey;
+    } else if (typeof cachedClient.setApiKey === 'function') {
+      cachedClient.setApiKey(apiKey);
+    }
+    return cachedClient;
+  }
+  return (cachedClient = null);
 }
 
 async function deliverViaBrevo({ from, to, subject, html, text }) {
