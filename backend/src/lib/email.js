@@ -3,22 +3,17 @@
  *
  * Wrapper de envio de correos para FitLoyalty.
  *
- * Transporte: Gmail SMTP con App Password (Nodemailer). Plan free de Gmail
- * permite 500 emails/dia, suficiente para un SaaS pequeno.
- *
- * Branding: cada helper expone una funcion de plantilla para un tipo de correo.
- * El HTML/CSS esta inline (sin imagenes externas) para que llegue a Gmail,
- * Outlook, Apple Mail y webmail sin warnings.
+ * Transporte: Brevo SMTP relay con Nodemailer. Funciona en Render porque
+ * usa conexion HTTPS/SMTPS estandar sin puertos bloqueados.
  *
  * Variables de entorno:
- *   SMTP_HOST         -> ej: smtp.gmail.com
- *   SMTP_PORT         -> 465 (secure) o 587 (starttls)
- *   SMTP_USER         -> direccion de Gmail
- *   SMTP_PASSWORD     -> App Password de Google (16 chars)
- *   MAIL_FROM         -> nombre + direccion del remitente
+ *   SMTP_HOST     -> smtp-relay.brevo.com
+ *   SMTP_PORT     -> 587 (STARTTLS) o 465 (SSL)
+ *   SMTP_USER     -> usuario SMTP de Brevo
+ *   SMTP_PASSWORD -> password SMTP de Brevo
+ *   MAIL_FROM    -> nombre + direccion del remitente
  *
- * Si falta configuracion SMTP, NO envia correo real: hace fallback a consola
- * (modo dev). El caller recibe { delivered:false, reason:'no-smtp' }.
+ * Si falta configuracion SMTP, NO envia correo real: hace fallback a consola.
  */
 const nodemailer = require('nodemailer');
 
@@ -31,7 +26,6 @@ const BRAND = {
   border: '#2A1E3F',
   text: '#F5F2FF',
   textMuted: '#CFC2D6',
-  logoUrl: 'https://fitloyalty-zeta.vercel.app/logo-fitloyalty.svg',
   supportEmail: process.env.SUPPORT_EMAIL || 'fitloyaltysaas@gmail.com',
 };
 
@@ -50,27 +44,17 @@ function escapeAttr(s) {
   return escapeHtml(s);
 }
 
-function fmtDate(d) {
-  try {
-    return new Date(d).toLocaleString('es-CO', {
-      day: 'numeric', month: 'long', year: 'numeric',
-      hour: '2-digit', minute: '2-digit',
-    });
-  } catch { return String(d); }
-}
-
 // ---------- Layout reusable ----------
 function baseLayout({ title, preheader, body }) {
   return `<!DOCTYPE html>
-<html lang="es" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+<html lang="es">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="color-scheme" content="dark" />
-<meta name="supported-color-schemes" content="dark" />
 <title>${escapeHtml(title)}</title>
 </head>
-<body style="margin:0;padding:0;background:${BRAND.bg};color:${BRAND.text};font-family:'Inter','Helvetica Neue',Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+<body style="margin:0;padding:0;background:${BRAND.bg};color:${BRAND.text};font-family:'Inter','Helvetica Neue',Arial,sans-serif;">
 ${preheader ? `<span style="display:none;font-size:1px;color:${BRAND.bg};line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">${escapeHtml(preheader)}</span>` : ''}
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${BRAND.bg};">
   <tr>
@@ -90,11 +74,11 @@ ${preheader ? `<span style="display:none;font-size:1px;color:${BRAND.bg};line-he
         <tr>
           <td style="padding:24px 16px 0;text-align:center;">
             <p style="margin:0 0 8px;font-size:12px;color:${BRAND.textMuted};">
-              ¿Necesitas ayuda? Escríbenos a
+              ¿Necesitas ayuda? Escribenos a
               <a href="mailto:${BRAND.supportEmail}" style="color:${BRAND.primary};text-decoration:none;">${BRAND.supportEmail}</a>
             </p>
-            <p style="margin:0;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:${BRAND.textMuted};opacity:0.6;">
-              © ${new Date().getFullYear()} ${BRAND.name} · Ley 1581/2012
+            <p style="margin:0;font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:${BRAND.textMuted};opacity:0.6;">
+              © ${new Date().getFullYear()} ${BRAND.name}
             </p>
           </td>
         </tr>
@@ -106,152 +90,151 @@ ${preheader ? `<span style="display:none;font-size:1px;color:${BRAND.bg};line-he
 </html>`;
 }
 
+// ---------- Plantillas ----------
+
 function ctaButton({ url, label }) {
   const safeUrl = escapeAttr(url);
   const safeLabel = escapeHtml(label);
   return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:24px 0;">
   <tr>
-    <td style="border-radius:8px;background:linear-gradient(135deg,${BRAND.primary},${BRAND.primaryDark});box-shadow:0 6px 18px rgba(168,85,247,0.35);">
-      <a href="${safeUrl}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:14px 28px;font-size:15px;font-weight:700;color:#000;text-decoration:none;border-radius:8px;letter-spacing:-0.01em;">${safeLabel}</a>
+    <td style="border-radius:8px;background:linear-gradient(135deg,${BRAND.primary},${BRAND.primaryDark});">
+      <a href="${safeUrl}" target="_blank" style="display:inline-block;padding:14px 28px;font-size:15px;font-weight:700;color:#000;text-decoration:none;border-radius:8px;">${safeLabel}</a>
     </td>
   </tr>
 </table>`;
 }
 
-// ---------- Plantillas ----------
-
 function templateRecoverCode({ name, code, expiresMinutes = 15 }) {
-  const subject = `${code} es tu código de recuperación — FitLoyalty`;
-  const preheader = `Tu código temporal expira en ${expiresMinutes} minutos.`;
+  const subject = `${code} es tu codigo de recuperacion — FitLoyalty`;
+  const preheader = `Tu codigo temporal expira en ${expiresMinutes} minutos.`;
   const body = `
-    <h1 style="margin:0 0 8px;font-size:24px;font-weight:800;letter-spacing:-0.02em;color:${BRAND.text};">
-      Restablecé tu contraseña
-    </h1>
+    <h1 style="margin:0 0 8px;font-size:24px;font-weight:800;color:${BRAND.text};">Restablece tu contrasena</h1>
     <p style="margin:0 0 20px;color:${BRAND.textMuted};font-size:15px;line-height:1.6;">
-      Hola <strong style="color:${BRAND.text};">${escapeHtml(name)}</strong>, recibimos un pedido para restablecer la contraseña de tu cuenta.
+      Hola <strong style="color:${BRAND.text};">${escapeHtml(name)}</strong>, recibimos un pedido para restablecer la contrasena de tu cuenta.
     </p>
-    <p style="margin:0 0 8px;color:${BRAND.textMuted};font-size:14px;">Ingresa este código en la pantalla de recuperación:</p>
+    <p style="margin:0 0 8px;color:${BRAND.textMuted};font-size:14px;">Ingresa este codigo en la pantalla de recuperacion:</p>
     <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:12px 0 16px;width:100%;">
       <tr>
         <td align="center" style="padding:16px;background:${BRAND.bg};border:1px dashed ${BRAND.primary};border-radius:8px;">
-          <span style="font-family:'JetBrains Mono',ui-monospace,monospace;font-size:32px;font-weight:700;letter-spacing:8px;color:${BRAND.text};">${escapeHtml(code)}</span>
+          <span style="font-family:ui-monospace,monospace;font-size:32px;font-weight:700;letter-spacing:8px;color:${BRAND.text};">${escapeHtml(code)}</span>
         </td>
       </tr>
     </table>
     <p style="margin:0 0 16px;color:${BRAND.textMuted};font-size:13px;">
-      ⏱️ Este código expira en <strong style="color:${BRAND.text};">${expiresMinutes} minutos</strong>. Si no lo usás en ese tiempo, podés pedir uno nuevo.
+      Este codigo expira en <strong style="color:${BRAND.text};">${expiresMinutes} minutos</strong>. Si no lo usas en ese tiempo, puedes pedir uno nuevo.
     </p>
     <p style="margin:0;color:${BRAND.textMuted};font-size:13px;line-height:1.6;">
-      Si no fuiste vos quien hizo este pedido, podés ignorar este correo. Nadie podrá acceder a tu cuenta sin este código.
+      Si no fuiste vos quien hizo este pedido, puedes ignorar este correo. Nadie podra acceder a tu cuenta sin este codigo.
     </p>
   `;
   return { subject, html: baseLayout({ title: subject, preheader, body }) };
 }
 
 function templateRecoverLink({ name, resetUrl, expiresHours = 1 }) {
-  const subject = 'Restablecé tu contraseña — FitLoyalty';
-  const preheader = `Tenés ${expiresHours} hora(s) para restablecer tu clave.`;
+  const subject = 'Restablece tu contrasena — FitLoyalty';
+  const preheader = `Tienes ${expiresHours} hora(s) para restablecer tu clave.`;
   const body = `
-    <h1 style="margin:0 0 8px;font-size:24px;font-weight:800;letter-spacing:-0.02em;color:${BRAND.text};">Restablecé tu contraseña</h1>
+    <h1 style="margin:0 0 8px;font-size:24px;font-weight:800;color:${BRAND.text};">Restablece tu contrasena</h1>
     <p style="margin:0 0 20px;color:${BRAND.textMuted};font-size:15px;line-height:1.6;">
-      Hola <strong style="color:${BRAND.text};">${escapeHtml(name)}</strong>, recibiste este correo porque pediste restablecer la contraseña de tu cuenta.
+      Hola <strong style="color:${BRAND.text};">${escapeHtml(name)}</strong>, recibiste este correo porque pediste restablecer la contrasena de tu cuenta.
     </p>
-    ${ctaButton({ url: resetUrl, label: 'Restablecer contraseña' })}
-    <p style="margin:16px 0;color:${BRAND.textMuted};font-size:13px;">O copiá y pegá este enlace en tu navegador:</p>
-    <p style="margin:0 0 24px;padding:12px;background:${BRAND.bg};border-radius:8px;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;color:${BRAND.primary};word-break:break-all;">
+    ${ctaButton({ url: resetUrl, label: 'Restablecer contrasena' })}
+    <p style="margin:16px 0;color:${BRAND.textMuted};font-size:13px;">O copia y pega este enlace en tu navegador:</p>
+    <p style="margin:0 0 24px;padding:12px;background:${BRAND.bg};border-radius:8px;font-family:ui-monospace,monospace;font-size:11px;color:${BRAND.primary};word-break:break-all;">
       ${escapeHtml(resetUrl)}
     </p>
     <p style="margin:0;color:${BRAND.textMuted};font-size:13px;">
-      ⏱️ Este enlace expira en <strong style="color:${BRAND.text};">${expiresHours} hora(s)</strong>. Si no pediste esto, ignora este mensaje.
+      Este enlace expira en <strong style="color:${BRAND.text};">${expiresHours} hora(s)</strong>. Si no pediste esto, ignora este mensaje.
     </p>
   `;
   return { subject, html: baseLayout({ title: subject, preheader, body }) };
 }
 
 function templateInviteStaff({ invitedName, invitedBy, gymName, role, acceptUrl, expiresDays = 7 }) {
-  const subject = `${invitedBy} te invitó a FitLoyalty — ${gymName}`;
-  const preheader = `Aceptá la invitación y empezá a gestionar el gimnasio.`;
+  const subject = `${invitedBy} te invito a FitLoyalty — ${gymName}`;
+  const preheader = `Acepta la invitacion y empieza a gestionar el gimnasio.`;
   const roleLabel = role === 'ADMINISTRADOR' ? 'Administrador' : role === 'ENTRENADOR' ? 'Entrenador' : 'Recepcionista';
   const body = `
-    <h1 style="margin:0 0 8px;font-size:24px;font-weight:800;letter-spacing:-0.02em;color:${BRAND.text};">Sos parte del equipo</h1>
+    <h1 style="margin:0 0 8px;font-size:24px;font-weight:800;color:${BRAND.text};">Sos parte del equipo</h1>
     <p style="margin:0 0 20px;color:${BRAND.textMuted};font-size:15px;line-height:1.6;">
-      Hola <strong style="color:${BRAND.text};">${escapeHtml(invitedName)}</strong>, <strong style="color:${BRAND.text};">${escapeHtml(invitedBy)}</strong> te invitó a FitLoyalty como <strong style="color:${BRAND.primary};">${escapeHtml(roleLabel)}</strong> en <strong style="color:${BRAND.text};">${escapeHtml(gymName)}</strong>.
+      Hola <strong style="color:${BRAND.text};">${escapeHtml(invitedName)}</strong>, <strong style="color:${BRAND.text};">${escapeHtml(invitedBy)}</strong> te invito a FitLoyalty como <strong style="color:${BRAND.primary};">${escapeHtml(roleLabel)}</strong> en <strong style="color:${BRAND.text};">${escapeHtml(gymName)}</strong>.
     </p>
     <p style="margin:0 0 20px;color:${BRAND.textMuted};font-size:14px;line-height:1.6;">
-      Para empezar, creá tu contraseña. Vas a poder gestionar miembros, registrar check-ins y ver los indicadores del gimnasio.
+      Para empezar, crea tu contrasena. Vas a poder gestionar miembros, registrar check-ins y ver los indicadores del gimnasio.
     </p>
-    ${ctaButton({ url: acceptUrl, label: 'Aceptar invitación' })}
-    <p style="margin:16px 0;color:${BRAND.textMuted};font-size:13px;">O copiá y pegá este enlace en tu navegador:</p>
-    <p style="margin:0 0 24px;padding:12px;background:${BRAND.bg};border-radius:8px;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;color:${BRAND.primary};word-break:break-all;">
+    ${ctaButton({ url: acceptUrl, label: 'Aceptar invitacion' })}
+    <p style="margin:16px 0;color:${BRAND.textMuted};font-size:13px;">O copia y pega este enlace en tu navegador:</p>
+    <p style="margin:0 0 24px;padding:12px;background:${BRAND.bg};border-radius:8px;font-family:ui-monospace,monospace;font-size:11px;color:${BRAND.primary};word-break:break-all;">
       ${escapeHtml(acceptUrl)}
     </p>
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:16px 0;">
-      <tr>
-        <td style="padding:12px;background:${BRAND.bg};border-left:3px solid ${BRAND.primary};border-radius:6px;">
-          <p style="margin:0;font-size:13px;color:${BRAND.textMuted};"><strong style="color:${BRAND.text};">Tu rol:</strong> ${escapeHtml(roleLabel)}</p>
-        </td>
-      </tr>
-    </table>
     <p style="margin:0;color:${BRAND.textMuted};font-size:13px;">
-      ⏱️ Esta invitación expira en <strong style="color:${BRAND.text};">${expiresDays} días</strong>.
+      Esta invitacion expira en <strong style="color:${BRAND.text};">${expiresDays} dias</strong>.
     </p>
   `;
   return { subject, html: baseLayout({ title: subject, preheader, body }) };
 }
 
-let cachedClient = null;
-function getClient() {
-  if (cachedClient !== null) return cachedClient;
+// ---------- Transporte ----------
+
+let cachedTransport = null;
+
+function getTransport() {
+  if (cachedTransport !== null) return cachedTransport;
+
   const host = process.env.SMTP_HOST;
-  const port = parseInt(process.env.SMTP_PORT, 10);
+  const port = parseInt(process.env.SMTP_PORT, 10) || 587;
   const user = process.env.SMTP_USER;
   const pass = process.env.SMTP_PASSWORD;
-  console.log('[EMAIL-DEBUG] SMTP host:', host);
-  console.log('[EMAIL-DEBUG] SMTP port:', port);
-  console.log('[EMAIL-DEBUG] SMTP user:', user);
-  console.log('[EMAIL-DEBUG] SMTP pass length:', pass ? pass.length : 0);
-  console.log('[EMAIL-DEBUG] SMTP pass value:', pass);
+
+  console.log('[EMAIL] Config SMTP:', { host, port, user });
+
   if (!host || !user || !pass) {
-    console.log('[EMAIL-DEBUG] FALTAN VARIABLES SMTP');
-    return (cachedClient = null);
+    console.log('[EMAIL] FALTAN VARIABLES SMTP - usando modo consola');
+    return (cachedTransport = null);
   }
-  cachedClient = nodemailer.createTransport({
-    host,
-    port: port || 465,
-    secure: (port || 465) === 465,
-    auth: { user, pass },
-  });
-  console.log('[EMAIL-DEBUG] Transport creado OK');
-  return cachedClient;
+
+  try {
+    cachedTransport = nodemailer.createTransport({
+      host,
+      port,
+      secure: port === 465,
+      requireTLS: port !== 465,
+      tls: { rejectUnauthorized: false },
+      connectionTimeout: 15000,
+      greetingTimeout: 15000,
+      socketTimeout: 15000,
+      auth: { user, pass },
+    });
+    console.log('[EMAIL] Transport SMTP creado OK');
+    return cachedTransport;
+  } catch (err) {
+    console.log('[EMAIL] Error creando transport:', err.message);
+    return (cachedTransport = null);
+  }
 }
 
-async function deliverViaSmtp({ from, to, subject, html, text }) {
-  console.log('[EMAIL-DEBUG] deliverViaSmtp - from:', from, '- to:', to);
-  const client = getClient();
-  console.log('[EMAIL-DEBUG] client exists:', !!client);
-  if (!client) return { delivered: false, reason: 'no-smtp' };
+async function sendViaSmtp({ from, to, subject, html, text }) {
+  const transport = getTransport();
+  if (!transport) {
+    console.log('[EMAIL] SMTP no disponible - modo consola');
+    console.log('[EMAIL] Para:', to);
+    console.log('[EMAIL] Asunto:', subject);
+    return { delivered: false, reason: 'no-smtp' };
+  }
+
   try {
-    console.log('[EMAIL-DEBUG] Enviando...');
-    const info = await client.sendMail({ from, to, subject, html, text });
-    console.log('[EMAIL-DEBUG] Email enviado OK, messageId:', info.messageId);
+    console.log('[EMAIL] Enviando a:', to);
+    const info = await transport.sendMail({ from, to, subject, html, text });
+    console.log('[EMAIL] Enviado OK, messageId:', info.messageId);
     return { delivered: true, id: info.messageId };
   } catch (err) {
-    console.log('[EMAIL-ERROR] SMTP fallo:', err.message);
+    console.log('[EMAIL] Error SMTP:', err.message);
     return { delivered: false, reason: 'smtp-error', error: err.message };
   }
 }
 
-function fallbackConsole({ to, subject, text }) {
-  console.log('\n[EMAIL-DEV] ----------------------------------------');
-  console.log(`[EMAIL-DEV] Para:   ${to}`);
-  console.log(`[EMAIL-DEV] Asunto: ${subject}`);
-  console.log(`[EMAIL-DEV] Cuerpo:\n${text || '(sin version texto)'}`);
-  console.log('[EMAIL-DEV] ----------------------------------------\n');
-  return { delivered: false, reason: 'no-smtp' };
-}
-
 function textVersion({ preheader, content }) {
-  return `${preheader ? preheader + '\n\n' : ''}${content}\n\n— Equipo FitLoyalty\n${BRAND.supportEmail}\n© ${new Date().getFullYear()} FitLoyalty`;
+  return `${preheader ? preheader + '\n\n' : ''}${content}\n\n— Equipo FitLoyalty\n${BRAND.supportEmail}`;
 }
 
 // ---------- API publica ----------
@@ -259,59 +242,38 @@ function textVersion({ preheader, content }) {
 async function sendRecoveryCode({ to, name, code, expiresMinutes = 15 }) {
   const tpl = templateRecoverCode({ name, code, expiresMinutes });
   const text = textVersion({
-    preheader: `Tu código de recuperación es ${code}.`,
-    content: `Hola ${name},\nRecibimos un pedido para restablecer tu contraseña.\n\nTu código es: ${code}\n\nExpira en ${expiresMinutes} minutos. Si no solicitaste esto, ignora este correo.`,
+    preheader: `Tu codigo de recuperacion es ${code}.`,
+    content: `Hola ${name},\nRecibimos un pedido para restablecer tu contrasena.\n\nTu codigo es: ${code}\n\nExpira en ${expiresMinutes} minutos. Si no solicitaste esto, ignora este correo.`,
   });
-  const from = process.env.MAIL_FROM || 'FitLoyalty <onboarding@smtp-brevo.com>';
-  const client = getClient();
-  if (!client) {
-    fallbackConsole({ to, subject: tpl.subject, text });
-    return { delivered: false, reason: 'no-smtp' };
-  }
-  return deliverViaSmtp({ from, to, subject: tpl.subject, html: tpl.html, text });
+  const from = process.env.MAIL_FROM || 'FitLoyalty <fitloyaltysaas@gmail.com>';
+  return sendViaSmtp({ from, to, subject: tpl.subject, html: tpl.html, text });
 }
 
 async function sendRecoveryLink({ to, name, resetUrl, expiresHours = 1 }) {
   const tpl = templateRecoverLink({ name, resetUrl, expiresHours });
   const text = textVersion({
-    preheader: 'Restablecé tu contraseña.',
-    content: `Hola ${name},\nRecibiste este correo porque pediste restablecer tu contraseña.\n\nEntrá a este enlace para crear una nueva (expira en ${expiresHours}h):\n${resetUrl}\n\nSi no pediste esto, ignora este correo.`,
+    preheader: 'Restablece tu contrasena.',
+    content: `Hola ${name},\nRecibiste este correo porque pediste restablecer tu contrasena.\n\nEntra a este enlace para crear una nueva (expira en ${expiresHours}h):\n${resetUrl}\n\nSi no pediste esto, ignora este correo.`,
   });
-  const from = process.env.MAIL_FROM || 'FitLoyalty <onboarding@smtp-brevo.com>';
-  const client = getClient();
-  if (!client) {
-    fallbackConsole({ to, subject: tpl.subject, text });
-    return { delivered: false, reason: 'no-smtp' };
-  }
-  return deliverViaSmtp({ from, to, subject: tpl.subject, html: tpl.html, text });
+  const from = process.env.MAIL_FROM || 'FitLoyalty <fitloyaltysaas@gmail.com>';
+  return sendViaSmtp({ from, to, subject: tpl.subject, html: tpl.html, text });
 }
 
 async function sendStaffInvite({ to, invitedName, invitedBy, gymName, role, acceptUrl, expiresDays = 7 }) {
   const tpl = templateInviteStaff({ invitedName, invitedBy, gymName, role, acceptUrl, expiresDays });
   const text = textVersion({
-    preheader: `${invitedBy} te invitó a FitLoyalty como ${role} en ${gymName}.`,
-    content: `Hola ${invitedName},\n${invitedBy} te invitó a FitLoyalty como ${role} en ${gymName}.\n\nCreá tu contraseña acá (link válido ${expiresDays} días):\n${acceptUrl}`,
+    preheader: `${invitedBy} te invito a FitLoyalty como ${role} en ${gymName}.`,
+    content: `Hola ${invitedName},\n${invitedBy} te invito a FitLoyalty como ${role} en ${gymName}.\n\nCrea tu contrasena aqui (link valido ${expiresDays} dias):\n${acceptUrl}`,
   });
-  const from = process.env.MAIL_FROM || 'FitLoyalty <onboarding@smtp-brevo.com>';
-  const client = getClient();
-  if (!client) {
-    fallbackConsole({ to, subject: tpl.subject, text });
-    return { delivered: false, reason: 'no-smtp' };
-  }
-  return deliverViaSmtp({ from, to, subject: tpl.subject, html: tpl.html, text });
+  const from = process.env.MAIL_FROM || 'FitLoyalty <fitloyaltysaas@gmail.com>';
+  return sendViaSmtp({ from, to, subject: tpl.subject, html: tpl.html, text });
 }
 
-// Compatibilidad: la API legacy `sendMail({ to, subject, text, html })` sigue existiendo
-// para no romper callers existentes, pero se prefiere usar las funciones de plantilla.
+// Compatibilidad legacy
 async function sendMail({ to, subject, text, html }) {
   if (!text && !html) throw new Error('sendMail: ni text ni html provistos');
-  const from = process.env.MAIL_FROM || 'FitLoyalty <onboarding@smtp-brevo.com>';
-  const client = getClient();
-  if (!client) {
-    fallbackConsole({ to, subject, text: text || html.replace(/<[^>]+>/g, '') });
-    return { delivered: false, reason: 'no-smtp' };
-  }
-  return deliverViaSmtp({ from, to, subject, html, text });
+  const from = process.env.MAIL_FROM || 'FitLoyalty <fitloyaltysaas@gmail.com>';
+  return sendViaSmtp({ from, to, subject, html, text: text || html.replace(/<[^>]+>/g, '') });
 }
 
 module.exports = {
@@ -319,6 +281,4 @@ module.exports = {
   sendRecoveryCode,
   sendRecoveryLink,
   sendStaffInvite,
-  // expongo helpers en caso de tests / debugging
-  _templates: { templateRecoverCode, templateRecoverLink, templateInviteStaff, baseLayout },
 };
