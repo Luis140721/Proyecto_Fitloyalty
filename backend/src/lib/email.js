@@ -11,6 +11,7 @@
  *   MAIL_FROM     -> "Nombre <email>" del remitente
  *
  * Si falta BREVO_API_KEY, hace fallback a consola.
+ * TODO: todos los textos usan tuteo obligatorio (tú, tu, tuya). Sin voseo.
  */
 const { BrevoClient, BrevoEnvironment } = require('@getbrevo/brevo');
 
@@ -31,11 +32,11 @@ const BRAND = {
 function escapeHtml(s) {
   if (s === null || s === undefined) return '';
   return String(s)
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;');
+    .replaceAll('&', '&')
+    .replaceAll('<', '<')
+    .replaceAll('>', '>')
+    .replaceAll('"', '"')
+    .replaceAll("'", ''');
 }
 
 // ---------- Layout reusable ----------
@@ -111,6 +112,7 @@ function divider() {
   return `<div style="height:1px;background:${BRAND.border};margin:24px 0;"></div>`;
 }
 
+// ---------- Plantilla: recuperacion por codigo ----------
 function templateRecoverCode({ name, code, expiresMinutes = 15 }) {
   const subject = `${code} — Tu codigo de recuperacion FitLoyalty`;
   const preheader = `Restablece tu contrasena en ${expiresMinutes} minutos.`;
@@ -119,7 +121,7 @@ function templateRecoverCode({ name, code, expiresMinutes = 15 }) {
     <h1 style="margin:0 0 12px;font-size:28px;font-weight:800;color:${BRAND.text};letter-spacing:-0.03em;">¡Hola, ${escapeHtml(name)}!</h1>
     <p style="margin:0 0 28px;font-size:16px;line-height:1.7;color:${BRAND.textMuted};">
       Recibimos tu solicitud para restablecer la contrasena de tu cuenta en <strong style="color:${BRAND.text};">FitLoyalty</strong>.
-      Usa el codigo abaixo para continuar.
+      Usa el codigo abajo para continuar.
     </p>
     <div style="background:${BRAND.bg};border:2px dashed ${BRAND.primary};border-radius:12px;padding:24px;text-align:center;margin:8px 0 8px;">
       <p style="margin:0 0 8px;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:${BRAND.textMuted};">Tu codigo de verificacion</p>
@@ -132,12 +134,13 @@ function templateRecoverCode({ name, code, expiresMinutes = 15 }) {
     </div>
     <div style="display:flex;align-items:center;gap:10px;margin:0;">
       <span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:${BRAND.accent}22;color:${BRAND.accent};font-size:14px;">🛡</span>
-      <p style="margin:0;font-size:14px;color:${BRAND.textMuted};">Si no fuiste tu quien pidio el cambio, ignora este correo. Tu cuenta sigue segura.</p>
+      <p style="margin:0;font-size:14px;color:${BRAND.textMuted};">Si no fuiste tú quien pidio el cambio, ignora este correo. Tu cuenta sigue segura.</p>
     </div>
   `;
   return { subject, html: baseLayout({ title: subject, preheader, body }) };
 }
 
+// ---------- Plantilla: recuperacion por enlace ----------
 function templateRecoverLink({ name, resetUrl, expiresHours = 1 }) {
   const subject = 'Restablece tu contrasena — FitLoyalty';
   const preheader = `Tienes ${expiresHours} hora(s) para crear una nueva clave.`;
@@ -146,7 +149,7 @@ function templateRecoverLink({ name, resetUrl, expiresHours = 1 }) {
     <h1 style="margin:0 0 12px;font-size:28px;font-weight:800;color:${BRAND.text};letter-spacing:-0.03em;">¡Hola, ${escapeHtml(name)}!</h1>
     <p style="margin:0 0 28px;font-size:16px;line-height:1.7;color:${BRAND.textMuted};">
       Recibimos tu solicitud para restablecer la contrasena de tu cuenta en <strong style="color:${BRAND.text};">FitLoyalty</strong>.
-      Haz clic en el bouton para crear una nueva clave.
+      Haz clic en el boton para crear una nueva clave.
     </p>
     ${ctaButton({ url: resetUrl, label: 'Crear nueva contrasena' })}
     <p style="margin:24px 0 0;font-size:12px;color:${BRAND.textMuted};">Si no funciona, copia y pega este enlace en tu navegador:</p>
@@ -160,16 +163,17 @@ function templateRecoverLink({ name, resetUrl, expiresHours = 1 }) {
   return { subject, html: baseLayout({ title: subject, preheader, body }) };
 }
 
+// ---------- Plantilla: invitacion a staff ----------
 function templateInviteStaff({ invitedName, invitedBy, gymName, role, acceptUrl, expiresDays = 7 }) {
   const subject = `Te invitaron a FitLoyalty — ${gymName}`;
-  const preheader = `${invitedBy} te sumas al equipo de ${gymName} en FitLoyalty.`;
+  const preheader = `${invitedBy} te suma al equipo de ${gymName} en FitLoyalty.`;
   const roleLabel = role === 'ADMINISTRADOR' ? 'Administrador' : role === 'ENTRENADOR' ? 'Entrenador' : 'Recepcionista';
   const roleEmoji = role === 'ADMINISTRADOR' ? '👑' : role === 'ENTRENADOR' ? '💪' : '🎫';
   const body = `
     <p style="margin:0 0 6px;font-size:12px;letter-spacing:0.1em;text-transform:uppercase;color:${BRAND.primary};font-weight:600;">Nueva invitacion</p>
     <h1 style="margin:0 0 12px;font-size:28px;font-weight:800;color:${BRAND.text};letter-spacing:-0.03em;">¡Bienvenido, ${escapeHtml(invitedName)}!</h1>
     <p style="margin:0 0 8px;font-size:16px;line-height:1.7;color:${BRAND.textMuted};">
-      <strong style="color:${BRAND.text};">${escapeHtml(invitedBy)}</strong> te invito a unirte al equipo de <strong style="color:${BRAND.text};">${escapeHtml(gymName)}</strong> en FitLoyalty.
+      <strong style="color:${BRAND.text};">${escapeHtml(invitedBy)}</strong> te invita a unirte al equipo de <strong style="color:${BRAND.text};">${escapeHtml(gymName)}</strong> en FitLoyalty.
     </p>
     <div style="background:${BRAND.bg};border:1px solid ${BRAND.border};border-radius:12px;padding:20px;margin:8px 0;">
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
