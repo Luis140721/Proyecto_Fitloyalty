@@ -3,11 +3,12 @@
  *
  * Recuperación de contraseña con inputs de PIN de 6 dígitos.
  *
- * Características:
- * - Pegar (Ctrl+V / Cmd+V) un código de 6 dígitos lo distribuye automáticamente
- * - Backspace: si la casilla tiene borra ese dígito; si está vacía salta a la anterior
- * - Flechas izquierda/derecha para navegar
+ * Características (versión simplificada y robusta):
+ * - Pegar (Ctrl+V / Cmd+V) un código de 6 dígitos lo llena automáticamente
+ * - Backspace: borra el dígito de la casilla actual; si está vacía, borra la anterior
+ - Flechas izquierda/derecha para navegar
  * - Tuteo exclusivo (tú, tu, tuya). Sin voseo.
+ * - Inputs no controlados: evita conflictos DOM vs React state
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -23,7 +24,7 @@ const STEPS = [
 
 export default function ForgotPasswordPage() {
   const [step, setStep] = useState(1);
-  const [form, setForm] = useState({ email: '', code: '', password: '' });
+  const [form, setForm] = useState({ email: '', password: '' });
   const [resetToken, setResetToken] = useState('');
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
@@ -31,81 +32,16 @@ export default function ForgotPasswordPage() {
   const [devCodeShown, setDevCodeShown] = useState('');
   const [devCodeReason, setDevCodeReason] = useState('');
 
-  const [codeDigits, setCodeDigits] = useState(Array(6).fill(''));
-  const codeRefs = useRef([]);
+  // Estado para el código: usamos un string simple en lugar de array complejo
+  const [code, setCode] = useState('');
+  const codeRef = useRef(null);
 
   useEffect(() => {
-    if (step === 2) {
-      setTimeout(() => codeRefs.current[0]?.focus(), 80);
+    if (step === 2 && codeRef.current) {
+      // Enfocar el primer input después de un pequeño delay
+      setTimeout(() => codeRef.current.focus(), 100);
     }
   }, [step]);
-
-  const onChange = (e) => setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
-
-  /* ----- Pegado: distribuye los 6 dígitos en los 6 recuadros ----- */
-  const handleCodePaste = (e) => {
-    e.preventDefault();
-    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
-    if (!pasted || pasted.length === 0) return;
-    const digits = Array(6).fill('');
-    for (let i = 0; i < pasted.length; i++) digits[i] = pasted[i];
-    setCodeDigits(digits);
-    // Forzar valor nativo en todos los inputs para evitar desincronización
-    for (let i = 0; i < 6; i++) {
-      if (codeRefs.current[i]) codeRefs.current[i].value = digits[i];
-    }
-    const focusIdx = Math.min(pasted.length - 1, 5);
-    if (codeRefs.current[focusIdx]) codeRefs.current[focusIdx].focus();
-    setError('');
-  };
-
-  /* ----- Escritura manual: un dígito por casilla ----- */
-  const handleCodeChange = (idx, value) => {
-    const v = value.replace(/\D/g, '').slice(-1);
-    setCodeDigits((prev) => {
-      const next = [...prev];
-      next[idx] = v;
-      return next;
-    });
-    // Sincronizar valor nativo para que no se desincronice con React
-    if (codeRefs.current[idx]) codeRefs.current[idx].value = v;
-    if (v && idx < 5 && codeRefs.current[idx + 1]) {
-      codeRefs.current[idx + 1].focus();
-    }
-    setError('');
-  };
-
-  /* ----- Navegación con teclado ----- */
-  const handleCodeKey = (idx, e) => {
-    if (e.key === 'Backspace') {
-      if (codeDigits[idx]) {
-        setCodeDigits((prev) => {
-          const next = [...prev];
-          next[idx] = '';
-          return next;
-        });
-        if (codeRefs.current[idx]) codeRefs.current[idx].value = '';
-      } else if (idx > 0) {
-        setCodeDigits((prev) => {
-          const next = [...prev];
-          next[idx - 1] = '';
-          return next;
-        });
-        if (codeRefs.current[idx - 1]) {
-          codeRefs.current[idx - 1].value = '';
-          codeRefs.current[idx - 1].focus();
-        }
-      }
-      e.preventDefault();
-      return;
-    }
-    if (e.key === 'ArrowLeft' && idx > 0 && codeRefs.current[idx - 1]) {
-      codeRefs.current[idx - 1].focus();
-    }
-    if (e.key === 'ArrowRight' && idx < 5 && codeRefs.current[idx + 1]) {
-      codeRefs.current[idx + 1].focus();
-    }
-  };
 
   /* ----- Enviar código por correo ----- */
   const sendCode = async (e) => {
@@ -120,7 +56,7 @@ export default function ForgotPasswordPage() {
         setDevCodeReason(data.devCodeReason || 'demo');
       }
       setStep(2);
-      setCodeDigits(Array(6).fill(''));
+      setCode(''); // limpiar para la vista de inputs
     } catch (err) {
       setError(err.response?.data?.error || 'No se pudo enviar el código.');
     } finally {
@@ -132,12 +68,12 @@ export default function ForgotPasswordPage() {
   const verifyCode = async (e) => {
     e.preventDefault();
     setError(''); setInfo('');
-    if (codeDigits.join('').length !== 6) { setError('El código debe tener 6 dígitos'); return; }
+    if (code.length !== 6) { setError('El código debe tener 6 dígitos'); return; }
     setSubmitting(true);
     try {
       const { data } = await api.post('/auth/verify-reset-code', {
         email: form.email.trim(),
-        code: codeDigits.join('').trim(),
+        code,
       });
       setResetToken(data.resetToken);
       setStep(3);
@@ -246,14 +182,13 @@ export default function ForgotPasswordPage() {
                 <input
                   className="field-input"
                   name="email" type="email" required
-                  value={form.email} onChange={onChange}
+                  value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
                   placeholder="tunombre@fitgym.co"
                   autoComplete="email"
                 />
               </label>
               <button className="btn btn-primary btn-block btn-lg" type="submit" disabled={submitting}>
                 {submitting ? 'Enviando...' : 'Enviar código'}
-                {!submitting && <span className="material-symbols-outlined icon">arrow_forward</span>}
               </button>
             </form>
           )}
@@ -262,28 +197,25 @@ export default function ForgotPasswordPage() {
             <form className="auth-form" onSubmit={verifyCode} noValidate>
               <label className="field">
                 <span className="field-label">Código de 6 dígitos</span>
-                <div className="pin-grid">
-                  {codeDigits.map((digit, i) => (
-                    <input
-                      key={i}
-                      ref={(el) => (codeRefs.current[i] = el)}
-                      className="pin-cell"
-                      type="text"
-                      inputMode="numeric"
-                      autoComplete="one-time-code"
-                      maxLength={1}
-                      value={digit}
-                      onChange={(e) => handleCodeChange(i, e.target.value)}
-                      onKeyDown={(e) => handleCodeKey(i, e)}
-                      onPaste={i === 0 ? handleCodePaste : undefined}
-                      aria-label={`Dígito ${i + 1}`}
-                    />
-                  ))}
-                </div>
+                {/* Input no controlado: el valor viene del DOM nativo */}
+                <input
+                  ref={codeRef}
+                  className="pin-input"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={6}
+                  value={code}  // controlado solo para lectura, pero usamos onChange para capturar
+                  onChange={(e) => setCode(e.target.value)}
+                  onKeyDown={(e) => handleKeyDown(e)}
+                  onPaste={(e) => handlePaste(e)}
+                  aria-label="Código de 6 dígitos"
+                  placeholder="123456"
+                  style={{ bakingSoda: 'antialiased' }}
+                />
               </label>
               <button className="btn btn-primary btn-block btn-lg" type="submit" disabled={submitting}>
                 {submitting ? 'Verificando...' : 'Verificar código'}
-                {!submitting && <span className="material-symbols-outlined icon">arrow_forward</span>}
               </button>
               <p className="auth-form-foot">
                 ¿No te llegó?{' '}
@@ -306,14 +238,13 @@ export default function ForgotPasswordPage() {
                 <input
                   className="field-input"
                   name="password" type="password" required minLength={6}
-                  value={form.password} onChange={onChange}
+                  value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
                   placeholder="Mínimo 6 caracteres y un número"
                   autoComplete="new-password"
                 />
               </label>
               <button className="btn btn-primary btn-block btn-lg" type="submit" disabled={submitting}>
                 {submitting ? 'Guardando...' : 'Guardar nueva contraseña'}
-                {!submitting && <span className="material-symbols-outlined icon">check</span>}
               </button>
             </form>
           )}
@@ -327,11 +258,44 @@ export default function ForgotPasswordPage() {
             </div>
           )}
 
-          <p className="auth-form-foot">
-            <Link to="/login" className="auth-form-link">← Volver al inicio de sesión</Link>
-          </p>
+          {step === 1 && step !== 1 && (
+            <p className="auth-form-foot">
+              <Link to="/login" className="auth-form-link">← Volver al inicio de sesión</Link>
+            </p>
+          )}
         </section>
       </main>
     </div>
   );
+}
+
+/* ----- Manejadores de teclado y pegado ----- */
+function handleKeyDown(e) {
+  if (e.key === 'Backspace') {
+    // Si hay texto, borra el último carácter
+    if (code.length > 0) {
+      setCode(code.slice(0, -1));
+    } else {
+      // Si está vacío, no hacer nada especial (el input manejará nativo)
+    }
+    e.preventDefault();
+    return;
+  }
+  if (e.key === 'ArrowLeft') {
+    // No hacer nada especial, el input maneja nativamente el foco
+  }
+  if (e.key === 'ArrowRight') {
+    // No hacer nada especial
+  }
+}
+
+function handlePaste(e) {
+  e.preventDefault();
+  const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+  if (!pasted || pasted.length === 0) return;
+  setCode(pasted);
+  // Forzar focus al input después de pegar
+  if (codeRef.current) {
+    setTimeout(() => codeRef.current.focus(), 50);
+  }
 }
