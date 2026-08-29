@@ -28,19 +28,31 @@ export default function ResetPasswordPage() {
     return () => window.clearInterval(timer);
   }, [resendTimer]);
 
-  const handleCodePaste = (e) => {
-    e.preventDefault();
-    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+  const fillFromDigits = (raw) => {
+    const pasted = String(raw ?? '').replace(/\D/g, '').slice(0, 6);
     if (!pasted) return;
     const digits = Array(6).fill('');
     for (let i = 0; i < pasted.length; i++) digits[i] = pasted[i];
     setCodeDigits(digits);
-    codeInputs.current[Math.min(pasted.length, 5)]?.focus();
+    queueMicrotask(() => codeInputs.current[Math.min(pasted.length, 5)]?.focus());
     if (error) setError('');
   };
 
+  const handleCodePaste = (e) => {
+    const text = e.clipboardData?.getData('text') ?? '';
+    const pasted = text.replace(/\D/g, '').slice(0, 6);
+    if (!pasted) return;
+    e.preventDefault();
+    fillFromDigits(pasted);
+  };
+
   const handleCodeChange = (index, value) => {
-    const onlyDigits = value.replace(/\D/g, '').slice(-1);
+    const digits = String(value).replace(/\D/g, '');
+    if (digits.length > 1) {
+      fillFromDigits(digits);
+      return;
+    }
+    const onlyDigits = digits.slice(-1);
     setCodeDigits((prev) => {
       const next = [...prev];
       next[index] = onlyDigits;
@@ -51,25 +63,41 @@ export default function ResetPasswordPage() {
   };
 
   const handleCodeKeyDown = (index, event) => {
-    if (event.key === 'Backspace') {
-      if (codeDigits[index]) {
-        setCodeDigits((prev) => {
-          const next = [...prev];
-          next[index] = '';
-          return next;
-        });
-      } else if (index > 0) {
-        codeInputs.current[index - 1]?.focus();
-        setCodeDigits((prev) => {
-          const next = [...prev];
-          next[index - 1] = '';
-          return next;
-        });
-      }
+    if (event.key === 'Backspace' || event.key === 'Delete') {
       event.preventDefault();
+      setCodeDigits((prev) => {
+        const next = [...prev];
+        if (next[index]) {
+          next[index] = '';
+        } else if (index > 0) {
+          next[index - 1] = '';
+          queueMicrotask(() => codeInputs.current[index - 1]?.focus());
+        }
+        return next;
+      });
+      if (error) setError('');
+      return;
     }
-    if (event.key === 'ArrowLeft' && index > 0) codeInputs.current[index - 1]?.focus();
-    if (event.key === 'ArrowRight' && index < 5) codeInputs.current[index + 1]?.focus();
+    if (event.key === 'ArrowLeft' && index > 0) {
+      event.preventDefault();
+      codeInputs.current[index - 1]?.focus();
+      return;
+    }
+    if (event.key === 'ArrowRight' && index < 5) {
+      event.preventDefault();
+      codeInputs.current[index + 1]?.focus();
+      return;
+    }
+    if (/^\d$/.test(event.key)) {
+      event.preventDefault();
+      setCodeDigits((prev) => {
+        const next = [...prev];
+        next[index] = event.key;
+        return next;
+      });
+      if (index < 5) codeInputs.current[index + 1]?.focus();
+      if (error) setError('');
+    }
   };
 
   const handleResend = async () => {
@@ -216,7 +244,7 @@ export default function ResetPasswordPage() {
 
               <label className="field">
                 <span className="field-label">Código de verificación</span>
-                <div className="pin-grid">
+                <div className="pin-grid" onPaste={handleCodePaste}>
                   {codeDigits.map((digit, index) => (
                     <input
                       key={index}
@@ -224,14 +252,15 @@ export default function ResetPasswordPage() {
                       value={digit}
                       onChange={(e) => handleCodeChange(index, e.target.value)}
                       onKeyDown={(e) => handleCodeKeyDown(index, e)}
-                      onPaste={index === 0 ? handleCodePaste : undefined}
+                      onPaste={handleCodePaste}
+                      onFocus={(e) => e.target.select()}
                       className="pin-cell"
                       type="text"
                       inputMode="numeric"
-                      maxLength={1}
+                      maxLength={index === 0 ? 6 : 1}
                       disabled={loading}
-                      autoComplete="one-time-code"
-                      aria-label={`Dígito ${index + 1}`}
+                      autoComplete={index === 0 ? 'one-time-code' : 'off'}
+                      aria-label={`Dígito ${index + 1} de 6`}
                     />
                   ))}
                 </div>

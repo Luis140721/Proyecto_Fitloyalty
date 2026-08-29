@@ -3,12 +3,10 @@
  *
  * Recuperación de contraseña con inputs de PIN de 6 dígitos.
  *
- * Características (versión simplificada y robusta):
- * - Pegar (Ctrl+V / Cmd+V) un código de 6 dígitos lo llena automáticamente
- * - Backspace: borra el dígito de la casilla actual; si está vacía, borra la anterior
- - Flechas izquierda/derecha para navegar
+ * - Pegar (Ctrl+V / Cmd+V) un código de 6 dígitos lo distribuye en las casillas
+ * - Backspace: borra el dígito actual; si está vacía, borra la anterior
+ * - Flechas izquierda/derecha para navegar
  * - Tuteo exclusivo (tú, tu, tuya). Sin voseo.
- * - Inputs no controlados: evita conflictos DOM vs React state
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -32,18 +30,89 @@ export default function ForgotPasswordPage() {
   const [devCodeShown, setDevCodeShown] = useState('');
   const [devCodeReason, setDevCodeReason] = useState('');
 
-  // Estado para el código: usamos un string simple en lugar de array complejo
-  const [code, setCode] = useState('');
-  const codeRef = useRef(null);
+  const [codeDigits, setCodeDigits] = useState(Array(6).fill(''));
+  const codeRefs = useRef([]);
 
   useEffect(() => {
-    if (step === 2 && codeRef.current) {
-      // Enfocar el primer input después de un pequeño delay
-      setTimeout(() => codeRef.current.focus(), 100);
+    if (step === 2) {
+      const t = setTimeout(() => codeRefs.current[0]?.focus(), 80);
+      return () => clearTimeout(t);
     }
   }, [step]);
 
-  /* ----- Enviar código por correo ----- */
+  const fillFromDigits = (raw) => {
+    const pasted = String(raw ?? '').replace(/\D/g, '').slice(0, 6);
+    if (!pasted) return;
+    const digits = Array(6).fill('');
+    for (let i = 0; i < pasted.length; i++) digits[i] = pasted[i];
+    setCodeDigits(digits);
+    const focusIdx = Math.min(pasted.length, 5);
+    queueMicrotask(() => codeRefs.current[focusIdx]?.focus());
+    setError('');
+  };
+
+  const handleCodePaste = (e) => {
+    const text = e.clipboardData?.getData('text') ?? '';
+    const pasted = text.replace(/\D/g, '').slice(0, 6);
+    if (!pasted) return;
+    e.preventDefault();
+    fillFromDigits(pasted);
+  };
+
+  const handleCodeChange = (idx, value) => {
+    const digits = String(value).replace(/\D/g, '');
+    if (digits.length > 1) {
+      fillFromDigits(digits);
+      return;
+    }
+    const v = digits.slice(-1);
+    setCodeDigits((prev) => {
+      const next = [...prev];
+      next[idx] = v;
+      return next;
+    });
+    if (v && idx < 5) codeRefs.current[idx + 1]?.focus();
+    setError('');
+  };
+
+  const handleCodeKey = (idx, e) => {
+    if (e.key === 'Backspace' || e.key === 'Delete') {
+      e.preventDefault();
+      setCodeDigits((prev) => {
+        const next = [...prev];
+        if (next[idx]) {
+          next[idx] = '';
+        } else if (idx > 0) {
+          next[idx - 1] = '';
+          queueMicrotask(() => codeRefs.current[idx - 1]?.focus());
+        }
+        return next;
+      });
+      setError('');
+      return;
+    }
+    if (e.key === 'ArrowLeft' && idx > 0) {
+      e.preventDefault();
+      codeRefs.current[idx - 1]?.focus();
+      return;
+    }
+    if (e.key === 'ArrowRight' && idx < 5) {
+      e.preventDefault();
+      codeRefs.current[idx + 1]?.focus();
+      return;
+    }
+    if (/^\d$/.test(e.key)) {
+      e.preventDefault();
+      setCodeDigits((prev) => {
+        const next = [...prev];
+        next[idx] = e.key;
+        return next;
+      });
+      if (idx < 5) codeRefs.current[idx + 1]?.focus();
+      setError('');
+    }
+  };
+
   const sendCode = async (e) => {
     e.preventDefault();
     setError(''); setInfo('');
@@ -56,7 +125,7 @@ export default function ForgotPasswordPage() {
         setDevCodeReason(data.devCodeReason || 'demo');
       }
       setStep(2);
-      setCode(''); // limpiar para la vista de inputs
+      setCodeDigits(Array(6).fill(''));
     } catch (err) {
       setError(err.response?.data?.error || 'No se pudo enviar el código.');
     } finally {
@@ -64,10 +133,10 @@ export default function ForgotPasswordPage() {
     }
   };
 
-  /* ----- Verificar código ----- */
   const verifyCode = async (e) => {
     e.preventDefault();
     setError(''); setInfo('');
+    const code = codeDigits.join('');
     if (code.length !== 6) { setError('El código debe tener 6 dígitos'); return; }
     setSubmitting(true);
     try {
@@ -84,7 +153,6 @@ export default function ForgotPasswordPage() {
     }
   };
 
-  /* ----- Aplicar nueva contraseña ----- */
   const applyNew = async (e) => {
     e.preventDefault();
     setError(''); setInfo('');
@@ -125,7 +193,6 @@ export default function ForgotPasswordPage() {
             Paso {Math.min(step, 3)} de 3 — {STEPS[step - 1]?.title}
           </p>
 
-          {/* Stepper visual */}
           <div style={{
             display: 'flex',
             gap: 8,
@@ -197,22 +264,25 @@ export default function ForgotPasswordPage() {
             <form className="auth-form" onSubmit={verifyCode} noValidate>
               <label className="field">
                 <span className="field-label">Código de 6 dígitos</span>
-                {/* Input no controlado: el valor viene del DOM nativo */}
-                <input
-                  ref={codeRef}
-                  className="pin-input"
-                  type="text"
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  maxLength={6}
-                  value={code}  // controlado solo para lectura, pero usamos onChange para capturar
-                  onChange={(e) => setCode(e.target.value)}
-                  onKeyDown={(e) => handleKeyDown(e)}
-                  onPaste={(e) => handlePaste(e)}
-                  aria-label="Código de 6 dígitos"
-                  placeholder="123456"
-                  style={{ bakingSoda: 'antialiased' }}
-                />
+                <div className="pin-grid" onPaste={handleCodePaste}>
+                  {codeDigits.map((digit, i) => (
+                    <input
+                      key={i}
+                      ref={(el) => { codeRefs.current[i] = el; }}
+                      className="pin-cell"
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete={i === 0 ? 'one-time-code' : 'off'}
+                      maxLength={i === 0 ? 6 : 1}
+                      value={digit}
+                      onChange={(e) => handleCodeChange(i, e.target.value)}
+                      onKeyDown={(e) => handleCodeKey(i, e)}
+                      onPaste={handleCodePaste}
+                      onFocus={(e) => e.target.select()}
+                      aria-label={`Dígito ${i + 1} de 6`}
+                    />
+                  ))}
+                </div>
               </label>
               <button className="btn btn-primary btn-block btn-lg" type="submit" disabled={submitting}>
                 {submitting ? 'Verificando...' : 'Verificar código'}
@@ -258,44 +328,11 @@ export default function ForgotPasswordPage() {
             </div>
           )}
 
-          {step === 1 && step !== 1 && (
-            <p className="auth-form-foot">
-              <Link to="/login" className="auth-form-link">← Volver al inicio de sesión</Link>
-            </p>
-          )}
+          <p className="auth-form-foot">
+            <Link to="/login" className="auth-form-link">← Volver al inicio de sesión</Link>
+          </p>
         </section>
       </main>
     </div>
   );
-}
-
-/* ----- Manejadores de teclado y pegado ----- */
-function handleKeyDown(e) {
-  if (e.key === 'Backspace') {
-    // Si hay texto, borra el último carácter
-    if (code.length > 0) {
-      setCode(code.slice(0, -1));
-    } else {
-      // Si está vacío, no hacer nada especial (el input manejará nativo)
-    }
-    e.preventDefault();
-    return;
-  }
-  if (e.key === 'ArrowLeft') {
-    // No hacer nada especial, el input maneja nativamente el foco
-  }
-  if (e.key === 'ArrowRight') {
-    // No hacer nada especial
-  }
-}
-
-function handlePaste(e) {
-  e.preventDefault();
-  const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
-  if (!pasted || pasted.length === 0) return;
-  setCode(pasted);
-  // Forzar focus al input después de pegar
-  if (codeRef.current) {
-    setTimeout(() => codeRef.current.focus(), 50);
-  }
 }
