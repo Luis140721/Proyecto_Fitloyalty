@@ -226,6 +226,7 @@ async function deliverViaBrevo({ from, to, subject, html, text }) {
   try {
     const senderEmail = from.match(/<([^>]+)>/)?.[1] || from;
     const senderName = from.match(/^([^<]+)/)?.[1].trim() || 'FitLoyalty';
+    console.warn(`[EMAIL-DEBUG] Enviando a Brevo: to=${to}, from=${senderEmail}`);
     const result = await client.sendTransacEmail({
       sender: { email: senderEmail, name: senderName },
       to: [{ email: to, name: to.split('@')[0] }],
@@ -233,8 +234,10 @@ async function deliverViaBrevo({ from, to, subject, html, text }) {
       htmlContent: html,
       textContent: text || html.replace(/<[^>]+>/g, ''),
     });
+    console.warn(`[EMAIL-DEBUG] Brevo resultado:`, JSON.stringify(result?.body || result));
     return { delivered: true, result };
   } catch (err) {
+    console.warn(`[EMAIL-DEBUG] Error Brevo: status=${err?.response?.status}, body=${JSON.stringify(err?.body || err?.response?.body)}`);
     console.warn(`[EMAIL-WARN] Brevo fallo: ${err.message}`);
     return { delivered: false, reason: 'brevo-error', error: err.message };
   }
