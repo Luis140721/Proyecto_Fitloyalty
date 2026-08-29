@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { api } from '../context/AuthContext';
 import AuthPanel from '../components/AuthPanel';
@@ -20,8 +20,6 @@ export default function ResetPasswordPage() {
   const [resendTimer, setResendTimer] = useState(0);
   const [showPwd, setShowPwd]   = useState(false);
 
-  const code = useMemo(() => codeDigits.join(''), [codeDigits]);
-
   useEffect(() => {
     if (resendTimer <= 0) return;
     const timer = window.setInterval(() => {
@@ -30,19 +28,48 @@ export default function ResetPasswordPage() {
     return () => window.clearInterval(timer);
   }, [resendTimer]);
 
+  const handleCodePaste = (e) => {
+    e.preventDefault();
+    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+    if (!pasted) return;
+    const digits = Array(6).fill('');
+    for (let i = 0; i < pasted.length; i++) digits[i] = pasted[i];
+    setCodeDigits(digits);
+    codeInputs.current[Math.min(pasted.length, 5)]?.focus();
+    if (error) setError('');
+  };
+
   const handleCodeChange = (index, value) => {
-    const onlyDigits = value.replace(/\D/g, '').slice(0, 1);
-    const nextDigits = [...codeDigits];
-    nextDigits[index] = onlyDigits;
-    setCodeDigits(nextDigits);
+    const onlyDigits = value.replace(/\D/g, '').slice(-1);
+    setCodeDigits((prev) => {
+      const next = [...prev];
+      next[index] = onlyDigits;
+      return next;
+    });
     if (onlyDigits && index < 5) codeInputs.current[index + 1]?.focus();
     if (error) setError('');
   };
 
   const handleCodeKeyDown = (index, event) => {
-    if (event.key === 'Backspace' && !codeDigits[index] && index > 0) {
-      codeInputs.current[index - 1]?.focus();
+    if (event.key === 'Backspace') {
+      if (codeDigits[index]) {
+        setCodeDigits((prev) => {
+          const next = [...prev];
+          next[index] = '';
+          return next;
+        });
+      } else if (index > 0) {
+        codeInputs.current[index - 1]?.focus();
+        setCodeDigits((prev) => {
+          const next = [...prev];
+          next[index - 1] = '';
+          return next;
+        });
+      }
+      event.preventDefault();
     }
+    if (event.key === 'ArrowLeft' && index > 0) codeInputs.current[index - 1]?.focus();
+    if (event.key === 'ArrowRight' && index < 5) codeInputs.current[index + 1]?.focus();
   };
 
   const handleResend = async () => {
@@ -64,12 +91,13 @@ export default function ResetPasswordPage() {
   const handleVerify = async (event) => {
     event.preventDefault();
     if (!email) return setError('Ingresa tu correo electrónico.');
-    if (code.length !== 6) return setError('Ingresa los 6 dígitos del código.');
+    const currentCode = codeDigits.join('');
+    if (currentCode.length !== 6) return setError('Ingresa los 6 dígitos del código.');
     setLoading(true);
     setError('');
     setMessage('');
     try {
-      const { data } = await api.post('/auth/verify-reset-code', { email, code });
+      const { data } = await api.post('/auth/verify-reset-code', { email, code: currentCode });
       setResetToken(data.resetToken);
       setStep('reset');
       setMessage(data.message);
@@ -196,6 +224,7 @@ export default function ResetPasswordPage() {
                       value={digit}
                       onChange={(e) => handleCodeChange(index, e.target.value)}
                       onKeyDown={(e) => handleCodeKeyDown(index, e)}
+                      onPaste={index === 0 ? handleCodePaste : undefined}
                       className="pin-cell"
                       type="text"
                       inputMode="numeric"
