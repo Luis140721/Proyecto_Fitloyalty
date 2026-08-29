@@ -3,21 +3,24 @@
  *
  * Wrapper de envio de correos para FitLoyalty.
  *
- * Transporte: Resend (API HTTPS, no SMTP). Render free bloquea SMTP saliente,
- * por eso elegimos la API directa. Resend tiene plan free generoso.
+ * Transporte: Gmail SMTP con App Password (Nodemailer). Plan free de Gmail
+ * permite 500 emails/dia, suficiente para un SaaS pequeno.
  *
  * Branding: cada helper expone una funcion de plantilla para un tipo de correo.
  * El HTML/CSS esta inline (sin imagenes externas) para que llegue a Gmail,
  * Outlook, Apple Mail y webmail sin warnings.
  *
  * Variables de entorno:
- *   RESEND_API_KEY  -> requerido para enviar correo real
- *   MAIL_FROM       -> nombre + direccion del remitente (ej: 'FitLoyalty <onboarding@resend.dev>')
+ *   SMTP_HOST         -> ej: smtp.gmail.com
+ *   SMTP_PORT         -> 465 (secure) o 587 (starttls)
+ *   SMTP_USER         -> direccion de Gmail
+ *   SMTP_PASSWORD     -> App Password de Google (16 chars)
+ *   MAIL_FROM         -> nombre + direccion del remitente
  *
- * Si falta RESEND_API_KEY, NO envia correo real: hace fallback a consola
- * (modo dev). El caller recibe { delivered:false, reason:'no-resend' }.
+ * Si falta configuracion SMTP, NO envia correo real: hace fallback a consola
+ * (modo dev). El caller recibe { delivered:false, reason:'no-smtp' }.
  */
-const { Brevo } = require('@getbrevo/brevo');
+const nodemailer = require('nodemailer');
 
 const BRAND = {
   name: 'FitLoyalty',
@@ -199,47 +202,29 @@ function templateInviteStaff({ invitedName, invitedBy, gymName, role, acceptUrl,
 let cachedClient = null;
 function getClient() {
   if (cachedClient !== null) return cachedClient;
-  const key = process.env.BREVO_API_KEY;
-  if (!key) {
-    console.warn('[EMAIL-DEBUG] BREVO_API_KEY no definida');
-    return (cachedClient = null);
-  }
-  try {
-    const brevo = require('@getbrevo/brevo');
-    console.warn('[EMAIL-DEBUG] modulo brevo cargado, keys:', Object.keys(brevo));
-    const { BrevoClient, BrevoEnvironment } = brevo;
-    console.warn('[EMAIL-DEBUG] BrevoClient:', typeof BrevoClient, 'BrevoEnvironment:', BrevoEnvironment);
-    const client = new BrevoClient({ apiKey: key, baseUrl: BrevoEnvironment.PRODUCTION });
-    console.warn('[EMAIL-DEBUG] cliente creado:', !!client);
-    cachedClient = client.transactionalEmails;
-    console.warn('[EMAIL-DEBUG] transactionalEmails:', !!cachedClient);
-    return cachedClient;
-  } catch (err) {
-    console.warn('[EMAIL-DEBUG] error getClient:', err.message);
-    return (cachedClient = null);
-  }
+  const host = process.env.SMTP_HOST;
+  const port = parseInt(process.env.SMTP_PORT, 10);
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASSWORD;
+  if (!host || !user || !pass) return (cachedClient = null);
+  cachedClient = nodemailer.createTransport({
+    host,
+    port: port || 465,
+    secure: (port || 465) === 465,
+    auth: { user, pass },
+  });
+  return cachedClient;
 }
 
-async function deliverViaBrevo({ from, to, subject, html, text }) {
+async function deliverViaSmtp({ from, to, subject, html, text }) {
   const client = getClient();
-  if (!client) return { delivered: false, reason: 'no-brevo' };
+  if (!client) return { delivered: false, reason: 'no-smtp' };
   try {
-    const senderEmail = from.match(/<([^>]+)>/)?.[1] || from;
-    const senderName = from.match(/^([^<]+)/)?.[1].trim() || 'FitLoyalty';
-    console.warn(`[EMAIL-DEBUG] Enviando a Brevo: to=${to}, from=${senderEmail}`);
-    const result = await client.sendTransacEmail({
-      sender: { email: senderEmail, name: senderName },
-      to: [{ email: to, name: to.split('@')[0] }],
-      subject: subject,
-      htmlContent: html,
-      textContent: text || html.replace(/<[^>]+>/g, ''),
-    });
-    console.warn(`[EMAIL-DEBUG] Brevo resultado:`, JSON.stringify(result?.body || result));
-    return { delivered: true, result };
+    const info = await client.sendMail({ from, to, subject, html, text });
+    return { delivered: true, id: info.messageId };
   } catch (err) {
-    console.warn(`[EMAIL-DEBUG] Error Brevo: status=${err?.response?.status}, body=${JSON.stringify(err?.body || err?.response?.body)}`);
-    console.warn(`[EMAIL-WARN] Brevo fallo: ${err.message}`);
-    return { delivered: false, reason: 'brevo-error', error: err.message };
+    console.warn(`[EMAIL-WARN] SMTP fallo: ${err.message}`);
+    return { delivered: false, reason: 'smtp-error', error: err.message };
   }
 }
 
@@ -249,7 +234,7 @@ function fallbackConsole({ to, subject, text }) {
   console.log(`[EMAIL-DEV] Asunto: ${subject}`);
   console.log(`[EMAIL-DEV] Cuerpo:\n${text || '(sin version texto)'}`);
   console.log('[EMAIL-DEV] ----------------------------------------\n');
-  return { delivered: false, reason: 'no-brevo' };
+  return { delivered: false, reason: 'no-smtp' };
 }
 
 function textVersion({ preheader, content }) {
@@ -264,13 +249,13 @@ async function sendRecoveryCode({ to, name, code, expiresMinutes = 15 }) {
     preheader: `Tu código de recuperación es ${code}.`,
     content: `Hola ${name},\nRecibimos un pedido para restablecer tu contraseña.\n\nTu código es: ${code}\n\nExpira en ${expiresMinutes} minutos. Si no solicitaste esto, ignora este correo.`,
   });
-  const from = process.env.MAIL_FROM || 'FitLoyalty <onboarding@brevo.example>';
+  const from = process.env.MAIL_FROM || 'FitLoyalty <onboarding@smtp-brevo.com>';
   const client = getClient();
   if (!client) {
     fallbackConsole({ to, subject: tpl.subject, text });
-    return { delivered: false, reason: 'no-brevo' };
+    return { delivered: false, reason: 'no-smtp' };
   }
-  return deliverViaBrevo({ from, to, subject: tpl.subject, html: tpl.html, text });
+  return deliverViaSmtp({ from, to, subject: tpl.subject, html: tpl.html, text });
 }
 
 async function sendRecoveryLink({ to, name, resetUrl, expiresHours = 1 }) {
@@ -279,13 +264,13 @@ async function sendRecoveryLink({ to, name, resetUrl, expiresHours = 1 }) {
     preheader: 'Restablecé tu contraseña.',
     content: `Hola ${name},\nRecibiste este correo porque pediste restablecer tu contraseña.\n\nEntrá a este enlace para crear una nueva (expira en ${expiresHours}h):\n${resetUrl}\n\nSi no pediste esto, ignora este correo.`,
   });
-  const from = process.env.MAIL_FROM || 'FitLoyalty <onboarding@brevo.example>';
+  const from = process.env.MAIL_FROM || 'FitLoyalty <onboarding@smtp-brevo.com>';
   const client = getClient();
   if (!client) {
     fallbackConsole({ to, subject: tpl.subject, text });
-    return { delivered: false, reason: 'no-brevo' };
+    return { delivered: false, reason: 'no-smtp' };
   }
-  return deliverViaBrevo({ from, to, subject: tpl.subject, html: tpl.html, text });
+  return deliverViaSmtp({ from, to, subject: tpl.subject, html: tpl.html, text });
 }
 
 async function sendStaffInvite({ to, invitedName, invitedBy, gymName, role, acceptUrl, expiresDays = 7 }) {
@@ -294,26 +279,26 @@ async function sendStaffInvite({ to, invitedName, invitedBy, gymName, role, acce
     preheader: `${invitedBy} te invitó a FitLoyalty como ${role} en ${gymName}.`,
     content: `Hola ${invitedName},\n${invitedBy} te invitó a FitLoyalty como ${role} en ${gymName}.\n\nCreá tu contraseña acá (link válido ${expiresDays} días):\n${acceptUrl}`,
   });
-  const from = process.env.MAIL_FROM || 'FitLoyalty <onboarding@brevo.example>';
+  const from = process.env.MAIL_FROM || 'FitLoyalty <onboarding@smtp-brevo.com>';
   const client = getClient();
   if (!client) {
     fallbackConsole({ to, subject: tpl.subject, text });
-    return { delivered: false, reason: 'no-brevo' };
+    return { delivered: false, reason: 'no-smtp' };
   }
-  return deliverViaBrevo({ from, to, subject: tpl.subject, html: tpl.html, text });
+  return deliverViaSmtp({ from, to, subject: tpl.subject, html: tpl.html, text });
 }
 
 // Compatibilidad: la API legacy `sendMail({ to, subject, text, html })` sigue existiendo
 // para no romper callers existentes, pero se prefiere usar las funciones de plantilla.
 async function sendMail({ to, subject, text, html }) {
   if (!text && !html) throw new Error('sendMail: ni text ni html provistos');
-  const from = process.env.MAIL_FROM || 'FitLoyalty <onboarding@brevo.example>';
+  const from = process.env.MAIL_FROM || 'FitLoyalty <onboarding@smtp-brevo.com>';
   const client = getClient();
   if (!client) {
     fallbackConsole({ to, subject, text: text || html.replace(/<[^>]+>/g, '') });
-    return { delivered: false, reason: 'no-brevo' };
+    return { delivered: false, reason: 'no-smtp' };
   }
-  return deliverViaBrevo({ from, to, subject, html, text });
+  return deliverViaSmtp({ from, to, subject, html, text });
 }
 
 module.exports = {
