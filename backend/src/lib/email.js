@@ -36,7 +36,7 @@ function escapeHtml(s) {
     .replaceAll('<', '<')
     .replaceAll('>', '>')
     .replaceAll('"', '"')
-    .replaceAll("'", ''');
+    .replaceAll("'", "'");
 }
 
 // ---------- Layout reusable ----------
