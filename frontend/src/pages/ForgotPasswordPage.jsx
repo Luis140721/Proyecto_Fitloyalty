@@ -47,31 +47,30 @@ export default function ForgotPasswordPage() {
     e.preventDefault();
     const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
     if (!pasted || pasted.length === 0) return;
-    // Llenar el array: si pegaron menos de 6, los que sobran se quedan vacíos
     const digits = Array(6).fill('');
     for (let i = 0; i < pasted.length; i++) digits[i] = pasted[i];
     setCodeDigits(digits);
-    // Mover foco al siguiente input después del último dígito pegado
-    const focusIdx = Math.min(pasted.length, 5);
-    if (codeRefs.current[focusIdx]) {
-      codeRefs.current[focusIdx].focus();
+    // Forzar valor nativo en todos los inputs para evitar desincronización
+    for (let i = 0; i < 6; i++) {
+      if (codeRefs.current[i]) codeRefs.current[i].value = digits[i];
     }
+    const focusIdx = Math.min(pasted.length - 1, 5);
+    if (codeRefs.current[focusIdx]) codeRefs.current[focusIdx].focus();
     setError('');
   };
 
   /* ----- Escritura manual: un dígito por casilla ----- */
   const handleCodeChange = (idx, value) => {
-    const v = value.replace(/\D/g, '').slice(-1); // solo el último carácter numérico
+    const v = value.replace(/\D/g, '').slice(-1);
     setCodeDigits((prev) => {
       const next = [...prev];
       next[idx] = v;
       return next;
     });
-    // Si escribió un dígito y no es la última casilla, foco la siguiente
-    if (v && idx < 5) {
-      if (codeRefs.current[idx + 1]) {
-        codeRefs.current[idx + 1].focus();
-      }
+    // Sincronizar valor nativo para que no se desincronice con React
+    if (codeRefs.current[idx]) codeRefs.current[idx].value = v;
+    if (v && idx < 5 && codeRefs.current[idx + 1]) {
+      codeRefs.current[idx + 1].focus();
     }
     setError('');
   };
@@ -79,32 +78,32 @@ export default function ForgotPasswordPage() {
   /* ----- Navegación con teclado ----- */
   const handleCodeKey = (idx, e) => {
     if (e.key === 'Backspace') {
-      // Si la casilla actual tiene un dígito, borra solo esa
       if (codeDigits[idx]) {
         setCodeDigits((prev) => {
           const next = [...prev];
           next[idx] = '';
           return next;
         });
+        if (codeRefs.current[idx]) codeRefs.current[idx].value = '';
       } else if (idx > 0) {
-        // Si está vacía y no es la primera, ir a la anterior y borrarla también
         setCodeDigits((prev) => {
           const next = [...prev];
           next[idx - 1] = '';
           return next;
         });
         if (codeRefs.current[idx - 1]) {
+          codeRefs.current[idx - 1].value = '';
           codeRefs.current[idx - 1].focus();
         }
       }
       e.preventDefault();
       return;
     }
-    if (e.key === 'ArrowLeft' && idx > 0) {
-      if (codeRefs.current[idx - 1]) codeRefs.current[idx - 1].focus();
+    if (e.key === 'ArrowLeft' && idx > 0 && codeRefs.current[idx - 1]) {
+      codeRefs.current[idx - 1].focus();
     }
-    if (e.key === 'ArrowRight' && idx < 5) {
-      if (codeRefs.current[idx + 1]) codeRefs.current[idx + 1].focus();
+    if (e.key === 'ArrowRight' && idx < 5 && codeRefs.current[idx + 1]) {
+      codeRefs.current[idx + 1].focus();
     }
   };
 
