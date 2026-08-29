@@ -201,7 +201,11 @@ function getClient() {
   if (cachedClient !== null) return cachedClient;
   const key = process.env.BREVO_API_KEY;
   if (!key) return (cachedClient = null);
-  cachedClient = new Brevo(key);
+  const Brevo = require('@getbrevo/brevo');
+  const apiClient = Brevo.ApiClient.instance;
+  const apiKey = apiClient.authentications['api-key'];
+  apiKey.apiKey = key;
+  cachedClient = new Brevo.EmailsApi();
   return cachedClient;
 }
 
@@ -209,17 +213,18 @@ async function deliverViaBrevo({ from, to, subject, html, text }) {
   const client = getClient();
   if (!client) return { delivered: false, reason: 'no-brevo' };
   try {
-    const apiInstance = new Brevo.EmailApi();
-    const sender = { email: from.includes('<') ? from.split('<')[1].replace('>', '') : from, name: from.includes('<') ? from.split('<')[0].replace('>', '').trim() : 'FitLoyalty' };
-    const recipient = { email: to, name: to.split('@')[0] };
+    const senderEmail = from.match(/<([^>]+)>/)?.[1] || from;
+    const senderName = from.match(/^([^<]+)/)?.[1].trim() || 'FitLoyalty';
+    
     const sendSmtpEmail = {
-      to: [recipient],
-      from: sender,
+      to: [{ email: to, name: to.split('@')[0] }],
+      from: { email: senderEmail, name: senderName },
       subject: subject,
       htmlContent: html,
       textContent: text || html.replace(/<[^>]+>/g, ''),
     };
-    await apiInstance.sendTransacEmail(sendSmtpEmail);
+    
+    await client.sendTransacEmail(sendSmtpEmail);
     return { delivered: true };
   } catch (err) {
     console.warn(`[EMAIL-WARN] Brevo fallo: ${err.message}`);
@@ -233,7 +238,7 @@ function fallbackConsole({ to, subject, text }) {
   console.log(`[EMAIL-DEV] Asunto: ${subject}`);
   console.log(`[EMAIL-DEV] Cuerpo:\n${text || '(sin version texto)'}`);
   console.log('[EMAIL-DEV] ----------------------------------------\n');
-  return { delivered: false, reason: 'no-resend' };
+  return { delivered: false, reason: 'no-brevo' };
 }
 
 function textVersion({ preheader, content }) {
@@ -278,26 +283,26 @@ async function sendStaffInvite({ to, invitedName, invitedBy, gymName, role, acce
     preheader: `${invitedBy} te invitó a FitLoyalty como ${role} en ${gymName}.`,
     content: `Hola ${invitedName},\n${invitedBy} te invitó a FitLoyalty como ${role} en ${gymName}.\n\nCreá tu contraseña acá (link válido ${expiresDays} días):\n${acceptUrl}`,
   });
-  const from = process.env.MAIL_FROM || 'FitLoyalty <onboarding@resend.dev>';
+  const from = process.env.MAIL_FROM || 'FitLoyalty <onboarding@brevo.example>';
   const client = getClient();
   if (!client) {
     fallbackConsole({ to, subject: tpl.subject, text });
-    return { delivered: false, reason: 'no-resend' };
+    return { delivered: false, reason: 'no-brevo' };
   }
-  return deliverViaResend({ from, to, subject: tpl.subject, html: tpl.html, text });
+  return deliverViaBrevo({ from, to, subject: tpl.subject, html: tpl.html, text });
 }
 
 // Compatibilidad: la API legacy `sendMail({ to, subject, text, html })` sigue existiendo
 // para no romper callers existentes, pero se prefiere usar las funciones de plantilla.
 async function sendMail({ to, subject, text, html }) {
   if (!text && !html) throw new Error('sendMail: ni text ni html provistos');
-  const from = process.env.MAIL_FROM || 'FitLoyalty <onboarding@resend.dev>';
+  const from = process.env.MAIL_FROM || 'FitLoyalty <onboarding@brevo.example>';
   const client = getClient();
   if (!client) {
     fallbackConsole({ to, subject, text: text || html.replace(/<[^>]+>/g, '') });
-    return { delivered: false, reason: 'no-resend' };
+    return { delivered: false, reason: 'no-brevo' };
   }
-  return deliverViaResend({ from, to, subject, html, text });
+  return deliverViaBrevo({ from, to, subject, html, text });
 }
 
 module.exports = {
