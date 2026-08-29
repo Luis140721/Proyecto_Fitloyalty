@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import axios from 'axios';
 import AuthPanel from '../components/AuthPanel';
 import { api } from '../api';
 
@@ -20,6 +19,7 @@ export default function ForgotPasswordPage() {
   const [devCodeShown, setDevCodeShown] = useState('');
   const [devCodeReason, setDevCodeReason] = useState('');
 
+  const [codeDigits, setCodeDigits] = useState(Array(6).fill(''));
   const codeRefs = useRef([]);
 
   useEffect(() => {
@@ -30,16 +30,52 @@ export default function ForgotPasswordPage() {
 
   const onChange = (e) => setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
 
+  const handleCodePaste = (e) => {
+    e.preventDefault();
+    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+    if (!pasted) return;
+    const digits = Array(6).fill('');
+    for (let i = 0; i < pasted.length; i++) digits[i] = pasted[i];
+    setCodeDigits(digits);
+    const focusIdx = Math.min(pasted.length, 5);
+    codeRefs.current[focusIdx]?.focus();
+    if (error) setError('');
+  };
+
   const handleCodeChange = (idx, value) => {
-    const v = value.replace(/\D/g, '').slice(0, 1);
-    const next = (form.code + v).slice(0, 6);
-    setForm((f) => ({ ...f, code: next }));
+    const v = value.replace(/\D/g, '').slice(-1);
+    setCodeDigits((prev) => {
+      const next = [...prev];
+      next[idx] = v;
+      return next;
+    });
     if (v && idx < 5) codeRefs.current[idx + 1]?.focus();
+    if (error) setError('');
   };
 
   const handleCodeKey = (idx, e) => {
-    if (e.key === 'Backspace' && !form.code[idx] && idx > 0) {
+    if (e.key === 'Backspace') {
+      if (codeDigits[idx]) {
+        setCodeDigits((prev) => {
+          const next = [...prev];
+          next[idx] = '';
+          return next;
+        });
+      } else if (idx > 0) {
+        codeRefs.current[idx - 1]?.focus();
+        setCodeDigits((prev) => {
+          const next = [...prev];
+          next[idx - 1] = '';
+          return next;
+        });
+      }
+      e.preventDefault();
+    }
+    if (e.key === 'ArrowLeft' && idx > 0) {
       codeRefs.current[idx - 1]?.focus();
+    }
+    if (e.key === 'ArrowRight' && idx < 5) {
+      codeRefs.current[idx + 1]?.focus();
     }
   };
 
@@ -58,6 +94,7 @@ export default function ForgotPasswordPage() {
         setDevCodeReason(data.devCodeReason || 'demo');
       }
       setStep(2);
+      setCodeDigits(Array(6).fill(''));
     } catch (err) {
       setError(err.response?.data?.error || 'No se pudo enviar el código.');
     } finally {
@@ -68,12 +105,12 @@ export default function ForgotPasswordPage() {
   const verifyCode = async (e) => {
     e.preventDefault();
     setError(''); setInfo('');
-    if (form.code.length !== 6) { setError('El código debe tener 6 dígitos'); return; }
+    if (codeDigits.join('').length !== 6) { setError('El código debe tener 6 dígitos'); return; }
     setSubmitting(true);
     try {
       const { data } = await api.post('/auth/verify-reset-code', {
         email: form.email.trim(),
-        code: form.code.trim(),
+        code: codeDigits.join('').trim(),
       });
       setResetToken(data.resetToken);
       setStep(3);
@@ -198,7 +235,7 @@ export default function ForgotPasswordPage() {
               <label className="field">
                 <span className="field-label">Código de 6 dígitos</span>
                 <div className="pin-grid">
-                  {Array.from({ length: 6 }).map((_, i) => (
+                  {codeDigits.map((digit, i) => (
                     <input
                       key={i}
                       ref={(el) => (codeRefs.current[i] = el)}
@@ -207,9 +244,10 @@ export default function ForgotPasswordPage() {
                       inputMode="numeric"
                       autoComplete="one-time-code"
                       maxLength={1}
-                      value={form.code[i] || ''}
+                      value={digit}
                       onChange={(e) => handleCodeChange(i, e.target.value)}
                       onKeyDown={(e) => handleCodeKey(i, e)}
+                      onPaste={i === 0 ? handleCodePaste : undefined}
                       aria-label={`Dígito ${i + 1}`}
                     />
                   ))}
