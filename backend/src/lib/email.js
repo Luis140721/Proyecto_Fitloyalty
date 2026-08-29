@@ -3,19 +3,17 @@
  *
  * Wrapper de envio de correos para FitLoyalty.
  *
- * Transporte: Brevo SMTP relay con Nodemailer. Funciona en Render porque
- * usa conexion HTTPS/SMTPS estandar sin puertos bloqueados.
+ * Transporte: Brevo API HTTPS (no SMTP).
+ * Render free bloquea puertos SMTP (25, 465, 587) por spam,
+ * pero la API HTTPS (puerto 443) SI funciona.
  *
  * Variables de entorno:
- *   SMTP_HOST     -> smtp-relay.brevo.com
- *   SMTP_PORT     -> 587 (STARTTLS) o 465 (SSL)
- *   SMTP_USER     -> usuario SMTP de Brevo
- *   SMTP_PASSWORD -> password SMTP de Brevo
- *   MAIL_FROM    -> nombre + direccion del remitente
+ *   BREVO_API_KEY -> API key v3 de Brevo (xkeysib-...)
+ *   MAIL_FROM     -> "Nombre <email>" del remitente (por defecto FitLoyalty <fitloyaltysaas@gmail.com>)
  *
- * Si falta configuracion SMTP, NO envia correo real: hace fallback a consola.
+ * Si falta BREVO_API_KEY, NO envia correo real: hace fallback a consola.
  */
-const nodemailer = require('nodemailer');
+const { BrevoClient, BrevoEnvironment } = require('@getbrevo/brevo');
 
 const BRAND = {
   name: 'FitLoyalty',
@@ -38,10 +36,6 @@ function escapeHtml(s) {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#39;');
-}
-
-function escapeAttr(s) {
-  return escapeHtml(s);
 }
 
 // ---------- Layout reusable ----------
@@ -93,12 +87,10 @@ ${preheader ? `<span style="display:none;font-size:1px;color:${BRAND.bg};line-he
 // ---------- Plantillas ----------
 
 function ctaButton({ url, label }) {
-  const safeUrl = escapeAttr(url);
-  const safeLabel = escapeHtml(label);
   return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:24px 0;">
   <tr>
     <td style="border-radius:8px;background:linear-gradient(135deg,${BRAND.primary},${BRAND.primaryDark});">
-      <a href="${safeUrl}" target="_blank" style="display:inline-block;padding:14px 28px;font-size:15px;font-weight:700;color:#000;text-decoration:none;border-radius:8px;">${safeLabel}</a>
+      <a href="${url}" target="_blank" style="display:inline-block;padding:14px 28px;font-size:15px;font-weight:700;color:#000;text-decoration:none;border-radius:8px;">${escapeHtml(label)}</a>
     </td>
   </tr>
 </table>`;
@@ -174,67 +166,70 @@ function templateInviteStaff({ invitedName, invitedBy, gymName, role, acceptUrl,
   return { subject, html: baseLayout({ title: subject, preheader, body }) };
 }
 
-// ---------- Transporte ----------
+// ---------- Transporte (Brevo API HTTPS) ----------
 
-let cachedTransport = null;
+let cachedClient = null;
 
-function getTransport() {
-  if (cachedTransport !== null) return cachedTransport;
+function getClient() {
+  if (cachedClient !== null) return cachedClient;
 
-  const host = process.env.SMTP_HOST;
-  const port = parseInt(process.env.SMTP_PORT, 10) || 587;
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASSWORD;
-
-  console.log('[EMAIL] Config SMTP:', { host, port, user });
-
-  if (!host || !user || !pass) {
-    console.log('[EMAIL] FALTAN VARIABLES SMTP - usando modo consola');
-    return (cachedTransport = null);
+  const apiKey = process.env.BREVO_API_KEY;
+  if (!apiKey) {
+    console.log('[EMAIL] BREVO_API_KEY no configurada - modo consola');
+    return (cachedClient = null);
   }
 
   try {
-    cachedTransport = nodemailer.createTransport({
-      host,
-      port,
-      secure: port === 465,
-      requireTLS: port !== 465,
-      tls: { rejectUnauthorized: false },
-      connectionTimeout: 15000,
-      greetingTimeout: 15000,
-      socketTimeout: 15000,
-      auth: { user, pass },
+    cachedClient = new BrevoClient({
+      apiKey,
+      baseUrl: BrevoEnvironment.PRODUCTION,
     });
-    console.log('[EMAIL] Transport SMTP creado OK');
-    return cachedTransport;
+    console.log('[EMAIL] Cliente Brevo API inicializado');
+    return cachedClient;
   } catch (err) {
-    console.log('[EMAIL] Error creando transport:', err.message);
-    return (cachedTransport = null);
+    console.log('[EMAIL] Error creando cliente Brevo:', err.message);
+    return (cachedClient = null);
   }
 }
 
-async function sendViaSmtp({ from, to, subject, html, text }) {
-  const transport = getTransport();
-  if (!transport) {
-    console.log('[EMAIL] SMTP no disponible - modo consola');
+function parseFromAddress(from) {
+  // Acepta "Name <email@x.com>" o "email@x.com"
+  const match = from.match(/^(.+?)\s*<(.+?)>$/);
+  if (match) return { name: match[1].trim(), email: match[2].trim() };
+  return { name: 'FitLoyalty', email: from.trim() };
+}
+
+async function sendViaBrevo({ from, to, subject, html, text }) {
+  const client = getClient();
+  if (!client) {
+    console.log('[EMAIL] Cliente no disponible - modo consola');
     console.log('[EMAIL] Para:', to);
     console.log('[EMAIL] Asunto:', subject);
-    return { delivered: false, reason: 'no-smtp' };
+    return { delivered: false, reason: 'no-api' };
   }
 
+  const sender = parseFromAddress(from);
+
   try {
-    console.log('[EMAIL] Enviando a:', to);
-    const info = await transport.sendMail({ from, to, subject, html, text });
-    console.log('[EMAIL] Enviado OK, messageId:', info.messageId);
-    return { delivered: true, id: info.messageId };
+    console.log('[EMAIL] Enviando via Brevo API a:', to);
+    const result = await client.transactionalEmails.sendTransacEmail({
+      sender,
+      to: [{ email: to }],
+      subject,
+      htmlContent: html,
+      textContent: text || html.replace(/<[^>]+>/g, ''),
+    });
+    console.log('[EMAIL] Enviado OK, messageId:', result.messageId);
+    return { delivered: true, id: result.messageId };
   } catch (err) {
-    console.log('[EMAIL] Error SMTP:', err.message);
-    return { delivered: false, reason: 'smtp-error', error: err.message };
+    const detail = err.response?.body || err.response?.text || err.message;
+    console.log('[EMAIL] Error Brevo API:', typeof detail === 'string' ? detail : JSON.stringify(detail));
+    return { delivered: false, reason: 'api-error', error: err.message };
   }
 }
 
-function textVersion({ preheader, content }) {
-  return `${preheader ? preheader + '\n\n' : ''}${content}\n\n— Equipo FitLoyalty\n${BRAND.supportEmail}`;
+function textVersion({ content }) {
+  return `${content}\n\n— Equipo FitLoyalty\n${BRAND.supportEmail}`;
 }
 
 // ---------- API publica ----------
@@ -242,38 +237,35 @@ function textVersion({ preheader, content }) {
 async function sendRecoveryCode({ to, name, code, expiresMinutes = 15 }) {
   const tpl = templateRecoverCode({ name, code, expiresMinutes });
   const text = textVersion({
-    preheader: `Tu codigo de recuperacion es ${code}.`,
     content: `Hola ${name},\nRecibimos un pedido para restablecer tu contrasena.\n\nTu codigo es: ${code}\n\nExpira en ${expiresMinutes} minutos. Si no solicitaste esto, ignora este correo.`,
   });
   const from = process.env.MAIL_FROM || 'FitLoyalty <fitloyaltysaas@gmail.com>';
-  return sendViaSmtp({ from, to, subject: tpl.subject, html: tpl.html, text });
+  return sendViaBrevo({ from, to, subject: tpl.subject, html: tpl.html, text });
 }
 
 async function sendRecoveryLink({ to, name, resetUrl, expiresHours = 1 }) {
   const tpl = templateRecoverLink({ name, resetUrl, expiresHours });
   const text = textVersion({
-    preheader: 'Restablece tu contrasena.',
     content: `Hola ${name},\nRecibiste este correo porque pediste restablecer tu contrasena.\n\nEntra a este enlace para crear una nueva (expira en ${expiresHours}h):\n${resetUrl}\n\nSi no pediste esto, ignora este correo.`,
   });
   const from = process.env.MAIL_FROM || 'FitLoyalty <fitloyaltysaas@gmail.com>';
-  return sendViaSmtp({ from, to, subject: tpl.subject, html: tpl.html, text });
+  return sendViaBrevo({ from, to, subject: tpl.subject, html: tpl.html, text });
 }
 
 async function sendStaffInvite({ to, invitedName, invitedBy, gymName, role, acceptUrl, expiresDays = 7 }) {
   const tpl = templateInviteStaff({ invitedName, invitedBy, gymName, role, acceptUrl, expiresDays });
   const text = textVersion({
-    preheader: `${invitedBy} te invito a FitLoyalty como ${role} en ${gymName}.`,
     content: `Hola ${invitedName},\n${invitedBy} te invito a FitLoyalty como ${role} en ${gymName}.\n\nCrea tu contrasena aqui (link valido ${expiresDays} dias):\n${acceptUrl}`,
   });
   const from = process.env.MAIL_FROM || 'FitLoyalty <fitloyaltysaas@gmail.com>';
-  return sendViaSmtp({ from, to, subject: tpl.subject, html: tpl.html, text });
+  return sendViaBrevo({ from, to, subject: tpl.subject, html: tpl.html, text });
 }
 
 // Compatibilidad legacy
 async function sendMail({ to, subject, text, html }) {
   if (!text && !html) throw new Error('sendMail: ni text ni html provistos');
   const from = process.env.MAIL_FROM || 'FitLoyalty <fitloyaltysaas@gmail.com>';
-  return sendViaSmtp({ from, to, subject, html, text: text || html.replace(/<[^>]+>/g, '') });
+  return sendViaBrevo({ from, to, subject, html, text: text || html.replace(/<[^>]+>/g, '') });
 }
 
 module.exports = {
