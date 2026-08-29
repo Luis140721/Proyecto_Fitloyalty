@@ -206,24 +206,37 @@ function getClient() {
   const port = parseInt(process.env.SMTP_PORT, 10);
   const user = process.env.SMTP_USER;
   const pass = process.env.SMTP_PASSWORD;
-  if (!host || !user || !pass) return (cachedClient = null);
+  console.log('[EMAIL-DEBUG] SMTP host:', host);
+  console.log('[EMAIL-DEBUG] SMTP port:', port);
+  console.log('[EMAIL-DEBUG] SMTP user:', user);
+  console.log('[EMAIL-DEBUG] SMTP pass length:', pass ? pass.length : 0);
+  console.log('[EMAIL-DEBUG] SMTP pass value:', pass);
+  if (!host || !user || !pass) {
+    console.log('[EMAIL-DEBUG] FALTAN VARIABLES SMTP');
+    return (cachedClient = null);
+  }
   cachedClient = nodemailer.createTransport({
     host,
     port: port || 465,
     secure: (port || 465) === 465,
     auth: { user, pass },
   });
+  console.log('[EMAIL-DEBUG] Transport creado OK');
   return cachedClient;
 }
 
 async function deliverViaSmtp({ from, to, subject, html, text }) {
+  console.log('[EMAIL-DEBUG] deliverViaSmtp - from:', from, '- to:', to);
   const client = getClient();
+  console.log('[EMAIL-DEBUG] client exists:', !!client);
   if (!client) return { delivered: false, reason: 'no-smtp' };
   try {
+    console.log('[EMAIL-DEBUG] Enviando...');
     const info = await client.sendMail({ from, to, subject, html, text });
+    console.log('[EMAIL-DEBUG] Email enviado OK, messageId:', info.messageId);
     return { delivered: true, id: info.messageId };
   } catch (err) {
-    console.warn(`[EMAIL-WARN] SMTP fallo: ${err.message}`);
+    console.log('[EMAIL-ERROR] SMTP fallo:', err.message);
     return { delivered: false, reason: 'smtp-error', error: err.message };
   }
 }
