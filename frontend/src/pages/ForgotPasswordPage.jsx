@@ -1,3 +1,15 @@
+/**
+ * ForgotPasswordPage.jsx
+ *
+ * Recuperación de contraseña con inputs de PIN de 6 dígitos.
+ *
+ * Características:
+ * - Pegar (Ctrl+V / Cmd+V) un código de 6 dígitos lo distribuye automáticamente
+ * - Backspace: si la casilla tiene borra ese dígito; si está vacía salta a la anterior
+ * - Flechas izquierda/derecha para navegar
+ * - Tuteo exclusivo (tú, tu, tuya). Sin voseo.
+ */
+
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import AuthPanel from '../components/AuthPanel';
@@ -5,7 +17,7 @@ import { api } from '../api';
 
 const STEPS = [
   { id: 1, title: 'Tu correo',     desc: 'Te enviaremos un código de 6 dígitos.' },
-  { id: 2, title: 'Verifica',      desc: 'Ingrésalo abajo. Vence en 15 minutos.' },
+  { id: 2, title: 'Verifica',      desc: 'Ingresalo abajo. Vence en 15 minutos.' },
   { id: 3, title: 'Nueva clave',   desc: 'Mínimo 6 caracteres y un número.' },
 ];
 
@@ -30,31 +42,44 @@ export default function ForgotPasswordPage() {
 
   const onChange = (e) => setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
 
+  /* ----- Pegado: distribuye los 6 dígitos en los 6 recuadros ----- */
   const handleCodePaste = (e) => {
     e.preventDefault();
     const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
-    if (!pasted) return;
+    if (!pasted || pasted.length === 0) return;
+    // Llenar el array: si pegaron menos de 6, los que sobran se quedan vacíos
     const digits = Array(6).fill('');
     for (let i = 0; i < pasted.length; i++) digits[i] = pasted[i];
     setCodeDigits(digits);
+    // Mover foco al siguiente input después del último dígito pegado
     const focusIdx = Math.min(pasted.length, 5);
-    codeRefs.current[focusIdx]?.focus();
-    if (error) setError('');
+    if (codeRefs.current[focusIdx]) {
+      codeRefs.current[focusIdx].focus();
+    }
+    setError('');
   };
 
+  /* ----- Escritura manual: un dígito por casilla ----- */
   const handleCodeChange = (idx, value) => {
-    const v = value.replace(/\D/g, '').slice(-1);
+    const v = value.replace(/\D/g, '').slice(-1); // solo el último carácter numérico
     setCodeDigits((prev) => {
       const next = [...prev];
       next[idx] = v;
       return next;
     });
-    if (v && idx < 5) codeRefs.current[idx + 1]?.focus();
-    if (error) setError('');
+    // Si escribió un dígito y no es la última casilla, foco la siguiente
+    if (v && idx < 5) {
+      if (codeRefs.current[idx + 1]) {
+        codeRefs.current[idx + 1].focus();
+      }
+    }
+    setError('');
   };
 
+  /* ----- Navegación con teclado ----- */
   const handleCodeKey = (idx, e) => {
     if (e.key === 'Backspace') {
+      // Si la casilla actual tiene un dígito, borra solo esa
       if (codeDigits[idx]) {
         setCodeDigits((prev) => {
           const next = [...prev];
@@ -62,23 +87,28 @@ export default function ForgotPasswordPage() {
           return next;
         });
       } else if (idx > 0) {
-        codeRefs.current[idx - 1]?.focus();
+        // Si está vacía y no es la primera, ir a la anterior y borrarla también
         setCodeDigits((prev) => {
           const next = [...prev];
           next[idx - 1] = '';
           return next;
         });
+        if (codeRefs.current[idx - 1]) {
+          codeRefs.current[idx - 1].focus();
+        }
       }
       e.preventDefault();
+      return;
     }
     if (e.key === 'ArrowLeft' && idx > 0) {
-      codeRefs.current[idx - 1]?.focus();
+      if (codeRefs.current[idx - 1]) codeRefs.current[idx - 1].focus();
     }
     if (e.key === 'ArrowRight' && idx < 5) {
-      codeRefs.current[idx + 1]?.focus();
+      if (codeRefs.current[idx + 1]) codeRefs.current[idx + 1].focus();
     }
   };
 
+  /* ----- Enviar código por correo ----- */
   const sendCode = async (e) => {
     e.preventDefault();
     setError(''); setInfo('');
@@ -86,9 +116,6 @@ export default function ForgotPasswordPage() {
     try {
       const { data } = await api.post('/auth/forgot-password', { email: form.email.trim() });
       setInfo(data.message || 'Si el correo está registrado, enviamos un código.');
-      // El backend puede devolver devCode + showCodeInUI=true cuando:
-      //  - Resend NO entregó (ej. plan free con destinatario externo)
-      //  - SHOW_DEV_CODE_IN_UI=true (modo demo / sustentación)
       if (data.showCodeInUI && data.devCode) {
         setDevCodeShown(data.devCode);
         setDevCodeReason(data.devCodeReason || 'demo');
@@ -102,6 +129,7 @@ export default function ForgotPasswordPage() {
     }
   };
 
+  /* ----- Verificar código ----- */
   const verifyCode = async (e) => {
     e.preventDefault();
     setError(''); setInfo('');
@@ -121,6 +149,7 @@ export default function ForgotPasswordPage() {
     }
   };
 
+  /* ----- Aplicar nueva contraseña ----- */
   const applyNew = async (e) => {
     e.preventDefault();
     setError(''); setInfo('');
