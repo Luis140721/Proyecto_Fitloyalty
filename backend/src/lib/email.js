@@ -201,10 +201,10 @@ function getClient() {
   if (cachedClient !== null) return cachedClient;
   const key = process.env.BREVO_API_KEY;
   if (!key) return (cachedClient = null);
-  const Brevo = require('@getbrevo/brevo');
-  let apiClient = new Brevo.ApiClient();
-  apiClient.authentications['api-key'].apiKey = key;
-  cachedClient = new Brevo.TransactionalEmailsApi(apiClient);
+  const { TransactionalEmailsApi } = require('@getbrevo/brevo');
+  const apiInstance = new TransactionalEmailsApi();
+  apiInstance.setApiKey(TransactionalEmailsApi.apiKeys['api-key'], key);
+  cachedClient = apiInstance;
   return cachedClient;
 }
 
