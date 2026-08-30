@@ -1,0 +1,55 @@
+/* ============================================================
+   EmptyState — estado vacio M3 (tema Ultraviolet)
+   Usado por components/EmptyState.jsx
+   ============================================================ */
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 6px;
+  padding: 32px 20px;
+}
+
+/* Halo circular suave detras del icono */
+.empty-state__halo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-full);
+  background: var(--primary-faint);
+  border: 1px solid var(--primary-soft);
+  margin-bottom: 6px;
+}
+
+.empty-state__icono {
+  font-size: 28px;
+  color: var(--primary);
+}
+
+.empty-state__titulo {
+  font-family: var(--font-headline);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--on-surface);
+  letter-spacing: -0.01em;
+}
+
+.empty-state__desc {
+  font-size: 13px;
+  color: var(--on-surface-variant);
+  max-width: 360px;
+  line-height: 1.5;
+}
+
+.empty-state__cta {
+  margin-top: 10px;
+}
+
+@media (max-width: 600px) {
+  .empty-state { padding: 24px 14px; }
+}
