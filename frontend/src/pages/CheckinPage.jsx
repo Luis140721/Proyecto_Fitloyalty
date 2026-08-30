@@ -1,12 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
-
-const COP = (n) => '$' + Number(n || 0).toLocaleString('es-CO');
-
-function Avatar({ name, danger = false }) {
-  const initials = (name || '?').split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase();
-  return <span className={`avatar ${danger ? 'avatar-error' : 'avatar-primary'}`}>{initials}</span>;
-}
+import EmptyState from '../components/EmptyState';
 
 export default function CheckinPage() {
   const [codigo, setCodigo]     = useState('');
@@ -206,9 +200,11 @@ export default function CheckinPage() {
           </div>
           <div style={{ padding: '8px 24px 24px', display: 'flex', flexDirection: 'column', gap: 12 }}>
             {recent.length === 0 && (
-              <div style={{ color: 'var(--on-surface-variant)', textAlign: 'center', padding: 32 }}>
-                Aún no hay check-ins hoy.
-              </div>
+              <EmptyState
+                icono="fitness_center"
+                titulo="Aún no hay check-ins hoy"
+                descripcion="Escanea el QR de un miembro o registra su entrada manual para empezar."
+              />
             )}
             {recent.map((c) => {
               const initials = (c.nombre || '?').split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase();

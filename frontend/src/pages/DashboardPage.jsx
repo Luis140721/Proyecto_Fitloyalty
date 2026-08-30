@@ -1,42 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useTrial } from '../context/TrialContext';
 import { api } from '../api';
+import EmptyState from '../components/EmptyState';
 import '../styles/admin.css';
 
 const COP = (n) => '$' + Number(n || 0).toLocaleString('es-CO');
-
-function Sparkline({ data, color = '#A855F7' }) {
-  if (!data || data.length === 0) return null;
-  const w = 600, h = 220, pad = 8;
-  const max = Math.max(...data.map((d) => d.value), 1);
-  const stepX = (w - pad * 2) / Math.max(1, data.length - 1);
-  const points = data.map((d, i) => {
-    const x = pad + i * stepX;
-    const y = h - pad - (d.value / max) * (h - pad * 2);
-    return [x, y];
-  });
-  const path = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p[0].toFixed(2)} ${p[1].toFixed(2)}`).join(' ');
-  const fill = `${path} L ${points[points.length - 1][0].toFixed(2)} ${h - pad} L ${points[0][0].toFixed(2)} ${h - pad} Z`;
-
-  return (
-    <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="chart-svg">
-      <defs>
-        <linearGradient id="grad-spark" x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.40" />
-          <stop offset="100%" stopColor={color} stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <path d={fill} fill="url(#grad-spark)" />
-      <path d={path} fill="none" stroke={color} strokeWidth="2.5" strokeLinejoin="round" />
-      {points.map(([x, y], i) => (
-        <circle key={i} cx={x} cy={y} r="3" fill={color}>
-          <title>{data[i].label}: {data[i].value}</title>
-        </circle>
-      ))}
-    </svg>
-  );
-}
 
 function BarsWeekly({ data }) {
   if (!data || data.length === 0) return null;
@@ -86,11 +55,6 @@ export default function DashboardPage() {
   }, []);
 
   const weekly = data?.weekly ?? [];
-  const max = weekly.reduce((m, d) => Math.max(m, d.count), 0) || 1;
-
-  const totalMes = useMemo(() => {
-    return (data?.proximos ?? []).reduce((acc) => acc, 0); // placeholder; el backend debería entregarlo
-  }, [data]);
 
   return (
     <>
@@ -326,8 +290,12 @@ export default function DashboardPage() {
                 </p>
               </div>
               {data.recientes.length === 0 ? (
-                <div style={{ padding: '0 24px 20px', color: 'var(--on-surface-variant)' }}>
-                  Aún no hay check-ins hoy.
+                <div style={{ padding: '0 24px 20px' }}>
+                  <EmptyState
+                    icono="qr_code_scanner"
+                    titulo="Aún no hay check-ins hoy"
+                    descripcion="Cuando registres la primera entrada del día, aparecerá aquí."
+                  />
                 </div>
               ) : (
                 <div style={{ padding: '0 24px 20px' }}>

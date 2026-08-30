@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api';
 import CardGlass from '../components/CardGlass';
 import BadgeEstado, { estadoDeMiembro } from '../components/BadgeEstado';
+import EmptyState from '../components/EmptyState';
 
 const empty = { nombre: '', documento: '', telefono: '', email: '' };
 const FILTROS = [
@@ -223,8 +224,14 @@ export default function MiembrosPage() {
             <tbody>
               {filtrados.length === 0 && !loading && (
                 <tr>
-                  <td colSpan={6} style={{ color: 'var(--on-surface-variant)', textAlign: 'center', padding: 40 }}>
-                    No hay miembros que coincidan con el filtro actual.
+                  <td colSpan={6} style={{ padding: 24 }}>
+                    <EmptyState
+                      icono="group_off"
+                      titulo="Sin miembros que mostrar"
+                      descripcion="No hay miembros que coincidan con el filtro actual."
+                      ctaLabel="Nuevo miembro"
+                      onCta={() => setOpen(true)}
+                    />
                   </td>
                 </tr>
               )}
@@ -279,7 +286,13 @@ export default function MiembrosPage() {
             En escritorio se muestra la tabla original; CSS decide cual se ve. */}
         <div className="miembros-cards">
           {filtrados.length === 0 && !loading && (
-            <p className="miembros-cards__empty">No hay miembros que coincidan con el filtro actual.</p>
+            <EmptyState
+              icono="group_off"
+              titulo="Sin miembros que mostrar"
+              descripcion="No hay miembros que coincidan con el filtro actual."
+              ctaLabel="Nuevo miembro"
+              onCta={() => setOpen(true)}
+            />
           )}
           {filtrados.map((m) => {
             const initials = (m.nombre || '?').split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase();
