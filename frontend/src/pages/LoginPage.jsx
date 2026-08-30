@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import AuthPanel from '../components/AuthPanel';
 import '../styles/login.css';
@@ -7,7 +7,6 @@ import '../styles/login.css';
 export default function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
-  const location = useLocation();
 
   const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
@@ -15,8 +14,6 @@ export default function LoginPage() {
   const [showPwd, setShowPwd]   = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError]       = useState('');
-
-  const from = location.state?.from?.pathname || '/dashboard';
 
   async function handleSubmit(e) {
     e.preventDefault();

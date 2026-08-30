@@ -30,10 +30,6 @@ function normalizeUser(u) {
 }
 
 export function AuthProvider({ children }) {
-  // Fase 1 (síncrona): si hay token, pintamos un user provisional derivado del token.
-  // Esto evita que la primera renderización de una ruta protegida decida "no user"
-  // y nos mande a /login antes de tiempo.
-  const initialToken = typeof window !== 'undefined' ? localStorage.getItem('fitloyalty_token') : null;
   const [user, setUser]       = useState(null);
   const [loading, setLoading] = useState(true);
   const [ready, setReady]     = useState(false);
