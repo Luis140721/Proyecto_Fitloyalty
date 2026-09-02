@@ -375,3 +375,18 @@
 .strength.l-2 span:nth-child(-n+2) { background: var(--warning); }
 .strength.l-3 span:nth-child(-n+3) { background: var(--primary); }
 .strength.l-4 span { background: var(--success); }
+
+/* ============================================================
+   RESPONSIVE — correcciones moviles
+
+   A 375px "Recordarme en este equipo" y "¿Olvidaste tu clave?"
+   quedaban pegados sin separacion (justify-content:space-between
+   sin gap ni wrap). Se permite el salto de linea.
+   ============================================================ */
+@media (max-width: 460px) {
+  .auth-form-actions {
+    flex-wrap: wrap;
+    gap: 8px 14px;
+  }
+  .auth-checkbox { flex: 1 1 auto; }
+}
