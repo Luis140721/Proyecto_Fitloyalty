@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import ErrorBoundary from './components/ErrorBoundary';
 import './styles/global.css';
+import './styles/motion.css';
 import './styles/admin.css';
 import './styles/errors.css';
 

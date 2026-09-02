@@ -12,6 +12,11 @@ import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import AcceptInvitePage from './pages/AcceptInvitePage';
 import NotFoundPage from './pages/NotFoundPage';
 
+import TerminosPage from './pages/TerminosPage';
+import PrivacidadPage from './pages/PrivacidadPage';
+import PoliticaDatosPage from './pages/PoliticaDatosPage';
+import EliminarCuentaPage from './pages/EliminarCuentaPage';
+
 import DashboardPage from './pages/DashboardPage';
 import MiembrosPage from './pages/MiembrosPage';
 import CheckinPage from './pages/CheckinPage';
@@ -32,6 +37,12 @@ export default function App() {
             <Route path="/register-owner" element={<RegisterOwnerPage />} />
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
             <Route path="/accept-invite" element={<AcceptInvitePage />} />
+
+            {/* Legal pages */}
+            <Route path="/legal/terminos" element={<TerminosPage />} />
+            <Route path="/legal/privacidad" element={<PrivacidadPage />} />
+            <Route path="/legal/datos" element={<PoliticaDatosPage />} />
+            <Route path="/legal/eliminar-cuenta" element={<EliminarCuentaPage />} />
 
             {/* Admin-protected routes */}
             <Route

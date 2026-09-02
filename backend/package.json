@@ -9,6 +9,7 @@
     "seed": "node src/db/seed_pg.js"
   },
   "dependencies": {
+    "@getbrevo/brevo": "^6.0.3",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
@@ -16,7 +17,7 @@
     "express-rate-limit": "^7.5.1",
     "fitloyalty": "file:..",
     "jsonwebtoken": "^9.0.2",
-    "nodemailer": "^9.0.0",
+    "nodemailer": "^9.0.6",
     "pg": "^8.21.0",
     "resend": "^6.21.0",
     "zod": "^3.25.76"

@@ -1,0 +1,110 @@
+# FitLoyalty — Docker Compose (desarrollo local integral)
+#
+# Levanta toda la pila local: Postgres + Backend + Frontend.
+# Pensado para Windows + Docker Desktop (WSL2), Linux y macOS.
+#
+# Comandos:
+#   docker compose up --build              # arranca todo en primer plano (logs en vivo)
+#   docker compose up --build -d           # arranca todo en background (recomendado)
+#   docker compose down                     # para y elimina contenedores/volumenes huerfanos
+#   docker compose logs -f backend          # ver logs del backend a tiempo real
+#   docker compose ps                       # ver el estado de los servicios
+#   docker compose exec db psql -U fitloyalty -d fitloyalty
+#
+# Las variables sensibles (JWT_SECRET, claves de mail) NO van aqui. Van en .env en la
+# raiz del proyecto (NO commitear). Ver .env.example.
+#
+# Si ya tienes Docker corriendo el stack y quieres empezar de cero:
+#   docker compose down -v && docker compose up --build -d
+
+name: fitloyalty
+
+services:
+
+  # ----------------------------------------------------------------------
+  # Postgres 16 alpine: BD local con datos persistidos en el volumen `pgdata`.
+  # Healthcheck evita que el backend arranque antes de que Postgres acepte conexiones.
+  # ----------------------------------------------------------------------
+  db:
+    image: postgres:16-alpine
+    container_name: fitloyalty_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER:     ${POSTGRES_USER:-fitloyalty}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-fitlocal}
+      POSTGRES_DB:       ${POSTGRES_DB:-fitloyalty}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-fitloyalty} -d ${POSTGRES_DB:-fitloyalty}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ----------------------------------------------------------------------
+  # Backend Node 24 + Express. Espera a db, luego corre migraciones idempotentes
+  # y levanta `npm start` (node src/index.js).
+  # ----------------------------------------------------------------------
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: fitloyalty_backend
+    restart: unless-stopped
+    environment:
+      NODE_ENV:     ${NODE_ENV:-production}
+      PORT:         ${PORT:-3001}
+      DATABASE_URL: postgres://${POSTGRES_USER:-fitloyalty}:${POSTGRES_PASSWORD:-fitlocal}@db:5432/${POSTGRES_DB:-fitloyalty}
+      JWT_SECRET:   ${JWT_SECRET:?JWT_SECRET es obligatorio, define uno en .env}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+      SUPPORT_EMAIL: ${SUPPORT_EMAIL:-fitloyaltysaas@gmail.com}
+      SUPPORT_TRIAL_DAYS: ${SUPPORT_TRIAL_DAYS:-7}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      # Postgres local en compose NO usa SSL; Render/Neon si lo usan.
+      DB_SSL: ${DB_SSL:-false}
+    ports:
+      - "${PORT:-3001}:3001"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://127.0.0.1:3001/api/healthz', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))\""]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ----------------------------------------------------------------------
+  # Frontend: build de Vite servido por nginx. nginx ademas proxea /api/* al
+  # backend, asi el navegador solo habla con :5173 y no hay CORS.
+  # ----------------------------------------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # VITE_API_BASE se inyecta al BUILD. Si lo dejas vacio, las llamadas
+        # usan ruta relativa y caen en el proxy de nginx (recomendado).
+        VITE_API_BASE: ${VITE_API_BASE:-}
+    container_name: fitloyalty_frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-5173}:80"
+    depends_on:
+      backend:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1/ >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:
+    name: fitloyalty_pgdata
