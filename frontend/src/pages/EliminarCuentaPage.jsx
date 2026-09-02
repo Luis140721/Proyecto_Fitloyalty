@@ -23,7 +23,7 @@ export default function EliminarCuentaPage() {
       logout();
       setDone(true);
     } catch (err) {
-      setError(err.response?.data?.error || 'No se pudo procesar la solicitud. Escríbenos a fitloyaltysaas@gmail.com.');
+      setError(err.message || 'No se pudo procesar la solicitud. Escríbenos a fitloyaltysaas@gmail.com.');
     } finally {
       setSubmitting(false);
     }

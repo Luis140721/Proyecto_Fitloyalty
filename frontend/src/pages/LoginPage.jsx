@@ -28,7 +28,7 @@ export default function LoginPage() {
       const target = isAdmin ? '/admin/dashboard' : '/admin/checkin';
       navigate(target, { replace: true });
     } catch (err) {
-      setError(err.response?.data?.error || err.message || 'No se pudo iniciar sesión');
+      setError(err.message || 'No se pudo iniciar sesión');
     } finally {
       setSubmitting(false);
     }
