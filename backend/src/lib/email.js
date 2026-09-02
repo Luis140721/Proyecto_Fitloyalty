@@ -3,32 +3,28 @@
  *
  * Wrapper de envio de correos para FitLoyalty.
  *
- * Transporte: Resend (API HTTPS, no SMTP). Render free bloquea SMTP saliente,
- * por eso elegimos la API directa. Resend tiene plan free generoso.
- *
- * Branding: cada helper expone una funcion de plantilla para un tipo de correo.
- * El HTML/CSS esta inline (sin imagenes externas) para que llegue a Gmail,
- * Outlook, Apple Mail y webmail sin warnings.
+ * Transporte: Brevo API HTTPS (no SMTP).
+ * Render free bloquea puertos SMTP pero la API HTTPS funciona.
  *
  * Variables de entorno:
- *   RESEND_API_KEY  -> requerido para enviar correo real
- *   MAIL_FROM       -> nombre + direccion del remitente (ej: 'FitLoyalty <onboarding@resend.dev>')
+ *   BREVO_API_KEY -> API key v3 de Brevo (xkeysib-...)
+ *   MAIL_FROM     -> "Nombre <email>" del remitente
  *
- * Si falta RESEND_API_KEY, NO envia correo real: hace fallback a consola
- * (modo dev). El caller recibe { delivered:false, reason:'no-resend' }.
+ * Si falta BREVO_API_KEY, hace fallback a consola.
+ * TODO: todos los textos usan tuteo obligatorio (tú, tu, tuya). Sin voseo.
  */
-const { Resend } = require('resend');
+const { BrevoClient, BrevoEnvironment } = require('@getbrevo/brevo');
 
 const BRAND = {
   name: 'FitLoyalty',
   primary: '#A855F7',
   primaryDark: '#7C3AED',
+  accent: '#34D399',
   bg: '#0E0B16',
   cardBg: '#18102A',
   border: '#2A1E3F',
   text: '#F5F2FF',
   textMuted: '#CFC2D6',
-  logoUrl: 'https://fitloyalty-zeta.vercel.app/logo-fitloyalty.svg',
   supportEmail: process.env.SUPPORT_EMAIL || 'fitloyaltysaas@gmail.com',
 };
 
@@ -36,62 +32,57 @@ const BRAND = {
 function escapeHtml(s) {
   if (s === null || s === undefined) return '';
   return String(s)
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;');
-}
-
-function escapeAttr(s) {
-  return escapeHtml(s);
-}
-
-function fmtDate(d) {
-  try {
-    return new Date(d).toLocaleString('es-CO', {
-      day: 'numeric', month: 'long', year: 'numeric',
-      hour: '2-digit', minute: '2-digit',
-    });
-  } catch { return String(d); }
+    .replaceAll('&', '&')
+    .replaceAll('<', '<')
+    .replaceAll('>', '>')
+    .replaceAll('"', '"')
+    .replaceAll("'", "'");
 }
 
 // ---------- Layout reusable ----------
 function baseLayout({ title, preheader, body }) {
   return `<!DOCTYPE html>
-<html lang="es" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+<html lang="es">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="color-scheme" content="dark" />
-<meta name="supported-color-schemes" content="dark" />
 <title>${escapeHtml(title)}</title>
 </head>
-<body style="margin:0;padding:0;background:${BRAND.bg};color:${BRAND.text};font-family:'Inter','Helvetica Neue',Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+<body style="margin:0;padding:0;background:${BRAND.bg};color:${BRAND.text};font-family:'Inter','Helvetica Neue',Arial,sans-serif;">
 ${preheader ? `<span style="display:none;font-size:1px;color:${BRAND.bg};line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">${escapeHtml(preheader)}</span>` : ''}
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${BRAND.bg};">
   <tr>
-    <td align="center" style="padding:32px 16px;">
+    <td align="center" style="padding:40px 20px;">
       <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;width:100%;">
+        <!-- Header -->
         <tr>
-          <td style="padding:0 0 24px;text-align:center;">
-            <span style="display:inline-block;width:40px;height:40px;line-height:40px;border-radius:8px;background:linear-gradient(135deg,${BRAND.primary},${BRAND.primaryDark});color:#000;font-weight:900;font-size:18px;letter-spacing:-0.02em;vertical-align:middle;">FL</span>
-            <span style="font-size:18px;font-weight:800;letter-spacing:-0.02em;color:${BRAND.text};margin-left:10px;vertical-align:middle;">${escapeHtml(BRAND.name)}</span>
+          <td style="padding:0 0 28px;text-align:center;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto 12px;">
+              <tr>
+                <td style="width:44px;height:44px;border-radius:12px;background:linear-gradient(135deg,${BRAND.primary},${BRAND.primaryDark});text-align:center;vertical-align:middle;">
+                  <span style="display:inline-block;width:44px;height:44px;line-height:44px;font-weight:900;font-size:20px;color:#000;letter-spacing:-0.02em;">FL</span>
+                </td>
+              </tr>
+            </table>
+            <span style="font-size:20px;font-weight:800;letter-spacing:-0.03em;color:${BRAND.text};">${escapeHtml(BRAND.name)}</span>
           </td>
         </tr>
+        <!-- Card -->
         <tr>
-          <td style="background:${BRAND.cardBg};border:1px solid ${BRAND.border};border-radius:12px;padding:32px;">
+          <td style="background:${BRAND.cardBg};border:1px solid ${BRAND.border};border-radius:16px;padding:36px 40px;">
             ${body}
           </td>
         </tr>
+        <!-- Footer -->
         <tr>
-          <td style="padding:24px 16px 0;text-align:center;">
-            <p style="margin:0 0 8px;font-size:12px;color:${BRAND.textMuted};">
-              ¿Necesitas ayuda? Escríbenos a
+          <td style="padding:28px 20px 0;text-align:center;">
+            <p style="margin:0 0 6px;font-size:13px;color:${BRAND.textMuted};">
+              ¿Necesitas ayuda? Escribenos a
               <a href="mailto:${BRAND.supportEmail}" style="color:${BRAND.primary};text-decoration:none;">${BRAND.supportEmail}</a>
             </p>
-            <p style="margin:0;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:${BRAND.textMuted};opacity:0.6;">
-              © ${new Date().getFullYear()} ${BRAND.name} · Ley 1581/2012
+            <p style="margin:0;font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:${BRAND.textMuted};opacity:0.5;">
+              © ${new Date().getFullYear()} ${BRAND.name} — CRM para gimnasios
             </p>
           </td>
         </tr>
@@ -103,204 +94,191 @@ ${preheader ? `<span style="display:none;font-size:1px;color:${BRAND.bg};line-he
 </html>`;
 }
 
-function ctaButton({ url, label }) {
-  const safeUrl = escapeAttr(url);
-  const safeLabel = escapeHtml(label);
-  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:24px 0;">
+// ---------- Plantillas ----------
+
+function ctaButton({ url, label, accent }) {
+  const bg = accent ? `linear-gradient(135deg,${BRAND.accent},#10B981)` : `linear-gradient(135deg,${BRAND.primary},${BRAND.primaryDark})`;
+  const color = accent ? '#000' : '#000';
+  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:28px 0 0;">
   <tr>
-    <td style="border-radius:8px;background:linear-gradient(135deg,${BRAND.primary},${BRAND.primaryDark});box-shadow:0 6px 18px rgba(168,85,247,0.35);">
-      <a href="${safeUrl}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:14px 28px;font-size:15px;font-weight:700;color:#000;text-decoration:none;border-radius:8px;letter-spacing:-0.01em;">${safeLabel}</a>
+    <td style="border-radius:10px;background:${bg};">
+      <a href="${url}" target="_blank" style="display:inline-block;padding:15px 32px;font-size:16px;font-weight:700;color:${color};text-decoration:none;border-radius:10px;letter-spacing:0.01em;">${escapeHtml(label)}</a>
     </td>
   </tr>
 </table>`;
 }
 
-// ---------- Plantillas ----------
+function divider() {
+  return `<div style="height:1px;background:${BRAND.border};margin:24px 0;"></div>`;
+}
 
+// ---------- Plantilla: recuperacion por codigo ----------
 function templateRecoverCode({ name, code, expiresMinutes = 15 }) {
-  const subject = `${code} es tu código de recuperación — FitLoyalty`;
-  const preheader = `Tu código temporal expira en ${expiresMinutes} minutos.`;
+  const subject = `${code} — Tu codigo de recuperacion FitLoyalty`;
+  const preheader = `Restablece tu contrasena en ${expiresMinutes} minutos.`;
   const body = `
-    <h1 style="margin:0 0 8px;font-size:24px;font-weight:800;letter-spacing:-0.02em;color:${BRAND.text};">
-      Restablecé tu contraseña
-    </h1>
-    <p style="margin:0 0 20px;color:${BRAND.textMuted};font-size:15px;line-height:1.6;">
-      Hola <strong style="color:${BRAND.text};">${escapeHtml(name)}</strong>, recibimos un pedido para restablecer la contraseña de tu cuenta.
+    <p style="margin:0 0 6px;font-size:12px;letter-spacing:0.1em;text-transform:uppercase;color:${BRAND.primary};font-weight:600;">Recuperacion de cuenta</p>
+    <h1 style="margin:0 0 12px;font-size:28px;font-weight:800;color:${BRAND.text};letter-spacing:-0.03em;">¡Hola, ${escapeHtml(name)}!</h1>
+    <p style="margin:0 0 28px;font-size:16px;line-height:1.7;color:${BRAND.textMuted};">
+      Recibimos tu solicitud para restablecer la contrasena de tu cuenta en <strong style="color:${BRAND.text};">FitLoyalty</strong>.
+      Usa el codigo abajo para continuar.
     </p>
-    <p style="margin:0 0 8px;color:${BRAND.textMuted};font-size:14px;">Ingresa este código en la pantalla de recuperación:</p>
-    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:12px 0 16px;width:100%;">
-      <tr>
-        <td align="center" style="padding:16px;background:${BRAND.bg};border:1px dashed ${BRAND.primary};border-radius:8px;">
-          <span style="font-family:'JetBrains Mono',ui-monospace,monospace;font-size:32px;font-weight:700;letter-spacing:8px;color:${BRAND.text};">${escapeHtml(code)}</span>
-        </td>
-      </tr>
-    </table>
-    <p style="margin:0 0 16px;color:${BRAND.textMuted};font-size:13px;">
-      ⏱️ Este código expira en <strong style="color:${BRAND.text};">${expiresMinutes} minutos</strong>. Si no lo usás en ese tiempo, podés pedir uno nuevo.
-    </p>
-    <p style="margin:0;color:${BRAND.textMuted};font-size:13px;line-height:1.6;">
-      Si no fuiste vos quien hizo este pedido, podés ignorar este correo. Nadie podrá acceder a tu cuenta sin este código.
-    </p>
+    <div style="background:${BRAND.bg};border:2px dashed ${BRAND.primary};border-radius:12px;padding:24px;text-align:center;margin:8px 0 8px;">
+      <p style="margin:0 0 8px;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:${BRAND.textMuted};">Tu codigo de verificacion</p>
+      <p style="margin:0;font-family:ui-monospace,'Courier New',monospace;font-size:40px;font-weight:700;letter-spacing:12px;color:${BRAND.text};">${escapeHtml(code)}</p>
+    </div>
+    ${divider()}
+    <div style="display:flex;align-items:center;gap:10px;margin:0 0 8px;">
+      <span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:${BRAND.primary}22;color:${BRAND.primary};font-size:14px;">⏱</span>
+      <p style="margin:0;font-size:14px;color:${BRAND.textMuted};">Este codigo expira en <strong style="color:${BRAND.text};">${expiresMinutes} minutos</strong></p>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;margin:0;">
+      <span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:${BRAND.accent}22;color:${BRAND.accent};font-size:14px;">🛡</span>
+      <p style="margin:0;font-size:14px;color:${BRAND.textMuted};">Si no fuiste tú quien pidio el cambio, ignora este correo. Tu cuenta sigue segura.</p>
+    </div>
   `;
   return { subject, html: baseLayout({ title: subject, preheader, body }) };
 }
 
+// ---------- Plantilla: recuperacion por enlace ----------
 function templateRecoverLink({ name, resetUrl, expiresHours = 1 }) {
-  const subject = 'Restablecé tu contraseña — FitLoyalty';
-  const preheader = `Tenés ${expiresHours} hora(s) para restablecer tu clave.`;
+  const subject = 'Restablece tu contrasena — FitLoyalty';
+  const preheader = `Tienes ${expiresHours} hora(s) para crear una nueva clave.`;
   const body = `
-    <h1 style="margin:0 0 8px;font-size:24px;font-weight:800;letter-spacing:-0.02em;color:${BRAND.text};">Restablecé tu contraseña</h1>
-    <p style="margin:0 0 20px;color:${BRAND.textMuted};font-size:15px;line-height:1.6;">
-      Hola <strong style="color:${BRAND.text};">${escapeHtml(name)}</strong>, recibiste este correo porque pediste restablecer la contraseña de tu cuenta.
+    <p style="margin:0 0 6px;font-size:12px;letter-spacing:0.1em;text-transform:uppercase;color:${BRAND.primary};font-weight:600;">Recuperacion de cuenta</p>
+    <h1 style="margin:0 0 12px;font-size:28px;font-weight:800;color:${BRAND.text};letter-spacing:-0.03em;">¡Hola, ${escapeHtml(name)}!</h1>
+    <p style="margin:0 0 28px;font-size:16px;line-height:1.7;color:${BRAND.textMuted};">
+      Recibimos tu solicitud para restablecer la contrasena de tu cuenta en <strong style="color:${BRAND.text};">FitLoyalty</strong>.
+      Haz clic en el boton para crear una nueva clave.
     </p>
-    ${ctaButton({ url: resetUrl, label: 'Restablecer contraseña' })}
-    <p style="margin:16px 0;color:${BRAND.textMuted};font-size:13px;">O copiá y pegá este enlace en tu navegador:</p>
-    <p style="margin:0 0 24px;padding:12px;background:${BRAND.bg};border-radius:8px;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;color:${BRAND.primary};word-break:break-all;">
-      ${escapeHtml(resetUrl)}
-    </p>
-    <p style="margin:0;color:${BRAND.textMuted};font-size:13px;">
-      ⏱️ Este enlace expira en <strong style="color:${BRAND.text};">${expiresHours} hora(s)</strong>. Si no pediste esto, ignora este mensaje.
-    </p>
+    ${ctaButton({ url: resetUrl, label: 'Crear nueva contrasena' })}
+    <p style="margin:24px 0 0;font-size:12px;color:${BRAND.textMuted};">Si no funciona, copia y pega este enlace en tu navegador:</p>
+    <p style="margin:4px 0 0;padding:12px 16px;background:${BRAND.bg};border-radius:8px;font-family:ui-monospace,monospace;font-size:11px;color:${BRAND.primary};word-break:break-all;">${escapeHtml(resetUrl)}</p>
+    ${divider()}
+    <div style="display:flex;align-items:center;gap:10px;margin:0;">
+      <span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:${BRAND.primary}22;color:${BRAND.primary};font-size:14px;">⏱</span>
+      <p style="margin:0;font-size:14px;color:${BRAND.textMuted};">Este enlace expira en <strong style="color:${BRAND.text};">${expiresHours} hora(s)</strong>. Si no lo usas, puedes pedir uno nuevo.</p>
+    </div>
   `;
   return { subject, html: baseLayout({ title: subject, preheader, body }) };
 }
 
+// ---------- Plantilla: invitacion a staff ----------
 function templateInviteStaff({ invitedName, invitedBy, gymName, role, acceptUrl, expiresDays = 7 }) {
-  const subject = `${invitedBy} te invitó a FitLoyalty — ${gymName}`;
-  const preheader = `Aceptá la invitación y empezá a gestionar el gimnasio.`;
+  const subject = `Te invitaron a FitLoyalty — ${gymName}`;
+  const preheader = `${invitedBy} te suma al equipo de ${gymName} en FitLoyalty.`;
   const roleLabel = role === 'ADMINISTRADOR' ? 'Administrador' : role === 'ENTRENADOR' ? 'Entrenador' : 'Recepcionista';
+  const roleEmoji = role === 'ADMINISTRADOR' ? '👑' : role === 'ENTRENADOR' ? '💪' : '🎫';
   const body = `
-    <h1 style="margin:0 0 8px;font-size:24px;font-weight:800;letter-spacing:-0.02em;color:${BRAND.text};">Sos parte del equipo</h1>
-    <p style="margin:0 0 20px;color:${BRAND.textMuted};font-size:15px;line-height:1.6;">
-      Hola <strong style="color:${BRAND.text};">${escapeHtml(invitedName)}</strong>, <strong style="color:${BRAND.text};">${escapeHtml(invitedBy)}</strong> te invitó a FitLoyalty como <strong style="color:${BRAND.primary};">${escapeHtml(roleLabel)}</strong> en <strong style="color:${BRAND.text};">${escapeHtml(gymName)}</strong>.
+    <p style="margin:0 0 6px;font-size:12px;letter-spacing:0.1em;text-transform:uppercase;color:${BRAND.primary};font-weight:600;">Nueva invitacion</p>
+    <h1 style="margin:0 0 12px;font-size:28px;font-weight:800;color:${BRAND.text};letter-spacing:-0.03em;">¡Bienvenido, ${escapeHtml(invitedName)}!</h1>
+    <p style="margin:0 0 8px;font-size:16px;line-height:1.7;color:${BRAND.textMuted};">
+      <strong style="color:${BRAND.text};">${escapeHtml(invitedBy)}</strong> te invita a unirte al equipo de <strong style="color:${BRAND.text};">${escapeHtml(gymName)}</strong> en FitLoyalty.
     </p>
-    <p style="margin:0 0 20px;color:${BRAND.textMuted};font-size:14px;line-height:1.6;">
-      Para empezar, creá tu contraseña. Vas a poder gestionar miembros, registrar check-ins y ver los indicadores del gimnasio.
+    <div style="background:${BRAND.bg};border:1px solid ${BRAND.border};border-radius:12px;padding:20px;margin:8px 0;">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+        <tr>
+          <td style="width:44px;text-align:center;vertical-align:top;padding-right:16px;">
+            <span style="font-size:28px;">${roleEmoji}</span>
+          </td>
+          <td>
+            <p style="margin:0 0 2px;font-size:12px;letter-spacing:0.08em;text-transform:uppercase;color:${BRAND.textMuted};">Tu rol</p>
+            <p style="margin:0;font-size:18px;font-weight:700;color:${BRAND.text};">${escapeHtml(roleLabel)}</p>
+          </td>
+        </tr>
+      </table>
+    </div>
+    <p style="margin:0 0 28px;font-size:15px;line-height:1.6;color:${BRAND.textMuted};">
+      Como parte del equipo podras gestionar miembros, registrar check-ins y acompanhar el rendimiento del gimnasio.
     </p>
-    ${ctaButton({ url: acceptUrl, label: 'Aceptar invitación' })}
-    <p style="margin:16px 0;color:${BRAND.textMuted};font-size:13px;">O copiá y pegá este enlace en tu navegador:</p>
-    <p style="margin:0 0 24px;padding:12px;background:${BRAND.bg};border-radius:8px;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;color:${BRAND.primary};word-break:break-all;">
-      ${escapeHtml(acceptUrl)}
-    </p>
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:16px 0;">
-      <tr>
-        <td style="padding:12px;background:${BRAND.bg};border-left:3px solid ${BRAND.primary};border-radius:6px;">
-          <p style="margin:0;font-size:13px;color:${BRAND.textMuted};"><strong style="color:${BRAND.text};">Tu rol:</strong> ${escapeHtml(roleLabel)}</p>
-        </td>
-      </tr>
-    </table>
-    <p style="margin:0;color:${BRAND.textMuted};font-size:13px;">
-      ⏱️ Esta invitación expira en <strong style="color:${BRAND.text};">${expiresDays} días</strong>.
-    </p>
+    ${ctaButton({ url: acceptUrl, label: 'Aceptar invitacion y crear cuenta' })}
+    <p style="margin:24px 0 0;font-size:12px;color:${BRAND.textMuted};">Si no funciona, copia y pega este enlace:</p>
+    <p style="margin:4px 0 0;padding:12px 16px;background:${BRAND.bg};border-radius:8px;font-family:ui-monospace,monospace;font-size:11px;color:${BRAND.primary};word-break:break-all;">${escapeHtml(acceptUrl)}</p>
+    ${divider()}
+    <div style="display:flex;align-items:center;gap:10px;margin:0;">
+      <span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:${BRAND.primary}22;color:${BRAND.primary};font-size:14px;">⏱</span>
+      <p style="margin:0;font-size:14px;color:${BRAND.textMuted};">Esta invitacion expira en <strong style="color:${BRAND.text};">${expiresDays} dias</strong>.</p>
+    </div>
   `;
   return { subject, html: baseLayout({ title: subject, preheader, body }) };
 }
 
 // ---------- Transporte ----------
-
 let cachedClient = null;
+
 function getClient() {
   if (cachedClient !== null) return cachedClient;
-  const key = process.env.RESEND_API_KEY;
-  if (!key) return (cachedClient = null);
-  cachedClient = new Resend(key);
-  return cachedClient;
-}
-
-async function deliverViaResend({ from, to, subject, html, text }) {
-  const client = getClient();
-  if (!client) return { delivered: false, reason: 'no-resend' };
+  const apiKey = process.env.BREVO_API_KEY;
+  if (!apiKey) { console.log('[EMAIL] BREVO_API_KEY no configurada'); return (cachedClient = null); }
   try {
-    const { data, error } = await client.emails.send({ from, to, subject, html, text });
-    if (error) {
-      console.warn(`[EMAIL-WARN] Resend fallo: ${error.message || JSON.stringify(error)}`);
-      return { delivered: false, reason: 'resend-error', error: error.message };
-    }
-    return { delivered: true, id: data?.id };
+    cachedClient = new BrevoClient({ apiKey, baseUrl: BrevoEnvironment.PRODUCTION });
+    console.log('[EMAIL] Cliente Brevo API inicializado');
+    return cachedClient;
   } catch (err) {
-    console.warn(`[EMAIL-WARN] Resend excepcion: ${err.message}`);
-    return { delivered: false, reason: 'resend-error', error: err.message };
+    console.log('[EMAIL] Error cliente Brevo:', err.message);
+    return (cachedClient = null);
   }
 }
 
-function fallbackConsole({ to, subject, text }) {
-  console.log('\n[EMAIL-DEV] ----------------------------------------');
-  console.log(`[EMAIL-DEV] Para:   ${to}`);
-  console.log(`[EMAIL-DEV] Asunto: ${subject}`);
-  console.log(`[EMAIL-DEV] Cuerpo:\n${text || '(sin version texto)'}`);
-  console.log('[EMAIL-DEV] ----------------------------------------\n');
-  return { delivered: false, reason: 'no-resend' };
+function parseFromAddress(from) {
+  const match = from.match(/^(.+?)\s*<(.+?)>$/);
+  if (match) return { name: match[1].trim(), email: match[2].trim() };
+  return { name: 'FitLoyalty', email: from.trim() };
 }
 
-function textVersion({ preheader, content }) {
-  return `${preheader ? preheader + '\n\n' : ''}${content}\n\n— Equipo FitLoyalty\n${BRAND.supportEmail}\n© ${new Date().getFullYear()} FitLoyalty`;
+async function sendViaBrevo({ from, to, subject, html, text }) {
+  const client = getClient();
+  if (!client) {
+    console.log('[EMAIL] Modo consola - Para:', to, 'Asunto:', subject);
+    return { delivered: false, reason: 'no-api' };
+  }
+  try {
+    const sender = parseFromAddress(from);
+    console.log('[EMAIL] Enviando a:', to);
+    const result = await client.transactionalEmails.sendTransacEmail({
+      sender, to: [{ email: to }], subject,
+      htmlContent: html,
+      textContent: text || html.replace(/<[^>]+>/g, ''),
+    });
+    console.log('[EMAIL] Enviado OK:', result.messageId);
+    return { delivered: true, id: result.messageId };
+  } catch (err) {
+    const detail = err.response?.body || err.response?.text || err.message;
+    console.log('[EMAIL] Error Brevo:', typeof detail === 'string' ? detail : JSON.stringify(detail));
+    return { delivered: false, reason: 'api-error', error: err.message };
+  }
+}
+
+function textVersion({ content }) {
+  return `${content}\n\n— Equipo FitLoyalty\n${BRAND.supportEmail}`;
 }
 
 // ---------- API publica ----------
-
 async function sendRecoveryCode({ to, name, code, expiresMinutes = 15 }) {
   const tpl = templateRecoverCode({ name, code, expiresMinutes });
-  const text = textVersion({
-    preheader: `Tu código de recuperación es ${code}.`,
-    content: `Hola ${name},\nRecibimos un pedido para restablecer tu contraseña.\n\nTu código es: ${code}\n\nExpira en ${expiresMinutes} minutos. Si no solicitaste esto, ignora este correo.`,
-  });
-  const from = process.env.MAIL_FROM || 'FitLoyalty <onboarding@resend.dev>';
-  const client = getClient();
-  if (!client) {
-    fallbackConsole({ to, subject: tpl.subject, text });
-    return { delivered: false, reason: 'no-resend' };
-  }
-  return deliverViaResend({ from, to, subject: tpl.subject, html: tpl.html, text });
+  const text = textVersion({ content: `Hola ${name},\nRecibimos tu solicitud para restablecer la contrasena.\n\nTu codigo: ${code}\nExpira en ${expiresMinutes} minutos.\n\nSi no fuiste tu, ignora este correo.` });
+  const from = process.env.MAIL_FROM || 'FitLoyalty <fitloyaltysaas@gmail.com>';
+  return sendViaBrevo({ from, to, subject: tpl.subject, html: tpl.html, text });
 }
 
 async function sendRecoveryLink({ to, name, resetUrl, expiresHours = 1 }) {
   const tpl = templateRecoverLink({ name, resetUrl, expiresHours });
-  const text = textVersion({
-    preheader: 'Restablecé tu contraseña.',
-    content: `Hola ${name},\nRecibiste este correo porque pediste restablecer tu contraseña.\n\nEntrá a este enlace para crear una nueva (expira en ${expiresHours}h):\n${resetUrl}\n\nSi no pediste esto, ignora este correo.`,
-  });
-  const from = process.env.MAIL_FROM || 'FitLoyalty <onboarding@resend.dev>';
-  const client = getClient();
-  if (!client) {
-    fallbackConsole({ to, subject: tpl.subject, text });
-    return { delivered: false, reason: 'no-resend' };
-  }
-  return deliverViaResend({ from, to, subject: tpl.subject, html: tpl.html, text });
+  const text = textVersion({ content: `Hola ${name},\nRecibimos tu solicitud para restablecer la contrasena.\n\nUsa este enlace (expira en ${expiresHours}h):\n${resetUrl}\n\nSi no fuiste tu, ignora este correo.` });
+  const from = process.env.MAIL_FROM || 'FitLoyalty <fitloyaltysaas@gmail.com>';
+  return sendViaBrevo({ from, to, subject: tpl.subject, html: tpl.html, text });
 }
 
 async function sendStaffInvite({ to, invitedName, invitedBy, gymName, role, acceptUrl, expiresDays = 7 }) {
   const tpl = templateInviteStaff({ invitedName, invitedBy, gymName, role, acceptUrl, expiresDays });
-  const text = textVersion({
-    preheader: `${invitedBy} te invitó a FitLoyalty como ${role} en ${gymName}.`,
-    content: `Hola ${invitedName},\n${invitedBy} te invitó a FitLoyalty como ${role} en ${gymName}.\n\nCreá tu contraseña acá (link válido ${expiresDays} días):\n${acceptUrl}`,
-  });
-  const from = process.env.MAIL_FROM || 'FitLoyalty <onboarding@resend.dev>';
-  const client = getClient();
-  if (!client) {
-    fallbackConsole({ to, subject: tpl.subject, text });
-    return { delivered: false, reason: 'no-resend' };
-  }
-  return deliverViaResend({ from, to, subject: tpl.subject, html: tpl.html, text });
+  const text = textVersion({ content: `Hola ${invitedName},\n${invitedBy} te invita a FitLoyalty como ${role} en ${gymName}.\n\nCrea tu cuenta aqui (expira en ${expiresDays} dias):\n${acceptUrl}` });
+  const from = process.env.MAIL_FROM || 'FitLoyalty <fitloyaltysaas@gmail.com>';
+  return sendViaBrevo({ from, to, subject: tpl.subject, html: tpl.html, text });
 }
 
-// Compatibilidad: la API legacy `sendMail({ to, subject, text, html })` sigue existiendo
-// para no romper callers existentes, pero se prefiere usar las funciones de plantilla.
 async function sendMail({ to, subject, text, html }) {
   if (!text && !html) throw new Error('sendMail: ni text ni html provistos');
-  const from = process.env.MAIL_FROM || 'FitLoyalty <onboarding@resend.dev>';
-  const client = getClient();
-  if (!client) {
-    fallbackConsole({ to, subject, text: text || html.replace(/<[^>]+>/g, '') });
-    return { delivered: false, reason: 'no-resend' };
-  }
-  return deliverViaResend({ from, to, subject, html, text });
+  const from = process.env.MAIL_FROM || 'FitLoyalty <fitloyaltysaas@gmail.com>';
+  return sendViaBrevo({ from, to, subject, html, text: text || html.replace(/<[^>]+>/g, '') });
 }
 
-module.exports = {
-  sendMail,
-  sendRecoveryCode,
-  sendRecoveryLink,
-  sendStaffInvite,
-  // expongo helpers en caso de tests / debugging
-  _templates: { templateRecoverCode, templateRecoverLink, templateInviteStaff, baseLayout },
-};
+module.exports = { sendMail, sendRecoveryCode, sendRecoveryLink, sendStaffInvite };
