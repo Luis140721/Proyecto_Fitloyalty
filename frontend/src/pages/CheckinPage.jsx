@@ -49,7 +49,7 @@ export default function CheckinPage() {
       next.forEach((c) => previousIds.add(c.id_checkin));
       return newOnTop;
     } catch (err) {
-      setError(err.response?.data?.error || 'No se pudo cargar el historial.');
+      setError(err.message || 'No se pudo cargar el historial.');
       return false;
     }
   };
@@ -81,8 +81,8 @@ export default function CheckinPage() {
       setCodigo(''); setDocumento('');
       await loadRecent();
     } catch (err) {
-      setError(err.response?.data?.error || 'No se pudo registrar el check-in.');
-      setFeedback({ type: 'error', msg: err.response?.data?.error || 'Ingreso denegado', advertencia: true });
+      setError(err.message || 'No se pudo registrar el check-in.');
+      setFeedback({ type: 'error', msg: err.message || 'Ingreso denegado', advertencia: true });
       setFrameFlash({ type: 'error', key: Date.now() });
     } finally {
       setSubmitting(false);

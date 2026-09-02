@@ -17,7 +17,7 @@ export function TrialProvider({ children }) {
         endsAt: data.trial.endsAt,
       });
     } catch (err) {
-      if (err.response?.status === 401) {
+      if (err.status === 401) {
         setTrial({ status: 'sin-sesion', active: false, expired: false });
       } else {
         setTrial({ status: 'error', active: false, expired: false });

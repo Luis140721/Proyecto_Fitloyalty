@@ -64,7 +64,7 @@ export default function RegisterPage() {
       // redirigir al onboarding/dashboard
       navigate('/dashboard', { replace: true });
     } catch (err) {
-      setError(err.response?.data?.error || 'Error al crear la cuenta. Intenta de nuevo.');
+      setError(err.message || 'Error al crear la cuenta. Intenta de nuevo.');
     } finally {
       setLoading(false);
     }

@@ -58,7 +58,7 @@ export default function StaffPage() {
         setTimeout(() => setPulseBadge(false), 2000);
       }
     } catch (err) {
-      setError(err.response?.data?.error || 'No se pudo cargar la información de staff.');
+      setError(err.message || 'No se pudo cargar la información de staff.');
     } finally {
       setLoading(false);
     }
@@ -90,7 +90,7 @@ export default function StaffPage() {
       setTimeout(() => setEmailState('idle'), 1600);
       load();
     } catch (err) {
-      setError(err.response?.data?.error || 'No se pudo enviar la invitación.');
+      setError(err.message || 'No se pudo enviar la invitación.');
       // Shake en el input email (re-aplica la clase via state para reiniciar anim).
       setEmailState('shake');
       setTimeout(() => setEmailState('idle'), 450);
@@ -109,7 +109,7 @@ export default function StaffPage() {
       setConfirmRevoke(null);
       load();
     } catch (err) {
-      setError(err.response?.data?.error || 'No se pudo revocar.');
+      setError(err.message || 'No se pudo revocar.');
       setConfirmRevoke(null);
     }
   };
