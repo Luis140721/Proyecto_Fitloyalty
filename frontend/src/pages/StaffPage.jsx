@@ -398,7 +398,7 @@ export default function StaffPage() {
               </div>
             ) : (
               <p style={{ color: 'var(--on-surface-variant)', fontSize: 14 }}>
-                Aún no has invitado a nadie. Usa el formulario de la izquierda para empezar.
+                Aún no has invitado a nadie. Usa el formulario «Invitar a alguien» para empezar.
               </p>
             )}
           </article>

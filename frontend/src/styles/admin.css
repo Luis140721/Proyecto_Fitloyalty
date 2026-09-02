@@ -991,3 +991,91 @@
 
 /* ---------- Fila clickeable (Miembros) ---------- */
 .table tbody tr.member-row-clickable { cursor: pointer; }
+
+/* ============================================================
+   RESPONSIVE — correcciones moviles (<= 700px)
+
+   Problemas detectados midiendo en 375x812 (iPhone SE):
+
+   1. Tablas: `.table` es width:100% y `td` usa word-break:break-word.
+      Con 4-5 columnas en 375px cada celda queda en ~60px y las
+      palabras se parten letra a letra ("da / cvi / d / me / sa" en
+      Equipo). La solucion NO es encoger mas: es dar un ancho minimo
+      legible a la tabla y dejar que su contenedor haga scroll lateral.
+
+   2. Los botones de accion del encabezado (`.admin-page-head`) van en
+      un div sin flex-wrap, asi que "Nuevo miembro" se salia 14px del
+      viewport en Miembros.
+
+   3. `.staff-card` es flex-row: en movil ponia el titulo a la izquierda
+      y el texto aplastado a la derecha.
+   ============================================================ */
+@media (max-width: 700px) {
+  /* --- 0. Los items de grid/flex traen min-width:auto, que impide
+     encogerlos por debajo de su contenido. Sin esto, el min-width de la
+     tabla (regla 1) estira la columna entera y desborda la pagina en vez
+     de hacer scroll solo dentro de la tabla. --- */
+  .staff-shell > *,
+  .checkin-shell > *,
+  .admin-cols > *,
+  .admin-cols-3 > *,
+  .kpi-grid > * {
+    min-width: 0;
+  }
+
+  /* --- 1. Tablas con scroll horizontal en vez de texto destrozado --- */
+  /* Los contenedores ya declaran overflow-x:auto (.table-scroll en
+     Miembros, style inline en Equipo); solo faltaba el ancho minimo
+     para que ese scroll llegue a activarse en vez de comprimir. */
+  .table-card { overflow-x: auto; }
+  .table-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .table {
+    min-width: 560px;          /* fuerza el scroll en vez de comprimir */
+  }
+  .table th,
+  .table td {
+    padding: 12px 14px;
+    white-space: nowrap;       /* evita el corte letra a letra */
+    word-break: normal;
+  }
+  /* Celdas que si pueden partir en varias lineas (correos largos). */
+  .table td.cell-wrap {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  /* --- 2. Botonera del encabezado: ocupa el ancho y envuelve --- */
+  .admin-page-head { gap: 12px; }
+  .admin-page-head > div:last-child {
+    display: flex;
+    flex-wrap: wrap;
+    width: 100%;
+    gap: 10px;
+  }
+  .admin-page-head > div:last-child > .btn {
+    flex: 1 1 auto;
+    justify-content: center;
+    min-width: 0;
+  }
+
+  /* --- 3. Tarjetas laterales de Equipo: titulo arriba, no al lado --- */
+  .staff-card {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  /* --- 4. Buscador de Miembros: que ocupe toda la fila --- */
+  .filter-bar__search { flex: 1 1 100%; }
+  .filter-bar__chips  { margin-left: 0; }
+}
+
+/* Pantallas muy angostas (<= 380px): apretar paddings del panel. */
+@media (max-width: 380px) {
+  .admin-page-head__title { font-size: 24px; }
+  .table { min-width: 520px; }
+  .chart-card { padding: 16px 14px; }
+}
