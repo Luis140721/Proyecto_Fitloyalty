@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { api } from '../context/AuthContext';
 import AuthPanel from '../components/AuthPanel';
@@ -20,8 +20,6 @@ export default function ResetPasswordPage() {
   const [resendTimer, setResendTimer] = useState(0);
   const [showPwd, setShowPwd]   = useState(false);
 
-  const code = useMemo(() => codeDigits.join(''), [codeDigits]);
-
   useEffect(() => {
     if (resendTimer <= 0) return;
     const timer = window.setInterval(() => {
@@ -30,18 +28,75 @@ export default function ResetPasswordPage() {
     return () => window.clearInterval(timer);
   }, [resendTimer]);
 
+  const fillFromDigits = (raw) => {
+    const pasted = String(raw ?? '').replace(/\D/g, '').slice(0, 6);
+    if (!pasted) return;
+    const digits = Array(6).fill('');
+    for (let i = 0; i < pasted.length; i++) digits[i] = pasted[i];
+    setCodeDigits(digits);
+    queueMicrotask(() => codeInputs.current[Math.min(pasted.length, 5)]?.focus());
+    if (error) setError('');
+  };
+
+  const handleCodePaste = (e) => {
+    const text = e.clipboardData?.getData('text') ?? '';
+    const pasted = text.replace(/\D/g, '').slice(0, 6);
+    if (!pasted) return;
+    e.preventDefault();
+    fillFromDigits(pasted);
+  };
+
   const handleCodeChange = (index, value) => {
-    const onlyDigits = value.replace(/\D/g, '').slice(0, 1);
-    const nextDigits = [...codeDigits];
-    nextDigits[index] = onlyDigits;
-    setCodeDigits(nextDigits);
+    const digits = String(value).replace(/\D/g, '');
+    if (digits.length > 1) {
+      fillFromDigits(digits);
+      return;
+    }
+    const onlyDigits = digits.slice(-1);
+    setCodeDigits((prev) => {
+      const next = [...prev];
+      next[index] = onlyDigits;
+      return next;
+    });
     if (onlyDigits && index < 5) codeInputs.current[index + 1]?.focus();
     if (error) setError('');
   };
 
   const handleCodeKeyDown = (index, event) => {
-    if (event.key === 'Backspace' && !codeDigits[index] && index > 0) {
+    if (event.key === 'Backspace' || event.key === 'Delete') {
+      event.preventDefault();
+      setCodeDigits((prev) => {
+        const next = [...prev];
+        if (next[index]) {
+          next[index] = '';
+        } else if (index > 0) {
+          next[index - 1] = '';
+          queueMicrotask(() => codeInputs.current[index - 1]?.focus());
+        }
+        return next;
+      });
+      if (error) setError('');
+      return;
+    }
+    if (event.key === 'ArrowLeft' && index > 0) {
+      event.preventDefault();
       codeInputs.current[index - 1]?.focus();
+      return;
+    }
+    if (event.key === 'ArrowRight' && index < 5) {
+      event.preventDefault();
+      codeInputs.current[index + 1]?.focus();
+      return;
+    }
+    if (/^\d$/.test(event.key)) {
+      event.preventDefault();
+      setCodeDigits((prev) => {
+        const next = [...prev];
+        next[index] = event.key;
+        return next;
+      });
+      if (index < 5) codeInputs.current[index + 1]?.focus();
+      if (error) setError('');
     }
   };
 
@@ -64,12 +119,13 @@ export default function ResetPasswordPage() {
   const handleVerify = async (event) => {
     event.preventDefault();
     if (!email) return setError('Ingresa tu correo electrónico.');
-    if (code.length !== 6) return setError('Ingresa los 6 dígitos del código.');
+    const currentCode = codeDigits.join('');
+    if (currentCode.length !== 6) return setError('Ingresa los 6 dígitos del código.');
     setLoading(true);
     setError('');
     setMessage('');
     try {
-      const { data } = await api.post('/auth/verify-reset-code', { email, code });
+      const { data } = await api.post('/auth/verify-reset-code', { email, code: currentCode });
       setResetToken(data.resetToken);
       setStep('reset');
       setMessage(data.message);
@@ -188,7 +244,7 @@ export default function ResetPasswordPage() {
 
               <label className="field">
                 <span className="field-label">Código de verificación</span>
-                <div className="pin-grid">
+                <div className="pin-grid" onPaste={handleCodePaste}>
                   {codeDigits.map((digit, index) => (
                     <input
                       key={index}
@@ -196,13 +252,15 @@ export default function ResetPasswordPage() {
                       value={digit}
                       onChange={(e) => handleCodeChange(index, e.target.value)}
                       onKeyDown={(e) => handleCodeKeyDown(index, e)}
+                      onPaste={handleCodePaste}
+                      onFocus={(e) => e.target.select()}
                       className="pin-cell"
                       type="text"
                       inputMode="numeric"
-                      maxLength={1}
+                      maxLength={index === 0 ? 6 : 1}
                       disabled={loading}
-                      autoComplete="one-time-code"
-                      aria-label={`Dígito ${index + 1}`}
+                      autoComplete={index === 0 ? 'one-time-code' : 'off'}
+                      aria-label={`Dígito ${index + 1} de 6`}
                     />
                   ))}
                 </div>

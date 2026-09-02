@@ -1,42 +1,115 @@
+/**
+ * ForgotPasswordPage.jsx
+ *
+ * Recuperación de contraseña con inputs de PIN de 6 dígitos.
+ *
+ * - Pegar (Ctrl+V / Cmd+V) un código de 6 dígitos lo distribuye en las casillas
+ * - Backspace: borra el dígito actual; si está vacía, borra la anterior
+ * - Flechas izquierda/derecha para navegar
+ * - Tuteo exclusivo (tú, tu, tuya). Sin voseo.
+ */
+
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import axios from 'axios';
 import AuthPanel from '../components/AuthPanel';
+import { api } from '../api';
 
 const STEPS = [
   { id: 1, title: 'Tu correo',     desc: 'Te enviaremos un código de 6 dígitos.' },
-  { id: 2, title: 'Verifica',      desc: 'Ingrésalo abajo. Vence en 15 minutos.' },
+  { id: 2, title: 'Verifica',      desc: 'Ingresalo abajo. Vence en 15 minutos.' },
   { id: 3, title: 'Nueva clave',   desc: 'Mínimo 6 caracteres y un número.' },
 ];
 
 export default function ForgotPasswordPage() {
   const [step, setStep] = useState(1);
-  const [form, setForm] = useState({ email: '', code: '', password: '' });
+  const [form, setForm] = useState({ email: '', password: '' });
   const [resetToken, setResetToken] = useState('');
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [devCodeShown, setDevCodeShown] = useState('');
+  const [devCodeReason, setDevCodeReason] = useState('');
 
+  const [codeDigits, setCodeDigits] = useState(Array(6).fill(''));
   const codeRefs = useRef([]);
 
   useEffect(() => {
     if (step === 2) {
-      setTimeout(() => codeRefs.current[0]?.focus(), 80);
+      const t = setTimeout(() => codeRefs.current[0]?.focus(), 80);
+      return () => clearTimeout(t);
     }
   }, [step]);
 
-  const onChange = (e) => setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
+  const fillFromDigits = (raw) => {
+    const pasted = String(raw ?? '').replace(/\D/g, '').slice(0, 6);
+    if (!pasted) return;
+    const digits = Array(6).fill('');
+    for (let i = 0; i < pasted.length; i++) digits[i] = pasted[i];
+    setCodeDigits(digits);
+    const focusIdx = Math.min(pasted.length, 5);
+    queueMicrotask(() => codeRefs.current[focusIdx]?.focus());
+    setError('');
+  };
+
+  const handleCodePaste = (e) => {
+    const text = e.clipboardData?.getData('text') ?? '';
+    const pasted = text.replace(/\D/g, '').slice(0, 6);
+    if (!pasted) return;
+    e.preventDefault();
+    fillFromDigits(pasted);
+  };
 
   const handleCodeChange = (idx, value) => {
-    const v = value.replace(/\D/g, '').slice(0, 1);
-    const next = (form.code + v).slice(0, 6);
-    setForm((f) => ({ ...f, code: next }));
+    const digits = String(value).replace(/\D/g, '');
+    if (digits.length > 1) {
+      fillFromDigits(digits);
+      return;
+    }
+    const v = digits.slice(-1);
+    setCodeDigits((prev) => {
+      const next = [...prev];
+      next[idx] = v;
+      return next;
+    });
     if (v && idx < 5) codeRefs.current[idx + 1]?.focus();
+    setError('');
   };
 
   const handleCodeKey = (idx, e) => {
-    if (e.key === 'Backspace' && !form.code[idx] && idx > 0) {
+    if (e.key === 'Backspace' || e.key === 'Delete') {
+      e.preventDefault();
+      setCodeDigits((prev) => {
+        const next = [...prev];
+        if (next[idx]) {
+          next[idx] = '';
+        } else if (idx > 0) {
+          next[idx - 1] = '';
+          queueMicrotask(() => codeRefs.current[idx - 1]?.focus());
+        }
+        return next;
+      });
+      setError('');
+      return;
+    }
+    if (e.key === 'ArrowLeft' && idx > 0) {
+      e.preventDefault();
       codeRefs.current[idx - 1]?.focus();
+      return;
+    }
+    if (e.key === 'ArrowRight' && idx < 5) {
+      e.preventDefault();
+      codeRefs.current[idx + 1]?.focus();
+      return;
+    }
+    if (/^\d$/.test(e.key)) {
+      e.preventDefault();
+      setCodeDigits((prev) => {
+        const next = [...prev];
+        next[idx] = e.key;
+        return next;
+      });
+      if (idx < 5) codeRefs.current[idx + 1]?.focus();
+      setError('');
     }
   };
 
@@ -45,10 +118,14 @@ export default function ForgotPasswordPage() {
     setError(''); setInfo('');
     setSubmitting(true);
     try {
-      const { data } = await axios.post('/api/auth/forgot-password', { email: form.email.trim() });
+      const { data } = await api.post('/auth/forgot-password', { email: form.email.trim() });
       setInfo(data.message || 'Si el correo está registrado, enviamos un código.');
-      if (data.devCode) setInfo((prev) => `${prev} (código dev: ${data.devCode})`);
+      if (data.showCodeInUI && data.devCode) {
+        setDevCodeShown(data.devCode);
+        setDevCodeReason(data.devCodeReason || 'demo');
+      }
       setStep(2);
+      setCodeDigits(Array(6).fill(''));
     } catch (err) {
       setError(err.response?.data?.error || 'No se pudo enviar el código.');
     } finally {
@@ -59,12 +136,13 @@ export default function ForgotPasswordPage() {
   const verifyCode = async (e) => {
     e.preventDefault();
     setError(''); setInfo('');
-    if (form.code.length !== 6) { setError('El código debe tener 6 dígitos'); return; }
+    const code = codeDigits.join('');
+    if (code.length !== 6) { setError('El código debe tener 6 dígitos'); return; }
     setSubmitting(true);
     try {
-      const { data } = await axios.post('/api/auth/verify-reset-code', {
+      const { data } = await api.post('/auth/verify-reset-code', {
         email: form.email.trim(),
-        code: form.code.trim(),
+        code,
       });
       setResetToken(data.resetToken);
       setStep(3);
@@ -80,7 +158,7 @@ export default function ForgotPasswordPage() {
     setError(''); setInfo('');
     setSubmitting(true);
     try {
-      await axios.post('/api/auth/reset-password', { resetToken, password: form.password });
+      await api.post('/auth/reset-password', { resetToken, password: form.password });
       setStep(4);
     } catch (err) {
       setError(err.response?.data?.error || 'No se pudo actualizar.');
@@ -115,7 +193,6 @@ export default function ForgotPasswordPage() {
             Paso {Math.min(step, 3)} de 3 — {STEPS[step - 1]?.title}
           </p>
 
-          {/* Stepper visual */}
           <div style={{
             display: 'flex',
             gap: 8,
@@ -152,6 +229,19 @@ export default function ForgotPasswordPage() {
             </div>
           )}
 
+          {devCodeShown && (
+            <div className="alert alert-warning" role="status" data-testid="dev-code-banner">
+              <span className="material-symbols-outlined icon">visibility</span>
+              <div>
+                <strong>Modo demo:</strong> el envío por correo está limitado en este entorno.
+                <br />
+                Tu código es <code className="dev-code">{devCodeShown}</code>
+                {devCodeReason === 'demo-mode' && <> (visible porque el backend está en modo demo)</>}
+                {devCodeReason !== 'demo-mode' && <> (visible porque Resend no pudo entregar)</>}
+              </div>
+            </div>
+          )}
+
           {step === 1 && (
             <form className="auth-form" onSubmit={sendCode} noValidate>
               <label className="field">
@@ -159,14 +249,13 @@ export default function ForgotPasswordPage() {
                 <input
                   className="field-input"
                   name="email" type="email" required
-                  value={form.email} onChange={onChange}
+                  value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
                   placeholder="tunombre@fitgym.co"
                   autoComplete="email"
                 />
               </label>
               <button className="btn btn-primary btn-block btn-lg" type="submit" disabled={submitting}>
                 {submitting ? 'Enviando...' : 'Enviar código'}
-                {!submitting && <span className="material-symbols-outlined icon">arrow_forward</span>}
               </button>
             </form>
           )}
@@ -175,27 +264,28 @@ export default function ForgotPasswordPage() {
             <form className="auth-form" onSubmit={verifyCode} noValidate>
               <label className="field">
                 <span className="field-label">Código de 6 dígitos</span>
-                <div className="pin-grid">
-                  {Array.from({ length: 6 }).map((_, i) => (
+                <div className="pin-grid" onPaste={handleCodePaste}>
+                  {codeDigits.map((digit, i) => (
                     <input
                       key={i}
-                      ref={(el) => (codeRefs.current[i] = el)}
+                      ref={(el) => { codeRefs.current[i] = el; }}
                       className="pin-cell"
                       type="text"
                       inputMode="numeric"
-                      autoComplete="one-time-code"
-                      maxLength={1}
-                      value={form.code[i] || ''}
+                      autoComplete={i === 0 ? 'one-time-code' : 'off'}
+                      maxLength={i === 0 ? 6 : 1}
+                      value={digit}
                       onChange={(e) => handleCodeChange(i, e.target.value)}
                       onKeyDown={(e) => handleCodeKey(i, e)}
-                      aria-label={`Dígito ${i + 1}`}
+                      onPaste={handleCodePaste}
+                      onFocus={(e) => e.target.select()}
+                      aria-label={`Dígito ${i + 1} de 6`}
                     />
                   ))}
                 </div>
               </label>
               <button className="btn btn-primary btn-block btn-lg" type="submit" disabled={submitting}>
                 {submitting ? 'Verificando...' : 'Verificar código'}
-                {!submitting && <span className="material-symbols-outlined icon">arrow_forward</span>}
               </button>
               <p className="auth-form-foot">
                 ¿No te llegó?{' '}
@@ -218,14 +308,13 @@ export default function ForgotPasswordPage() {
                 <input
                   className="field-input"
                   name="password" type="password" required minLength={6}
-                  value={form.password} onChange={onChange}
+                  value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
                   placeholder="Mínimo 6 caracteres y un número"
                   autoComplete="new-password"
                 />
               </label>
               <button className="btn btn-primary btn-block btn-lg" type="submit" disabled={submitting}>
                 {submitting ? 'Guardando...' : 'Guardar nueva contraseña'}
-                {!submitting && <span className="material-symbols-outlined icon">check</span>}
               </button>
             </form>
           )}
