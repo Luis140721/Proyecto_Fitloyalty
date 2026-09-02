@@ -61,6 +61,15 @@ services:
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
       SUPPORT_EMAIL: ${SUPPORT_EMAIL:-fitloyaltysaas@gmail.com}
       SUPPORT_TRIAL_DAYS: ${SUPPORT_TRIAL_DAYS:-7}
+      # Correo: lib/email.js usa la API HTTPS de Brevo (Render free bloquea SMTP).
+      # Sin BREVO_API_KEY los correos caen a modo consola y NO se envian.
+      BREVO_API_KEY: ${BREVO_API_KEY:-}
+      MAIL_FROM: ${MAIL_FROM:-FitLoyalty <fitloyaltysaas@gmail.com>}
+      # Expone el codigo de recuperacion en la respuesta HTTP. Solo para la
+      # demo/sustentacion sin dominio verificado. NUNCA en produccion real.
+      SHOW_DEV_CODE_IN_UI: ${SHOW_DEV_CODE_IN_UI:-false}
+      # Legacy: RESEND_API_KEY y SMTP_* ya no los lee el codigo. Se mantienen
+      # por compatibilidad con despliegues viejos.
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
