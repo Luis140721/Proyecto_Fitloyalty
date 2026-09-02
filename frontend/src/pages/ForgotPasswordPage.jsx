@@ -127,7 +127,7 @@ export default function ForgotPasswordPage() {
       setStep(2);
       setCodeDigits(Array(6).fill(''));
     } catch (err) {
-      setError(err.response?.data?.error || 'No se pudo enviar el código.');
+      setError(err.message || 'No se pudo enviar el código.');
     } finally {
       setSubmitting(false);
     }
@@ -147,7 +147,7 @@ export default function ForgotPasswordPage() {
       setResetToken(data.resetToken);
       setStep(3);
     } catch (err) {
-      setError(err.response?.data?.error || 'Código inválido.');
+      setError(err.message || 'Código inválido.');
     } finally {
       setSubmitting(false);
     }
@@ -161,7 +161,7 @@ export default function ForgotPasswordPage() {
       await api.post('/auth/reset-password', { resetToken, password: form.password });
       setStep(4);
     } catch (err) {
-      setError(err.response?.data?.error || 'No se pudo actualizar.');
+      setError(err.message || 'No se pudo actualizar.');
     } finally {
       setSubmitting(false);
     }

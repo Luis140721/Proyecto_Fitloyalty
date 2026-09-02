@@ -110,7 +110,7 @@ export default function ResetPasswordPage() {
       setMessage('Código reenviado. Revisa tu bandeja de entrada.');
       setResendTimer(data.resendAfterSeconds || 60);
     } catch (err) {
-      setError(err.response?.data?.error || 'No se pudo reenviar el código.');
+      setError(err.message || 'No se pudo reenviar el código.');
     } finally {
       setLoading(false);
     }
@@ -133,7 +133,7 @@ export default function ResetPasswordPage() {
       setConfirm('');
       setCodeDigits(Array(6).fill(''));
     } catch (err) {
-      setError(err.response?.data?.error || 'No se pudo verificar el código.');
+      setError(err.message || 'No se pudo verificar el código.');
     } finally {
       setLoading(false);
     }
@@ -154,7 +154,7 @@ export default function ResetPasswordPage() {
       setStep('done');
       setTimeout(() => navigate('/login', { replace: true }), 2000);
     } catch (err) {
-      setError(err.response?.data?.error || 'No se pudo restablecer la contraseña.');
+      setError(err.message || 'No se pudo restablecer la contraseña.');
     } finally {
       setLoading(false);
     }

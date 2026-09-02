@@ -32,7 +32,7 @@ export default function DashboardUsuario() {
     let alive = true;
     api.get('/asistencia')
       .then(({ data }) => { if (alive) setData(data); })
-      .catch((err) => { if (alive) setError(err.response?.data?.error || 'No se pudo cargar el historial.'); })
+      .catch((err) => { if (alive) setError(err.message || 'No se pudo cargar el historial.'); })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
   }, []);

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
-import axios from 'axios';
+import { api } from '../api';
 import { useAuth } from '../context/AuthContext';
 import AuthPanel from '../components/AuthPanel';
 
@@ -25,7 +25,9 @@ export default function AcceptInvitePage() {
   const navigate = useNavigate();
 
   const [preview, setPreview] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [showPwd, setShowPwd] = useState(false);
@@ -33,29 +35,69 @@ export default function AcceptInvitePage() {
 
   const score = strengthScore(password);
 
+  // Verificacion del token contra el backend. Se usa el cliente `api` (no axios
+  // directo) para que respete VITE_API_BASE: en Vercel el backend vive en otro
+  // dominio (Render) y una ruta relativa /api/... daria 404.
   useEffect(() => {
-    if (!token) { setError('Token no proporcionado.'); return; }
+    if (!token) { setLoading(false); return; }
     let alive = true;
-    axios.get(`/api/auth/accept-invite/${encodeURIComponent(token)}`)
-      .then(({ data }) => { if (alive) setPreview(data); })
+    setLoading(true);
+    api.get(`/auth/accept-invite/${encodeURIComponent(token)}`)
+      .then(({ data }) => { if (alive) { setPreview(data); setError(''); } })
       .catch((err) => {
-        if (alive) setError(err.response?.data?.error || 'Invitación no válida.');
-      });
+        if (!alive) return;
+        // err viene normalizado por el interceptor de api.js: { status, code, message }
+        if (err.isNetwork) {
+          setError('No pudimos contactar al servidor. Revisa tu conexión e intenta de nuevo.');
+        } else if (err.status === 404) {
+          setError('Esta invitación no existe o ya fue usada. Pídele al dueño que te envíe una nueva.');
+        } else if (err.status === 410 || err.code === 'INVITE_EXPIRED') {
+          setError('Esta invitación expiró. Pídele al dueño que te envíe una nueva.');
+        } else {
+          setError(err.message || 'Invitación no válida.');
+        }
+      })
+      .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
   }, [token]);
+
+  // Validacion por campo: devuelve { password?, confirm? } con el mensaje concreto.
+  const validate = () => {
+    const next = {};
+    if (!password) next.password = 'Escribe una contraseña.';
+    else if (password.length < 6) next.password = `Te faltan ${6 - password.length} caracteres (mínimo 6).`;
+    else if (!/\d/.test(password)) next.password = 'Debe incluir al menos un número.';
+
+    if (!confirm) next.confirm = 'Repite la contraseña para confirmarla.';
+    else if (password !== confirm) next.confirm = 'Las contraseñas no coinciden.';
+
+    return next;
+  };
 
   const onSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    if (password.length < 6) { setError('La contraseña debe tener al menos 6 caracteres.'); return; }
-    if (password !== confirm) { setError('Las contraseñas no coinciden.'); return; }
+    const found = validate();
+    setFieldErrors(found);
+    if (Object.keys(found).length > 0) {
+      // Enfoca el primer campo con problema para no dejar al usuario buscando.
+      const first = document.querySelector('.field-input--error');
+      if (first) first.focus();
+      return;
+    }
     setSubmitting(true);
     try {
       const user = await acceptInvite(token, password);
       const isAdmin = user?.rol === 'admin' || user?.id_rol === 1 || user?.role === 'admin';
       navigate(isAdmin ? '/admin/dashboard' : '/admin/checkin', { replace: true });
     } catch (err) {
-      setError(err.response?.data?.error || 'No se pudo aceptar la invitación.');
+      if (err.isNetwork) {
+        setError('No pudimos contactar al servidor. Revisa tu conexión e intenta de nuevo.');
+      } else if (err.status === 409) {
+        setError('Ya existe una cuenta con este correo. Inicia sesión en vez de aceptar la invitación.');
+      } else {
+        setError(err.message || 'No se pudo aceptar la invitación.');
+      }
     } finally {
       setSubmitting(false);
     }
@@ -97,6 +139,19 @@ export default function AcceptInvitePage() {
             </div>
           )}
 
+          {token && loading && (
+            <div className="alert alert-info" role="status">
+              <span className="material-symbols-outlined icon">hourglass_top</span>
+              <span>
+                Verificando tu invitación…
+                <br />
+                <span className="field-hint">
+                  La primera carga puede tardar hasta un minuto mientras despierta el servidor.
+                </span>
+              </span>
+            </div>
+          )}
+
           {preview && (
             <div className="alert alert-info" role="status" style={{ alignItems: 'center' }}>
               <div className="avatar avatar-primary" style={{ flexShrink: 0 }}>
@@ -119,11 +174,16 @@ export default function AcceptInvitePage() {
                 <span className="field-label">Crea tu contraseña (mín. 6 caracteres, al menos un número)</span>
                 <div style={{ position: 'relative' }}>
                   <input
-                    className="field-input"
+                    className={`field-input${fieldErrors.password ? ' field-input--error' : ''}`}
                     type={showPwd ? 'text' : 'password'}
                     required minLength={6}
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    onChange={(e) => {
+                      setPassword(e.target.value);
+                      if (fieldErrors.password) setFieldErrors((f) => ({ ...f, password: undefined }));
+                    }}
+                    aria-invalid={fieldErrors.password ? 'true' : undefined}
+                    aria-describedby={fieldErrors.password ? 'err-password' : undefined}
                     placeholder="••••••••"
                     autoComplete="new-password"
                     style={{ paddingRight: 44 }}
@@ -146,19 +206,48 @@ export default function AcceptInvitePage() {
                 <div className={`strength l-${score}`} aria-hidden="true">
                   <span /><span /><span /><span />
                 </div>
+                {fieldErrors.password ? (
+                  <span className="field-error" id="err-password" role="alert">
+                    <span className="material-symbols-outlined icon">error</span>
+                    {fieldErrors.password}
+                  </span>
+                ) : password.length >= 6 && /\d/.test(password) ? (
+                  <span className="field-ok">
+                    <span className="material-symbols-outlined icon">check_circle</span>
+                    Contraseña válida.
+                  </span>
+                ) : (
+                  <span className="field-hint">Mínimo 6 caracteres e incluir al menos un número.</span>
+                )}
               </label>
 
               <label className="field">
                 <span className="field-label">Confirma tu contraseña</span>
                 <input
-                  className="field-input"
+                  className={`field-input${fieldErrors.confirm ? ' field-input--error' : ''}`}
                   type={showPwd ? 'text' : 'password'}
                   required
                   value={confirm}
-                  onChange={(e) => setConfirm(e.target.value)}
+                  onChange={(e) => {
+                    setConfirm(e.target.value);
+                    if (fieldErrors.confirm) setFieldErrors((f) => ({ ...f, confirm: undefined }));
+                  }}
+                  aria-invalid={fieldErrors.confirm ? 'true' : undefined}
+                  aria-describedby={fieldErrors.confirm ? 'err-confirm' : undefined}
                   placeholder="Repite la contraseña"
                   autoComplete="new-password"
                 />
+                {fieldErrors.confirm ? (
+                  <span className="field-error" id="err-confirm" role="alert">
+                    <span className="material-symbols-outlined icon">error</span>
+                    {fieldErrors.confirm}
+                  </span>
+                ) : confirm && password === confirm ? (
+                  <span className="field-ok">
+                    <span className="material-symbols-outlined icon">check_circle</span>
+                    Coinciden.
+                  </span>
+                ) : null}
               </label>
 
               <button className="btn btn-primary btn-block btn-lg" type="submit" disabled={submitting}>
