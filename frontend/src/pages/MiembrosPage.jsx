@@ -67,7 +67,7 @@ export default function MiembrosPage() {
       const { data } = await api.get('/admin/miembros', { params: { q: query, pageSize: 100 } });
       setItems(data.miembros);
     } catch (err) {
-      setError(err.response?.data?.error || 'Error al cargar miembros.');
+      setError(err.message || 'Error al cargar miembros.');
     } finally {
       setLoading(false);
     }
@@ -89,7 +89,7 @@ export default function MiembrosPage() {
       setOpen(false);
       load(q);
     } catch (err) {
-      setError(err.response?.data?.error || 'No se pudo crear el miembro.');
+      setError(err.message || 'No se pudo crear el miembro.');
     }
   };
 
@@ -127,7 +127,7 @@ export default function MiembrosPage() {
       setInfo('Miembro actualizado.');
       load(q);
     } catch (err) {
-      setEditError(err.response?.data?.error || 'No se pudo actualizar.');
+      setEditError(err.message || 'No se pudo actualizar.');
     } finally {
       setEditSaving(false);
     }
@@ -145,7 +145,7 @@ export default function MiembrosPage() {
       setConfirmDeactivate(null);
       load(q);
     } catch (err) {
-      setError(err.response?.data?.error || 'No se pudo eliminar.');
+      setError(err.message || 'No se pudo eliminar.');
       setConfirmDeactivate(null);
     }
   };
