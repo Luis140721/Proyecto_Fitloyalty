@@ -12,18 +12,18 @@ const { Pool } = require('pg');
 //  - DATABASE_URL completa (Neon, Supabase, Render Postgres, Railway)
 //  - DB_HOST/DB_PORT/... individuales (legacy / local)
 function buildConnectionConfig() {
-  const sslEnabled = process.env.DB_SSL !== 'false';
-  const ssl = sslEnabled ? { rejectUnauthorized: false } : false;
+  // DB_SSL=false desactiva SSL (Postgres local en Docker). Default: activado (Neon).
+  const wantSsl = String(process.env.DB_SSL ?? 'true').toLowerCase() !== 'false';
+  const ssl = wantSsl ? { rejectUnauthorized: false } : false;
 
   if (process.env.DATABASE_URL) {
-    const url = process.env.DATABASE_URL;
-    // Neon pooler acepta cualquier certificado; forzar compatibilidad libpq.
-    // Añadimos sslmode=no-verify para silenciar el warning de pg v8.13+
-    const safeUrl = url.includes('sslmode=')
-      ? url
-      : (url + (url.includes('?') ? '&' : '?') + 'sslmode=no-verify');
+    let url = process.env.DATABASE_URL;
+    // Si SSL esta desactivado, aseguramos que la URL no lleva sslmode.
+    if (!wantSsl && /[?&]sslmode=/i.test(url)) {
+      url = url.replace(/([?&])sslmode=[^&]*/i, (m, sep) => (sep === '?' ? '?' : ''));
+    }
     return {
-      connectionString: safeUrl,
+      connectionString: url,
       ssl,
     };
   }

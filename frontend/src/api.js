@@ -21,7 +21,11 @@
  */
 import axios from 'axios';
 
-const baseURL = import.meta.env.VITE_API_BASE || 'http://localhost:3001/api';
+const baseURL = import.meta.env.VITE_API_BASE || (
+  typeof window !== 'undefined' && window.location.hostname.endsWith('vercel.app')
+    ? 'https://fitloyalty-api.onrender.com/api'
+    : 'http://localhost:3001/api'
+);
 
 const TOKEN_KEY = 'fitloyalty_token';
 
