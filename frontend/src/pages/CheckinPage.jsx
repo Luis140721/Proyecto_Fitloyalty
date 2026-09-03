@@ -201,7 +201,7 @@ export default function CheckinPage() {
               textTransform: 'uppercase',
               color: 'var(--on-surface-variant)',
             }}>
-              <span style={{ color: 'var(--primary)', fontWeight: 700 }}>TIP</span>
+              <span style={{ color: 'var(--primary-accent)', fontWeight: 700 }}>TIP</span>
               <span>O escribe el documento si el miembro no tiene QR a mano.</span>
             </div>
 

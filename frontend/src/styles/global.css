@@ -1,6 +1,6 @@
 /* ============================================================
    FitLoyalty — Tema Ultraviolet (Stitch design system)
-   - Paleta: true black + ultraviolet (#A855F7)
+   - Paleta: true black + ultraviolet (#7C5CE6)
    - Tipografía: Anybody (display), Hanken Grotesk (body), JetBrains Mono (labels)
    - Formas: radio corto (industrial), borders 1px, top highlight blanco 5%
    - Profundidad: capas tonales + glow púrpura en hover
@@ -9,52 +9,62 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  /* ---------- Surfaces (darkest → lightest) ---------- */
-  --bg:                  #000000;
-  --surface:             #121212;
-  --surface-dim:         #121414;
-  --surface-bright:      #37393a;
-  --surface-container-lowest: #0c0f0f;
-  --surface-container-low:    #1a1c1c;
-  --surface-container:        #1e2020;
-  --surface-container-high:   #282a2b;
-  --surface-container-highest:#333535;
-  --surface-variant:    #333535;
+  /* ---------- Surfaces (darkest → lightest) ----------
+     Escala de grises construida alrededor del #3F444B del logo. Es un gris
+     azulado (hue 214°), no neutro: por eso todos los peldanos comparten ese
+     mismo tono y solo cambia la luminosidad. Mezclar grises neutros aqui
+     ensucia el conjunto y hace que el morado se vea desvaido. */
+  --bg:                  #1C1F24;   /* fondo de pagina */
+  --surface:             #24272D;   /* tarjetas y paneles */
+  --surface-dim:         #202329;
+  --surface-bright:      #565C65;
+  --surface-container-lowest: #191C20;
+  --surface-container-low:    #22252B;
+  --surface-container:        #2A2E34;
+  --surface-container-high:   #353A41;
+  --surface-container-highest:#3F444B;  /* el gris exacto del logo */
+  --surface-variant:    #3F444B;
 
   /* ---------- On-surface ---------- */
-  --on-surface:          #e2e2e2;
-  --on-surface-variant:  #cfc2d6;
-  --on-background:       #e2e2e2;
+  --on-surface:          #F5F4F8;   /* el casi-blanco del logo */
+  --on-surface-variant:  #B9BDC6;
+  --on-background:       #F5F4F8;
 
-  /* ---------- Brand ultraviolet ---------- */
-  --primary:             #A855F7;
-  --primary-fixed:       #ddb7ff;
-  --primary-container:   #b76dff;
-  --on-primary:          #000000;
-  --on-primary-container:#400071;
-  --inverse-primary:     #842bd2;
-  --primary-glow:        rgba(168, 85, 247, 0.35);
-  --primary-soft:        rgba(168, 85, 247, 0.10);
-  --primary-faint:       rgba(168, 85, 247, 0.05);
+  /* ---------- Brand ---------- */
+  /* Morado del logo. --on-primary va oscuro a proposito: texto blanco sobre
+     #7C5CE6 no llega a 4.5:1, y el gris oscuro si. */
+  --primary:             #7C5CE6;
+  --primary-fixed:       #C4B5FD;
+  --primary-container:   #8F72EC;
+  --on-primary:          #FFFFFF;
+  --on-primary-container:#2A1D5C;
+  --inverse-primary:     #5B3FC4;
+  --primary-glow:        rgba(124, 92, 230, 0.38);
+  --primary-soft:        rgba(124, 92, 230, 0.14);
+  --primary-faint:       rgba(124, 92, 230, 0.07);
+  /* Acento claro del logo: hovers, detalles y el simbolo de la marca. */
+  --primary-accent:      #A78BFA;
 
   /* ---------- Secondary / tertiary ---------- */
-  --secondary:           #c6c6c6;
-  --tertiary:            #c8c6c5;
+  --secondary:           #C6C9D0;
+  --tertiary:            #C8CBD2;
 
   /* ---------- Status ---------- */
   --error:               #ffb4ab;
   --error-container:     #93000a;
   --success:             #4ADE80;
   --success-container:   rgba(26, 77, 46, 0.25);
-  --warning:             #ddb7ff;
-  --warning-container:   rgba(168, 85, 247, 0.15);
+  /* Warning en ambar: antes era morado claro y se confundia con el color de
+     marca, asi que un aviso no se distinguia de un elemento normal. */
+  --warning:             #FBBF24;
+  --warning-container:   rgba(251, 191, 36, 0.15);
   --info:                #60A5FA;
   --info-container:      rgba(37, 99, 235, 0.20);
 
   /* ---------- Outlines ---------- */
-  --outline:             #988d9f;
-  --outline-variant:     #4d4354;
-  --border-subtle:       #1F2937;
+  --outline:             #8A909B;
+  --outline-variant:     #4A505A;
+  --border-subtle:       #343941;
 
   /* ---------- Tipografía ---------- */
   --font-display:  'Anybody', system-ui, -apple-system, sans-serif;
@@ -107,7 +117,7 @@ h1, h2, h3, h4, .display, .headline {
   color: var(--on-surface);
 }
 
-a { color: var(--primary); text-decoration: none; transition: color var(--dur-fast) var(--ease-out); }
+a { color: var(--primary-accent); text-decoration: none; transition: color var(--dur-fast) var(--ease-out); }
 a:hover { color: var(--primary-fixed); }
 
 /* Selección con acento de marca */
@@ -162,8 +172,8 @@ a:hover { color: var(--primary-fixed); }
 }
 .glass-card.glow-on-hover:hover {
   transform: scale(1.02);
-  border-color: rgba(168, 85, 247, 0.30);
-  box-shadow: 0 4px 20px rgba(168, 85, 247, 0.15);
+  border-color: rgba(124, 92, 230, 0.30);
+  box-shadow: 0 4px 20px rgba(124, 92, 230, 0.15);
 }
 
 /* Ambient corner glow (para cards destacadas) */
@@ -182,7 +192,7 @@ a:hover { color: var(--primary-fixed); }
   pointer-events: none;
   transition: background var(--dur-slow) var(--ease-out);
 }
-.ambient-glow:hover::after { background: rgba(168, 85, 247, 0.22); }
+.ambient-glow:hover::after { background: rgba(124, 92, 230, 0.22); }
 
 /* ============================================================
    Botones (industrial — uppercase, scale on hover, sin sombras)
@@ -219,12 +229,12 @@ a:hover { color: var(--primary-fixed); }
 .btn-primary {
   background: var(--primary);
   color: var(--on-primary);
-  border-color: var(--primary);
+  border-color: var(--primary-accent);
 }
 .btn-primary:hover:not(:disabled) {
   background: var(--primary-fixed);
   color: var(--on-primary);
-  box-shadow: 0 4px 20px rgba(168, 85, 247, 0.30);
+  box-shadow: 0 4px 20px rgba(124, 92, 230, 0.30);
 }
 
 .btn-secondary {
@@ -307,8 +317,8 @@ a:hover { color: var(--primary-fixed); }
 .field-input:focus,
 .field select:focus,
 .field textarea:focus {
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.20);
+  border-color: var(--primary-accent);
+  box-shadow: 0 0 0 3px rgba(124, 92, 230, 0.20);
 }
 .field-input:disabled { opacity: 0.55; cursor: not-allowed; }
 
@@ -387,10 +397,10 @@ a:hover { color: var(--primary-fixed); }
 }
 .field-input:-webkit-autofill:focus {
   -webkit-box-shadow: 0 0 0 1000px var(--bg) inset,
-                     0 0 0 3px rgba(168, 85, 247, 0.20) !important;
+                     0 0 0 3px rgba(124, 92, 230, 0.20) !important;
   box-shadow: 0 0 0 1000px var(--bg) inset,
-              0 0 0 3px rgba(168, 85, 247, 0.20) !important;
-  border-color: var(--primary);
+              0 0 0 3px rgba(124, 92, 230, 0.20) !important;
+  border-color: var(--primary-accent);
 }
 
 /* Firefox no usa -webkit-autofill; usa :-moz-autofill (mas raro) */
@@ -465,8 +475,8 @@ input:-webkit-autofill::first-line {
               box-shadow var(--dur-fast) var(--ease-out);
 }
 .search-input:focus-within {
-  border-color: var(--primary);
-  box-shadow: 0 0 15px rgba(168, 85, 247, 0.15);
+  border-color: var(--primary-accent);
+  box-shadow: 0 0 15px rgba(124, 92, 230, 0.15);
 }
 .search-input .material-symbols-outlined { color: var(--on-surface-variant); }
 .search-input input {
@@ -504,8 +514,8 @@ input:-webkit-autofill::first-line {
 }
 .chip:hover { color: var(--on-surface); border-color: var(--outline); }
 .chip-active {
-  color: var(--primary);
-  border-color: var(--primary);
+  color: var(--primary-accent);
+  border-color: var(--primary-accent);
   background: var(--primary-soft);
 }
 .chip-count {
@@ -549,9 +559,9 @@ input:-webkit-autofill::first-line {
   animation: fade-in-up var(--dur) var(--ease-out);
 }
 .alert-error   { color: var(--error); border-left-color: var(--error); background: rgba(147, 0, 10, 0.25); }
-.alert-success { color: var(--primary-fixed); border-left-color: var(--primary); background: var(--primary-soft); }
+.alert-success { color: var(--primary-fixed); border-left-color: var(--primary-accent); background: var(--primary-soft); }
 .alert-info    { color: var(--info); border-left-color: var(--info); background: var(--info-container); }
-.alert-warning { color: var(--primary-fixed); border-left-color: var(--primary); background: var(--warning-container); }
+.alert-warning { color: var(--primary-fixed); border-left-color: var(--primary-accent); background: var(--warning-container); }
 
 /* Codigo dev que aparece en pantalla cuando Resend no puede entregar. */
 .dev-code {
@@ -604,7 +614,7 @@ input:-webkit-autofill::first-line {
   cursor: pointer;
   transition: color var(--dur-fast) var(--ease-out);
 }
-.table .row-actions .material-symbols-outlined:hover { color: var(--primary); }
+.table .row-actions .material-symbols-outlined:hover { color: var(--primary-accent); }
 
 /* Scroll horizontal para tablas anchas sin desbordar el card */
 .table-scroll {
@@ -637,7 +647,7 @@ input:-webkit-autofill::first-line {
   flex-shrink: 0;
   overflow: hidden;
 }
-.avatar-primary { color: var(--primary); border-color: var(--primary); }
+.avatar-primary { color: var(--primary-accent); border-color: var(--primary-accent); }
 .avatar-error   { color: var(--error); border-color: var(--error); }
 .avatar-info    { color: var(--info); border-color: var(--info); }
 .avatar img { width: 100%; height: 100%; object-fit: cover; }
@@ -673,8 +683,8 @@ input:-webkit-autofill::first-line {
 }
 .kpi:hover {
   transform: scale(1.02);
-  border-color: rgba(168, 85, 247, 0.30);
-  box-shadow: 0 4px 20px rgba(168, 85, 247, 0.15);
+  border-color: rgba(124, 92, 230, 0.30);
+  box-shadow: 0 4px 20px rgba(124, 92, 230, 0.15);
 }
 .kpi:hover::after { opacity: 1; }
 .kpi-head {
@@ -694,7 +704,7 @@ input:-webkit-autofill::first-line {
   align-items: center; justify-content: center;
   border-radius: var(--radius);
   background: var(--surface-container-high);
-  color: var(--primary);
+  color: var(--primary-accent);
   border: 1px solid var(--border-subtle);
 }
 .kpi-icon .material-symbols-outlined { font-size: 20px; }
@@ -709,7 +719,7 @@ input:-webkit-autofill::first-line {
 .kpi-meta {
   font-family: var(--font-label);
   font-size: 11px;
-  color: var(--primary);
+  color: var(--primary-accent);
   font-weight: 500;
 }
 .kpi-meta--error { color: var(--error); }
@@ -721,7 +731,7 @@ input:-webkit-autofill::first-line {
 .spinner {
   width: 40px; height: 40px;
   border: 3px solid var(--border-subtle);
-  border-top-color: var(--primary);
+  border-top-color: var(--primary-accent);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -778,8 +788,8 @@ input:-webkit-autofill::first-line {
   to   { transform: translateX(0); opacity: 1; }
 }
 @keyframes glow-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(168, 85, 247, 0.45); }
-  50%      { box-shadow: 0 0 0 12px rgba(168, 85, 247, 0); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(124, 92, 230, 0.45); }
+  50%      { box-shadow: 0 0 0 12px rgba(124, 92, 230, 0); }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -788,4 +798,34 @@ input:-webkit-autofill::first-line {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* ============================================================
+   Logo / marca
+   El componente <Logo /> inserta el SVG en linea (ver Logo.jsx).
+   Estas reglas solo controlan como se comporta dentro de su caja.
+   ============================================================ */
+.logo {
+  display: block;
+  height: auto;          /* el alto real lo fija el atributo height del SVG */
+  max-width: 100%;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+/* Los contenedores de marca antes llevaban un cuadrito "FL" + texto.
+   Ahora el logo es una sola pieza, asi que sobra el gap y el color de texto. */
+.admin-sidebar__brand,
+.landing-brand,
+.legal-brand,
+.auth-panel-brand {
+  gap: 0;
+  line-height: 0;
+}
+
+/* Icono de marca en el header del panel: solo en movil, donde el sidebar
+   esta oculto tras el drawer y la marca no se veria por ningun lado. */
+.admin-header__logo { display: none; line-height: 0; }
+@media (max-width: 900px) {
+  .admin-header__logo { display: block; flex-shrink: 0; }
 }
