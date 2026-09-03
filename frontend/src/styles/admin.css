@@ -19,8 +19,9 @@
   left: 0;
   width: 240px;
   height: 100vh;
-  background: var(--surface-container-lowest);
-  border-right: 1px solid var(--border-subtle);
+  background: var(--sidebar-bg);
+  color: var(--sidebar-on);
+  border-right: 1px solid rgba(43, 39, 51, 0.10);
   padding: 24px 16px 32px;
   display: flex;
   flex-direction: column;
@@ -122,7 +123,7 @@
   display: grid; place-items: center;
   border-radius: var(--radius);
   background: var(--primary);
-  color: var(--bg);
+  color: var(--on-primary);
   font-family: var(--font-headline);
   font-weight: 800;
   font-size: 15px;
@@ -135,7 +136,9 @@
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--on-surface-variant);
+  /* Sobre lavanda los tokens de texto normales pierden contraste, por eso el
+     sidebar usa su propio color con opacidad en vez de --on-surface-variant. */
+  color: rgba(43, 39, 51, 0.62);
   padding: 0 12px 8px;
 }
 .admin-nav {
@@ -148,10 +151,10 @@
   align-items: center;
   gap: 12px;
   padding: 10px 12px;
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
   font-family: var(--font-body);
   font-size: 14px;
-  color: var(--on-surface-variant);
+  color: rgba(43, 39, 51, 0.78);
   text-decoration: none;
   transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
 }
@@ -159,29 +162,30 @@
   font-size: 20px;
 }
 .admin-nav__item:hover {
-  background: var(--surface-container);
-  color: var(--on-surface);
+  background: rgba(255, 255, 255, 0.42);
+  color: var(--sidebar-on);
   text-decoration: none;
 }
 .admin-nav__item--active {
-  background: var(--primary-soft);
-  color: var(--primary-accent);
-  font-weight: 600;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--sidebar-on);
+  font-weight: 700;
 }
 .admin-nav__item--active::before {
   content: '';
-  width: 3px;
-  height: 18px;
-  border-radius: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
   background: var(--primary);
-  margin-left: -12px;
-  box-shadow: 0 0 8px var(--primary);
+  margin-left: -2px;
+  margin-right: -2px;
+  box-shadow: none;
 }
 
 .admin-sidebar__foot {
   margin-top: auto;
   padding: 16px 12px;
-  border-top: 1px solid var(--border-subtle);
+  border-top: 1px solid rgba(43, 39, 51, 0.12);
   display: flex;
   align-items: center;
   gap: 10px;
@@ -198,7 +202,7 @@
   display: block;
   font-family: var(--font-headline);
   font-size: 13px;
-  color: var(--on-surface);
+  color: var(--sidebar-on);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .admin-sidebar__user-meta span {
@@ -206,7 +210,7 @@
   font-size: 10px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--primary-accent);
+  color: rgba(43, 39, 51, 0.60);
 }
 
 /* ---------- Header ---------- */
@@ -219,7 +223,7 @@
   justify-content: space-between;
   gap: 12px;
   padding: 18px clamp(24px, 3vw, 32px);
-  background: rgba(28, 31, 36, 0.72);
+  background: rgba(233, 233, 236, 0.82);
   backdrop-filter: blur(14px) saturate(140%);
   -webkit-backdrop-filter: blur(14px) saturate(140%);
   border-bottom: 1px solid var(--border-subtle);
@@ -374,7 +378,7 @@
   padding: 28px;
   background: var(--surface);
   border: 1px solid var(--border-subtle);
-  border-top: 1px solid rgba(255,255,255,0.05);
+  border-top: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   position: relative;
   overflow: hidden;
@@ -707,7 +711,7 @@
 .table-card {
   background: var(--surface);
   border: 1px solid var(--border-subtle);
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  border-top: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   overflow: hidden;
   min-width: 0;
@@ -760,7 +764,7 @@
 .checkin-scanner {
   background: var(--surface);
   border: 1px solid var(--border-subtle);
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  border-top: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   padding: 24px;
   display: flex;
