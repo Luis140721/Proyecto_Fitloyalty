@@ -1,6 +1,6 @@
 /* ============================================================
    FitLoyalty — Tema Ultraviolet (Stitch design system)
-   - Paleta: true black + ultraviolet (#7C5CE6)
+   - Paleta: true black + ultraviolet (#A855F7)
    - Tipografía: Anybody (display), Hanken Grotesk (body), JetBrains Mono (labels)
    - Formas: radio corto (industrial), borders 1px, top highlight blanco 5%
    - Profundidad: capas tonales + glow púrpura en hover
@@ -9,69 +9,73 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  /* ---------- Superficies (tema claro: gris medio + lavanda) ----------
-     El fondo de pagina es un gris MEDIO, no blanco: es lo que da el aire
-     "gris con morado". Las tarjetas van bastante mas claras que el fondo,
-     asi se separan solas sin necesitar sombras fuertes. */
-  --bg:                  #B8B8BD;   /* fondo de pagina, gris medio */
-  --surface:             #E9E9EC;   /* tarjetas y paneles */
-  --surface-dim:         #DCDCE0;
-  --surface-bright:      #FFFFFF;
-  --surface-container-lowest: #FFFFFF;
-  --surface-container-low:    #F2F2F4;
-  --surface-container:        #E4E4E8;
-  --surface-container-high:   #D8D8DD;
-  --surface-container-highest:#CBCBD2;
-  --surface-variant:    #D8D8DD;
+  /* ---------- Superficies (oscuro con tinte morado) ----------
+     No es gris neutro: todos los peldanos llevan algo de morado (hue ~270),
+     que es lo que hace que el fondo "acompane" al degradado del sidebar en
+     vez de verse como una app gris con adornos de color. */
+  --bg:                  #17131F;   /* fondo de pagina */
+  --surface:             #241E30;   /* tarjetas y paneles */
+  --surface-dim:         #1E1929;
+  --surface-bright:      #3B3350;
+  --surface-container-lowest: #141019;
+  --surface-container-low:    #1F1A2A;
+  --surface-container:        #2A2338;
+  --surface-container-high:   #332B44;
+  --surface-container-highest:#3E3552;
+  --surface-variant:    #332B44;
 
-  /* Lavanda del sidebar: el morado de marca desaturado y aclarado, para que
-     acompane sin competir con los botones. */
-  --sidebar-bg:          #CFC4EA;
-  --sidebar-on:          #2B2733;
+  /* Sidebar: degradado morado, del violeta profundo arriba al morado medio
+     abajo. Es la pieza que da caracter a toda la interfaz. */
+  --sidebar-grad:        linear-gradient(180deg, #3C1D70 0%, #5B2494 55%, #7B2CA8 100%);
+  --sidebar-on:          #F6F0FF;
 
-  /* Superficie oscura de contraste: las tarjetas que deben "saltar"
-     (ingresos del mes, en riesgo de abandono). */
-  --surface-inverse:     #2B2B31;
-  --on-surface-inverse:  #F5F4F8;
+  /* Superficie destacada: las tarjetas que deben "saltar" (ingresos del mes,
+     en riesgo de abandono) llevan tinte morado y borde de marca. */
+  --surface-accent:      #2E2145;
+  --surface-accent-border: rgba(217, 70, 239, 0.32);
 
   /* ---------- On-surface ---------- */
-  --on-surface:          #26262B;   /* texto principal, casi negro */
-  --on-surface-variant:  #45454F;   /* texto secundario: oscuro para leerse tambien sobre el gris de pagina, no solo sobre las tarjetas */
-  --on-background:       #1E1E22;
+  --on-surface:          #F3EEFA;   /* texto principal */
+  --on-surface-variant:  #B4A8C6;   /* texto secundario */
+  --on-background:       #F3EEFA;
 
-  /* ---------- Marca ---------- */
-  /* --primary es el morado del logo y se usa para RELLENOS (botones, barras).
-     --primary-accent es el morado para TEXTO: sobre gris claro el #7C5CE6
-     solo llega a 3.5:1, por eso el texto usa una version mas oscura. */
-  --primary:             #7C5CE6;
-  --primary-fixed:       #5B3FC4;
-  --primary-container:   #8F72EC;
+  /* ---------- Marca ----------
+     Dos colores, no uno: el morado es el relleno (botones, barras) y el
+     magenta es el acento de titulos y detalles. El degradado entre ambos es
+     la firma visual. */
+  --primary:             #A855F7;
+  --primary-fixed:       #E9D5FF;
+  --primary-container:   #7C3AED;
   --on-primary:          #FFFFFF;
-  --on-primary-container:#FFFFFF;
-  --inverse-primary:     #A78BFA;
-  --primary-glow:        rgba(124, 92, 230, 0.30);
-  --primary-soft:        rgba(124, 92, 230, 0.12);
-  --primary-faint:       rgba(124, 92, 230, 0.06);
-  --primary-accent:      #472F9E;
+  --on-primary-container:#F3E8FF;
+  --inverse-primary:     #7C3AED;
+  --primary-glow:        rgba(168, 85, 247, 0.40);
+  --primary-soft:        rgba(168, 85, 247, 0.14);
+  --primary-faint:       rgba(168, 85, 247, 0.07);
+  /* Magenta: titulos de seccion y acentos. Sobre el fondo oscuro llega a
+     mas de 7:1, asi que sirve para texto pequeno sin problema. */
+  --primary-accent:      #E879F9;
+  --brand-grad:          linear-gradient(135deg, #7C3AED 0%, #C026D3 100%);
+  --brand-grad-soft:     linear-gradient(135deg, rgba(124, 58, 237, 0.22) 0%, rgba(192, 38, 211, 0.22) 100%);
 
   /* ---------- Secondary / tertiary ---------- */
-  --secondary:           #4A4A54;
-  --tertiary:            #52525C;
+  --secondary:           #C9BED8;
+  --tertiary:            #CBC0DA;
 
-  /* ---------- Estados (oscurecidos para leerse sobre claro) ---------- */
-  --error:               #B3261E;
-  --error-container:     #FBD8D5;
-  --success:             #146C2E;
-  --success-container:   rgba(20, 108, 46, 0.12);
-  --warning:             #8A5A00;
-  --warning-container:   rgba(251, 191, 36, 0.22);
-  --info:                #1D4ED8;
-  --info-container:      rgba(29, 78, 216, 0.12);
+  /* ---------- Estados ---------- */
+  --error:               #FFB4AB;
+  --error-container:     #7F1D1D;
+  --success:             #4ADE80;
+  --success-container:   rgba(26, 77, 46, 0.28);
+  --warning:             #FBBF24;
+  --warning-container:   rgba(251, 191, 36, 0.16);
+  --info:                #60A5FA;
+  --info-container:      rgba(37, 99, 235, 0.20);
 
   /* ---------- Contornos ---------- */
-  --outline:             #6E6E78;
-  --outline-variant:     #BFBFC7;
-  --border-subtle:       #C9C9D0;
+  --outline:             #8E80A2;
+  --outline-variant:     #4A3F5E;
+  --border-subtle:       #352C47;
 
   /* ---------- Tipografía ---------- */
   --font-display:  'Anybody', system-ui, -apple-system, sans-serif;
@@ -179,8 +183,8 @@ a:hover { color: var(--primary-fixed); }
 }
 .glass-card.glow-on-hover:hover {
   transform: scale(1.02);
-  border-color: rgba(124, 92, 230, 0.30);
-  box-shadow: 0 4px 20px rgba(124, 92, 230, 0.15);
+  border-color: rgba(168, 85, 247, 0.30);
+  box-shadow: 0 4px 20px rgba(168, 85, 247, 0.15);
 }
 
 /* Ambient corner glow (para cards destacadas) */
@@ -199,7 +203,7 @@ a:hover { color: var(--primary-fixed); }
   pointer-events: none;
   transition: background var(--dur-slow) var(--ease-out);
 }
-.ambient-glow:hover::after { background: rgba(124, 92, 230, 0.22); }
+.ambient-glow:hover::after { background: rgba(168, 85, 247, 0.22); }
 
 /* ============================================================
    Botones (industrial — uppercase, scale on hover, sin sombras)
@@ -241,7 +245,7 @@ a:hover { color: var(--primary-fixed); }
 .btn-primary:hover:not(:disabled) {
   background: var(--primary-fixed);
   color: var(--on-primary);
-  box-shadow: 0 4px 20px rgba(124, 92, 230, 0.30);
+  box-shadow: 0 4px 20px rgba(168, 85, 247, 0.30);
 }
 
 .btn-secondary {
@@ -305,8 +309,8 @@ a:hover { color: var(--primary-fixed); }
   max-width: 100%;
   min-width: 0;
   padding: 12px 14px;
-  /* Blanco, no var(--bg): en tema oscuro el campo era mas oscuro que la
-     tarjeta, pero en claro eso lo ensucia. El campo debe ser lo mas claro. */
+  /* El campo va mas oscuro que la tarjeta: sobre fondo oscuro eso lo hace
+     leerse como un hueco donde escribir, no como otra superficie. */
   background: var(--surface-container-lowest);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius);
@@ -327,7 +331,7 @@ a:hover { color: var(--primary-fixed); }
 .field select:focus,
 .field textarea:focus {
   border-color: var(--primary-accent);
-  box-shadow: 0 0 0 3px rgba(124, 92, 230, 0.20);
+  box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.20);
 }
 .field-input:disabled { opacity: 0.55; cursor: not-allowed; }
 
@@ -398,7 +402,7 @@ a:hover { color: var(--primary-fixed); }
   -webkit-text-fill-color: var(--on-surface) !important;
   -webkit-box-shadow: 0 0 0 1000px var(--bg) inset !important;
   box-shadow: 0 0 0 1000px var(--bg) inset !important;
-  background-color: var(--surface-container-lowest) !important;
+  background-color: var(--surface-container-low) !important;
   background-image: none !important;
   caret-color: var(--on-surface);
   border-color: var(--border-subtle);
@@ -406,15 +410,15 @@ a:hover { color: var(--primary-fixed); }
 }
 .field-input:-webkit-autofill:focus {
   -webkit-box-shadow: 0 0 0 1000px var(--bg) inset,
-                     0 0 0 3px rgba(124, 92, 230, 0.20) !important;
+                     0 0 0 3px rgba(168, 85, 247, 0.20) !important;
   box-shadow: 0 0 0 1000px var(--bg) inset,
-              0 0 0 3px rgba(124, 92, 230, 0.20) !important;
+              0 0 0 3px rgba(168, 85, 247, 0.20) !important;
   border-color: var(--primary-accent);
 }
 
 /* Firefox no usa -webkit-autofill; usa :-moz-autofill (mas raro) */
 .field-input:-moz-autofill {
-  background-color: var(--surface-container-lowest) !important;
+  background-color: var(--surface-container-low) !important;
   color: var(--on-surface) !important;
 }
 
@@ -455,7 +459,7 @@ input[type="url"]:-webkit-autofill:active {
   -webkit-text-fill-color: var(--on-surface) !important;
   -webkit-box-shadow: 0 0 0 1000px var(--bg) inset !important;
   box-shadow: 0 0 0 1000px var(--bg) inset !important;
-  background-color: var(--surface-container-lowest) !important;
+  background-color: var(--surface-container-low) !important;
   background-image: none !important;
   caret-color: var(--on-surface);
   border-color: var(--border-subtle);
@@ -485,7 +489,7 @@ input:-webkit-autofill::first-line {
 }
 .search-input:focus-within {
   border-color: var(--primary-accent);
-  box-shadow: 0 0 15px rgba(124, 92, 230, 0.15);
+  box-shadow: 0 0 15px rgba(168, 85, 247, 0.15);
 }
 .search-input .material-symbols-outlined { color: var(--on-surface-variant); }
 .search-input input {
@@ -692,8 +696,8 @@ input:-webkit-autofill::first-line {
 }
 .kpi:hover {
   transform: scale(1.02);
-  border-color: rgba(124, 92, 230, 0.30);
-  box-shadow: 0 4px 20px rgba(124, 92, 230, 0.15);
+  border-color: rgba(168, 85, 247, 0.30);
+  box-shadow: 0 4px 20px rgba(168, 85, 247, 0.15);
 }
 .kpi:hover::after { opacity: 1; }
 .kpi-head {
@@ -797,8 +801,8 @@ input:-webkit-autofill::first-line {
   to   { transform: translateX(0); opacity: 1; }
 }
 @keyframes glow-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(124, 92, 230, 0.45); }
-  50%      { box-shadow: 0 0 0 12px rgba(124, 92, 230, 0); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(168, 85, 247, 0.45); }
+  50%      { box-shadow: 0 0 0 12px rgba(168, 85, 247, 0); }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -841,48 +845,52 @@ input:-webkit-autofill::first-line {
 
 
 /* ============================================================
-   Tema claro: profundidad por sombra, no por brillo
-   El diseño original era oscuro y separaba las capas con glows y
-   bordes claros. Sobre gris medio eso no se ve: lo que separa las
-   tarjetas del fondo es una sombra suave.
+   Tema oscuro morado: profundidad por borde + glow, no por sombra
    ============================================================ */
-.glass-card,
-.chart-card,
-.table-card,
-.kpi-tile,
-.checkin-scanner,
-.staff-card,
-.auth-form-card {
-  box-shadow: 0 1px 2px rgba(30, 30, 36, 0.06),
-              0 4px 16px rgba(30, 30, 36, 0.08);
+
+/* El realce blanco superior vuelve: sobre oscuro si se percibe y es lo que
+   da el borde "de vidrio" a las tarjetas. */
+.glass-card::before {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), transparent 40%);
 }
-
-/* El realce blanco superior de las tarjetas era para fondo oscuro.
-   Sobre claro sobra: se elimina el degradado. */
-.glass-card::before { background: none; }
-
 .glass-card.glow-on-hover:hover {
-  border-color: var(--primary);
-  box-shadow: 0 2px 4px rgba(30, 30, 36, 0.08),
-              0 8px 28px rgba(124, 92, 230, 0.20);
+  border-color: rgba(168, 85, 247, 0.45);
+  box-shadow: 0 6px 28px rgba(168, 85, 247, 0.22);
 }
 
-/* ---------- Tarjeta invertida ----------
-   El arquetipo destaca un par de tarjetas en oscuro (ingresos del mes,
-   miembros en riesgo) para romper el gris. Esta clase las produce. */
-.card-inverse {
-  background: var(--surface-inverse) !important;
-  color: var(--on-surface-inverse) !important;
-  border-color: rgba(255, 255, 255, 0.10) !important;
+/* ---------- Titulos de seccion en magenta ----------
+   En la referencia los titulos dentro de las tarjetas van en magenta y en
+   mayusculas: es lo que ordena la lectura y separa "seccion" de "dato". */
+.chart-card__head h3,
+.table-card__head h3 {
+  color: var(--primary-accent);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: clamp(14px, 1.6vw, 16px);
 }
-.card-inverse h1, .card-inverse h2, .card-inverse h3,
-.card-inverse h4, .card-inverse strong { color: var(--on-surface-inverse); }
-.card-inverse p, .card-inverse span, .card-inverse small { color: rgba(245, 244, 248, 0.72); }
-/* Dentro de una tarjeta oscura el morado oscuro no se lee: vuelve al claro. */
-.card-inverse .accent,
-.card-inverse a { color: var(--inverse-primary); }
 
-/* El logo hereda el color del contenedor (fill="currentColor" en la palabra). */
+/* ---------- Tarjeta destacada ----------
+   Sustituye a .card-inverse del tema claro: aqui no se invierte, se tinta. */
+.card-inverse,
+.card-accent {
+  background: var(--surface-accent) !important;
+  border-color: var(--surface-accent-border) !important;
+  box-shadow: 0 0 0 1px rgba(217, 70, 239, 0.10),
+              0 8px 32px rgba(124, 58, 237, 0.18);
+}
+
+/* ---------- Botones con degradado de marca ---------- */
+.btn-primary {
+  background: var(--brand-grad);
+  border-color: transparent;
+  color: var(--on-primary);
+}
+.btn-primary:hover:not(:disabled) {
+  filter: brightness(1.12);
+  box-shadow: 0 6px 22px rgba(168, 85, 247, 0.38);
+}
+
+/* El logo hereda el color del contenedor (la palabra usa currentColor). */
 .admin-sidebar__brand { color: var(--sidebar-on); }
 .landing-brand,
 .legal-brand,
