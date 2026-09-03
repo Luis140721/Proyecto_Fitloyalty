@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 100" role="img" aria-label="FitLoyalty">
+  <g>
+    <path d="M24 16H86L77 32H40V84H24Z" fill="#F5F4F8" stroke="#F5F4F8" stroke-width="4" stroke-linejoin="round"/>
+    <path d="M45 44H72L63 60H45Z" fill="#A78BFA" stroke="#A78BFA" stroke-width="4" stroke-linejoin="round"/>
+  </g>
+  <text x="118" y="66" font-family="Sora, system-ui, sans-serif" font-size="48" letter-spacing="-1.5" fill="#F5F4F8"><tspan font-weight="400">Fit</tspan><tspan font-weight="700">Loyalty</tspan></text>
+</svg>

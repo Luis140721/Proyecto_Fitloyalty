@@ -9,52 +9,89 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  /* ---------- Surfaces (darkest → lightest) ---------- */
-  --bg:                  #000000;
-  --surface:             #121212;
-  --surface-dim:         #121414;
-  --surface-bright:      #37393a;
-  --surface-container-lowest: #0c0f0f;
-  --surface-container-low:    #1a1c1c;
-  --surface-container:        #1e2020;
-  --surface-container-high:   #282a2b;
-  --surface-container-highest:#333535;
-  --surface-variant:    #333535;
+  /* ---------- Superficies ----------
+     El fondo es un DEGRADADO gris azulado que aclara: es lo que da
+     profundidad a la pantalla sin necesidad de sombras. --bg queda como
+     color plano de respaldo (para :root, inputs y superficies que no deben
+     dejar ver el degradado). */
+  --bg-grad:             linear-gradient(145deg, #25272D 0%, #42454D 55%, #5E626A 100%);
+  --bg:                  #25272D;   /* extremo oscuro del degradado */
+  --bg-mid:              #42454D;
+  --bg-light:            #5E626A;   /* extremo claro: el peor caso de contraste */
+
+  /* Tarjetas translucidas: blanco al 14 -> 7 %. Dejan ver el degradado del
+     fondo, que es lo que produce el efecto de vidrio. */
+  --surface:             rgba(255, 255, 255, 0.10);
+  /* Vidrio: capa blanca 14 -> 7 % SOBRE una base oscura translucida. La base
+     es necesaria porque el degradado del fondo llega hasta #5E626A, y sobre
+     ese extremo claro el fucsia de los titulos caia a 2.11:1. Con la base la
+     tarjeta se mantiene oscura sin dejar de ser translucida. */
+  --surface-glass:       linear-gradient(180deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.07) 100%), rgba(26, 28, 33, 0.78);
+  --surface-border:      rgba(255, 255, 255, 0.22);
+  --surface-bevel:       inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  --surface-dim:         rgba(255, 255, 255, 0.06);
+  --surface-bright:      rgba(255, 255, 255, 0.18);
+  --surface-container-lowest: rgba(0, 0, 0, 0.28);   /* huecos: inputs */
+  --surface-container-low:    rgba(255, 255, 255, 0.06);
+  --surface-container:        rgba(255, 255, 255, 0.10);
+  --surface-container-high:   rgba(255, 255, 255, 0.16);
+  --surface-container-highest:rgba(255, 255, 255, 0.22);
+  --surface-variant:    rgba(255, 255, 255, 0.12);
+
+  /* Sidebar: morado brillante arriba, violeta profundo abajo. */
+  --sidebar-grad:        linear-gradient(180deg, #6D3FD9 0%, #3B1E6E 100%);
+  --sidebar-on:          #F6F0FF;
+
+  /* Tarjeta destacada: la que debe "saltar" (ingresos, en riesgo). */
+  --surface-accent:      linear-gradient(150deg, #3B2A6E 0%, #2A2D33 100%);
+  --surface-accent-border: rgba(232, 121, 249, 0.50);
 
   /* ---------- On-surface ---------- */
-  --on-surface:          #e2e2e2;
-  --on-surface-variant:  #cfc2d6;
-  --on-background:       #e2e2e2;
+  --on-surface:          #F5F4F8;   /* texto principal */
+  --on-surface-variant:  #D3D5D8;   /* texto secundario */
+  --on-background:       #F5F4F8;
+  --on-label:            #C4A6F2;   /* lila claro: etiquetas y epigrafes */
 
-  /* ---------- Brand ultraviolet ---------- */
-  --primary:             #A855F7;
-  --primary-fixed:       #ddb7ff;
-  --primary-container:   #b76dff;
-  --on-primary:          #000000;
-  --on-primary-container:#400071;
-  --inverse-primary:     #842bd2;
-  --primary-glow:        rgba(168, 85, 247, 0.35);
-  --primary-soft:        rgba(168, 85, 247, 0.10);
-  --primary-faint:       rgba(168, 85, 247, 0.05);
+  /* ---------- Marca ----------
+     El morado rellena y el fucsia acentua; el degradado entre ambos es la
+     firma visual. */
+  --primary:             #8B5CF6;
+  --primary-fixed:       #C4A6F2;
+  --primary-container:   #7C3AED;
+  --on-primary:          #FFFFFF;
+  --on-primary-container:#F3E8FF;
+  --inverse-primary:     #7C3AED;
+  --primary-glow:        rgba(168, 85, 247, 0.50);
+  --primary-soft:        rgba(168, 85, 247, 0.14);
+  --primary-faint:       rgba(168, 85, 247, 0.07);
+  --primary-accent:      #E879F9;   /* fucsia neon: titulos y enlaces */
+  --brand-grad:          linear-gradient(135deg, #8B5CF6 0%, #C026D3 100%);
+  --brand-grad-soft:     linear-gradient(135deg, rgba(139, 92, 246, 0.22) 0%, rgba(192, 38, 211, 0.22) 100%);
+  /* Barra destacada de graficos: fucsia -> morado. */
+  --bar-grad:            linear-gradient(180deg, #D946EF 0%, #7C3AED 100%);
+  /* Cifras grandes: degradado blanco -> fucsia. */
+  --num-grad:            linear-gradient(135deg, #F5F4F8 0%, #E879F9 100%);
 
   /* ---------- Secondary / tertiary ---------- */
-  --secondary:           #c6c6c6;
-  --tertiary:            #c8c6c5;
+  --secondary:           #D3D5D8;
+  --tertiary:            #C4A6F2;
 
-  /* ---------- Status ---------- */
-  --error:               #ffb4ab;
-  --error-container:     #93000a;
+  /* ---------- Estados ---------- */
+  --error:               #FFB4AB;
+  --error-container:     #7F1D1D;
   --success:             #4ADE80;
-  --success-container:   rgba(26, 77, 46, 0.25);
-  --warning:             #ddb7ff;
-  --warning-container:   rgba(168, 85, 247, 0.15);
+  --success-container:   rgba(26, 77, 46, 0.28);
+  --warning:             #FBBF24;
+  --warning-container:   rgba(251, 191, 36, 0.16);
   --info:                #60A5FA;
   --info-container:      rgba(37, 99, 235, 0.20);
 
-  /* ---------- Outlines ---------- */
-  --outline:             #988d9f;
-  --outline-variant:     #4d4354;
-  --border-subtle:       #1F2937;
+  /* ---------- Contornos ----------
+     Sobre superficies translucidas los bordes tambien van en blanco con
+     alfa: un color solido cortaria el efecto de vidrio. */
+  --outline:             rgba(255, 255, 255, 0.42);
+  --outline-variant:     rgba(255, 255, 255, 0.16);
+  --border-subtle:       rgba(255, 255, 255, 0.22);
 
   /* ---------- Tipografía ---------- */
   --font-display:  'Anybody', system-ui, -apple-system, sans-serif;
@@ -65,7 +102,7 @@
   /* ---------- Radii ---------- */
   --radius-xs: 2px;
   --radius:    4px;     /* default — botones, inputs, chips */
-  --radius-lg:  8px;    /* cards, modals */
+  --radius-lg:  12px;   /* cards, modals */
   --radius-xl:  12px;   /* hero cards */
   --radius-full: 9999px;
 
@@ -90,7 +127,10 @@ html { font-size: 16px; overflow-x: hidden; }
 
 body {
   font-family: var(--font-body);
-  background: var(--bg);
+  /* El degradado va fijo al viewport: si se desplazara con el scroll, en
+     paginas largas se repetiria y se verian bandas. */
+  background: var(--bg-grad) fixed;
+  background-color: var(--bg);
   color: var(--on-surface);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
@@ -107,7 +147,7 @@ h1, h2, h3, h4, .display, .headline {
   color: var(--on-surface);
 }
 
-a { color: var(--primary); text-decoration: none; transition: color var(--dur-fast) var(--ease-out); }
+a { color: var(--primary-accent); text-decoration: none; transition: color var(--dur-fast) var(--ease-out); }
 a:hover { color: var(--primary-fixed); }
 
 /* Selección con acento de marca */
@@ -144,7 +184,7 @@ a:hover { color: var(--primary-fixed); }
   position: relative;
   background-color: var(--surface);
   border: 1px solid var(--border-subtle);
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  border-top: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   overflow: hidden;
   isolation: isolate;
@@ -219,7 +259,7 @@ a:hover { color: var(--primary-fixed); }
 .btn-primary {
   background: var(--primary);
   color: var(--on-primary);
-  border-color: var(--primary);
+  border-color: var(--primary-accent);
 }
 .btn-primary:hover:not(:disabled) {
   background: var(--primary-fixed);
@@ -288,7 +328,9 @@ a:hover { color: var(--primary-fixed); }
   max-width: 100%;
   min-width: 0;
   padding: 12px 14px;
-  background: var(--bg);
+  /* El campo va mas oscuro que la tarjeta: sobre fondo oscuro eso lo hace
+     leerse como un hueco donde escribir, no como otra superficie. */
+  background: var(--surface-container-lowest);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius);
   color: var(--on-surface);
@@ -307,7 +349,7 @@ a:hover { color: var(--primary-fixed); }
 .field-input:focus,
 .field select:focus,
 .field textarea:focus {
-  border-color: var(--primary);
+  border-color: var(--primary-accent);
   box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.20);
 }
 .field-input:disabled { opacity: 0.55; cursor: not-allowed; }
@@ -379,7 +421,7 @@ a:hover { color: var(--primary-fixed); }
   -webkit-text-fill-color: var(--on-surface) !important;
   -webkit-box-shadow: 0 0 0 1000px var(--bg) inset !important;
   box-shadow: 0 0 0 1000px var(--bg) inset !important;
-  background-color: var(--bg) !important;
+  background-color: var(--surface-container-low) !important;
   background-image: none !important;
   caret-color: var(--on-surface);
   border-color: var(--border-subtle);
@@ -390,12 +432,12 @@ a:hover { color: var(--primary-fixed); }
                      0 0 0 3px rgba(168, 85, 247, 0.20) !important;
   box-shadow: 0 0 0 1000px var(--bg) inset,
               0 0 0 3px rgba(168, 85, 247, 0.20) !important;
-  border-color: var(--primary);
+  border-color: var(--primary-accent);
 }
 
 /* Firefox no usa -webkit-autofill; usa :-moz-autofill (mas raro) */
 .field-input:-moz-autofill {
-  background-color: var(--bg) !important;
+  background-color: var(--surface-container-low) !important;
   color: var(--on-surface) !important;
 }
 
@@ -436,7 +478,7 @@ input[type="url"]:-webkit-autofill:active {
   -webkit-text-fill-color: var(--on-surface) !important;
   -webkit-box-shadow: 0 0 0 1000px var(--bg) inset !important;
   box-shadow: 0 0 0 1000px var(--bg) inset !important;
-  background-color: var(--bg) !important;
+  background-color: var(--surface-container-low) !important;
   background-image: none !important;
   caret-color: var(--on-surface);
   border-color: var(--border-subtle);
@@ -458,14 +500,14 @@ input:-webkit-autofill::first-line {
   align-items: center;
   gap: 10px;
   padding: 10px 14px;
-  background: var(--bg);
+  background: var(--surface-container-lowest);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-full);
   transition: border-color var(--dur-fast) var(--ease-out),
               box-shadow var(--dur-fast) var(--ease-out);
 }
 .search-input:focus-within {
-  border-color: var(--primary);
+  border-color: var(--primary-accent);
   box-shadow: 0 0 15px rgba(168, 85, 247, 0.15);
 }
 .search-input .material-symbols-outlined { color: var(--on-surface-variant); }
@@ -504,8 +546,8 @@ input:-webkit-autofill::first-line {
 }
 .chip:hover { color: var(--on-surface); border-color: var(--outline); }
 .chip-active {
-  color: var(--primary);
-  border-color: var(--primary);
+  color: var(--primary-accent);
+  border-color: var(--primary-accent);
   background: var(--primary-soft);
 }
 .chip-count {
@@ -513,7 +555,7 @@ input:-webkit-autofill::first-line {
   padding: 2px 8px;
   border-radius: var(--radius-full);
   background: var(--primary);
-  color: var(--bg);
+  color: var(--on-primary);
   font-size: 10px;
 }
 .chip-status {
@@ -549,9 +591,9 @@ input:-webkit-autofill::first-line {
   animation: fade-in-up var(--dur) var(--ease-out);
 }
 .alert-error   { color: var(--error); border-left-color: var(--error); background: rgba(147, 0, 10, 0.25); }
-.alert-success { color: var(--primary-fixed); border-left-color: var(--primary); background: var(--primary-soft); }
+.alert-success { color: var(--primary-fixed); border-left-color: var(--primary-accent); background: var(--primary-soft); }
 .alert-info    { color: var(--info); border-left-color: var(--info); background: var(--info-container); }
-.alert-warning { color: var(--primary-fixed); border-left-color: var(--primary); background: var(--warning-container); }
+.alert-warning { color: var(--primary-fixed); border-left-color: var(--primary-accent); background: var(--warning-container); }
 
 /* Codigo dev que aparece en pantalla cuando Resend no puede entregar. */
 .dev-code {
@@ -604,7 +646,7 @@ input:-webkit-autofill::first-line {
   cursor: pointer;
   transition: color var(--dur-fast) var(--ease-out);
 }
-.table .row-actions .material-symbols-outlined:hover { color: var(--primary); }
+.table .row-actions .material-symbols-outlined:hover { color: var(--primary-accent); }
 
 /* Scroll horizontal para tablas anchas sin desbordar el card */
 .table-scroll {
@@ -637,7 +679,7 @@ input:-webkit-autofill::first-line {
   flex-shrink: 0;
   overflow: hidden;
 }
-.avatar-primary { color: var(--primary); border-color: var(--primary); }
+.avatar-primary { color: var(--primary-accent); border-color: var(--primary-accent); }
 .avatar-error   { color: var(--error); border-color: var(--error); }
 .avatar-info    { color: var(--info); border-color: var(--info); }
 .avatar img { width: 100%; height: 100%; object-fit: cover; }
@@ -654,7 +696,7 @@ input:-webkit-autofill::first-line {
   padding: 24px;
   background: var(--surface);
   border: 1px solid var(--border-subtle);
-  border-top: 1px solid rgba(255,255,255,0.05);
+  border-top: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   position: relative;
   overflow: hidden;
@@ -694,7 +736,7 @@ input:-webkit-autofill::first-line {
   align-items: center; justify-content: center;
   border-radius: var(--radius);
   background: var(--surface-container-high);
-  color: var(--primary);
+  color: var(--primary-accent);
   border: 1px solid var(--border-subtle);
 }
 .kpi-icon .material-symbols-outlined { font-size: 20px; }
@@ -709,7 +751,7 @@ input:-webkit-autofill::first-line {
 .kpi-meta {
   font-family: var(--font-label);
   font-size: 11px;
-  color: var(--primary);
+  color: var(--primary-accent);
   font-weight: 500;
 }
 .kpi-meta--error { color: var(--error); }
@@ -721,7 +763,7 @@ input:-webkit-autofill::first-line {
 .spinner {
   width: 40px; height: 40px;
   border: 3px solid var(--border-subtle);
-  border-top-color: var(--primary);
+  border-top-color: var(--primary-accent);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -789,3 +831,347 @@ input:-webkit-autofill::first-line {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ============================================================
+   Logo / marca
+   El componente <Logo /> inserta el SVG en linea (ver Logo.jsx).
+   Estas reglas solo controlan como se comporta dentro de su caja.
+   ============================================================ */
+.logo {
+  display: block;
+  height: auto;          /* el alto real lo fija el atributo height del SVG */
+  max-width: 100%;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+/* Los contenedores de marca antes llevaban un cuadrito "FL" + texto.
+   Ahora el logo es una sola pieza, asi que sobra el gap y el color de texto. */
+.admin-sidebar__brand,
+.landing-brand,
+.legal-brand,
+.auth-panel-brand {
+  gap: 0;
+  line-height: 0;
+}
+
+/* Icono de marca en el header del panel: solo en movil, donde el sidebar
+   esta oculto tras el drawer y la marca no se veria por ningun lado. */
+.admin-header__logo { display: none; line-height: 0; }
+@media (max-width: 900px) {
+  .admin-header__logo { display: block; flex-shrink: 0; }
+}
+
+
+/* ============================================================
+   Efecto vidrio sobre el degradado de fondo
+   Las tarjetas no son color solido: son blanco translucido (14 -> 7 %)
+   que deja ver el degradado. Lo que las separa del fondo es el borde
+   claro y el bisel interior, no una sombra.
+   ============================================================ */
+.glass-card,
+.chart-card,
+.table-card,
+.kpi,
+.kpi-tile,
+.checkin-scanner,
+.staff-card,
+.auth-form-card {
+  background: var(--surface-glass);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--surface-bevel), 0 8px 28px rgba(0, 0, 0, 0.22);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+/* El degradado blanco superior ya lo aporta --surface-glass. */
+.glass-card::before { background: none; }
+
+.glass-card.glow-on-hover:hover {
+  border-color: rgba(232, 121, 249, 0.55);
+  box-shadow: var(--surface-bevel), 0 10px 34px var(--primary-glow);
+}
+
+/* ---------- Titulos de seccion en fucsia ---------- */
+.chart-card__head h3,
+.table-card__head h3 {
+  color: var(--primary-accent);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  /* 19px minimo y peso 800: a ese tamano el fucsia entra en el umbral de
+     texto grande (3:1) y se lee bien sobre el vidrio. Por debajo no llegaba. */
+  font-size: clamp(19px, 1.8vw, 21px);
+  font-weight: 800;
+}
+
+/* Etiquetas y epigrafes en lila claro. */
+.field-label,
+.admin-nav-group__title,
+.kpi-label,
+.kpi-tile__label,
+.chart-card__head p { color: var(--on-label); }
+
+/* ---------- Tarjeta destacada ---------- */
+.card-inverse,
+.card-accent {
+  background: var(--surface-accent) !important;
+  border: 1px solid var(--surface-accent-border) !important;
+  box-shadow: var(--surface-bevel), 0 10px 34px rgba(124, 58, 237, 0.28);
+}
+
+/* ---------- Cifras grandes con degradado ----------
+   background-clip:text solo pinta el degradado dentro de la letra. Si el
+   navegador no lo soporta, el color de respaldo deja el texto legible. */
+.kpi-tile__value,
+.kpi-value {
+  background: var(--num-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+@supports not (background-clip: text) {
+  .kpi-tile__value, .kpi-value { color: var(--on-surface); -webkit-text-fill-color: currentColor; }
+}
+
+/* ---------- Botones con degradado de marca ---------- */
+.btn-primary {
+  background: var(--brand-grad);
+  border-color: transparent;
+  color: var(--on-primary);
+}
+.btn-primary:hover:not(:disabled) {
+  filter: brightness(1.12);
+  box-shadow: 0 6px 24px var(--primary-glow);
+}
+
+/* El logo hereda el color del contenedor (la palabra usa currentColor). */
+.admin-sidebar__brand { color: var(--sidebar-on); }
+.landing-brand,
+.legal-brand,
+.auth-panel-brand { color: var(--on-surface); }
+
+/* ---------- Fucsia vs lila, segun tamano ----------
+   El fucsia #E879F9 es un color claro: sobre el vidrio solo alcanza el
+   umbral de contraste en texto grande. Por eso los acentos PEQUENOS
+   (deltas de KPI, pies de tarjeta, chips) usan el lila #C4A6F2, que es lo
+   que la propia paleta reserva para etiquetas. */
+.kpi-meta,
+.kpi-tile__delta,
+.kpi-delta,
+.chart-card__foot,
+.table-card__foot,
+.chip-count,
+.hero-cap,
+small { color: var(--on-label); }
+
+/* Iniciales del avatar: el fucsia sobre el chip translucido se queda en
+   3.82:1. Al ser texto necesitan 4.5, asi que van en blanco sobre un chip
+   con el degradado de marca. */
+.avatar.avatar-primary {
+  background: var(--brand-grad);
+  color: #FFFFFF;
+}
+
+/* ============================================================
+   Boton flotante "volver arriba"
+   Oculto hasta que se baja una pantalla. No usa display:none para
+   poder animar la aparicion; mientras esta oculto es inerte
+   (pointer-events y tabIndex se apagan desde el componente).
+   ============================================================ */
+.volver-arriba {
+  position: fixed;
+  right: clamp(16px, 3vw, 28px);
+  bottom: clamp(16px, 3vw, 28px);
+  z-index: 60;
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--surface-border);
+  border-radius: 50%;
+  background: var(--brand-grad);
+  color: #FFFFFF;
+  cursor: pointer;
+  box-shadow: 0 6px 22px var(--primary-glow);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(12px);
+  transition: opacity var(--dur) var(--ease-out),
+              transform var(--dur) var(--ease-out),
+              visibility var(--dur) var(--ease-out),
+              filter var(--dur-fast) var(--ease-out);
+}
+.volver-arriba--visible {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+.volver-arriba:hover { filter: brightness(1.12); }
+.volver-arriba:active { transform: translateY(0) scale(0.94); }
+.volver-arriba .material-symbols-outlined { font-size: 24px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .volver-arriba { transition: opacity var(--dur-fast) linear, visibility var(--dur-fast) linear; transform: none; }
+  .volver-arriba--visible { transform: none; }
+}
+
+/* ============================================================
+   Controles nativos en oscuro
+   La lista desplegable de un <select>, el calendario de
+   <input type="date"> y los spinners los dibuja el SISTEMA
+   OPERATIVO, no el CSS de la pagina: por eso salian en gris
+   claro sobre la interfaz oscura. `color-scheme: dark` es lo
+   unico que hace que el navegador los pinte en oscuro.
+   ============================================================ */
+:root { color-scheme: dark; }
+
+/* Respaldo para navegadores que ignoran color-scheme en las opciones
+   (Firefox en Linux, sobre todo). */
+.field-input option,
+.field select option,
+select option {
+  background-color: #241E30;
+  color: var(--on-surface);
+}
+.field-input option:checked,
+select option:checked {
+  background-color: var(--primary);
+  color: #FFFFFF;
+}
+
+/* La flecha del select tambien es nativa: se sustituye por una propia
+   para que siga el color del tema. */
+/* La clase va repetida a proposito: `.auth-form .field-input` fija un
+   padding propio y hay que ganarle en especificidad sin recurrir a
+   !important, que romperia cualquier ajuste puntual mas adelante. */
+.field-input.field-input:is(select),
+.field select {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--on-surface-variant) 50%),
+    linear-gradient(135deg, var(--on-surface-variant) 50%, transparent 50%);
+  background-position: right 18px center, right 13px center;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  padding-right: 36px;
+}
+
+/* ==========================================================================
+   Calendario (react-datepicker)
+   --------------------------------------------------------------------------
+   La hoja de estilos que trae la libreria es clara y choca con el tema oscuro.
+   Aqui se repinta con los tokens del proyecto. Se usan selectores encadenados
+   (.react-datepicker .algo) para ganarle en especificidad a la hoja original,
+   que se importa despues de esta en el bundle.
+   ========================================================================== */
+
+/* El campo debe ocupar todo el ancho: la libreria lo envuelve en dos divs. */
+.field .react-datepicker-wrapper,
+.field .react-datepicker__input-container { display: block; width: 100%; }
+
+/* El popup por encima de modales y cabeceras pegajosas. */
+.react-datepicker-popper { z-index: 60; }
+
+.react-datepicker {
+  font-family: var(--font-body);
+  background-color: #241E30;
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+  color: var(--on-surface);
+}
+
+.react-datepicker__header {
+  background: var(--surface-accent);
+  border-bottom: 1px solid var(--surface-border);
+  border-top-left-radius: var(--radius-lg);
+  border-top-right-radius: var(--radius-lg);
+  padding-top: 10px;
+}
+
+.react-datepicker__current-month,
+.react-datepicker-time__header,
+.react-datepicker__day-name {
+  color: var(--on-surface);
+}
+
+.react-datepicker__day-name {
+  font-family: var(--font-label);
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--on-label);
+}
+
+.react-datepicker__day,
+.react-datepicker__time-name { color: var(--on-surface-variant); }
+
+.react-datepicker__day:hover {
+  background-color: rgba(139, 92, 246, 0.28);
+  color: var(--on-surface);
+}
+
+.react-datepicker__day--today { font-weight: 800; color: var(--on-label); }
+
+.react-datepicker__day--selected,
+.react-datepicker__day--keyboard-selected {
+  background: var(--brand-grad);
+  color: var(--on-primary);
+  font-weight: 700;
+}
+
+.react-datepicker__day--outside-month { opacity: 0.35; }
+
+.react-datepicker__day--disabled,
+.react-datepicker__day--disabled:hover {
+  color: rgba(255, 255, 255, 0.22);
+  background-color: transparent;
+  cursor: not-allowed;
+}
+
+.react-datepicker__navigation-icon::before { border-color: var(--on-surface-variant); }
+.react-datepicker__navigation:hover .react-datepicker__navigation-icon::before {
+  border-color: var(--primary-accent);
+}
+
+.react-datepicker__triangle { display: none; }
+
+/* Selectores rapidos de mes y ano de la cabecera. */
+.react-datepicker__header__dropdown {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  padding: 8px 10px 4px;
+}
+
+.react-datepicker__month-select,
+.react-datepicker__year-select {
+  appearance: none;
+  -webkit-appearance: none;
+  background-color: rgba(0, 0, 0, 0.34);
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--on-surface-variant) 50%),
+    linear-gradient(135deg, var(--on-surface-variant) 50%, transparent 50%);
+  background-position: right 12px center, right 7px center;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  border: 1px solid var(--surface-border);
+  border-radius: 8px;
+  color: var(--on-surface);
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-size: 13px;
+  padding: 5px 26px 5px 10px;
+}
+
+.react-datepicker__month-select:focus,
+.react-datepicker__year-select:focus {
+  border-color: var(--primary);
+  outline: none;
+}
+
+/* Campo de fecha marcado como invalido: el borde lo pinta .field-input--error,
+   pero la libreria envuelve el input y hay que dejar pasar el estilo. */
+.react-datepicker__input-container .field-input { width: 100%; }

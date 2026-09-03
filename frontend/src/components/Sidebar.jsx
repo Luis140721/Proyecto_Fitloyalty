@@ -1,12 +1,14 @@
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import UserAvatar from './UserAvatar';
+import Logo from './Logo';
 
 const links = [
   { to: '/admin/dashboard', label: 'Dashboard', icon: 'space_dashboard',  roles: ['admin'] },
   { to: '/admin/miembros',  label: 'Miembros',  icon: 'group',             roles: ['admin', 'receptionist'] },
   { to: '/admin/checkin',   label: 'Check-in',  icon: 'qr_code_scanner',   roles: ['admin', 'receptionist'] },
   { to: '/admin/staff',     label: 'Equipo',    icon: 'badge',             roles: ['admin'] },
+  { to: '/admin/config',    label: 'Configuración', icon: 'settings',      roles: ['admin'] },
 ];
 
 function roleName(r) {
@@ -39,8 +41,7 @@ export default function Sidebar({ open, onNavigate }) {
       </button>
 
       <NavLink to="/" className="admin-sidebar__brand" aria-label="Inicio FitLoyalty" onClick={onNavigate}>
-        <span className="admin-sidebar__brand-mark">FL</span>
-        <span>FitLoyalty</span>
+        <Logo height={30} />
       </NavLink>
 
       <div>

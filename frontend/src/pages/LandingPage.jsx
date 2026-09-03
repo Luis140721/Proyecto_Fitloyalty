@@ -1,4 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom';
+import Logo from '../components/Logo';
+import BotonVolverArriba from '../components/BotonVolverArriba';
 import '../styles/landing.css';
 
 const SOLUTIONS = [
@@ -101,8 +103,8 @@ function HeroMock() {
           <svg viewBox="0 0 320 110" preserveAspectRatio="none">
             <defs>
               <linearGradient id="hp-fill" x1="0" x2="0" y1="0" y2="1">
-                <stop offset="0%" stopColor="#A855F7" stopOpacity="0.45" />
-                <stop offset="100%" stopColor="#A855F7" stopOpacity="0" />
+                <stop offset="0%" stopColor="#7C5CE6" stopOpacity="0.45" />
+                <stop offset="100%" stopColor="#7C5CE6" stopOpacity="0" />
               </linearGradient>
             </defs>
             <path
@@ -112,7 +114,7 @@ function HeroMock() {
             <path
               d="M0 90 L40 70 L80 80 L120 50 L160 55 L200 30 L240 35 L280 15 L320 20"
               fill="none"
-              stroke="#A855F7"
+              stroke="#7C5CE6"
               strokeWidth="2"
             />
           </svg>
@@ -130,8 +132,7 @@ export default function LandingPage() {
       {/* ---------- HEADER ---------- */}
       <header className="landing-header">
         <Link to="/" className="landing-brand" aria-label="Inicio FitLoyalty">
-          <span className="landing-brand-mark">FL</span>
-          <span>FitLoyalty</span>
+          <Logo height={32} />
         </Link>
         <nav className="landing-nav" aria-label="Navegación principal">
           <a className="landing-nav-link" href="#solucion">Solución</a>
@@ -338,8 +339,7 @@ export default function LandingPage() {
         <div className="footer-cols">
           <div>
             <Link to="/" className="landing-brand" aria-label="Inicio FitLoyalty">
-              <span className="landing-brand-mark">FL</span>
-              <span>FitLoyalty</span>
+              <Logo height={28} />
             </Link>
             <p className="footer-tag">
               La herramienta hecha en Colombia para los gimnasios pequeños que quieren crecer sin volverse locos
@@ -368,6 +368,8 @@ export default function LandingPage() {
         </div>
         <div className="footer-bottom">© {new Date().getFullYear()} FitLoyalty</div>
       </footer>
+
+      <BotonVolverArriba />
     </div>
   );
 }

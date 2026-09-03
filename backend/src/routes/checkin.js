@@ -9,6 +9,7 @@
  * Handlers con asyncHandler: cualquier rechazo va al errorHandler central.
  */
 const express = require('express');
+const crypto  = require('crypto');
 const pool    = require('../db/db');
 const { authenticate, authorize } = require('../middleware/auth');
 const asyncHandler = require('../lib/asyncHandler');
@@ -18,6 +19,27 @@ const { z } = require('zod');
 const { formatZodError } = require('../lib/validators');
 
 const router = express.Router();
+
+// Clave secreta para descifrar QR (debe ser la misma que en miembros.js)
+const QR_ENCRYPTION_KEY = process.env.QR_ENCRYPTION_KEY || 'FitLoyalty2024SecretKey';
+
+// Función para descifrar el código QR
+function decryptQrCode(encrypted) {
+  try {
+    const algorithm = 'aes-256-cbc';
+    const key = crypto.scryptSync(QR_ENCRYPTION_KEY, 'salt', 32);
+    const parts = encrypted.split(':');
+    const iv = Buffer.from(parts.shift(), 'hex');
+    const encryptedText = parts.join(':');
+    const decipher = crypto.createDecipheriv(algorithm, key, iv);
+    let decrypted = decipher.update(encryptedText, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+    return decrypted;
+  } catch (e) {
+    // Si falla el descifrado, retornar el texto original (para compatibilidad con QRs antiguos)
+    return encrypted;
+  }
+}
 
 const checkinSchema = z.object({
   codigo:    z.string().optional(),
@@ -43,20 +65,62 @@ router.post(
   asyncHandler(async (req, res) => {
     const parsed = parse(checkinSchema, req.body);
     if (!parsed.ok) throw new AppError(parsed.status, parsed.error, 'VALIDATION_ERROR', { issues: parsed.issues });
-    const { codigo, documento, metodo, observacion } = parsed.data;
+    let { codigo, documento, metodo, observacion } = parsed.data;
     const gymId = req.user.gymId;
 
+    // Descifrar el código QR si está cifrado
+    if (codigo) {
+      codigo = decryptQrCode(codigo);
+    }
+
     try {
-      const where = ['id_gimnasio = $1', 'activo = TRUE'];
-      const params = [gymId];
-      if (codigo)    { params.push(codigo);    where.push(`codigo_qr = $${params.length}`); }
-      if (documento) { params.push(documento); where.push(`documento = $${params.length}`); }
-      const { rows: miembros } = await pool.query(
-        `SELECT id_miembro, nombre, documento, codigo_qr FROM miembro WHERE ${where.join(' AND ')} LIMIT 1`,
-        params
-      );
-      const miembro = miembros[0];
-      if (!miembro) throw new AppError(404, 'Miembro no encontrado en este gimnasio.', 'MEMBER_NOT_FOUND');
+      let miembro;
+      
+      if (codigo) {
+        // Para búsqueda por código QR, necesitamos comparar con el valor descifrado
+        // Primero intentamos buscar directamente (por si es un código antiguo sin cifrar)
+        const { rows: directMatch } = await pool.query(
+          `SELECT id_miembro, nombre, documento, codigo_qr, qr_imagen FROM miembro 
+           WHERE id_gimnasio = $1 AND activo = TRUE AND codigo_qr = $2 LIMIT 1`,
+          [gymId, codigo]
+        );
+        
+        if (directMatch.length > 0) {
+          miembro = directMatch[0];
+        } else {
+          // Si no encontramos con el código original, buscar todos y descifrar para comparar
+          const { rows: allMembers } = await pool.query(
+            `SELECT id_miembro, nombre, documento, codigo_qr, qr_imagen FROM miembro 
+             WHERE id_gimnasio = $1 AND activo = TRUE`,
+            [gymId]
+          );
+          
+          const decryptedMatch = allMembers.find(m => {
+            try {
+              const decrypted = decryptQrCode(m.codigo_qr);
+              return decrypted === codigo;
+            } catch (e) {
+              return false;
+            }
+          });
+          
+          if (decryptedMatch) {
+            miembro = decryptedMatch;
+          }
+        }
+        
+        if (!miembro) throw new AppError(404, 'Miembro no encontrado en este gimnasio.', 'MEMBER_NOT_FOUND');
+      } else if (documento) {
+        const { rows: miembros } = await pool.query(
+          `SELECT id_miembro, nombre, documento, codigo_qr, qr_imagen FROM miembro 
+           WHERE id_gimnasio = $1 AND activo = TRUE AND documento = $2 LIMIT 1`,
+          [gymId, documento]
+        );
+        miembro = miembros[0];
+        if (!miembro) throw new AppError(404, 'Miembro no encontrado en este gimnasio.', 'MEMBER_NOT_FOUND');
+      } else {
+        throw new AppError(400, 'codigo o documento requerido', 'VALIDATION_ERROR');
+      }
 
       // Validar membresia activa
       const { rows: mem } = await pool.query(
@@ -80,7 +144,13 @@ router.post(
       return res.status(201).json({
         message: membresiaVencida ? 'Membresia no activa. Ingreso registrado con aviso.' : 'Ingreso registrado.',
         checkin: rows[0],
-        miembro: { id: miembro.id_miembro, nombre: miembro.nombre, documento: miembro.documento },
+        miembro: { 
+          id: miembro.id_miembro, 
+          nombre: miembro.nombre, 
+          documento: miembro.documento,
+          codigo_qr: decryptQrCode(miembro.codigo_qr),
+          qr_imagen: miembro.qr_imagen
+        },
         membresia: m || null,
         advertencia: sinMembresia ? 'sin-membresia' : membresiaVencida ? 'membresia-vencida' : null,
       });
