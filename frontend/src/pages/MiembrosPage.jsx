@@ -159,6 +159,9 @@ export default function MiembrosPage() {
   const [editForm, setEditForm] = useState(empty);
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState('');
+  const [editLoading, setEditLoading] = useState(false);
+  const [editQr, setEditQr] = useState('');      // imagen del QR en el detalle
+  const [qrCopiado, setQrCopiado] = useState(false);
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
   const [loading, setLoading] = useState(false);
@@ -433,16 +436,54 @@ export default function MiembrosPage() {
   };
 
   // Abre modal de edicion con el form prellenado.
-  const openEdit = (m) => {
+  /**
+   * Abre el detalle/edicion de un miembro.
+   *
+   * Pide el registro completo a la API en vez de usar el objeto de la lista:
+   * la lista no trae todas las columnas, y si el formulario las precargara
+   * vacias, al guardar las borraria. Tambien genera aqui la imagen del QR
+   * para poder mostrarla junto al formulario.
+   */
+  const openEdit = async (m) => {
     setEditing(m);
-    setEditForm({
-      nombre:   m.nombre   || '',
-      documento: m.documento || '',
-      telefono: m.telefono || '',
-      email:    m.email    || '',
-      activo:   m.activo !== false,
-    });
     setEditError('');
+    setEditQr('');
+    // Precarga con lo que ya tenemos para que el modal abra sin espera.
+    setEditForm({ ...empty, ...m, activo: m.activo !== false });
+    setEditLoading(true);
+    try {
+      const { data } = await api.get(`/admin/miembros/${m.id_miembro}`);
+      const full = data.miembro || m;
+      setEditing(full);
+      setEditForm({
+        ...empty,
+        ...full,
+        // <input type="date"> necesita AAAA-MM-DD, no un ISO completo.
+        fecha_nacimiento: full.fecha_nacimiento ? String(full.fecha_nacimiento).slice(0, 10) : '',
+        activo: full.activo !== false,
+      });
+      if (full.codigo_qr) {
+        try { setEditQr(await QRCode.toDataURL(full.codigo_qr)); }
+        catch (_) { /* si falla el dibujo, igual mostramos el codigo en texto */ }
+      }
+    } catch (err) {
+      setEditError(err.message || 'No pudimos cargar los datos completos del miembro.');
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
+  /** Copia el codigo QR al portapapeles y confirma en el propio boton. */
+  const copiarCodigoQr = async () => {
+    const codigo = editing?.codigo_qr;
+    if (!codigo) return;
+    try {
+      await navigator.clipboard.writeText(codigo);
+      setQrCopiado(true);
+      setTimeout(() => setQrCopiado(false), 2000);
+    } catch (_) {
+      setEditError('Tu navegador bloqueó el portapapeles. Copia el código a mano.');
+    }
   };
 
   const closeEdit = () => {
@@ -450,6 +491,8 @@ export default function MiembrosPage() {
     setEditing(null);
     setEditForm(empty);
     setEditError('');
+    setEditQr('');
+    setQrCopiado(false);
   };
 
   const onSaveEdit = async (e) => {
@@ -458,11 +501,25 @@ export default function MiembrosPage() {
     setEditError('');
     setEditSaving(true);
     try {
-      const payload = { ...editForm };
+      /* Solo se envian los campos que el backend acepta actualizar. El
+         formulario arrastra claves del objeto `empty` (plan, pagos...) que
+         viven en otras tablas: si se enviaran, zod rechazaria la peticion. */
+      const EDITABLES = [
+        'nombre', 'documento', 'telefono', 'email', 'activo',
+        'tipo_documento', 'fecha_nacimiento', 'genero', 'codigo_pais_telefono',
+        'ciudad', 'direccion', 'contacto_emergencia', 'telefono_emergencia',
+        'condiciones_medicas', 'alergias', 'objetivo', 'nivel_experiencia',
+        'observaciones',
+      ];
+      const payload = {};
+      for (const k of EDITABLES) {
+        if (editForm[k] !== undefined) payload[k] = editForm[k];
+      }
       if (!payload.email) delete payload.email;
       await api.put(`/admin/miembros/${editing.id_miembro}`, payload);
       setEditing(null);
       setEditForm(empty);
+      setEditQr('');
       setInfo('Miembro actualizado.');
       load(q);
     } catch (err) {
@@ -1221,6 +1278,49 @@ export default function MiembrosPage() {
               <span>{editError}</span>
             </div>
           )}
+
+          {/* ---------- Codigo QR del miembro ----------
+              El mismo QR que se muestra al registrar, disponible tambien aqui
+              para reimprimirlo o reenviarlo sin tener que crear el miembro de
+              nuevo. */}
+          {editing?.codigo_qr && (
+            <section className="miembro-qr-panel">
+              {editQr
+                ? <img src={editQr} alt={`Código QR de ${editing.nombre}`} className="miembro-qr-panel__img" />
+                : <div className="miembro-qr-panel__img miembro-qr-panel__img--vacio">
+                    <span className="material-symbols-outlined">qr_code_2</span>
+                  </div>}
+              <div className="miembro-qr-panel__body">
+                <span className="field-label">Código QR</span>
+                <code className="miembro-qr-panel__codigo">{editing.codigo_qr}</code>
+                <div className="miembro-qr-panel__acciones">
+                  <button type="button" className="btn btn-secondary btn-sm" onClick={copiarCodigoQr}>
+                    <span className="material-symbols-outlined icon">
+                      {qrCopiado ? 'check' : 'content_copy'}
+                    </span>
+                    {qrCopiado ? 'Copiado' : 'Copiar código'}
+                  </button>
+                  {editQr && (
+                    <a
+                      className="btn btn-ghost btn-sm"
+                      href={editQr}
+                      download={`qr-${editing.documento || editing.codigo_qr}.png`}
+                    >
+                      <span className="material-symbols-outlined icon">download</span>
+                      Descargar
+                    </a>
+                  )}
+                </div>
+              </div>
+            </section>
+          )}
+
+          {editLoading && (
+            <p className="field-hint" style={{ marginBottom: 12 }}>
+              Cargando los datos completos del miembro…
+            </p>
+          )}
+
           <div className="auth-form-row">
             <label className="field">
               <span className="field-label">Nombre completo</span>
@@ -1266,6 +1366,146 @@ export default function MiembrosPage() {
               />
             </label>
           </div>
+          <div className="auth-form-row">
+            <label className="field">
+              <span className="field-label">Tipo de documento</span>
+              <select
+                className="field-input"
+                value={editForm.tipo_documento || 'CC'}
+                onChange={(e) => setEditForm({ ...editForm, tipo_documento: e.target.value })}
+              >
+                {TIPOS_DOCUMENTO.map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </label>
+            <label className="field">
+              <span className="field-label">Fecha de nacimiento</span>
+              <input
+                className="field-input"
+                type="date"
+                value={editForm.fecha_nacimiento || ''}
+                onChange={(e) => setEditForm({ ...editForm, fecha_nacimiento: e.target.value })}
+              />
+            </label>
+          </div>
+
+          <div className="auth-form-row">
+            <label className="field">
+              <span className="field-label">Género</span>
+              <select
+                className="field-input"
+                value={editForm.genero || ''}
+                onChange={(e) => setEditForm({ ...editForm, genero: e.target.value })}
+              >
+                <option value="">Sin especificar</option>
+                {GENEROS.map((g) => <option key={g} value={g}>{g}</option>)}
+              </select>
+            </label>
+            <label className="field">
+              <span className="field-label">Ciudad</span>
+              <input
+                className="field-input"
+                value={editForm.ciudad || ''}
+                onChange={(e) => setEditForm({ ...editForm, ciudad: e.target.value })}
+                placeholder="Bogotá"
+              />
+            </label>
+          </div>
+
+          <label className="field">
+            <span className="field-label">Dirección</span>
+            <input
+              className="field-input"
+              value={editForm.direccion || ''}
+              onChange={(e) => setEditForm({ ...editForm, direccion: e.target.value })}
+              placeholder="Calle 123 #45-67"
+            />
+          </label>
+
+          <div className="auth-form-divider" style={{ margin: '6px 0 0' }}>SALUD Y EMERGENCIA</div>
+
+          <div className="auth-form-row">
+            <label className="field">
+              <span className="field-label">Contacto de emergencia</span>
+              <input
+                className="field-input"
+                value={editForm.contacto_emergencia || ''}
+                onChange={(e) => setEditForm({ ...editForm, contacto_emergencia: e.target.value })}
+                placeholder="Nombre y parentesco"
+              />
+            </label>
+            <label className="field">
+              <span className="field-label">Teléfono de emergencia</span>
+              <input
+                className="field-input"
+                value={editForm.telefono_emergencia || ''}
+                onChange={(e) => setEditForm({ ...editForm, telefono_emergencia: e.target.value })}
+                placeholder="3001234567"
+                inputMode="numeric"
+              />
+            </label>
+          </div>
+
+          <div className="auth-form-row">
+            <label className="field">
+              <span className="field-label">Condiciones médicas</span>
+              <textarea
+                className="field-input"
+                rows={2}
+                value={editForm.condiciones_medicas || ''}
+                onChange={(e) => setEditForm({ ...editForm, condiciones_medicas: e.target.value })}
+                placeholder="Lesiones, tratamientos, etc."
+              />
+            </label>
+            <label className="field">
+              <span className="field-label">Alergias</span>
+              <textarea
+                className="field-input"
+                rows={2}
+                value={editForm.alergias || ''}
+                onChange={(e) => setEditForm({ ...editForm, alergias: e.target.value })}
+                placeholder="Alimentos, medicamentos…"
+              />
+            </label>
+          </div>
+
+          <div className="auth-form-divider" style={{ margin: '6px 0 0' }}>ENTRENAMIENTO</div>
+
+          <div className="auth-form-row">
+            <label className="field">
+              <span className="field-label">Objetivo</span>
+              <select
+                className="field-input"
+                value={editForm.objetivo || ''}
+                onChange={(e) => setEditForm({ ...editForm, objetivo: e.target.value })}
+              >
+                <option value="">Sin especificar</option>
+                {OBJETIVOS.map((o) => <option key={o} value={o}>{o}</option>)}
+              </select>
+            </label>
+            <label className="field">
+              <span className="field-label">Nivel de experiencia</span>
+              <select
+                className="field-input"
+                value={editForm.nivel_experiencia || ''}
+                onChange={(e) => setEditForm({ ...editForm, nivel_experiencia: e.target.value })}
+              >
+                <option value="">Sin especificar</option>
+                {NIVELES_EXPERIENCIA.map((n) => <option key={n} value={n}>{n}</option>)}
+              </select>
+            </label>
+          </div>
+
+          <label className="field">
+            <span className="field-label">Observaciones</span>
+            <textarea
+              className="field-input"
+              rows={3}
+              value={editForm.observaciones || ''}
+              onChange={(e) => setEditForm({ ...editForm, observaciones: e.target.value })}
+              placeholder="Notas internas sobre el miembro"
+            />
+          </label>
+
           <label className="field" style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
             <input
               type="checkbox"
