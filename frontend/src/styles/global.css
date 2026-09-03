@@ -305,7 +305,9 @@ a:hover { color: var(--primary-fixed); }
   max-width: 100%;
   min-width: 0;
   padding: 12px 14px;
-  background: var(--bg);
+  /* Blanco, no var(--bg): en tema oscuro el campo era mas oscuro que la
+     tarjeta, pero en claro eso lo ensucia. El campo debe ser lo mas claro. */
+  background: var(--surface-container-lowest);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius);
   color: var(--on-surface);
@@ -396,7 +398,7 @@ a:hover { color: var(--primary-fixed); }
   -webkit-text-fill-color: var(--on-surface) !important;
   -webkit-box-shadow: 0 0 0 1000px var(--bg) inset !important;
   box-shadow: 0 0 0 1000px var(--bg) inset !important;
-  background-color: var(--bg) !important;
+  background-color: var(--surface-container-lowest) !important;
   background-image: none !important;
   caret-color: var(--on-surface);
   border-color: var(--border-subtle);
@@ -412,7 +414,7 @@ a:hover { color: var(--primary-fixed); }
 
 /* Firefox no usa -webkit-autofill; usa :-moz-autofill (mas raro) */
 .field-input:-moz-autofill {
-  background-color: var(--bg) !important;
+  background-color: var(--surface-container-lowest) !important;
   color: var(--on-surface) !important;
 }
 
@@ -453,7 +455,7 @@ input[type="url"]:-webkit-autofill:active {
   -webkit-text-fill-color: var(--on-surface) !important;
   -webkit-box-shadow: 0 0 0 1000px var(--bg) inset !important;
   box-shadow: 0 0 0 1000px var(--bg) inset !important;
-  background-color: var(--bg) !important;
+  background-color: var(--surface-container-lowest) !important;
   background-image: none !important;
   caret-color: var(--on-surface);
   border-color: var(--border-subtle);
@@ -475,7 +477,7 @@ input:-webkit-autofill::first-line {
   align-items: center;
   gap: 10px;
   padding: 10px 14px;
-  background: var(--bg);
+  background: var(--surface-container-lowest);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-full);
   transition: border-color var(--dur-fast) var(--ease-out),
