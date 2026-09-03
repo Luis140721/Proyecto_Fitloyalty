@@ -266,38 +266,63 @@ router.post(
       const proximaFechaCobro = data.proxima_fecha_cobro || calcularProximaFechaCobro(fechaFin);
 
       // Insertar miembro con todos los campos (guardar código QR cifrado)
-      const { rows: miembroRows } = await pool.query(
-        `INSERT INTO miembro (
-          id_gimnasio, nombre, tipo_documento, documento, fecha_nacimiento, genero,
-          telefono, email, direccion,
-          contacto_emergencia, telefono_emergencia, condiciones_medicas, alergias,
-          objetivo, nivel_experiencia, observaciones,
-          acepto_terminos, autorizo_datos, codigo_qr, qr_imagen
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
-        RETURNING id_miembro, nombre, documento, telefono, email, codigo_qr, qr_imagen, activo, fecha_registro`,
-        [
-          gymId, 
-          data.nombre.trim(), 
-          data.tipo_documento, 
-          data.documento, 
-          data.fecha_nacimiento || null, 
-          data.genero || null,
-          data.telefono, 
-          data.email || null, 
-          data.direccion || null,
-          data.contacto_emergencia || null, 
-          data.telefono_emergencia || null, 
-          data.condiciones_medicas || null, 
-          data.alergias || null,
-          data.objetivo || null, 
-          data.nivel_experiencia || null, 
-          data.observaciones || null,
-          data.acepto_terminos, 
-          data.autorizo_datos, 
-          codigo_qr_cifrado,
-          data.qr_imagen || null
-        ]
-      );
+      console.log('[POST /admin/miembros] Intentando insertar miembro con datos:', {
+        gymId,
+        nombre: data.nombre,
+        tipo_documento: data.tipo_documento,
+        documento: data.documento,
+        telefono: data.telefono,
+        email: data.email
+      });
+      
+      let miembroRows;
+      try {
+        const result = await pool.query(
+          `INSERT INTO miembro (
+            id_gimnasio, nombre, tipo_documento, documento, fecha_nacimiento, genero,
+            telefono, email, direccion,
+            contacto_emergencia, telefono_emergencia, condiciones_medicas, alergias,
+            objetivo, nivel_experiencia, observaciones,
+            acepto_terminos, autorizo_datos, codigo_qr, qr_imagen
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+          RETURNING id_miembro, nombre, documento, telefono, email, codigo_qr, qr_imagen, activo, fecha_registro`,
+          [
+            gymId, 
+            data.nombre.trim(), 
+            data.tipo_documento, 
+            data.documento, 
+            data.fecha_nacimiento || null, 
+            data.genero || null,
+            data.telefono, 
+            data.email || null, 
+            data.direccion || null,
+            data.contacto_emergencia || null, 
+            data.telefono_emergencia || null, 
+            data.condiciones_medicas || null, 
+            data.alergias || null,
+            data.objetivo || null, 
+            data.nivel_experiencia || null, 
+            data.observaciones || null,
+            data.acepto_terminos, 
+            data.autorizo_datos, 
+            codigo_qr_cifrado,
+            data.qr_imagen || null
+          ]
+        );
+        miembroRows = result.rows;
+        console.log('[POST /admin/miembros] Miembro insertado exitosamente:', miembroRows[0]);
+      } catch (dbErr) {
+        console.error('[POST /admin/miembros] Error en INSERT de miembro:', dbErr);
+        console.error('[POST /admin/miembros] Detalles del error:', {
+          message: dbErr.message,
+          code: dbErr.code,
+          detail: dbErr.detail,
+          hint: dbErr.hint,
+          table: dbErr.table,
+          column: dbErr.column
+        });
+        throw new AppError(500, 'No pudimos crear el miembro. Intenta de nuevo.', 'DB_UNREACHABLE');
+      }
 
       const miembroId = miembroRows[0].id_miembro;
 
