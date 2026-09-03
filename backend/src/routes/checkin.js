@@ -23,6 +23,13 @@ const router = express.Router();
 // Clave secreta para descifrar QR (debe ser la misma que en miembros.js)
 const QR_ENCRYPTION_KEY = process.env.QR_ENCRYPTION_KEY || 'FitLoyalty2024SecretKey';
 
+/*
+ * Segundos durante los cuales un mismo miembro no vuelve a registrar ingreso.
+ * Suficiente para absorber los disparos repetidos del lector y para que nadie
+ * marque dos veces por equivocacion, pero corto por si alguien sale y entra.
+ */
+const VENTANA_ANTIREBOTE_SEG = Number(process.env.CHECKIN_VENTANA_SEG || 90);
+
 // Función para descifrar el código QR
 function decryptQrCode(encrypted) {
   try {
@@ -134,6 +141,44 @@ router.post(
       const sinMembresia = !m;
       const membresiaVencida = m && (m.estado !== 'ACTIVA' || new Date(m.fecha_fin) < hoy);
 
+      /*
+       * Anti-rebote. El lector de QR dispara varias veces por segundo mientras
+       * el codigo siga delante de la camara, y sin esto cada disparo inserta
+       * una fila. La proteccion va aqui y no solo en el front porque afecta a
+       * cualquier cliente: el formulario manual, otra pestana abierta o un
+       * segundo lector en la puerta.
+       *
+       * Dentro de la ventana no se inserta nada: se devuelve el ingreso que ya
+       * existe, con 200 en vez de 201 para que el front sepa distinguirlos.
+       */
+      const { rows: repetido } = await pool.query(
+        `SELECT id_checkin, fecha_hora, metodo
+           FROM checkin
+          WHERE id_miembro = $1
+            AND id_gimnasio = $2
+            AND fecha_hora > NOW() - ($3 || ' seconds')::interval
+          ORDER BY fecha_hora DESC
+          LIMIT 1`,
+        [miembro.id_miembro, gymId, VENTANA_ANTIREBOTE_SEG]
+      );
+
+      if (repetido.length > 0) {
+        return res.status(200).json({
+          message: `${miembro.nombre} ya registro su ingreso hace un momento.`,
+          duplicado: true,
+          checkin: repetido[0],
+          miembro: {
+            id: miembro.id_miembro,
+            nombre: miembro.nombre,
+            documento: miembro.documento,
+            codigo_qr: decryptQrCode(miembro.codigo_qr),
+            qr_imagen: miembro.qr_imagen,
+          },
+          membresia: m || null,
+          advertencia: null,
+        });
+      }
+
       const { rows } = await pool.query(
         `INSERT INTO checkin (id_miembro, id_gimnasio, metodo, id_usuario, observacion, valido)
          VALUES ($1, $2, $3, $4, $5, $6)
@@ -143,6 +188,7 @@ router.post(
 
       return res.status(201).json({
         message: membresiaVencida ? 'Membresia no activa. Ingreso registrado con aviso.' : 'Ingreso registrado.',
+        duplicado: false,
         checkin: rows[0],
         miembro: { 
           id: miembro.id_miembro, 
