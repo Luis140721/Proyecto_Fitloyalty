@@ -9,6 +9,7 @@
  * Handlers con asyncHandler: cualquier rechazo va al errorHandler central.
  */
 const express = require('express');
+const crypto  = require('crypto');
 const pool    = require('../db/db');
 const { authenticate, authorize } = require('../middleware/auth');
 const asyncHandler = require('../lib/asyncHandler');
@@ -18,6 +19,27 @@ const { z } = require('zod');
 const { formatZodError } = require('../lib/validators');
 
 const router = express.Router();
+
+// Clave secreta para descifrar QR (debe ser la misma que en miembros.js)
+const QR_ENCRYPTION_KEY = process.env.QR_ENCRYPTION_KEY || 'FitLoyalty2024SecretKey';
+
+// Función para descifrar el código QR
+function decryptQrCode(encrypted) {
+  try {
+    const algorithm = 'aes-256-cbc';
+    const key = crypto.scryptSync(QR_ENCRYPTION_KEY, 'salt', 32);
+    const parts = encrypted.split(':');
+    const iv = Buffer.from(parts.shift(), 'hex');
+    const encryptedText = parts.join(':');
+    const decipher = crypto.createDecipheriv(algorithm, key, iv);
+    let decrypted = decipher.update(encryptedText, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+    return decrypted;
+  } catch (e) {
+    // Si falla el descifrado, retornar el texto original (para compatibilidad con QRs antiguos)
+    return encrypted;
+  }
+}
 
 const checkinSchema = z.object({
   codigo:    z.string().optional(),
@@ -43,8 +65,13 @@ router.post(
   asyncHandler(async (req, res) => {
     const parsed = parse(checkinSchema, req.body);
     if (!parsed.ok) throw new AppError(parsed.status, parsed.error, 'VALIDATION_ERROR', { issues: parsed.issues });
-    const { codigo, documento, metodo, observacion } = parsed.data;
+    let { codigo, documento, metodo, observacion } = parsed.data;
     const gymId = req.user.gymId;
+
+    // Descifrar el código QR si está cifrado
+    if (codigo) {
+      codigo = decryptQrCode(codigo);
+    }
 
     try {
       const where = ['id_gimnasio = $1', 'activo = TRUE'];

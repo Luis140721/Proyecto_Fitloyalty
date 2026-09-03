@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Html5QrcodeScanner } from 'html5-qrcode';
 import { api } from '../api';
 import EmptyState from '../components/EmptyState';
 import PageTransition from '../components/PageTransition';
@@ -25,6 +26,11 @@ export default function CheckinPage() {
   const [feedback, setFeedback] = useState(null);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [cameraEnabled, setCameraEnabled] = useState(false);
+  const [scannerError, setScannerError] = useState(null);
+  const scannerRef = useRef(null);
+  const lastScannedRef = useRef(null);
+  const scanTimeoutRef = useRef(null);
 
   // IDs de checkins conocidos para detectar el "mas nuevo" cuando llega un nuevo set.
   const knownIdsRef = useRef(new Set());
@@ -55,6 +61,108 @@ export default function CheckinPage() {
   };
 
   useEffect(() => { loadRecent(); const t = setInterval(() => loadRecent(), 15000); return () => clearInterval(t); }, []);
+
+  // Inicializar escáner QR cuando se activa la cámara
+  useEffect(() => {
+    if (cameraEnabled) {
+      const scanner = new Html5QrcodeScanner(
+        'qr-reader',
+        {
+          fps: 10,
+          qrbox: { width: 250, height: 250 },
+          aspectRatio: 1.0,
+          // Usar cámara trasera y evitar modo espejo
+          facingMode: 'environment',
+        },
+        false
+      );
+
+      scanner.render(
+        (decodedText) => {
+          // QR escaneado exitosamente - enviar automáticamente al backend
+          const now = Date.now();
+          if (lastScannedRef.current === decodedText && scanTimeoutRef.current) {
+            return; // Ya escaneamos este QR recientemente
+          }
+          
+          lastScannedRef.current = decodedText;
+          setCodigo(decodedText);
+          setScannerError(null);
+          
+          // Debounce: esperar 2 segundos antes de permitir otro escaneo
+          if (scanTimeoutRef.current) {
+            clearTimeout(scanTimeoutRef.current);
+          }
+          scanTimeoutRef.current = setTimeout(() => {
+            lastScannedRef.current = null;
+          }, 2000);
+          
+          // Enviar automáticamente el check-in
+          handleCheckIn(decodedText);
+        },
+        (errorMessage) => {
+          // Ignorar errores de escaneo continuo (normal mientras busca QR)
+          // console.warn('QR scan error:', errorMessage);
+        }
+      );
+
+      scannerRef.current = scanner;
+
+      return () => {
+        if (scannerRef.current) {
+          scannerRef.current.clear().catch(console.error);
+        }
+      };
+    }
+  }, [cameraEnabled]);
+
+  const toggleCamera = async () => {
+    if (cameraEnabled) {
+      // Desactivar cámara
+      if (scannerRef.current) {
+        await scannerRef.current.clear();
+        scannerRef.current = null;
+      }
+      setCameraEnabled(false);
+      setScannerError(null);
+    } else {
+      // Activar cámara
+      setCameraEnabled(true);
+      setScannerError(null);
+    }
+  };
+
+  const handleAutoCheckIn = async (qrCode) => {
+    // Evitar múltiples envíos simultáneos
+    if (submitting) return;
+    
+    const payload = { metodo: 'QR', codigo: qrCode.trim() };
+    setSubmitting(true);
+    try {
+      const { data } = await api.post('/admin/checkin', payload);
+      const fbType = data.advertencia ? 'warning' : 'success';
+      setFeedback({
+        type: fbType,
+        msg: data.message,
+        miembro: data.miembro,
+        advertencia: data.advertencia,
+      });
+      setFrameFlash({ type: fbType, key: Date.now() });
+      if (fbType === 'success') vibrate(80);
+      setCodigo('');
+      await loadRecent();
+    } catch (err) {
+      console.error('Error en check-in:', err);
+      const errorMsg = err.response?.status === 404 
+        ? 'Usuario no encontrado. Verifica que el QR sea correcto.'
+        : err.message || 'No se pudo registrar el check-in.';
+      setError(errorMsg);
+      setFeedback({ type: 'error', msg: errorMsg, advertencia: true });
+      setFrameFlash({ type: 'error', key: Date.now() });
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const submit = async (e) => {
     e.preventDefault();
@@ -160,13 +268,40 @@ export default function CheckinPage() {
               }
               key={frameFlash ? `frame-${frameFlash.key}` : 'frame-stable'}
               aria-hidden="true"
+              style={{ minHeight: cameraEnabled ? '500px' : 'auto', height: cameraEnabled ? '500px' : 'auto' }}
             >
-              <i className="left" /><i className="right" />
-              <span className="checkin-frame__scan" />
-              <div className="checkin-frame__qr">
-                <span className="material-symbols-outlined anim-spin-slow">qr_code_2</span>
-              </div>
+              {!cameraEnabled ? (
+                <>
+                  <i className="left" /><i className="right" />
+                  <span className="checkin-frame__scan" />
+                  <div className="checkin-frame__qr">
+                    <span className="material-symbols-outlined anim-spin-slow">qr_code_2</span>
+                  </div>
+                </>
+              ) : (
+                <div id="qr-reader" style={{ width: '100%', height: '100%', minHeight: '500px' }}></div>
+              )}
             </div>
+
+            <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
+              <button
+                type="button"
+                className={`btn ${cameraEnabled ? 'btn-danger' : 'btn-secondary'}`}
+                onClick={toggleCamera}
+              >
+                <span className="material-symbols-outlined icon">
+                  {cameraEnabled ? 'videocam_off' : 'videocam'}
+                </span>
+                {cameraEnabled ? 'Desactivar cámara' : 'Activar cámara'}
+              </button>
+            </div>
+
+            {scannerError && (
+              <div className="alert alert-error" style={{ marginTop: 12 }}>
+                <span className="material-symbols-outlined icon">error</span>
+                <span>{scannerError}</span>
+              </div>
+            )}
 
             <form className="checkin-manual" onSubmit={submit} noValidate>
               <input
@@ -202,7 +337,7 @@ export default function CheckinPage() {
               color: 'var(--on-surface-variant)',
             }}>
               <span style={{ color: 'var(--primary-accent)', fontWeight: 700 }}>TIP</span>
-              <span>O escribe el documento si el miembro no tiene QR a mano.</span>
+              <span>Si el QR no se lee, usa el campo de abajo para ingresar la cédula del cliente.</span>
             </div>
 
             <div className="auth-form-row" style={{ marginTop: 18 }}>

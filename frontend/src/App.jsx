@@ -21,6 +21,7 @@ import DashboardPage from './pages/DashboardPage';
 import MiembrosPage from './pages/MiembrosPage';
 import CheckinPage from './pages/CheckinPage';
 import StaffPage from './pages/StaffPage';
+import ConfigPage from './pages/ConfigPage';
 
 export default function App() {
   return (
@@ -74,6 +75,14 @@ export default function App() {
               element={
                 <ProtectedRoute roles={['admin']}>
                   <AdminLayout><StaffPage /></AdminLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/config"
+              element={
+                <ProtectedRoute roles={['admin']}>
+                  <AdminLayout><ConfigPage /></AdminLayout>
                 </ProtectedRoute>
               }
             />
