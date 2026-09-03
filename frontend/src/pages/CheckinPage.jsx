@@ -98,7 +98,7 @@ export default function CheckinPage() {
           }, 2000);
           
           // Enviar automáticamente el check-in
-          handleCheckIn(decodedText);
+          handleAutoCheckIn(decodedText);
         },
         (errorMessage) => {
           // Ignorar errores de escaneo continuo (normal mientras busca QR)
@@ -157,7 +157,7 @@ export default function CheckinPage() {
         ? 'Usuario no encontrado. Verifica que el QR sea correcto.'
         : err.message || 'No se pudo registrar el check-in.';
       setError(errorMsg);
-      setFeedback({ type: 'error', msg: errorMsg, advertencia: true });
+      setFeedback({ type: 'error', msg: errorMsg, advertencia: true, miembro: null });
       setFrameFlash({ type: 'error', key: Date.now() });
     } finally {
       setSubmitting(false);
@@ -389,6 +389,39 @@ export default function CheckinPage() {
                     {feedback.miembro.nombre} ({feedback.miembro.documento})
                     {feedback.advertencia && ' — revisar antes de dejar entrar'}
                   </small>
+                )}
+                {feedback.miembro?.codigo_qr && feedback.type !== 'error' && (
+                  <div style={{ marginTop: 12, padding: 12, background: 'white', borderRadius: 8, textAlign: 'center' }}>
+                    <div style={{ fontSize: 11, color: '#666', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      Código QR del miembro
+                    </div>
+                    <div style={{ 
+                      fontFamily: 'monospace', 
+                      fontSize: 16, 
+                      fontWeight: 'bold', 
+                      color: '#333',
+                      background: '#f5f5f5',
+                      padding: '8px 12px',
+                      borderRadius: 4,
+                      letterSpacing: '1px',
+                      userSelect: 'all'
+                    }}>
+                      {feedback.miembro.codigo_qr}
+                    </div>
+                    {feedback.miembro.qr_imagen && (
+                      <img 
+                        src={feedback.miembro.qr_imagen} 
+                        alt="QR Code" 
+                        style={{ 
+                          width: 120, 
+                          height: 120, 
+                          marginTop: 8,
+                          border: '1px solid #ddd',
+                          borderRadius: 4
+                        }} 
+                      />
+                    )}
+                  </div>
                 )}
               </span>
             </div>

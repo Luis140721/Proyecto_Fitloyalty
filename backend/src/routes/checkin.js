@@ -74,16 +74,53 @@ router.post(
     }
 
     try {
-      const where = ['id_gimnasio = $1', 'activo = TRUE'];
-      const params = [gymId];
-      if (codigo)    { params.push(codigo);    where.push(`codigo_qr = $${params.length}`); }
-      if (documento) { params.push(documento); where.push(`documento = $${params.length}`); }
-      const { rows: miembros } = await pool.query(
-        `SELECT id_miembro, nombre, documento, codigo_qr FROM miembro WHERE ${where.join(' AND ')} LIMIT 1`,
-        params
-      );
-      const miembro = miembros[0];
-      if (!miembro) throw new AppError(404, 'Miembro no encontrado en este gimnasio.', 'MEMBER_NOT_FOUND');
+      let miembro;
+      
+      if (codigo) {
+        // Para búsqueda por código QR, necesitamos comparar con el valor descifrado
+        // Primero intentamos buscar directamente (por si es un código antiguo sin cifrar)
+        const { rows: directMatch } = await pool.query(
+          `SELECT id_miembro, nombre, documento, codigo_qr, qr_imagen FROM miembro 
+           WHERE id_gimnasio = $1 AND activo = TRUE AND codigo_qr = $2 LIMIT 1`,
+          [gymId, codigo]
+        );
+        
+        if (directMatch.length > 0) {
+          miembro = directMatch[0];
+        } else {
+          // Si no encontramos con el código original, buscar todos y descifrar para comparar
+          const { rows: allMembers } = await pool.query(
+            `SELECT id_miembro, nombre, documento, codigo_qr, qr_imagen FROM miembro 
+             WHERE id_gimnasio = $1 AND activo = TRUE`,
+            [gymId]
+          );
+          
+          const decryptedMatch = allMembers.find(m => {
+            try {
+              const decrypted = decryptQrCode(m.codigo_qr);
+              return decrypted === codigo;
+            } catch (e) {
+              return false;
+            }
+          });
+          
+          if (decryptedMatch) {
+            miembro = decryptedMatch;
+          }
+        }
+        
+        if (!miembro) throw new AppError(404, 'Miembro no encontrado en este gimnasio.', 'MEMBER_NOT_FOUND');
+      } else if (documento) {
+        const { rows: miembros } = await pool.query(
+          `SELECT id_miembro, nombre, documento, codigo_qr, qr_imagen FROM miembro 
+           WHERE id_gimnasio = $1 AND activo = TRUE AND documento = $2 LIMIT 1`,
+          [gymId, documento]
+        );
+        miembro = miembros[0];
+        if (!miembro) throw new AppError(404, 'Miembro no encontrado en este gimnasio.', 'MEMBER_NOT_FOUND');
+      } else {
+        throw new AppError(400, 'codigo o documento requerido', 'VALIDATION_ERROR');
+      }
 
       // Validar membresia activa
       const { rows: mem } = await pool.query(
@@ -107,7 +144,13 @@ router.post(
       return res.status(201).json({
         message: membresiaVencida ? 'Membresia no activa. Ingreso registrado con aviso.' : 'Ingreso registrado.',
         checkin: rows[0],
-        miembro: { id: miembro.id_miembro, nombre: miembro.nombre, documento: miembro.documento },
+        miembro: { 
+          id: miembro.id_miembro, 
+          nombre: miembro.nombre, 
+          documento: miembro.documento,
+          codigo_qr: decryptQrCode(miembro.codigo_qr),
+          qr_imagen: miembro.qr_imagen
+        },
         membresia: m || null,
         advertencia: sinMembresia ? 'sin-membresia' : membresiaVencida ? 'membresia-vencida' : null,
       });
