@@ -9,62 +9,69 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  /* ---------- Surfaces (darkest → lightest) ----------
-     Escala de grises construida alrededor del #3F444B del logo. Es un gris
-     azulado (hue 214°), no neutro: por eso todos los peldanos comparten ese
-     mismo tono y solo cambia la luminosidad. Mezclar grises neutros aqui
-     ensucia el conjunto y hace que el morado se vea desvaido. */
-  --bg:                  #1C1F24;   /* fondo de pagina */
-  --surface:             #24272D;   /* tarjetas y paneles */
-  --surface-dim:         #202329;
-  --surface-bright:      #565C65;
-  --surface-container-lowest: #191C20;
-  --surface-container-low:    #22252B;
-  --surface-container:        #2A2E34;
-  --surface-container-high:   #353A41;
-  --surface-container-highest:#3F444B;  /* el gris exacto del logo */
-  --surface-variant:    #3F444B;
+  /* ---------- Superficies (tema claro: gris medio + lavanda) ----------
+     El fondo de pagina es un gris MEDIO, no blanco: es lo que da el aire
+     "gris con morado". Las tarjetas van bastante mas claras que el fondo,
+     asi se separan solas sin necesitar sombras fuertes. */
+  --bg:                  #B8B8BD;   /* fondo de pagina, gris medio */
+  --surface:             #E9E9EC;   /* tarjetas y paneles */
+  --surface-dim:         #DCDCE0;
+  --surface-bright:      #FFFFFF;
+  --surface-container-lowest: #FFFFFF;
+  --surface-container-low:    #F2F2F4;
+  --surface-container:        #E4E4E8;
+  --surface-container-high:   #D8D8DD;
+  --surface-container-highest:#CBCBD2;
+  --surface-variant:    #D8D8DD;
+
+  /* Lavanda del sidebar: el morado de marca desaturado y aclarado, para que
+     acompane sin competir con los botones. */
+  --sidebar-bg:          #CFC4EA;
+  --sidebar-on:          #2B2733;
+
+  /* Superficie oscura de contraste: las tarjetas que deben "saltar"
+     (ingresos del mes, en riesgo de abandono). */
+  --surface-inverse:     #2B2B31;
+  --on-surface-inverse:  #F5F4F8;
 
   /* ---------- On-surface ---------- */
-  --on-surface:          #F5F4F8;   /* el casi-blanco del logo */
-  --on-surface-variant:  #B9BDC6;
-  --on-background:       #F5F4F8;
+  --on-surface:          #26262B;   /* texto principal, casi negro */
+  --on-surface-variant:  #45454F;   /* texto secundario: oscuro para leerse tambien sobre el gris de pagina, no solo sobre las tarjetas */
+  --on-background:       #1E1E22;
 
-  /* ---------- Brand ---------- */
-  /* Morado del logo. --on-primary va oscuro a proposito: texto blanco sobre
-     #7C5CE6 no llega a 4.5:1, y el gris oscuro si. */
+  /* ---------- Marca ---------- */
+  /* --primary es el morado del logo y se usa para RELLENOS (botones, barras).
+     --primary-accent es el morado para TEXTO: sobre gris claro el #7C5CE6
+     solo llega a 3.5:1, por eso el texto usa una version mas oscura. */
   --primary:             #7C5CE6;
-  --primary-fixed:       #C4B5FD;
+  --primary-fixed:       #5B3FC4;
   --primary-container:   #8F72EC;
   --on-primary:          #FFFFFF;
-  --on-primary-container:#2A1D5C;
-  --inverse-primary:     #5B3FC4;
-  --primary-glow:        rgba(124, 92, 230, 0.38);
-  --primary-soft:        rgba(124, 92, 230, 0.14);
-  --primary-faint:       rgba(124, 92, 230, 0.07);
-  /* Acento claro del logo: hovers, detalles y el simbolo de la marca. */
-  --primary-accent:      #A78BFA;
+  --on-primary-container:#FFFFFF;
+  --inverse-primary:     #A78BFA;
+  --primary-glow:        rgba(124, 92, 230, 0.30);
+  --primary-soft:        rgba(124, 92, 230, 0.12);
+  --primary-faint:       rgba(124, 92, 230, 0.06);
+  --primary-accent:      #472F9E;
 
   /* ---------- Secondary / tertiary ---------- */
-  --secondary:           #C6C9D0;
-  --tertiary:            #C8CBD2;
+  --secondary:           #4A4A54;
+  --tertiary:            #52525C;
 
-  /* ---------- Status ---------- */
-  --error:               #ffb4ab;
-  --error-container:     #93000a;
-  --success:             #4ADE80;
-  --success-container:   rgba(26, 77, 46, 0.25);
-  /* Warning en ambar: antes era morado claro y se confundia con el color de
-     marca, asi que un aviso no se distinguia de un elemento normal. */
-  --warning:             #FBBF24;
-  --warning-container:   rgba(251, 191, 36, 0.15);
-  --info:                #60A5FA;
-  --info-container:      rgba(37, 99, 235, 0.20);
+  /* ---------- Estados (oscurecidos para leerse sobre claro) ---------- */
+  --error:               #B3261E;
+  --error-container:     #FBD8D5;
+  --success:             #146C2E;
+  --success-container:   rgba(20, 108, 46, 0.12);
+  --warning:             #8A5A00;
+  --warning-container:   rgba(251, 191, 36, 0.22);
+  --info:                #1D4ED8;
+  --info-container:      rgba(29, 78, 216, 0.12);
 
-  /* ---------- Outlines ---------- */
-  --outline:             #8A909B;
-  --outline-variant:     #4A505A;
-  --border-subtle:       #343941;
+  /* ---------- Contornos ---------- */
+  --outline:             #6E6E78;
+  --outline-variant:     #BFBFC7;
+  --border-subtle:       #C9C9D0;
 
   /* ---------- Tipografía ---------- */
   --font-display:  'Anybody', system-ui, -apple-system, sans-serif;
@@ -154,7 +161,7 @@ a:hover { color: var(--primary-fixed); }
   position: relative;
   background-color: var(--surface);
   border: 1px solid var(--border-subtle);
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  border-top: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   overflow: hidden;
   isolation: isolate;
@@ -523,7 +530,7 @@ input:-webkit-autofill::first-line {
   padding: 2px 8px;
   border-radius: var(--radius-full);
   background: var(--primary);
-  color: var(--bg);
+  color: var(--on-primary);
   font-size: 10px;
 }
 .chip-status {
@@ -664,7 +671,7 @@ input:-webkit-autofill::first-line {
   padding: 24px;
   background: var(--surface);
   border: 1px solid var(--border-subtle);
-  border-top: 1px solid rgba(255,255,255,0.05);
+  border-top: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   position: relative;
   overflow: hidden;
@@ -829,3 +836,52 @@ input:-webkit-autofill::first-line {
 @media (max-width: 900px) {
   .admin-header__logo { display: block; flex-shrink: 0; }
 }
+
+
+/* ============================================================
+   Tema claro: profundidad por sombra, no por brillo
+   El diseño original era oscuro y separaba las capas con glows y
+   bordes claros. Sobre gris medio eso no se ve: lo que separa las
+   tarjetas del fondo es una sombra suave.
+   ============================================================ */
+.glass-card,
+.chart-card,
+.table-card,
+.kpi-tile,
+.checkin-scanner,
+.staff-card,
+.auth-form-card {
+  box-shadow: 0 1px 2px rgba(30, 30, 36, 0.06),
+              0 4px 16px rgba(30, 30, 36, 0.08);
+}
+
+/* El realce blanco superior de las tarjetas era para fondo oscuro.
+   Sobre claro sobra: se elimina el degradado. */
+.glass-card::before { background: none; }
+
+.glass-card.glow-on-hover:hover {
+  border-color: var(--primary);
+  box-shadow: 0 2px 4px rgba(30, 30, 36, 0.08),
+              0 8px 28px rgba(124, 92, 230, 0.20);
+}
+
+/* ---------- Tarjeta invertida ----------
+   El arquetipo destaca un par de tarjetas en oscuro (ingresos del mes,
+   miembros en riesgo) para romper el gris. Esta clase las produce. */
+.card-inverse {
+  background: var(--surface-inverse) !important;
+  color: var(--on-surface-inverse) !important;
+  border-color: rgba(255, 255, 255, 0.10) !important;
+}
+.card-inverse h1, .card-inverse h2, .card-inverse h3,
+.card-inverse h4, .card-inverse strong { color: var(--on-surface-inverse); }
+.card-inverse p, .card-inverse span, .card-inverse small { color: rgba(245, 244, 248, 0.72); }
+/* Dentro de una tarjeta oscura el morado oscuro no se lee: vuelve al claro. */
+.card-inverse .accent,
+.card-inverse a { color: var(--inverse-primary); }
+
+/* El logo hereda el color del contenedor (fill="currentColor" en la palabra). */
+.admin-sidebar__brand { color: var(--sidebar-on); }
+.landing-brand,
+.legal-brand,
+.auth-panel-brand { color: var(--on-surface); }

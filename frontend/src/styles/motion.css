@@ -313,7 +313,7 @@
   max-height: min(85vh, 720px);
   background: var(--surface);
   border: 1px solid var(--border-subtle);
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  border-top: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   border-left-width: 3px;
   border-left-color: var(--primary-accent);
