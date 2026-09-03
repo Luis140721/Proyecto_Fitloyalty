@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useState, useRef } from 'react';
-import DatePicker from 'react-datepicker';
+import DatePicker, { registerLocale } from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
+import { es } from 'date-fns/locale/es';
+
+/* El calendario viene en ingles por defecto ("September 2026"). */
+registerLocale('es', es);
 import { api } from '../api';
 import CardGlass from '../components/CardGlass';
 import BadgeEstado, { estadoDeMiembro } from '../components/BadgeEstado';
@@ -53,6 +57,87 @@ function DateInputWithAutoFormat({ value, onChange, placeholder, ...props }) {
   );
 }
 
+/** Mensaje de error bajo un campo. No renderiza nada si no hay error. */
+function ErrorCampo({ msg }) {
+  if (!msg) return null;
+  return (
+    <span className="field-error" role="alert">
+      <span className="material-symbols-outlined icon">error</span>
+      {msg}
+    </span>
+  );
+}
+
+/** Fecha de hoy en el formato "DD/MM/YYYY" que usa el formulario. */
+function hoyEnTexto() {
+  const h = new Date();
+  return `${String(h.getDate()).padStart(2, '0')}/${String(h.getMonth() + 1).padStart(2, '0')}/${h.getFullYear()}`;
+}
+
+/** Convierte "DD/MM/YYYY" a Date. Devuelve null si aun no esta completa. */
+function textoAFecha(texto) {
+  if (!texto || texto.length !== 10) return null;
+  const [d, m, a] = texto.split('/').map(Number);
+  if (!d || !m || !a) return null;
+  const fecha = new Date(a, m - 1, d);
+  // Descarta fechas imposibles como 31/02: el Date las "corrige" sola.
+  if (fecha.getDate() !== d || fecha.getMonth() !== m - 1) return null;
+  return fecha;
+}
+
+/** Convierte Date a "DD/MM/YYYY". */
+function fechaATexto(fecha) {
+  if (!fecha) return '';
+  const dd = String(fecha.getDate()).padStart(2, '0');
+  const mm = String(fecha.getMonth() + 1).padStart(2, '0');
+  return `${dd}/${mm}/${fecha.getFullYear()}`;
+}
+
+/**
+ * Campo de fecha: se puede ESCRIBIR (23/11/2005, con las barras puestas
+ * automaticamente) y ademas abre un calendario con selectores rapidos de
+ * mes y ano, para no tener que pasar 30 anos flecha a flecha al poner una
+ * fecha de nacimiento.
+ *
+ * El valor viaja siempre como texto "DD/MM/YYYY", que es el formato que ya
+ * usaba el formulario.
+ */
+function CampoFecha({ value, onChange, placeholder, anosAtras = 100, ...props }) {
+  const hoy = new Date();
+  return (
+    <DatePicker
+      selected={textoAFecha(value)}
+      /* Al escribir a mano, react-datepicker no mueve el mes que muestra;
+         openToDate lo obliga a saltar al ano y mes recien tecleados. */
+      openToDate={textoAFecha(value) || undefined}
+      locale="es"
+      onChange={(fecha) => onChange(fechaATexto(fecha))}
+      /* onChangeRaw deja escribir a mano y reutiliza el auto-formateo. */
+      onChangeRaw={(e) => {
+        if (e?.target?.value === undefined) return;
+        const limpio = e.target.value.replace(/\D/g, '').slice(0, 8);
+        let txt = limpio.slice(0, 2);
+        if (limpio.length > 2) txt += '/' + limpio.slice(2, 4);
+        if (limpio.length > 4) txt += '/' + limpio.slice(4, 8);
+        onChange(txt);
+      }}
+      value={value}
+      dateFormat="dd/MM/yyyy"
+      placeholderText={placeholder || 'DD/MM/YYYY'}
+      className="field-input"
+      showMonthDropdown
+      showYearDropdown
+      dropdownMode="select"
+      yearDropdownItemNumber={anosAtras}
+      scrollableYearDropdown
+      minDate={new Date(hoy.getFullYear() - anosAtras, 0, 1)}
+      maxDate={new Date(hoy.getFullYear() + 10, 11, 31)}
+      popperPlacement="bottom-start"
+      {...props}
+    />
+  );
+}
+
 // Función para convertir DD/MM/YYYY a formato ISO (YYYY-MM-DD)
 function convertToISODate(dateString) {
   if (!dateString || dateString.length !== 10) return dateString;
@@ -92,7 +177,9 @@ const empty = {
   alergias: '',
   // Plan y cobros
   tipo_plan: 'MENSUAL',
-  fecha_inicio: '', // Fecha actual por defecto - se formateará automáticamente
+  // La fecha de inicio arranca en HOY: es lo habitual al inscribir a alguien,
+  // y asi la fecha de vencimiento se calcula sola desde el primer momento.
+  fecha_inicio: '',
   fecha_fin: '',
   valor_total: '',
   valor_pagado: '0',
@@ -149,12 +236,22 @@ function SkeletonRows({ cols, rows = 6 }) {
   );
 }
 
+/**
+ * Formulario en blanco para un miembro NUEVO. Es una funcion y no una
+ * constante a proposito: la fecha de inicio se calcula en el momento de
+ * abrir el formulario, no cuando se cargo el modulo. Si no, una pestana
+ * abierta desde ayer propondria la fecha de ayer.
+ */
+function formularioVacio() {
+  return { ...empty, fecha_inicio: hoyEnTexto() };
+}
+
 export default function MiembrosPage() {
   const [items, setItems]   = useState([]);
   const [q, setQ]           = useState('');
   const [filtro, setFiltro] = useState('todos');
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState(empty);
+  const [form, setForm] = useState(formularioVacio);
   const [editing, setEditing] = useState(null);
   const [editForm, setEditForm] = useState(empty);
   const [editSaving, setEditSaving] = useState(false);
@@ -172,11 +269,89 @@ export default function MiembrosPage() {
   const [activeSection, setActiveSection] = useState('personales');
   const [gymConfig, setGymConfig] = useState(null);
   const qrCanvasRef = useRef(null);
+  // Errores por campo del formulario de creacion: { documento: 'mensaje', ... }
+  const [formErrors, setFormErrors] = useState({});
 
   // Confirm desactivar
   const [confirmDeactivate, setConfirmDeactivate] = useState(null); // miembro a desactivar
   // Confirm eliminar permanentemente
   const [confirmDelete, setConfirmDelete] = useState(null); // miembro a eliminar
+
+  /* ---------- Validacion del formulario de alta ----------
+     Cada seccion valida solo SUS campos. Al intentar pasar a otra seccion o
+     al enviar, se marca lo que falta debajo del campo correspondiente en vez
+     de mostrar un unico aviso generico arriba. */
+  const SECCIONES = ['personales', 'salud', 'cobros', 'adicional', 'terminos'];
+  const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+  const fechaValida = (t) => !t || textoAFecha(t) !== null;
+
+  const validarSeccion = (seccion, f = form) => {
+    const e = {};
+    if (seccion === 'personales') {
+      if (!f.nombre?.trim()) e.nombre = 'Escribe el nombre del miembro.';
+      else if (f.nombre.trim().length < 2) e.nombre = 'El nombre es demasiado corto.';
+      if (!f.documento?.trim()) e.documento = 'Escribe el número de documento.';
+      else if (f.documento.trim().length < 5) e.documento = 'El documento parece incompleto.';
+      const tel = (f.telefono || '').replace(/\D/g, '');
+      if (!tel) e.telefono = 'Escribe el teléfono.';
+      else if (tel.length !== 10) e.telefono = `Debe tener 10 dígitos (escribiste ${tel.length}).`;
+      if (f.email?.trim() && !EMAIL_RE.test(f.email.trim())) e.email = 'Este correo no tiene un formato válido.';
+      if (!fechaValida(f.fecha_nacimiento)) e.fecha_nacimiento = 'Fecha incompleta o inexistente. Usa DD/MM/AAAA.';
+      else if (f.fecha_nacimiento && textoAFecha(f.fecha_nacimiento) > new Date()) {
+        e.fecha_nacimiento = 'La fecha de nacimiento no puede ser futura.';
+      }
+    }
+    if (seccion === 'salud') {
+      const tel = (f.telefono_emergencia || '').replace(/\D/g, '');
+      if (tel && tel.length !== 10) e.telefono_emergencia = `Debe tener 10 dígitos (escribiste ${tel.length}).`;
+    }
+    if (seccion === 'cobros') {
+      if (!f.fecha_inicio?.trim()) e.fecha_inicio = 'Indica cuándo empieza el plan.';
+      else if (!fechaValida(f.fecha_inicio)) e.fecha_inicio = 'Fecha incompleta o inexistente. Usa DD/MM/AAAA.';
+      if (!fechaValida(f.fecha_fin)) e.fecha_fin = 'Fecha incompleta o inexistente. Usa DD/MM/AAAA.';
+      const ini = textoAFecha(f.fecha_inicio), fin = textoAFecha(f.fecha_fin);
+      if (ini && fin && fin < ini) e.fecha_fin = 'El vencimiento no puede ser anterior al inicio.';
+      if (f.valor_total !== '' && Number(f.valor_total) < 0) e.valor_total = 'El valor no puede ser negativo.';
+      if (f.valor_pagado !== '' && Number(f.valor_pagado) < 0) e.valor_pagado = 'El valor no puede ser negativo.';
+      if (f.valor_total && f.valor_pagado && Number(f.valor_pagado) > Number(f.valor_total)) {
+        e.valor_pagado = 'Lo pagado no puede superar el valor del plan.';
+      }
+    }
+    if (seccion === 'terminos') {
+      if (!f.acepto_terminos) e.acepto_terminos = 'Debes aceptar los términos para registrar al miembro.';
+      if (!f.autorizo_datos) e.autorizo_datos = 'Falta la autorización de tratamiento de datos.';
+    }
+    return e;
+  };
+
+  /** Lleva el foco al primer campo marcado en rojo. */
+  const enfocarPrimerError = () => {
+    setTimeout(() => {
+      const primero = document.querySelector('.form-section .field-input--error');
+      if (primero) { primero.focus(); primero.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+    }, 0);
+  };
+
+  /**
+   * Cambia de seccion validando la actual. Solo bloquea al AVANZAR: volver a
+   * una seccion anterior siempre se permite, para no dejar al usuario
+   * atrapado mientras corrige.
+   */
+  const irASeccion = (destino) => {
+    const iActual = SECCIONES.indexOf(activeSection);
+    const iDestino = SECCIONES.indexOf(destino);
+    if (iDestino <= iActual) { setActiveSection(destino); return; }
+
+    const errores = validarSeccion(activeSection);
+    if (Object.keys(errores).length > 0) {
+      setFormErrors((prev) => ({ ...prev, ...errores }));
+      enfocarPrimerError();
+      return;
+    }
+    setFormErrors({});
+    setActiveSection(destino);
+  };
 
   // Ripple handlers.
   const crearRipple = Ripple({ opacity: 0.30 });
@@ -320,7 +495,16 @@ export default function MiembrosPage() {
   // Manejar cambios en campos que afectan cálculos automáticos
   const handleFormChange = (field, value) => {
     const newForm = { ...form, [field]: value };
-    
+
+    // Al escribir se retira el error de ESE campo, no el del formulario entero.
+    setFormErrors((prev) => {
+      if (!prev[field]) return prev;
+      const sig = { ...prev, [field]: undefined };
+      // Si ya no queda ninguno, se retira tambien el aviso general de arriba.
+      if (!Object.values(sig).some(Boolean)) setError('');
+      return sig;
+    });
+
     // Si cambia tipo de plan, sugerir valor desde configuración
     if (field === 'tipo_plan' && gymConfig) {
       const valorKey = `plan_${value.toLowerCase()}_valor`;
@@ -356,13 +540,26 @@ export default function MiembrosPage() {
   const onSubmit = async (e) => {
     e.preventDefault();
     setError(''); setInfo('');
-    
-    // Validar términos
-    if (!form.acepto_terminos) {
-      setError('Debes aceptar los términos y condiciones.');
+
+    /* Valida TODAS las secciones, no solo la visible: el usuario puede llegar
+       al boton de guardar sin haber pasado por alguna. Si algo falla, se salta
+       a la primera seccion con problemas y se marcan los campos. */
+    let todos = {};
+    let primeraSeccionMala = null;
+    for (const s of SECCIONES) {
+      const e2 = validarSeccion(s);
+      if (Object.keys(e2).length > 0 && !primeraSeccionMala) primeraSeccionMala = s;
+      todos = { ...todos, ...e2 };
+    }
+    if (primeraSeccionMala) {
+      setFormErrors(todos);
+      setActiveSection(primeraSeccionMala);
+      setError('Revisa los campos marcados antes de guardar.');
+      enfocarPrimerError();
       return;
     }
-    
+    setFormErrors({});
+
     setSubmitting(true);
     setError('');
     
@@ -413,7 +610,7 @@ export default function MiembrosPage() {
       setCreatedMember(data.miembro);
       setQrImage(qrImageUrl);
       setShowQRModal(true);
-      setForm(empty);
+      setForm(formularioVacio());
       setOpen(false);
       load(q);
       setInfo('Miembro creado exitosamente.');
@@ -562,7 +759,15 @@ export default function MiembrosPage() {
             <span className="material-symbols-outlined icon">refresh</span>
             Actualizar
           </button>
-          <button className="btn btn-primary" onClick={() => setOpen((o) => !o)}>
+          <button
+            className="btn btn-primary"
+            onClick={() => setOpen((o) => {
+              /* Al abrir, refresca la fecha de inicio por si la pestana
+                 llevaba horas abierta y ya cambio el dia. */
+              if (!o) setForm((f) => ({ ...f, fecha_inicio: hoyEnTexto() }));
+              return !o;
+            })}
+          >
             <span className="material-symbols-outlined icon">{open ? 'close' : 'person_add'}</span>
             {open ? 'Cerrar' : 'Nuevo miembro'}
           </button>
@@ -604,7 +809,7 @@ export default function MiembrosPage() {
                 key={section.id}
                 type="button"
                 className={`btn btn-ghost btn-sm ${activeSection === section.id ? 'active' : ''}`}
-                onClick={() => setActiveSection(section.id)}
+                onClick={() => irASeccion(section.id)}
                 style={{
                   backgroundColor: activeSection === section.id ? 'var(--primary)' : 'transparent',
                   color: activeSection === section.id ? 'white' : 'var(--on-surface)',
@@ -626,15 +831,13 @@ export default function MiembrosPage() {
                   <label className="field" style={{ flex: 2 }}>
                     <span className="field-label">Nombre completo *</span>
                     <input
-                      className="field-input"
+                      className={`field-input${formErrors.nombre ? ' field-input--error' : ''}`}
                       required value={form.nombre}
                       onChange={(e) => handleFormChange('nombre', e.target.value)}
                       placeholder="Nombre y apellido"
-                      style={{ borderColor: !form.nombre && submitting ? 'var(--error)' : '' }}
+                      aria-invalid={formErrors.nombre ? 'true' : undefined}
                     />
-                    {!form.nombre && submitting && (
-                      <span style={{ color: 'var(--error)', fontSize: 12, marginTop: 4 }}>El nombre es requerido</span>
-                    )}
+                    <ErrorCampo msg={formErrors.nombre} />
                   </label>
                 </div>
                 <div className="auth-form-row">
@@ -654,26 +857,25 @@ export default function MiembrosPage() {
                   <label className="field">
                     <span className="field-label">Número documento *</span>
                     <input
-                      className="field-input"
+                      className={`field-input${formErrors.documento ? ' field-input--error' : ''}`}
                       required value={form.documento}
                       onChange={(e) => handleFormChange('documento', e.target.value)}
                       placeholder="123456789"
-                      style={{ borderColor: !form.documento && submitting ? 'var(--error)' : '' }}
+                      aria-invalid={formErrors.documento ? 'true' : undefined}
                     />
-                    {!form.documento && submitting && (
-                      <span style={{ color: 'var(--error)', fontSize: 12, marginTop: 4 }}>El documento es requerido</span>
-                    )}
+                    <ErrorCampo msg={formErrors.documento} />
                   </label>
                 </div>
                 <div className="auth-form-row">
                   <label className="field">
                     <span className="field-label">Fecha nacimiento</span>
-                    <DateInputWithAutoFormat
+                    <CampoFecha
                       value={form.fecha_nacimiento}
                       onChange={(value) => handleFormChange('fecha_nacimiento', value)}
-                      className="field-input"
+                      className={`field-input${formErrors.fecha_nacimiento ? ' field-input--error' : ''}`}
                       placeholder="DD/MM/YYYY"
                     />
+                    <ErrorCampo msg={formErrors.fecha_nacimiento} />
                   </label>
                   <label className="field">
                     <span className="field-label">Género</span>
@@ -693,30 +895,26 @@ export default function MiembrosPage() {
                   <label className="field">
                     <span className="field-label">Teléfono / WhatsApp *</span>
                     <input
-                      className="field-input"
+                      className={`field-input${formErrors.telefono ? ' field-input--error' : ''}`}
                       required value={form.telefono}
                       onChange={(e) => handleFormChange('telefono', e.target.value)}
                       placeholder="3001234567"
                       inputMode="numeric"
-                      style={{ borderColor: !form.telefono && submitting ? 'var(--error)' : '' }}
+                      aria-invalid={formErrors.telefono ? 'true' : undefined}
                     />
-                    {!form.telefono && submitting && (
-                      <span style={{ color: 'var(--error)', fontSize: 12, marginTop: 4 }}>El teléfono es requerido</span>
-                    )}
+                    <ErrorCampo msg={formErrors.telefono} />
                   </label>
                   <label className="field">
                     <span className="field-label">Email</span>
                     <input
-                      className="field-input"
+                      className={`field-input${formErrors.email ? ' field-input--error' : ''}`}
                       type="email"
                       value={form.email}
                       onChange={(e) => handleFormChange('email', e.target.value)}
                       placeholder="correo@ejemplo.com"
-                      style={{ borderColor: form.email && !form.email.includes('@') && submitting ? 'var(--error)' : '' }}
+                      aria-invalid={formErrors.email ? 'true' : undefined}
                     />
-                    {form.email && !form.email.includes('@') && submitting && (
-                      <span style={{ color: 'var(--error)', fontSize: 12, marginTop: 4 }}>Email inválido</span>
-                    )}
+                    <ErrorCampo msg={formErrors.email} />
                   </label>
                 </div>
                 <div className="auth-form-row">
@@ -807,19 +1005,21 @@ export default function MiembrosPage() {
                   </label>
                   <label className="field">
                     <span className="field-label">Fecha inicio *</span>
-                    <DateInputWithAutoFormat
+                    <CampoFecha
                       value={form.fecha_inicio}
                       onChange={(value) => handleFormChange('fecha_inicio', value)}
-                      className="field-input"
+                      className={`field-input${formErrors.fecha_inicio ? ' field-input--error' : ''}`}
                       placeholder="DD/MM/YYYY"
+                      anosAtras={5}
                       required
                     />
+                    <ErrorCampo msg={formErrors.fecha_inicio} />
                   </label>
                 </div>
                 <div className="auth-form-row">
                   <label className="field">
                     <span className="field-label">Fecha fin (calculada automáticamente)</span>
-                    <DateInputWithAutoFormat
+                    <CampoFecha
                       value={form.fecha_fin}
                       onChange={(value) => handleFormChange('fecha_fin', value)}
                       className="field-input"
@@ -985,6 +1185,7 @@ export default function MiembrosPage() {
                   />
                   <span className="field-label" style={{ margin: 0, fontSize: 14 }}>
                     Acepto los términos y condiciones del gimnasio *
+                    <ErrorCampo msg={formErrors.acepto_terminos} />
                   </span>
                 </label>
                 <label className="field" style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
@@ -996,6 +1197,7 @@ export default function MiembrosPage() {
                   />
                   <span className="field-label" style={{ margin: 0, fontSize: 14 }}>
                     Autorizo el uso de mis datos para fines administrativos y de contacto
+                    <ErrorCampo msg={formErrors.autorizo_datos} />
                   </span>
                 </label>
               </div>
@@ -1007,11 +1209,8 @@ export default function MiembrosPage() {
                 type="button"
                 className="btn btn-ghost"
                 onClick={() => {
-                  const sections = ['personales', 'salud', 'cobros', 'adicional', 'terminos'];
-                  const currentIndex = sections.indexOf(activeSection);
-                  if (currentIndex > 0) {
-                    setActiveSection(sections[currentIndex - 1]);
-                  }
+                  const i = SECCIONES.indexOf(activeSection);
+                  if (i > 0) irASeccion(SECCIONES[i - 1]);
                 }}
                 disabled={activeSection === 'personales'}
               >
@@ -1019,7 +1218,7 @@ export default function MiembrosPage() {
               </button>
               
               <div style={{ fontSize: 13, color: 'var(--on-surface-variant)' }}>
-                Paso {['personales', 'salud', 'cobros', 'adicional', 'terminos'].indexOf(activeSection) + 1} de 5
+                Paso {SECCIONES.indexOf(activeSection) + 1} de {SECCIONES.length}
               </div>
               
               {activeSection !== 'terminos' ? (
@@ -1027,11 +1226,8 @@ export default function MiembrosPage() {
                   type="button"
                   className="btn btn-secondary"
                   onClick={() => {
-                    const sections = ['personales', 'salud', 'cobros', 'adicional', 'terminos'];
-                    const currentIndex = sections.indexOf(activeSection);
-                    if (currentIndex < sections.length - 1) {
-                      setActiveSection(sections[currentIndex + 1]);
-                    }
+                    const i = SECCIONES.indexOf(activeSection);
+                    if (i < SECCIONES.length - 1) irASeccion(SECCIONES[i + 1]);
                   }}
                 >
                   Siguiente →

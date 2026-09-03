@@ -1016,3 +1016,162 @@ small { color: var(--on-label); }
   .volver-arriba { transition: opacity var(--dur-fast) linear, visibility var(--dur-fast) linear; transform: none; }
   .volver-arriba--visible { transform: none; }
 }
+
+/* ============================================================
+   Controles nativos en oscuro
+   La lista desplegable de un <select>, el calendario de
+   <input type="date"> y los spinners los dibuja el SISTEMA
+   OPERATIVO, no el CSS de la pagina: por eso salian en gris
+   claro sobre la interfaz oscura. `color-scheme: dark` es lo
+   unico que hace que el navegador los pinte en oscuro.
+   ============================================================ */
+:root { color-scheme: dark; }
+
+/* Respaldo para navegadores que ignoran color-scheme en las opciones
+   (Firefox en Linux, sobre todo). */
+.field-input option,
+.field select option,
+select option {
+  background-color: #241E30;
+  color: var(--on-surface);
+}
+.field-input option:checked,
+select option:checked {
+  background-color: var(--primary);
+  color: #FFFFFF;
+}
+
+/* La flecha del select tambien es nativa: se sustituye por una propia
+   para que siga el color del tema. */
+/* La clase va repetida a proposito: `.auth-form .field-input` fija un
+   padding propio y hay que ganarle en especificidad sin recurrir a
+   !important, que romperia cualquier ajuste puntual mas adelante. */
+.field-input.field-input:is(select),
+.field select {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--on-surface-variant) 50%),
+    linear-gradient(135deg, var(--on-surface-variant) 50%, transparent 50%);
+  background-position: right 18px center, right 13px center;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  padding-right: 36px;
+}
+
+/* ==========================================================================
+   Calendario (react-datepicker)
+   --------------------------------------------------------------------------
+   La hoja de estilos que trae la libreria es clara y choca con el tema oscuro.
+   Aqui se repinta con los tokens del proyecto. Se usan selectores encadenados
+   (.react-datepicker .algo) para ganarle en especificidad a la hoja original,
+   que se importa despues de esta en el bundle.
+   ========================================================================== */
+
+/* El campo debe ocupar todo el ancho: la libreria lo envuelve en dos divs. */
+.field .react-datepicker-wrapper,
+.field .react-datepicker__input-container { display: block; width: 100%; }
+
+/* El popup por encima de modales y cabeceras pegajosas. */
+.react-datepicker-popper { z-index: 60; }
+
+.react-datepicker {
+  font-family: var(--font-body);
+  background-color: #241E30;
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+  color: var(--on-surface);
+}
+
+.react-datepicker__header {
+  background: var(--surface-accent);
+  border-bottom: 1px solid var(--surface-border);
+  border-top-left-radius: var(--radius-lg);
+  border-top-right-radius: var(--radius-lg);
+  padding-top: 10px;
+}
+
+.react-datepicker__current-month,
+.react-datepicker-time__header,
+.react-datepicker__day-name {
+  color: var(--on-surface);
+}
+
+.react-datepicker__day-name {
+  font-family: var(--font-label);
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--on-label);
+}
+
+.react-datepicker__day,
+.react-datepicker__time-name { color: var(--on-surface-variant); }
+
+.react-datepicker__day:hover {
+  background-color: rgba(139, 92, 246, 0.28);
+  color: var(--on-surface);
+}
+
+.react-datepicker__day--today { font-weight: 800; color: var(--on-label); }
+
+.react-datepicker__day--selected,
+.react-datepicker__day--keyboard-selected {
+  background: var(--brand-grad);
+  color: var(--on-primary);
+  font-weight: 700;
+}
+
+.react-datepicker__day--outside-month { opacity: 0.35; }
+
+.react-datepicker__day--disabled,
+.react-datepicker__day--disabled:hover {
+  color: rgba(255, 255, 255, 0.22);
+  background-color: transparent;
+  cursor: not-allowed;
+}
+
+.react-datepicker__navigation-icon::before { border-color: var(--on-surface-variant); }
+.react-datepicker__navigation:hover .react-datepicker__navigation-icon::before {
+  border-color: var(--primary-accent);
+}
+
+.react-datepicker__triangle { display: none; }
+
+/* Selectores rapidos de mes y ano de la cabecera. */
+.react-datepicker__header__dropdown {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  padding: 8px 10px 4px;
+}
+
+.react-datepicker__month-select,
+.react-datepicker__year-select {
+  appearance: none;
+  -webkit-appearance: none;
+  background-color: rgba(0, 0, 0, 0.34);
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--on-surface-variant) 50%),
+    linear-gradient(135deg, var(--on-surface-variant) 50%, transparent 50%);
+  background-position: right 12px center, right 7px center;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  border: 1px solid var(--surface-border);
+  border-radius: 8px;
+  color: var(--on-surface);
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-size: 13px;
+  padding: 5px 26px 5px 10px;
+}
+
+.react-datepicker__month-select:focus,
+.react-datepicker__year-select:focus {
+  border-color: var(--primary);
+  outline: none;
+}
+
+/* Campo de fecha marcado como invalido: el borde lo pinta .field-input--error,
+   pero la libreria envuelve el input y hay que dejar pasar el estilo. */
+.react-datepicker__input-container .field-input { width: 100%; }
