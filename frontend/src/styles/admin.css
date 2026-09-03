@@ -19,9 +19,9 @@
   left: 0;
   width: 240px;
   height: 100vh;
-  background: var(--sidebar-bg);
+  background: var(--sidebar-grad);
   color: var(--sidebar-on);
-  border-right: 1px solid rgba(43, 39, 51, 0.10);
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
   padding: 24px 16px 32px;
   display: flex;
   flex-direction: column;
@@ -127,7 +127,7 @@
   font-family: var(--font-headline);
   font-weight: 800;
   font-size: 15px;
-  box-shadow: 0 4px 14px rgba(124, 92, 230, 0.35);
+  box-shadow: 0 4px 14px rgba(168, 85, 247, 0.35);
 }
 
 .admin-nav-group__title {
@@ -138,7 +138,7 @@
   text-transform: uppercase;
   /* Sobre lavanda los tokens de texto normales pierden contraste, por eso el
      sidebar usa su propio color con opacidad en vez de --on-surface-variant. */
-  color: rgba(43, 39, 51, 0.62);
+  color: rgba(246, 240, 255, 0.60);
   padding: 0 12px 8px;
 }
 .admin-nav {
@@ -150,11 +150,16 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 12px;
+  padding: 11px 12px;
   border-radius: var(--radius-lg);
-  font-family: var(--font-body);
-  font-size: 14px;
-  color: rgba(43, 39, 51, 0.78);
+  /* Mayusculas y fuente de etiqueta, como en la referencia: el menu se lee
+     como navegacion y no compite con el contenido. */
+  font-family: var(--font-label);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(246, 240, 255, 0.82);
   text-decoration: none;
   transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
 }
@@ -162,30 +167,34 @@
   font-size: 20px;
 }
 .admin-nav__item:hover {
-  background: rgba(255, 255, 255, 0.42);
+  background: rgba(255, 255, 255, 0.14);
   color: var(--sidebar-on);
   text-decoration: none;
 }
 .admin-nav__item--active {
-  background: rgba(255, 255, 255, 0.72);
-  color: var(--sidebar-on);
+  background: var(--brand-grad);
+  color: #FFFFFF;
   font-weight: 700;
+  box-shadow: 0 4px 16px rgba(192, 38, 211, 0.32);
 }
+/* Punto del item activo: blanco, porque va sobre el degradado morado y el
+   color de marca ahi no se distinguiria. */
 .admin-nav__item--active::before {
   content: '';
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--primary);
+  background: #FFFFFF;
   margin-left: -2px;
   margin-right: -2px;
   box-shadow: none;
+  flex-shrink: 0;
 }
 
 .admin-sidebar__foot {
   margin-top: auto;
   padding: 16px 12px;
-  border-top: 1px solid rgba(43, 39, 51, 0.12);
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
   display: flex;
   align-items: center;
   gap: 10px;
@@ -210,7 +219,7 @@
   font-size: 10px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: rgba(43, 39, 51, 0.60);
+  color: rgba(246, 240, 255, 0.62);
 }
 
 /* ---------- Header ---------- */
@@ -223,7 +232,7 @@
   justify-content: space-between;
   gap: 12px;
   padding: 18px clamp(24px, 3vw, 32px);
-  background: rgba(233, 233, 236, 0.82);
+  background: rgba(23, 19, 31, 0.78);
   backdrop-filter: blur(14px) saturate(140%);
   -webkit-backdrop-filter: blur(14px) saturate(140%);
   border-bottom: 1px solid var(--border-subtle);
@@ -598,9 +607,8 @@
   margin: 0 auto;
   border: 1px dashed var(--primary);
   border-radius: var(--radius-lg);
-  background:
-    repeating-linear-gradient(45deg, rgba(124, 92, 230,0.06) 0 12px, transparent 12px 24px),
-    var(--surface-container-lowest);
+  /* Sin rayas diagonales: fondo plano. */
+  background: var(--surface-container-lowest);
   display: grid;
   place-items: center;
   color: var(--on-surface-variant);
@@ -670,8 +678,8 @@
   gap: 14px;
   padding: 14px 18px;
   border-radius: var(--radius-lg);
-  background: linear-gradient(120deg, rgba(124, 92, 230,0.18), rgba(34,211,238,0.10));
-  border: 1px solid rgba(124, 92, 230,0.35);
+  background: linear-gradient(120deg, rgba(168, 85, 247,0.18), rgba(34,211,238,0.10));
+  border: 1px solid rgba(168, 85, 247,0.35);
   margin-bottom: 24px;
 }
 .trial-banner__icon {
@@ -798,9 +806,8 @@
   width: 100%;
   border-radius: var(--radius-lg);
   border: 1px dashed var(--primary);
-  background:
-    repeating-linear-gradient(45deg, rgba(124, 92, 230,0.06) 0 12px, transparent 12px 24px),
-    var(--surface-container-lowest);
+  /* Sin rayas diagonales: fondo plano. */
+  background: var(--surface-container-lowest);
   overflow: hidden;
   display: grid;
   place-items: center;
@@ -989,7 +996,7 @@
   color: var(--on-surface-variant);
   white-space: nowrap;
 }
-.role-pill--admin   { color: var(--primary-accent);   border-color: rgba(124, 92, 230, 0.45); background: var(--primary-soft); }
+.role-pill--admin   { color: var(--primary-accent);   border-color: rgba(168, 85, 247, 0.45); background: var(--primary-soft); }
 .role-pill--recep   { color: var(--info);      border-color: rgba(96, 165, 250, 0.45); background: rgba(96, 165, 250, 0.10); }
 .role-pill--trainer { color: var(--success);   border-color: rgba(74, 222, 128, 0.45); background: rgba(74, 222, 128, 0.10); }
 

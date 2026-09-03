@@ -71,7 +71,7 @@
   position: absolute;
   top: 30%; left: 30%;
   width: 700px; height: 700px;
-  background: radial-gradient(circle, rgba(124, 92, 230,0.28), transparent 65%);
+  background: radial-gradient(circle, rgba(168, 85, 247,0.28), transparent 65%);
   transform: translate(-50%, -50%);
   pointer-events: none;
   z-index: 0;
@@ -81,9 +81,9 @@
   content: '';
   position: absolute;
   inset: 0;
-  background:
-    linear-gradient(180deg, transparent 50%, rgba(124, 92, 230,0.04) 100%),
-    repeating-linear-gradient(45deg, transparent, transparent 36px, rgba(124, 92, 230,0.04) 36px, rgba(124, 92, 230,0.04) 37px);
+  /* Solo un velo morado suave hacia abajo. Antes habia ademas un patron de
+     rayas diagonales que ensuciaba el fondo; se retiro. */
+  background: linear-gradient(180deg, transparent 50%, rgba(168, 85, 247, 0.06) 100%);
   pointer-events: none;
   z-index: 0;
 }
@@ -109,7 +109,7 @@
   font-family: var(--font-headline);
   font-weight: 800;
   font-size: 18px;
-  box-shadow: 0 4px 18px rgba(124, 92, 230, 0.45);
+  box-shadow: 0 4px 18px rgba(168, 85, 247, 0.45);
 }
 
 .auth-panel-headline {
@@ -201,7 +201,7 @@
   position: absolute;
   top: -10%; right: -20%;
   width: 600px; height: 600px;
-  background: radial-gradient(circle, rgba(124, 92, 230,0.16), transparent 60%);
+  background: radial-gradient(circle, rgba(168, 85, 247,0.16), transparent 60%);
   pointer-events: none;
   filter: blur(60px);
 }
@@ -355,7 +355,7 @@
 }
 .pin-cell:focus {
   border-color: var(--primary-accent);
-  box-shadow: 0 0 0 3px rgba(124, 92, 230, 0.20);
+  box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.20);
 }
 
 /* Strength meter */
