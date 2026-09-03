@@ -87,24 +87,23 @@ function SkeletonRows({ cols, rows = 6 }) {
 export default function MiembrosPage() {
   const [items, setItems]   = useState([]);
   const [q, setQ]           = useState('');
-  const [open, setOpen]     = useState(false);
-  const [form, setForm]     = useState(empty);
-  const [error, setError]   = useState('');
-  const [info, setInfo]     = useState('');
-  const [loading, setLoading] = useState(false);
   const [filtro, setFiltro] = useState('todos');
-  const [showQRModal, setShowQRModal] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState(empty);
+  const [editing, setEditing] = useState(null);
+  const [editForm, setEditForm] = useState(empty);
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState('');
+  const [error, setError] = useState('');
+  const [info, setInfo] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [createdMember, setCreatedMember] = useState(null);
-  const [qrImage, setQrImage] = useState('');
+  const [qrImage, setQrImage] = useState(null);
+  const [showQRModal, setShowQRModal] = useState(false);
   const [activeSection, setActiveSection] = useState('personales');
   const [gymConfig, setGymConfig] = useState(null);
   const qrCanvasRef = useRef(null);
-
-  // Edicion
-  const [editing, setEditing]   = useState(null);   // miembro en edicion
-  const [editForm, setEditForm] = useState(empty);
-  const [editError, setEditError] = useState('');
-  const [editSaving, setEditSaving] = useState(false);
 
   // Confirm desactivar
   const [confirmDeactivate, setConfirmDeactivate] = useState(null); // miembro a desactivar
@@ -284,6 +283,9 @@ export default function MiembrosPage() {
       return;
     }
     
+    setSubmitting(true);
+    setError('');
+    
     try {
       const payload = { ...form };
       if (!payload.email) delete payload.email;
@@ -320,8 +322,11 @@ export default function MiembrosPage() {
       setForm(empty);
       setOpen(false);
       load(q);
+      setInfo('Miembro creado exitosamente.');
     } catch (err) {
       setError(err.message || 'No se pudo crear el miembro.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -451,6 +456,12 @@ export default function MiembrosPage() {
                 type="button"
                 className={`btn btn-ghost btn-sm ${activeSection === section.id ? 'active' : ''}`}
                 onClick={() => setActiveSection(section.id)}
+                style={{
+                  backgroundColor: activeSection === section.id ? 'var(--primary)' : 'transparent',
+                  color: activeSection === section.id ? 'white' : 'var(--on-surface)',
+                  border: activeSection === section.id ? 'none' : '1px solid var(--border)',
+                  fontWeight: activeSection === section.id ? 600 : 400
+                }}
               >
                 {section.label}
               </button>
@@ -463,29 +474,34 @@ export default function MiembrosPage() {
               <div className="form-section anim-fade-up">
                 <h4 style={{ marginBottom: 16, color: 'var(--primary)' }}>Datos personales</h4>
                 <div className="auth-form-row">
-                  <label className="field">
+                  <label className="field" style={{ flex: 2 }}>
                     <span className="field-label">Nombre completo *</span>
                     <input
                       className="field-input"
                       required value={form.nombre}
                       onChange={(e) => handleFormChange('nombre', e.target.value)}
                       placeholder="Nombre y apellido"
+                      style={{ borderColor: !form.nombre && submitting ? 'var(--error)' : '' }}
                     />
+                    {!form.nombre && submitting && (
+                      <span style={{ color: 'var(--error)', fontSize: 12, marginTop: 4 }}>El nombre es requerido</span>
+                    )}
                   </label>
+                </div>
+                <div className="auth-form-row">
                   <label className="field">
                     <span className="field-label">Tipo documento *</span>
                     <select
                       className="field-input"
                       value={form.tipo_documento}
                       onChange={(e) => handleFormChange('tipo_documento', e.target.value)}
+                      style={{ borderColor: !form.tipo_documento && submitting ? 'var(--error)' : '' }}
                     >
                       {TIPOS_DOCUMENTO.map(tipo => (
                         <option key={tipo} value={tipo}>{tipo}</option>
                       ))}
                     </select>
                   </label>
-                </div>
-                <div className="auth-form-row">
                   <label className="field">
                     <span className="field-label">Número documento *</span>
                     <input
@@ -493,8 +509,14 @@ export default function MiembrosPage() {
                       required value={form.documento}
                       onChange={(e) => handleFormChange('documento', e.target.value)}
                       placeholder="123456789"
+                      style={{ borderColor: !form.documento && submitting ? 'var(--error)' : '' }}
                     />
+                    {!form.documento && submitting && (
+                      <span style={{ color: 'var(--error)', fontSize: 12, marginTop: 4 }}>El documento es requerido</span>
+                    )}
                   </label>
+                </div>
+                <div className="auth-form-row">
                   <label className="field">
                     <span className="field-label">Fecha nacimiento</span>
                     <DatePicker
@@ -502,14 +524,16 @@ export default function MiembrosPage() {
                       onChange={(date) => handleFormChange('fecha_nacimiento', date ? date.toISOString().split('T')[0] : '')}
                       dateFormat="dd/MM/yyyy"
                       className="field-input"
-                      placeholderText="Selecciona fecha"
+                      placeholderText="DD/MM/YYYY"
                       showYearDropdown
                       scrollableYearDropdown
                       yearDropdownItemNumber={100}
+                      showMonthDropdown
+                      minDate={new Date(1900, 0, 1)}
+                      maxDate={new Date()}
+                      isClearable
                     />
                   </label>
-                </div>
-                <div className="auth-form-row">
                   <label className="field">
                     <span className="field-label">Género</span>
                     <select
@@ -533,7 +557,11 @@ export default function MiembrosPage() {
                       onChange={(e) => handleFormChange('telefono', e.target.value)}
                       placeholder="3001234567"
                       inputMode="numeric"
+                      style={{ borderColor: !form.telefono && submitting ? 'var(--error)' : '' }}
                     />
+                    {!form.telefono && submitting && (
+                      <span style={{ color: 'var(--error)', fontSize: 12, marginTop: 4 }}>El teléfono es requerido</span>
+                    )}
                   </label>
                   <label className="field">
                     <span className="field-label">Email</span>
@@ -543,11 +571,15 @@ export default function MiembrosPage() {
                       value={form.email}
                       onChange={(e) => handleFormChange('email', e.target.value)}
                       placeholder="correo@ejemplo.com"
+                      style={{ borderColor: form.email && !form.email.includes('@') && submitting ? 'var(--error)' : '' }}
                     />
+                    {form.email && !form.email.includes('@') && submitting && (
+                      <span style={{ color: 'var(--error)', fontSize: 12, marginTop: 4 }}>Email inválido</span>
+                    )}
                   </label>
                 </div>
                 <div className="auth-form-row">
-                  <label className="field">
+                  <label className="field" style={{ flex: 1 }}>
                     <span className="field-label">Dirección completa</span>
                     <input
                       className="field-input"
@@ -639,8 +671,11 @@ export default function MiembrosPage() {
                       onChange={(date) => handleFormChange('fecha_inicio', date ? date.toISOString().split('T')[0] : '')}
                       dateFormat="dd/MM/yyyy"
                       className="field-input"
-                      placeholderText="Selecciona fecha"
+                      placeholderText="DD/MM/YYYY"
                       required
+                      minDate={new Date(2020, 0, 1)}
+                      maxDate={new Date(2030, 11, 31)}
+                      isClearable
                     />
                   </label>
                 </div>
@@ -846,6 +881,10 @@ export default function MiembrosPage() {
                 ← Anterior
               </button>
               
+              <div style={{ fontSize: 13, color: 'var(--on-surface-variant)' }}>
+                Paso {['personales', 'salud', 'cobros', 'adicional', 'terminos'].indexOf(activeSection) + 1} de 5
+              </div>
+              
               {activeSection !== 'terminos' ? (
                 <button
                   type="button"
@@ -861,17 +900,14 @@ export default function MiembrosPage() {
                   Siguiente →
                 </button>
               ) : (
-                <button type="submit" className="btn btn-primary btn-lg ripple-host" onClick={crearRipple}>
-                  <span className="material-symbols-outlined icon">save</span>
-                  Crear miembro y generar QR
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={submitting}
+                >
+                  {submitting ? 'Creando miembro...' : 'Crear miembro'}
                 </button>
               )}
-            </div>
-            
-            <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
-              <button type="button" className="btn btn-ghost btn-lg" onClick={() => setOpen(false)}>
-                Cancelar
-              </button>
             </div>
           </form>
         </section>
