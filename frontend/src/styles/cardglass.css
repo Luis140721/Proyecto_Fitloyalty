@@ -16,7 +16,7 @@
 
   /* --- border: outline M3 + top highlight blanco 5% --- */
   border: 1px solid var(--outline-variant);
-  border-top-color: rgba(255, 255, 255, 0.05);
+  border-top-color: var(--border-subtle);
   border-radius: var(--radius-lg);
 
   color: var(--on-surface);
@@ -55,7 +55,7 @@
 .card-glass--interactive:hover,
 .card-glass--interactive:focus-visible {
   transform: translateY(-2px);
-  border-color: var(--primary);
+  border-color: var(--primary-accent);
   background: color-mix(in srgb, var(--surface-container-high) 90%, transparent);
   box-shadow:
     0 8px 24px -8px rgba(0, 0, 0, 0.6),
@@ -92,7 +92,7 @@
    .card-glass--interactive, sin cursor pointer porque no navega). */
 .miembro-card:hover {
   transform: translateY(-2px);
-  border-color: var(--primary);
+  border-color: var(--primary-accent);
   box-shadow:
     0 8px 24px -8px rgba(0, 0, 0, 0.6),
     0 0 0 1px var(--primary-soft),

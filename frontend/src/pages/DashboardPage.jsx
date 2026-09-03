@@ -43,7 +43,7 @@ const COP = (n) => '$' + Number(n || 0).toLocaleString('es-CO');
 // Duracion del toast interno del Dashboard (no usa ErrorBanner porque es info, no error).
 const TOAST_MS = 5000;
 
-function Sparkline({ data, color = '#A855F7' }) {
+function Sparkline({ data, color = '#7C5CE6' }) {
   if (!data || data.length === 0) return null;
   const w = 600, h = 220, pad = 8;
   const max = Math.max(...data.map((d) => d.value), 1);
@@ -94,8 +94,8 @@ function BarsWeekly({ data, appear = false }) {
     <svg viewBox="0 0 600 220" preserveAspectRatio="none" className="chart-svg">
       <defs>
         <linearGradient id="grad-bar" x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0%"  stopColor="#A855F7" stopOpacity="0.95" />
-          <stop offset="100%" stopColor="#A855F7" stopOpacity="0.30" />
+          <stop offset="0%"  stopColor="#7C5CE6" stopOpacity="0.95" />
+          <stop offset="100%" stopColor="#7C5CE6" stopOpacity="0.30" />
         </linearGradient>
       </defs>
       {data.map((d, i) => {

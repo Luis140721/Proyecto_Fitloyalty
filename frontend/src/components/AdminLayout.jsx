@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Outlet, useLocation } from 'react-router-dom';
+import { Outlet, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTrial } from '../context/TrialContext';
 import Sidebar from './Sidebar';
 import UserAvatar from './UserAvatar';
+import Logo from './Logo';
 import '../styles/admin.css';
 
 const PAGE_META = {
@@ -11,6 +12,7 @@ const PAGE_META = {
   '/admin/miembros':  { title: 'Miembros',   icon: 'group'            },
   '/admin/checkin':   { title: 'Check-in',   icon: 'qr_code_scanner'  },
   '/admin/staff':     { title: 'Equipo',     icon: 'badge'            },
+  '/admin/config':    { title: 'Configuración', icon: 'settings'       },
 };
 
 /**
@@ -60,10 +62,15 @@ export default function AdminLayout({ children }) {
             >
               <span className="material-symbols-outlined icon">menu</span>
             </button>
+            {/* En movil el sidebar es un drawer oculto, asi que la marca
+                desaparece del encabezado. Este icono la mantiene visible. */}
+            <Link to="/" className="admin-header__logo" aria-label="Inicio FitLoyalty">
+              <Logo variant="icon" height={30} />
+            </Link>
             <div className="admin-header__greeting">
               <small>{new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })}</small>
               <strong style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span className="material-symbols-outlined icon" style={{ color: 'var(--primary)', fontSize: 22 }}>
+                <span className="material-symbols-outlined icon" style={{ color: 'var(--primary-accent)', fontSize: 22 }}>
                   {meta.icon}
                 </span>
                 {meta.title}
