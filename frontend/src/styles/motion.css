@@ -193,8 +193,8 @@
 }
 @keyframes flashBorderWarning {
   0%   { box-shadow: 0 0 0 0    rgba(221, 183, 255, 0.0); border-color: var(--border-subtle); }
-  20%  { box-shadow: 0 0 0 6px  rgba(168, 85, 247, 0.45); border-color: var(--primary); }
-  100% { box-shadow: 0 0 0 0    rgba(168, 85, 247, 0.0); border-color: var(--border-subtle); }
+  20%  { box-shadow: 0 0 0 6px  rgba(124, 92, 230, 0.45); border-color: var(--primary-accent); }
+  100% { box-shadow: 0 0 0 0    rgba(124, 92, 230, 0.0); border-color: var(--border-subtle); }
 }
 .checkin-frame--flash-success {
   animation: flashBorderSuccess 600ms ease-out both;
@@ -279,9 +279,9 @@
     background var(--dur-fast) var(--ease-out);
 }
 .search-input:focus-within {
-  border-color: var(--primary);
-  box-shadow: 0 0 0 4px rgba(168, 85, 247, 0.18),
-              0 0 20px rgba(168, 85, 247, 0.25);
+  border-color: var(--primary-accent);
+  box-shadow: 0 0 0 4px rgba(124, 92, 230, 0.18),
+              0 0 20px rgba(124, 92, 230, 0.25);
 }
 
 /* ---------- Pulse badge (Staff: ultima invitacion al cargar) ---------- */
@@ -316,7 +316,7 @@
   border-top: 1px solid rgba(255, 255, 255, 0.05);
   border-radius: var(--radius-lg);
   border-left-width: 3px;
-  border-left-color: var(--primary);
+  border-left-color: var(--primary-accent);
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
   display: flex;
   flex-direction: column;
