@@ -10,6 +10,71 @@ import Modal from '../components/Modal';
 import Ripple from '../components/Ripple';
 import QRCode from 'qrcode';
 
+// Componente personalizado para input de fecha con formato automático DD/MM/YYYY
+function DateInputWithAutoFormat({ value, onChange, placeholder, ...props }) {
+  const formatDateString = (input) => {
+    // Remover todos los caracteres que no sean dígitos
+    const cleaned = input.replace(/\D/g, '');
+    
+    // Limitar a 8 dígitos máximo
+    const truncated = cleaned.slice(0, 8);
+    
+    // Aplicar formato DD/MM/YYYY
+    let formatted = '';
+    if (truncated.length > 0) {
+      formatted += truncated.slice(0, 2);
+    }
+    if (truncated.length > 2) {
+      formatted += '/' + truncated.slice(2, 4);
+    }
+    if (truncated.length > 4) {
+      formatted += '/' + truncated.slice(4, 8);
+    }
+    
+    return formatted;
+  };
+
+  const handleChange = (e) => {
+    const rawValue = e.target.value;
+    const formatted = formatDateString(rawValue);
+    onChange(formatted);
+  };
+
+  return (
+    <input
+      {...props}
+      type="text"
+      value={value}
+      onChange={handleChange}
+      placeholder={placeholder || "DD/MM/YYYY"}
+      maxLength={10}
+      inputMode="numeric"
+    />
+  );
+}
+
+// Función para convertir DD/MM/YYYY a formato ISO (YYYY-MM-DD)
+function convertToISODate(dateString) {
+  if (!dateString || dateString.length !== 10) return dateString;
+  
+  const parts = dateString.split('/');
+  if (parts.length !== 3) return dateString;
+  
+  const [day, month, year] = parts;
+  return `${year}-${month}-${day}`;
+}
+
+// Función para convertir formato ISO a DD/MM/YYYY
+function convertFromISODate(isoDate) {
+  if (!isoDate || isoDate.length !== 10) return isoDate;
+  
+  const parts = isoDate.split('-');
+  if (parts.length !== 3) return isoDate;
+  
+  const [year, month, day] = parts;
+  return `${day}/${month}/${year}`;
+}
+
 const empty = {
   // Datos personales
   nombre: '',
@@ -27,7 +92,7 @@ const empty = {
   alergias: '',
   // Plan y cobros
   tipo_plan: 'MENSUAL',
-  fecha_inicio: new Date().toISOString().split('T')[0], // Fecha actual por defecto
+  fecha_inicio: '', // Fecha actual por defecto - se formateará automáticamente
   fecha_fin: '',
   valor_total: '',
   valor_pagado: '0',
@@ -203,7 +268,10 @@ export default function MiembrosPage() {
   // Calcular fecha fin automáticamente según tipo de plan
   const calcularFechaFin = (tipoPlan, fechaInicio) => {
     if (!fechaInicio) return '';
-    const inicio = new Date(fechaInicio);
+    
+    // Convertir de DD/MM/YYYY a ISO si es necesario
+    const isoDate = fechaInicio.includes('/') ? convertToISODate(fechaInicio) : fechaInicio;
+    const inicio = new Date(isoDate);
     let dias = 30;
     
     switch (tipoPlan) {
@@ -216,7 +284,10 @@ export default function MiembrosPage() {
     
     const fin = new Date(inicio);
     fin.setDate(fin.getDate() + dias);
-    return fin.toISOString().split('T')[0];
+    const isoResult = fin.toISOString().split('T')[0];
+    
+    // Convertir de vuelta a DD/MM/YYYY
+    return convertFromISODate(isoResult);
   };
 
   // Determinar estado del pago
@@ -231,10 +302,16 @@ export default function MiembrosPage() {
   // Calcular próxima fecha de cobro
   const calcularProximaFechaCobro = (fechaFin) => {
     if (!fechaFin) return '';
-    const fin = new Date(fechaFin);
+    
+    // Convertir de DD/MM/YYYY a ISO si es necesario
+    const isoDate = fechaFin.includes('/') ? convertToISODate(fechaFin) : fechaFin;
+    const fin = new Date(isoDate);
     const proxima = new Date(fin);
     proxima.setDate(proxima.getDate() + 1);
-    return proxima.toISOString().split('T')[0];
+    const isoResult = proxima.toISOString().split('T')[0];
+    
+    // Convertir de vuelta a DD/MM/YYYY
+    return convertFromISODate(isoResult);
   };
 
   // Manejar cambios en campos que afectan cálculos automáticos
@@ -289,6 +366,20 @@ export default function MiembrosPage() {
     try {
       const payload = { ...form };
       if (!payload.email) delete payload.email;
+      
+      // Convertir fechas de DD/MM/YYYY a formato ISO para el backend
+      if (payload.fecha_inicio && payload.fecha_inicio.includes('/')) {
+        payload.fecha_inicio = convertToISODate(payload.fecha_inicio);
+      }
+      if (payload.fecha_fin && payload.fecha_fin.includes('/')) {
+        payload.fecha_fin = convertToISODate(payload.fecha_fin);
+      }
+      if (payload.fecha_nacimiento && payload.fecha_nacimiento.includes('/')) {
+        payload.fecha_nacimiento = convertToISODate(payload.fecha_nacimiento);
+      }
+      if (payload.proxima_fecha_cobro && payload.proxima_fecha_cobro.includes('/')) {
+        payload.proxima_fecha_cobro = convertToISODate(payload.proxima_fecha_cobro);
+      }
       
       // Calcular fechas automáticamente si no están definidas
       if (!payload.fecha_inicio) {
@@ -519,19 +610,11 @@ export default function MiembrosPage() {
                 <div className="auth-form-row">
                   <label className="field">
                     <span className="field-label">Fecha nacimiento</span>
-                    <DatePicker
-                      selected={form.fecha_nacimiento ? new Date(form.fecha_nacimiento) : null}
-                      onChange={(date) => handleFormChange('fecha_nacimiento', date ? date.toISOString().split('T')[0] : '')}
-                      dateFormat="dd/MM/yyyy"
+                    <DateInputWithAutoFormat
+                      value={form.fecha_nacimiento}
+                      onChange={(value) => handleFormChange('fecha_nacimiento', value)}
                       className="field-input"
-                      placeholderText="DD/MM/YYYY"
-                      showYearDropdown
-                      scrollableYearDropdown
-                      yearDropdownItemNumber={100}
-                      showMonthDropdown
-                      minDate={new Date(1900, 0, 1)}
-                      maxDate={new Date()}
-                      isClearable
+                      placeholder="DD/MM/YYYY"
                     />
                   </label>
                   <label className="field">
@@ -666,28 +749,24 @@ export default function MiembrosPage() {
                   </label>
                   <label className="field">
                     <span className="field-label">Fecha inicio *</span>
-                    <DatePicker
-                      selected={form.fecha_inicio ? new Date(form.fecha_inicio) : null}
-                      onChange={(date) => handleFormChange('fecha_inicio', date ? date.toISOString().split('T')[0] : '')}
-                      dateFormat="dd/MM/yyyy"
+                    <DateInputWithAutoFormat
+                      value={form.fecha_inicio}
+                      onChange={(value) => handleFormChange('fecha_inicio', value)}
                       className="field-input"
-                      placeholderText="DD/MM/YYYY"
+                      placeholder="DD/MM/YYYY"
                       required
-                      minDate={new Date(2020, 0, 1)}
-                      maxDate={new Date(2030, 11, 31)}
-                      isClearable
                     />
                   </label>
                 </div>
                 <div className="auth-form-row">
                   <label className="field">
                     <span className="field-label">Fecha fin (calculada automáticamente)</span>
-                    <DatePicker
-                      selected={form.fecha_fin ? new Date(form.fecha_fin) : null}
-                      onChange={(date) => handleFormChange('fecha_fin', date ? date.toISOString().split('T')[0] : '')}
-                      dateFormat="dd/MM/yyyy"
+                    <DateInputWithAutoFormat
+                      value={form.fecha_fin}
+                      onChange={(value) => handleFormChange('fecha_fin', value)}
                       className="field-input"
-                      placeholderText="Calculada automáticamente"
+                      placeholder="Calculada automáticamente"
+                      readOnly
                     />
                   </label>
                   <label className="field">
