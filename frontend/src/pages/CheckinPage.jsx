@@ -80,9 +80,9 @@ export default function CheckinPage() {
       scanner.render(
         (decodedText) => {
           // QR escaneado exitosamente - enviar automáticamente al backend
-          const now = Date.now();
-          if (lastScannedRef.current === decodedText && scanTimeoutRef.current) {
-            return; // Ya escaneamos este QR recientemente
+          // Ignorar si es el mismo QR que acabamos de escanear
+          if (lastScannedRef.current === decodedText) {
+            return;
           }
           
           lastScannedRef.current = decodedText;
