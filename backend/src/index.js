@@ -27,6 +27,7 @@ const miembrosRoutes = require('./routes/miembros');
 const checkinRoutes  = require('./routes/checkin');
 const billingRoutes  = require('./routes/billing');
 const dashboardRoutes = require('./routes/dashboard');
+const configRoutes   = require('./routes/config');
 
 const app  = express();
 const PORT = process.env.PORT || 3001;
@@ -75,6 +76,7 @@ app.use('/api', miembrosRoutes);
 app.use('/api', checkinRoutes);
 app.use('/api', billingRoutes);
 app.use('/api', dashboardRoutes);
+app.use('/api', configRoutes);
 app.use('/api/asistencia', require('./routes/asistencia'));
 app.use('/api/vista',     require('./routes/vista'));
 

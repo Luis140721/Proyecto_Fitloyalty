@@ -11,6 +11,7 @@ const PAGE_META = {
   '/admin/miembros':  { title: 'Miembros',   icon: 'group'            },
   '/admin/checkin':   { title: 'Check-in',   icon: 'qr_code_scanner'  },
   '/admin/staff':     { title: 'Equipo',     icon: 'badge'            },
+  '/admin/config':    { title: 'Configuración', icon: 'settings'       },
 };
 
 /**
