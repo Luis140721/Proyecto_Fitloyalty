@@ -1,5 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom';
 import Logo from '../components/Logo';
+import BotonVolverArriba from '../components/BotonVolverArriba';
 import '../styles/landing.css';
 
 const SOLUTIONS = [
@@ -367,6 +368,8 @@ export default function LandingPage() {
         </div>
         <div className="footer-bottom">© {new Date().getFullYear()} FitLoyalty</div>
       </footer>
+
+      <BotonVolverArriba />
     </div>
   );
 }

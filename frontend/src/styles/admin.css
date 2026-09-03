@@ -1090,3 +1090,52 @@
   .table { min-width: 520px; }
   .chart-card { padding: 16px 14px; }
 }
+
+
+/* ============================================================
+   Panel del codigo QR en el detalle del miembro
+   Mismo QR que se muestra al registrar, ahora disponible tambien al
+   ver/editar para reimprimirlo o reenviarlo.
+   ============================================================ */
+.miembro-qr-panel {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px;
+  margin-bottom: 18px;
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-glass);
+  box-shadow: var(--surface-bevel);
+}
+.miembro-qr-panel__img {
+  width: 96px;
+  height: 96px;
+  flex-shrink: 0;
+  border-radius: var(--radius);
+  background: #FFFFFF;   /* el QR necesita fondo blanco para que un lector lo lea */
+  padding: 6px;
+}
+.miembro-qr-panel__img--vacio {
+  display: grid;
+  place-items: center;
+  background: var(--surface-container-low);
+  color: var(--on-surface-variant);
+}
+.miembro-qr-panel__img--vacio .material-symbols-outlined { font-size: 40px; }
+.miembro-qr-panel__body { min-width: 0; flex: 1; }
+.miembro-qr-panel__codigo {
+  display: block;
+  margin: 4px 0 10px;
+  font-family: var(--font-label);
+  font-size: 15px;
+  letter-spacing: 0.04em;
+  color: var(--on-surface);
+  word-break: break-all;
+}
+.miembro-qr-panel__acciones { display: flex; flex-wrap: wrap; gap: 8px; }
+
+@media (max-width: 560px) {
+  .miembro-qr-panel { flex-direction: column; align-items: flex-start; }
+  .miembro-qr-panel__acciones .btn { flex: 1 1 auto; justify-content: center; }
+}
