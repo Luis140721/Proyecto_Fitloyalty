@@ -122,6 +122,23 @@ router.post(
         throw new AppError(400, 'codigo o documento requerido', 'VALIDATION_ERROR');
       }
 
+      // PROTECCIÓN SIMPLE: Bloquear solo duplicados muy cercanos (5 segundos)
+      const { rows: recentCheckins } = await pool.query(
+        `SELECT id_checkin, fecha_hora 
+         FROM checkin 
+         WHERE id_miembro = $1 AND id_gimnasio = $2
+         AND fecha_hora > NOW() - INTERVAL '5 seconds'
+         ORDER BY fecha_hora DESC 
+         LIMIT 1`,
+        [miembro.id_miembro, gymId]
+      );
+
+      if (recentCheckins.length > 0) {
+        const timeSinceLastCheckin = Math.floor((new Date() - new Date(recentCheckins[0].fecha_hora)) / 1000);
+        console.log(`⏸️ Check-in reciente detectado: hace ${timeSinceLastCheckin}s`);
+        throw new AppError(429, `Espera ${5 - timeSinceLastCheckin} segundos antes de escanear nuevamente.`, 'RECENT_CHECKIN');
+      }
+
       // Validar membresia activa
       const { rows: mem } = await pool.query(
         `SELECT estado, fecha_fin FROM membresia
