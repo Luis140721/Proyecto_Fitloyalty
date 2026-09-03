@@ -268,7 +268,11 @@ export default function CheckinPage() {
               }
               key={frameFlash ? `frame-${frameFlash.key}` : 'frame-stable'}
               aria-hidden="true"
-              style={{ minHeight: cameraEnabled ? '500px' : 'auto', height: cameraEnabled ? '500px' : 'auto' }}
+              style={{ 
+                minHeight: cameraEnabled ? '400px' : 'auto', 
+                height: cameraEnabled ? '400px' : 'auto',
+                maxHeight: cameraEnabled ? '60vh' : 'auto'
+              }}
             >
               {!cameraEnabled ? (
                 <>
@@ -279,7 +283,7 @@ export default function CheckinPage() {
                   </div>
                 </>
               ) : (
-                <div id="qr-reader" style={{ width: '100%', height: '100%', minHeight: '500px' }}></div>
+                <div id="qr-reader" style={{ width: '100%', height: '100%', minHeight: '400px' }}></div>
               )}
             </div>
 
