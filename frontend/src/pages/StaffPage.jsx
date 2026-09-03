@@ -398,7 +398,7 @@ export default function StaffPage() {
               </div>
             ) : (
               <p style={{ color: 'var(--on-surface-variant)', fontSize: 14 }}>
-                Aún no has invitado a nadie. Usa el formulario de la izquierda para empezar.
+                Aún no has invitado a nadie. Usa el formulario «Invitar a alguien» para empezar.
               </p>
             )}
           </article>
@@ -412,7 +412,7 @@ export default function StaffPage() {
                 { icon: 'admin_panel_settings', text: 'Solo tú (admin) puedes invitar más gente.' },
               ].map((p, i) => (
                 <li key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: 13, color: 'var(--on-surface-variant)' }}>
-                  <span className="material-symbols-outlined icon" style={{ color: 'var(--primary)', fontSize: 18 }}>{p.icon}</span>
+                  <span className="material-symbols-outlined icon" style={{ color: 'var(--primary-accent)', fontSize: 18 }}>{p.icon}</span>
                   <span>{p.text}</span>
                 </li>
               ))}

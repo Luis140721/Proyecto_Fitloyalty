@@ -340,7 +340,7 @@ export default function CheckinPage() {
               textTransform: 'uppercase',
               color: 'var(--on-surface-variant)',
             }}>
-              <span style={{ color: 'var(--primary)', fontWeight: 700 }}>TIP</span>
+              <span style={{ color: 'var(--primary-accent)', fontWeight: 700 }}>TIP</span>
               <span>Si el QR no se lee, usa el campo de abajo para ingresar la cédula del cliente.</span>
             </div>
 

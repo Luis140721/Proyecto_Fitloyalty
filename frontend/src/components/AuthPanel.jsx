@@ -1,11 +1,11 @@
 import { Link } from 'react-router-dom';
+import Logo from './Logo';
 
 export default function AuthPanel({ eyebrow = 'FitLoyalty', headline, sub, points, footNote }) {
   return (
     <aside className="auth-page__panel">
       <Link to="/" className="auth-panel-brand" aria-label="Inicio FitLoyalty">
-        <span className="landing-brand-mark">FL</span>
-        <span>FitLoyalty</span>
+        <Logo height={34} />
       </Link>
 
       <div>

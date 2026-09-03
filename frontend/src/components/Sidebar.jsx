@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import UserAvatar from './UserAvatar';
+import Logo from './Logo';
 
 const links = [
   { to: '/admin/dashboard', label: 'Dashboard', icon: 'space_dashboard',  roles: ['admin'] },
@@ -40,8 +41,7 @@ export default function Sidebar({ open, onNavigate }) {
       </button>
 
       <NavLink to="/" className="admin-sidebar__brand" aria-label="Inicio FitLoyalty" onClick={onNavigate}>
-        <span className="admin-sidebar__brand-mark">FL</span>
-        <span>FitLoyalty</span>
+        <Logo height={30} />
       </NavLink>
 
       <div>

@@ -3,19 +3,29 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#000000" />
+    <meta name="theme-color" content="#22262B" />
     <title>FitLoyalty · El motor para tu gimnasio</title>
     <meta name="description" content="Administra miembros, cobros recurrentes en COP y accesos con códigos QR desde un único dashboard. Creado para gimnasios pequeños de Colombia." />
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23000'/%3E%3Ctext x='50%25' y='54%25' text-anchor='middle' font-family='Anybody,sans-serif' font-size='34' font-weight='800' fill='%23A855F7'%3EFL%3C/text%3E%3C/svg%3E" />
+    <!-- Favicon: el icono de marca real (public/favicon.svg), no un dibujo inline. -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- Sora es la tipografia del lockup del logo: el SVG lleva <text> real, asi
+         que sin ella el navegador sustituye la fuente y la marca se deforma.
+         Va en la misma peticion que las demas, no agrega una request extra. -->
     <link
-      href="https://fonts.googleapis.com/css2?family=Anybody:wght@400;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Anybody:wght@400;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&family=Sora:wght@400;700&display=swap"
       rel="stylesheet"
     />
+    <!--
+      display=block (no swap) a proposito: los iconos se escriben como
+      ligaduras ("person_add"), asi que con swap el navegador pinta ese
+      texto crudo mientras la fuente carga y descuadra el layout. Con
+      block el hueco queda invisible hasta que la fuente esta lista.
+    -->
     <link
-      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-25..200&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-25..200&display=block"
       rel="stylesheet"
     />
   </head>

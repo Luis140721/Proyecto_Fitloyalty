@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import Logo from './Logo';
 import '../styles/legal.css';
 
 export default function LegalLayout({ title, subtitle, updated, children }) {
@@ -6,8 +7,7 @@ export default function LegalLayout({ title, subtitle, updated, children }) {
     <div className="legal-shell">
       <header className="legal-header">
         <Link to="/" className="legal-brand">
-          <span className="legal-brand-mark">FL</span>
-          <span>FitLoyalty</span>
+          <Logo height={30} />
         </Link>
       </header>
 
@@ -32,8 +32,7 @@ export default function LegalLayout({ title, subtitle, updated, children }) {
       <footer className="legal-footer">
         <div className="legal-footer__inner">
           <Link to="/" className="legal-brand legal-brand--sm">
-            <span className="legal-brand-mark">FL</span>
-            <span>FitLoyalty</span>
+            <Logo height={24} />
           </Link>
           <nav className="legal-footer__nav">
             <Link to="/legal/terminos">Términos</Link>

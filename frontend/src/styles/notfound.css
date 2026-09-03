@@ -9,7 +9,7 @@
   align-items: center;
   justify-content: center;
   padding: 24px 16px;
-  background: var(--bg);
+  background: transparent;
   /* halo radial sutil para reforzar el ambiente ultraviolet */
   background-image: radial-gradient(
     ellipse at top,
@@ -63,7 +63,7 @@
   font-size: clamp(120px, 22vw, 240px);
   line-height: 0.9;
   letter-spacing: -0.04em;
-  color: var(--primary);
+  color: var(--primary-accent);
   margin: 0;
   /* glow púrpura */
   text-shadow:

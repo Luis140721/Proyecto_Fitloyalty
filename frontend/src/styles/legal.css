@@ -5,7 +5,7 @@
 
 .legal-shell {
   min-height: 100vh;
-  background: var(--bg);
+  background: transparent;
   color: var(--on-surface);
   display: flex;
   flex-direction: column;
@@ -91,7 +91,7 @@
   font-size: 11px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--primary);
+  color: var(--primary-accent);
   background: var(--primary-soft);
   padding: 4px 12px;
   border-radius: var(--radius-full);
@@ -161,19 +161,19 @@
 }
 
 .legal-content li::marker {
-  color: var(--primary);
+  color: var(--primary-accent);
   font-weight: 700;
 }
 
 .legal-content a {
-  color: var(--primary);
+  color: var(--primary-accent);
   text-decoration: none;
   border-bottom: 1px solid var(--primary-soft);
   transition: border-color 200ms var(--ease-out);
 }
 
 .legal-content a:hover {
-  border-bottom-color: var(--primary);
+  border-bottom-color: var(--primary-accent);
 }
 
 .legal-content blockquote {
@@ -218,7 +218,7 @@
 
 .legal-callout__title .material-symbols-outlined {
   font-size: 20px;
-  color: var(--primary);
+  color: var(--primary-accent);
 }
 
 .legal-callout p {
@@ -256,7 +256,7 @@
 }
 
 .legal-footer__nav a:hover {
-  color: var(--primary);
+  color: var(--primary-accent);
 }
 
 .legal-footer__copy {
