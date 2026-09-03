@@ -31,6 +31,7 @@ export default function CheckinPage() {
   const scannerRef = useRef(null);
   const lastScannedRef = useRef(null);
   const scanTimeoutRef = useRef(null);
+  const isProcessingRef = useRef(false); // Flag para evitar múltiples peticiones simultáneas
 
   // IDs de checkins conocidos para detectar el "mas nuevo" cuando llega un nuevo set.
   const knownIdsRef = useRef(new Set());
@@ -71,38 +72,52 @@ export default function CheckinPage() {
           fps: 10,
           qrbox: { width: 250, height: 250 },
           aspectRatio: 1.0,
-          // Usar cámara trasera y evitar modo espejo
           facingMode: 'environment',
+          supportedScanTypes: [0],
+          videoConstraints: {
+            facingMode: 'environment',
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          }
         },
         false
       );
 
       scanner.render(
         (decodedText) => {
-          // QR escaneado exitosamente - enviar automáticamente al backend
-          // Ignorar si es el mismo QR que acabamos de escanear
-          if (lastScannedRef.current === decodedText) {
+          // SISTEMA AUTOMÁTICO: Ignorar si estamos procesando
+          if (isProcessingRef.current) {
+            console.log('⏸️ Procesando, ignorando escaneo');
             return;
           }
           
+          // Ignorar mismo QR consecutivo
+          if (lastScannedRef.current === decodedText) {
+            console.log('� Mismo QR, ignorando');
+            return;
+          }
+          
+          console.log('📷 QR escaneado:', decodedText);
+          
+          // Bloquear inmediatamente
+          isProcessingRef.current = true;
           lastScannedRef.current = decodedText;
           setCodigo(decodedText);
           setScannerError(null);
           
-          // Debounce: esperar 2 segundos antes de permitir otro escaneo
-          if (scanTimeoutRef.current) {
-            clearTimeout(scanTimeoutRef.current);
-          }
-          scanTimeoutRef.current = setTimeout(() => {
-            lastScannedRef.current = null;
-          }, 2000);
-          
-          // Enviar automáticamente el check-in
-          handleAutoCheckIn(decodedText);
+          // Procesar check-in
+          handleAutoCheckIn(decodedText)
+            .finally(() => {
+              // REINICIAR ESCÁNER automáticamente después de procesar
+              setTimeout(() => {
+                console.log('🔄 Reiniciando escáner para nuevos escaneos');
+                isProcessingRef.current = false;
+                lastScannedRef.current = null;
+              }, 3000); // 3 segundos de espera
+            });
         },
         (errorMessage) => {
-          // Ignorar errores de escaneo continuo (normal mientras busca QR)
-          // console.warn('QR scan error:', errorMessage);
+          // Ignorar errores normales de escaneo
         }
       );
 
@@ -118,13 +133,26 @@ export default function CheckinPage() {
 
   const toggleCamera = async () => {
     if (cameraEnabled) {
-      // Desactivar cámara
+      // Desactivar cámara - LIMPIEZA COMPLETA
       if (scannerRef.current) {
         await scannerRef.current.clear();
         scannerRef.current = null;
       }
+      
+      // RESET COMPLETO DE FLAGS cuando se apaga la cámara
+      console.log('🔄 RESET COMPLETO: Limpiando todos los flags al desactivar cámara');
+      isProcessingRef.current = false;
+      lastScannedRef.current = null;
+      if (scanTimeoutRef.current) {
+        clearTimeout(scanTimeoutRef.current);
+        scanTimeoutRef.current = null;
+      }
+      
       setCameraEnabled(false);
       setScannerError(null);
+      setCodigo('');
+      setFeedback(null);
+      setError('');
     } else {
       // Activar cámara
       setCameraEnabled(true);
@@ -132,18 +160,51 @@ export default function CheckinPage() {
     }
   };
 
+  // FUNCIÓN DE RESET MANUAL PARA EMERGENCIAS
+  const manualReset = () => {
+    console.log('🚨 RESET MANUAL ACTIVADO');
+    
+    // Limpiar todos los flags
+    isProcessingRef.current = false;
+    lastScannedRef.current = null;
+    if (scanTimeoutRef.current) {
+      clearTimeout(scanTimeoutRef.current);
+      scanTimeoutRef.current = null;
+    }
+    
+    // Limpiar estado
+    setSubmitting(false);
+    setCodigo('');
+    setDocumento('');
+    setFeedback(null);
+    setError('');
+    
+    console.log('✅ RESET MANUAL COMPLETADO');
+  };
+
   const handleAutoCheckIn = async (qrCode) => {
     // Evitar múltiples envíos simultáneos
-    if (submitting) return;
+    if (submitting) {
+      console.log('Ya está submitiendo, ignorando');
+      return;
+    }
     
+    console.log('Iniciando check-in para:', qrCode);
     const payload = { metodo: 'QR', codigo: qrCode.trim() };
     setSubmitting(true);
     try {
       const { data } = await api.post('/admin/checkin', payload);
       const fbType = data.advertencia ? 'warning' : 'success';
+      console.log('Check-in exitoso:', data);
+      
+      // Mensaje más claro y visible para el usuario
+      const successMessage = data.advertencia 
+        ? `⚠️ ${data.message}` 
+        : `✅ Ingreso exitoso: ${data.miembro?.nombre || 'Usuario'}`;
+        
       setFeedback({
         type: fbType,
-        msg: data.message,
+        msg: successMessage,
         miembro: data.miembro,
         advertencia: data.advertencia,
       });
@@ -153,14 +214,30 @@ export default function CheckinPage() {
       await loadRecent();
     } catch (err) {
       console.error('Error en check-in:', err);
-      const errorMsg = err.response?.status === 404 
-        ? 'Usuario no encontrado. Verifica que el QR sea correcto.'
-        : err.message || 'No se pudo registrar el check-in.';
+      
+      // Manejo específico para diferentes tipos de errores
+      let errorMsg = err.message || 'No se pudo registrar el check-in.';
+      let errorType = 'error';
+      
+      if (err.response?.status === 404) {
+        errorMsg = 'Usuario no encontrado. Verifica que el QR sea correcto.';
+      } else if (err.response?.status === 429) {
+        // Error de rate limit - check-in duplicado
+        errorMsg = err.response?.data?.message || 'Check-in ya registrado recientemente. Por favor espera.';
+        errorType = 'warning'; // Usar warning en lugar de error para duplicados
+      }
+      
       setError(errorMsg);
-      setFeedback({ type: 'error', msg: errorMsg, advertencia: true, miembro: null });
-      setFrameFlash({ type: 'error', key: Date.now() });
+      setFeedback({ type: errorType, msg: errorMsg, advertencia: true, miembro: null });
+      setFrameFlash({ type: errorType, key: Date.now() });
+      
+      // Para errores de duplicado, no limpiar el código para permitir reintentos manuales
+      if (err.response?.status !== 429) {
+        setCodigo('');
+      }
     } finally {
       setSubmitting(false);
+      console.log('Check-in finalizado, flag de submitting liberado');
     }
   };
 
@@ -226,6 +303,10 @@ export default function CheckinPage() {
             <span className="material-symbols-outlined icon">refresh</span>
             Actualizar
           </button>
+          <button className="btn btn-ghost" onClick={manualReset} style={{ color: 'var(--error)' }}>
+            <span className="material-symbols-outlined icon">restart_alt</span>
+            Reset
+          </button>
         </div>
       </header>
 
@@ -269,8 +350,8 @@ export default function CheckinPage() {
               key={frameFlash ? `frame-${frameFlash.key}` : 'frame-stable'}
               aria-hidden="true"
               style={{ 
-                minHeight: cameraEnabled ? '400px' : 'auto', 
-                height: cameraEnabled ? '400px' : 'auto',
+                minHeight: cameraEnabled ? '350px' : '300px', 
+                height: cameraEnabled ? 'auto' : '300px',
                 maxHeight: cameraEnabled ? '60vh' : 'auto'
               }}
             >
@@ -283,7 +364,7 @@ export default function CheckinPage() {
                   </div>
                 </>
               ) : (
-                <div id="qr-reader" style={{ width: '100%', height: '100%', minHeight: '400px' }}></div>
+                <div id="qr-reader" style={{ width: '100%', height: '100%', minHeight: '350px' }}></div>
               )}
             </div>
 

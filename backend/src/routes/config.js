@@ -18,6 +18,7 @@ const { formatZodError } = require('../lib/validators');
 const router = express.Router();
 
 const configSchema = z.object({
+  // Soportar ambos nombres de columnas (nuevos y antiguos)
   plan_mensual_valor: z.number().min(0).optional(),
   plan_trimestral_valor: z.number().min(0).optional(),
   plan_semestral_valor: z.number().min(0).optional(),
@@ -27,7 +28,15 @@ const configSchema = z.object({
   recordatorio_cobro_activo: z.boolean().optional(),
   dias_recordatorio_default: z.number().min(1).max(30).optional(),
   dias_prueba: z.number().min(1).max(90).optional(),
-});
+  // Campos antiguos para compatibilidad
+  umbral_alerta_amarilla: z.number().min(0).optional(),
+  umbral_alerta_roja: z.number().min(0).optional(),
+  dias_aviso_vencimiento: z.number().min(1).max(30).optional(),
+  horario_apertura: z.string().optional(),
+  horario_cierre: z.string().optional(),
+  canal_principal: z.enum(['EMAIL', 'WHATSAPP']).optional(),
+  tiempo_inactividad_sesion_min: z.number().min(1).optional(),
+}).passthrough(); // Permitir campos adicionales sin error
 
 function parse(schema, payload) {
   const result = schema.safeParse(payload || {});
@@ -47,7 +56,8 @@ router.get(
     const gymId = req.user.gymId;
 
     try {
-      const { rows } = await pool.query(
+      // Usar siempre la tabla nueva (config_gimnasio)
+      let { rows } = await pool.query(
         'SELECT * FROM config_gimnasio WHERE id_gimnasio = $1',
         [gymId]
       );
@@ -86,54 +96,72 @@ router.put(
     const data = parsed.data;
     const gymId = req.user.gymId;
 
-    const campos = [];
-    const params = [];
-    for (const [k, v] of Object.entries(data)) {
-      if (v === undefined) continue;
-      params.push(v);
-      campos.push(`${k} = $${params.length}`);
-    }
-    
-    if (campos.length === 0) throw new AppError(400, 'Nada que actualizar', 'VALIDATION_ERROR');
-
-    params.push(gymId);
-
     try {
-      // Primero verificar si existe la configuración
+      // Verificar si existe configuración
       const { rows: existing } = await pool.query(
         'SELECT id_config FROM config_gimnasio WHERE id_gimnasio = $1',
         [gymId]
       );
 
       if (existing.length === 0) {
-        // Crear configuración si no existe
-        const camposInsert = Object.keys(data).join(', ');
-        const valoresInsert = Object.values(data);
-        const placeholders = valoresInsert.map((_, i) => `$${i + 2}`).join(', ');
+        // Crear nueva configuración
+        const columns = Object.keys(data).filter(k => 
+          data[k] !== undefined && 
+          k !== 'id_gimnasio' && 
+          k !== 'id_config' &&
+          k !== 'fecha_actualizacion'
+        );
+        const values = columns.map(k => data[k]);
         
+        if (columns.length === 0) {
+          // Si no hay datos, crear configuración vacía
+          const { rows: newConfig } = await pool.query(
+            'INSERT INTO config_gimnasio (id_gimnasio) VALUES ($1) RETURNING *',
+            [gymId]
+          );
+          return res.json({ message: 'Configuración creada.', config: newConfig[0] });
+        }
+
+        const placeholders = values.map((_, i) => `$${i + 2}`).join(', ');
         const { rows: newConfig } = await pool.query(
-          `INSERT INTO config_gimnasio (id_gimnasio, ${camposInsert})
+          `INSERT INTO config_gimnasio (id_gimnasio, ${columns.join(', ')})
            VALUES ($1, ${placeholders})
            RETURNING *`,
-          [gymId, ...valoresInsert]
+          [gymId, ...values]
         );
         return res.json({ message: 'Configuración creada.', config: newConfig[0] });
       }
 
-      // Actualizar configuración existente
+      // Actualizar configuración existente - construir UPDATE dinámico
+      const updateColumns = Object.keys(data).filter(k => 
+        data[k] !== undefined && 
+        k !== 'id_gimnasio' && 
+        k !== 'id_config' &&
+        k !== 'fecha_actualizacion'
+      );
+      
+      if (updateColumns.length === 0) {
+        throw new AppError(400, 'Nada que actualizar', 'VALIDATION_ERROR');
+      }
+
+      const updateValues = updateColumns.map(k => data[k]);
+      const setClause = updateColumns.map((col, i) => `${col} = $${i + 1}`).join(', ');
+      
       const { rows } = await pool.query(
         `UPDATE config_gimnasio 
-         SET ${campos.join(', ')}, fecha_actualizacion = CURRENT_TIMESTAMP
-         WHERE id_gimnasio = $${params.length}
+         SET ${setClause}, fecha_actualizacion = CURRENT_TIMESTAMP 
+         WHERE id_gimnasio = $${updateValues.length + 1}
          RETURNING *`,
-        params
+        [...updateValues, gymId]
       );
 
       return res.json({ message: 'Configuración actualizada.', config: rows[0] });
     } catch (err) {
       if (err instanceof AppError) throw err;
       console.error('[PUT /admin/config] Error:', err.message);
-      throw new AppError(503, 'No pudimos actualizar la configuración. Intenta de nuevo.', 'DB_UNREACHABLE');
+      console.error('[PUT /admin/config] Detalle:', err.detail);
+      // Mensaje amigable para el usuario, no técnico
+      throw new AppError(500, 'Hubo un error al guardar la configuración. Por favor intenta nuevamente.', 'DB_ERROR');
     }
   })
 );

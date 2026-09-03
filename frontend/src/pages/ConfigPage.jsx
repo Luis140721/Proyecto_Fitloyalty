@@ -22,11 +22,27 @@ export default function ConfigPage() {
 
   const loadConfig = async () => {
     setLoading(true);
+    setError('');
     try {
       const { data } = await api.get('/admin/config');
-      setConfig(data.config);
+      // Merge con valores por defecto para asegurar que todos los campos existan
+      setConfig(prev => ({
+        ...prev,
+        ...data.config,
+        // Asegurar valores numéricos
+        plan_mensual_valor: Number(data.config?.plan_mensual_valor) || 0,
+        plan_trimestral_valor: Number(data.config?.plan_trimestral_valor) || 0,
+        plan_semestral_valor: Number(data.config?.plan_semestral_valor) || 0,
+        plan_anual_valor: Number(data.config?.plan_anual_valor) || 0,
+        plan_clases_suelta_valor: Number(data.config?.plan_clases_suelta_valor) || 0,
+        plan_ilimitado_valor: Number(data.config?.plan_ilimitado_valor) || 0,
+        dias_recordatorio_default: Number(data.config?.dias_recordatorio_default) || 7,
+        dias_prueba: Number(data.config?.dias_prueba) || 7,
+        recordatorio_cobro_activo: data.config?.recordatorio_cobro_activo !== undefined ? data.config.recordatorio_cobro_activo : true,
+      }));
     } catch (err) {
-      setError(err.message || 'No se pudo cargar la configuración.');
+      console.error('Error cargando configuración:', err);
+      setError('No se pudo cargar la configuración. Por favor recarga la página.');
     } finally {
       setLoading(false);
     }
@@ -41,12 +57,26 @@ export default function ConfigPage() {
     setSaving(true);
 
     try {
-      const { data } = await api.put('/admin/config', config);
+      // Validar que los valores sean números positivos
+      const validatedConfig = {
+        ...config,
+        plan_mensual_valor: Number(config.plan_mensual_valor) || 0,
+        plan_trimestral_valor: Number(config.plan_trimestral_valor) || 0,
+        plan_semestral_valor: Number(config.plan_semestral_valor) || 0,
+        plan_anual_valor: Number(config.plan_anual_valor) || 0,
+        plan_clases_suelta_valor: Number(config.plan_clases_suelta_valor) || 0,
+        plan_ilimitado_valor: Number(config.plan_ilimitado_valor) || 0,
+        dias_recordatorio_default: Math.max(1, Math.min(30, Number(config.dias_recordatorio_default) || 7)),
+        dias_prueba: Math.max(1, Math.min(90, Number(config.dias_prueba) || 7)),
+      };
+
+      const { data } = await api.put('/admin/config', validatedConfig);
       setSuccess('Configuración guardada exitosamente.');
-      setConfig(data.config);
+      setConfig(prev => ({ ...prev, ...data.config }));
       setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
-      setError(err.message || 'No se pudo guardar la configuración.');
+      console.error('Error guardando configuración:', err);
+      setError('Hubo un error al guardar la configuración. Por favor intenta nuevamente.');
     } finally {
       setSaving(false);
     }
@@ -90,7 +120,7 @@ export default function ConfigPage() {
         </div>
       )}
 
-      <section className="chart-card anim-scale-in" style={{ maxWidth: 800 }}>
+      <section className="chart-card anim-scale-in" style={{ maxWidth: 900 }}>
         <header className="chart-card__head">
           <div>
             <h3>Precios de Planes</h3>
@@ -99,18 +129,22 @@ export default function ConfigPage() {
         </header>
 
         <form className="auth-form" onSubmit={handleSubmit} noValidate>
-          <div className="auth-form-row">
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
+            gap: 16 
+          }}>
             <label className="field">
               <span className="field-label">Plan Mensual</span>
               <div style={{ display: 'flex', alignItems: 'center' }}>
-                <span style={{ marginRight: 8, color: 'var(--on-surface-variant)' }}>$</span>
+                <span style={{ marginRight: 8, color: 'var(--on-surface-variant)', fontWeight: 600 }}>$</span>
                 <input
                   className="field-input"
                   type="number"
                   value={config.plan_mensual_valor || ''}
                   onChange={(e) => setConfig({ ...config, plan_mensual_valor: parseFloat(e.target.value) || 0 })}
-                  placeholder="0.00"
-                  step="0.01"
+                  placeholder="0"
+                  step="1000"
                   min="0"
                 />
               </div>
@@ -118,32 +152,29 @@ export default function ConfigPage() {
             <label className="field">
               <span className="field-label">Plan Trimestral</span>
               <div style={{ display: 'flex', alignItems: 'center' }}>
-                <span style={{ marginRight: 8, color: 'var(--on-surface-variant)' }}>$</span>
+                <span style={{ marginRight: 8, color: 'var(--on-surface-variant)', fontWeight: 600 }}>$</span>
                 <input
                   className="field-input"
                   type="number"
                   value={config.plan_trimestral_valor || ''}
                   onChange={(e) => setConfig({ ...config, plan_trimestral_valor: parseFloat(e.target.value) || 0 })}
-                  placeholder="0.00"
-                  step="0.01"
+                  placeholder="0"
+                  step="1000"
                   min="0"
                 />
               </div>
             </label>
-          </div>
-
-          <div className="auth-form-row">
             <label className="field">
               <span className="field-label">Plan Semestral</span>
               <div style={{ display: 'flex', alignItems: 'center' }}>
-                <span style={{ marginRight: 8, color: 'var(--on-surface-variant)' }}>$</span>
+                <span style={{ marginRight: 8, color: 'var(--on-surface-variant)', fontWeight: 600 }}>$</span>
                 <input
                   className="field-input"
                   type="number"
                   value={config.plan_semestral_valor || ''}
                   onChange={(e) => setConfig({ ...config, plan_semestral_valor: parseFloat(e.target.value) || 0 })}
-                  placeholder="0.00"
-                  step="0.01"
+                  placeholder="0"
+                  step="1000"
                   min="0"
                 />
               </div>
@@ -151,32 +182,29 @@ export default function ConfigPage() {
             <label className="field">
               <span className="field-label">Plan Anual</span>
               <div style={{ display: 'flex', alignItems: 'center' }}>
-                <span style={{ marginRight: 8, color: 'var(--on-surface-variant)' }}>$</span>
+                <span style={{ marginRight: 8, color: 'var(--on-surface-variant)', fontWeight: 600 }}>$</span>
                 <input
                   className="field-input"
                   type="number"
                   value={config.plan_anual_valor || ''}
                   onChange={(e) => setConfig({ ...config, plan_anual_valor: parseFloat(e.target.value) || 0 })}
-                  placeholder="0.00"
-                  step="0.01"
+                  placeholder="0"
+                  step="1000"
                   min="0"
                 />
               </div>
             </label>
-          </div>
-
-          <div className="auth-form-row">
             <label className="field">
               <span className="field-label">Clases Sueltas</span>
               <div style={{ display: 'flex', alignItems: 'center' }}>
-                <span style={{ marginRight: 8, color: 'var(--on-surface-variant)' }}>$</span>
+                <span style={{ marginRight: 8, color: 'var(--on-surface-variant)', fontWeight: 600 }}>$</span>
                 <input
                   className="field-input"
                   type="number"
                   value={config.plan_clases_suelta_valor || ''}
                   onChange={(e) => setConfig({ ...config, plan_clases_suelta_valor: parseFloat(e.target.value) || 0 })}
-                  placeholder="0.00"
-                  step="0.01"
+                  placeholder="0"
+                  step="1000"
                   min="0"
                 />
               </div>
@@ -184,14 +212,14 @@ export default function ConfigPage() {
             <label className="field">
               <span className="field-label">Plan Ilimitado</span>
               <div style={{ display: 'flex', alignItems: 'center' }}>
-                <span style={{ marginRight: 8, color: 'var(--on-surface-variant)' }}>$</span>
+                <span style={{ marginRight: 8, color: 'var(--on-surface-variant)', fontWeight: 600 }}>$</span>
                 <input
                   className="field-input"
                   type="number"
                   value={config.plan_ilimitado_valor || ''}
                   onChange={(e) => setConfig({ ...config, plan_ilimitado_valor: parseFloat(e.target.value) || 0 })}
-                  placeholder="0.00"
-                  step="0.01"
+                  placeholder="0"
+                  step="1000"
                   min="0"
                 />
               </div>
@@ -211,8 +239,9 @@ export default function ConfigPage() {
                 type="checkbox"
                 checked={config.recordatorio_cobro_activo}
                 onChange={(e) => setConfig({ ...config, recordatorio_cobro_activo: e.target.checked })}
+                style={{ width: 18, height: 18 }}
               />
-              <span className="field-label" style={{ margin: 0 }}>Activar recordatorios de cobro</span>
+              <span className="field-label" style={{ margin: 0 }}>Activar recordatorios automáticos</span>
             </label>
             <label className="field">
               <span className="field-label">Días antes del vencimiento</span>
@@ -224,6 +253,7 @@ export default function ConfigPage() {
                 min="1"
                 max="30"
                 disabled={!config.recordatorio_cobro_activo}
+                style={{ opacity: config.recordatorio_cobro_activo ? 1 : 0.5 }}
               />
             </label>
           </div>
@@ -235,24 +265,35 @@ export default function ConfigPage() {
             </div>
           </header>
 
-          <label className="field">
-            <span className="field-label">Días de prueba para nuevos gimnasios</span>
-            <input
-              className="field-input"
-              type="number"
-              value={config.dias_prueba || 7}
-              onChange={(e) => setConfig({ ...config, dias_prueba: parseInt(e.target.value) || 7 })}
-              min="1"
-              max="90"
-            />
-          </label>
+          <div className="auth-form-row">
+            <label className="field">
+              <span className="field-label">Días de prueba para nuevos gimnasios</span>
+              <input
+                className="field-input"
+                type="number"
+                value={config.dias_prueba || 7}
+                onChange={(e) => setConfig({ ...config, dias_prueba: parseInt(e.target.value) || 7 })}
+                min="1"
+                max="90"
+              />
+            </label>
+          </div>
 
-          <div style={{ display: 'flex', gap: 10, marginTop: 24 }}>
+          <div style={{ 
+            display: 'flex', 
+            gap: 10, 
+            marginTop: 24, 
+            padding: 16, 
+            background: 'var(--surface-container-low)', 
+            borderRadius: 'var(--radius)',
+            border: '1px solid var(--border-subtle)'
+          }}>
             <button
               type="submit"
               className="btn btn-primary btn-lg ripple-host"
               onClick={crearRipple}
               disabled={saving}
+              style={{ flex: 1 }}
             >
               <span className="material-symbols-outlined icon">save</span>
               {saving ? 'Guardando...' : 'Guardar Configuración'}
@@ -261,7 +302,7 @@ export default function ConfigPage() {
               type="button"
               className="btn btn-ghost btn-lg"
               onClick={loadConfig}
-              disabled={loading}
+              disabled={loading || saving}
             >
               <span className="material-symbols-outlined icon">refresh</span>
               Restablecer
