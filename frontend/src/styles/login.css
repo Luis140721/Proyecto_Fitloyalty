@@ -7,7 +7,7 @@
   min-height: 100vh;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  background: var(--bg);
+  background: transparent;
   color: var(--on-surface);
 }
 
@@ -56,7 +56,7 @@
 /* ---------- Panel izquierdo (brand) ---------- */
 .auth-page__panel {
   position: relative;
-  background: var(--bg);
+  background: rgba(0, 0, 0, 0.18);
   border-right: 1px solid var(--border-subtle);
   padding: 48px 56px;
   display: flex;
