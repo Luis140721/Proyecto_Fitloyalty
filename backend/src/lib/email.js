@@ -203,6 +203,38 @@ function templateInviteStaff({ invitedName, invitedBy, gymName, role, acceptUrl,
   return { subject, html: baseLayout({ title: subject, preheader, body }) };
 }
 
+// ---------- Plantilla: QR de miembro ----------
+function templateMemberQR({ memberName, gymName, qrCode, qrImageUrl }) {
+  const subject = `Tu codigo de acceso — ${gymName}`;
+  const preheader = `Guarda tu QR para entrar al gimnasio.`;
+  const body = `
+    <p style="margin:0 0 6px;font-size:12px;letter-spacing:0.1em;text-transform:uppercase;color:${BRAND.primary};font-weight:600;">Bienvenido</p>
+    <h1 style="margin:0 0 12px;font-size:28px;font-weight:800;color:${BRAND.text};letter-spacing:-0.03em;">¡Hola, ${escapeHtml(memberName)}!</h1>
+    <p style="margin:0 0 28px;font-size:16px;line-height:1.7;color:${BRAND.textMuted};">
+      Ya eres parte de <strong style="color:${BRAND.text};">${escapeHtml(gymName)}</strong>. Este es tu codigo de acceso personal para entrar al gimnasio.
+    </p>
+    <div style="background:${BRAND.bg};border:2px solid ${BRAND.primary};border-radius:12px;padding:24px;text-align:center;margin:8px 0 8px;">
+      <p style="margin:0 0 8px;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:${BRAND.textMuted};">Tu codigo QR de acceso</p>
+      ${qrImageUrl ? `<img src="${qrImageUrl}" alt="QR Code" style="width:200px;height:200px;margin:0 auto;display:block;border-radius:8px;" />` : ''}
+      <p style="margin:12px 0 0;font-family:ui-monospace,'Courier New',monospace;font-size:14px;font-weight:600;color:${BRAND.primary};word-break:break-all;">${escapeHtml(qrCode)}</p>
+    </div>
+    <p style="margin:24px 0 8px;font-size:15px;line-height:1.6;color:${BRAND.textMuted};">
+      <strong style="color:${BRAND.text};">Como usar tu QR:</strong>
+    </p>
+    <ul style="margin:0 0 28px;padding-left:20px;font-size:15px;line-height:1.6;color:${BRAND.textMuted};">
+      <li style="margin:0 0 8px;">Muestra este codigo en la entrada cada vez que vengas al gimnasio</li>
+      <li style="margin:0 0 8px;">El personal lo escaneara para registrar tu asistencia</li>
+      <li style="margin:0;">Guarda este correo o toma una captura de pantalla para tenerlo siempre a mano</li>
+    </ul>
+    ${divider()}
+    <div style="display:flex;align-items:center;gap:10px;margin:0;">
+      <span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:${BRAND.accent}22;color:${BRAND.accent};font-size:14px;">🔒</span>
+      <p style="margin:0;font-size:14px;color:${BRAND.textMuted};">Este codigo es unico y personal. No lo compartas con otras personas.</p>
+    </div>
+  `;
+  return { subject, html: baseLayout({ title: subject, preheader, body }) };
+}
+
 // ---------- Transporte ----------
 let cachedClient = null;
 
@@ -275,10 +307,17 @@ async function sendStaffInvite({ to, invitedName, invitedBy, gymName, role, acce
   return sendViaBrevo({ from, to, subject: tpl.subject, html: tpl.html, text });
 }
 
+async function sendMemberQR({ to, memberName, gymName, qrCode, qrImageUrl }) {
+  const tpl = templateMemberQR({ memberName, gymName, qrCode, qrImageUrl });
+  const text = textVersion({ content: `Hola ${memberName},\nYa eres parte de ${gymName}.\n\nTu codigo QR: ${qrCode}\n\nMuestra este codigo en la entrada cada vez que vengas al gimnasio.` });
+  const from = process.env.MAIL_FROM || 'FitLoyalty <fitloyaltysaas@gmail.com>';
+  return sendViaBrevo({ from, to, subject: tpl.subject, html: tpl.html, text });
+}
+
 async function sendMail({ to, subject, text, html }) {
   if (!text && !html) throw new Error('sendMail: ni text ni html provistos');
   const from = process.env.MAIL_FROM || 'FitLoyalty <fitloyaltysaas@gmail.com>';
   return sendViaBrevo({ from, to, subject, html, text: text || html.replace(/<[^>]+>/g, '') });
 }
 
-module.exports = { sendMail, sendRecoveryCode, sendRecoveryLink, sendStaffInvite };
+module.exports = { sendMail, sendRecoveryCode, sendRecoveryLink, sendStaffInvite, sendMemberQR };

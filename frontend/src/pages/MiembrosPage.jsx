@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
+import DatePicker from 'react-datepicker';
+import 'react-datepicker/dist/react-datepicker.css';
 import { api } from '../api';
 import CardGlass from '../components/CardGlass';
 import BadgeEstado, { estadoDeMiembro } from '../components/BadgeEstado';
@@ -6,14 +8,59 @@ import EmptyState from '../components/EmptyState';
 import PageTransition from '../components/PageTransition';
 import Modal from '../components/Modal';
 import Ripple from '../components/Ripple';
+import QRCode from 'qrcode';
 
-const empty = { nombre: '', documento: '', telefono: '', email: '', activo: true };
+const empty = {
+  // Datos personales
+  nombre: '',
+  tipo_documento: 'CC',
+  documento: '',
+  fecha_nacimiento: '',
+  genero: '',
+  telefono: '',
+  email: '',
+  direccion: '',
+  // Salud y emergencia
+  contacto_emergencia: '',
+  telefono_emergencia: '',
+  condiciones_medicas: '',
+  alergias: '',
+  // Plan y cobros
+  tipo_plan: 'MENSUAL',
+  fecha_inicio: new Date().toISOString().split('T')[0], // Fecha actual por defecto
+  fecha_fin: '',
+  valor_total: '',
+  valor_pagado: '0',
+  metodo_pago: 'EFECTIVO',
+  referencia_pago: '',
+  estado_pago: 'PENDIENTE',
+  proxima_fecha_cobro: '',
+  activar_recordatorio: false,
+  dias_recordatorio: 7,
+  // Info adicional
+  objetivo: '',
+  nivel_experiencia: '',
+  observaciones: '',
+  // Términos
+  acepto_terminos: false,
+  autorizo_datos: false,
+  activo: true
+};
+
+const TIPOS_DOCUMENTO = ['CC', 'TI', 'NIT', 'CE', 'PP'];
+const GENEROS = ['Masculino', 'Femenino', 'Otro', 'Prefiero no decir'];
+const TIPOS_PLAN = ['MENSUAL', 'TRIMESTRAL', 'SEMESTRAL', 'ANUAL', 'CLASES_SUELTAS', 'ILIMITADO', 'OTRO'];
+const METODOS_PAGO = ['EFECTIVO', 'TRANSFERENCIA', 'TARJETA', 'PSE', 'NEQUI', 'DAVIPLATA', 'OTRO'];
+const ESTADOS_PAGO = ['PENDIENTE', 'PAGADO', 'PARCIAL'];
+const OBJETIVOS = ['Perder peso', 'Ganar músculo', 'Resistencia', 'Salud general', 'Mejorar postura', 'Otro'];
+const NIVELES_EXPERIENCIA = ['Principiante', 'Intermedio', 'Avanzado'];
 const FILTROS = [
   { id: 'todos',  label: 'Todos' },
   { id: 'al-dia', label: 'Al día' },
   { id: 'vence',  label: 'Vence pronto' },
   { id: 'vencido',label: 'Vencido' },
   { id: 'riesgo', label: 'En riesgo' },
+  { id: 'desactivados', label: 'Desactivados' },
 ];
 
 // Nota: el antiguo statusChip() se reemplazo por el componente <BadgeEstado />.
@@ -46,6 +93,12 @@ export default function MiembrosPage() {
   const [info, setInfo]     = useState('');
   const [loading, setLoading] = useState(false);
   const [filtro, setFiltro] = useState('todos');
+  const [showQRModal, setShowQRModal] = useState(false);
+  const [createdMember, setCreatedMember] = useState(null);
+  const [qrImage, setQrImage] = useState('');
+  const [activeSection, setActiveSection] = useState('personales');
+  const [gymConfig, setGymConfig] = useState(null);
+  const qrCanvasRef = useRef(null);
 
   // Edicion
   const [editing, setEditing]   = useState(null);   // miembro en edicion
@@ -55,16 +108,20 @@ export default function MiembrosPage() {
 
   // Confirm desactivar
   const [confirmDeactivate, setConfirmDeactivate] = useState(null); // miembro a desactivar
+  // Confirm eliminar permanentemente
+  const [confirmDelete, setConfirmDelete] = useState(null); // miembro a eliminar
 
   // Ripple handlers.
   const crearRipple = Ripple({ opacity: 0.30 });
   const guardarRipple = Ripple({ opacity: 0.30 });
   const desactivarRipple = Ripple({ opacity: 0.30 });
 
-  const load = async (query = '') => {
+  const load = async (query = '', includeInactive = false) => {
     setLoading(true);
     try {
-      const { data } = await api.get('/admin/miembros', { params: { q: query, pageSize: 100 } });
+      const { data } = await api.get('/admin/miembros', { 
+        params: { q: query, pageSize: 100, includeInactive } 
+      });
       setItems(data.miembros);
     } catch (err) {
       setError(err.message || 'Error al cargar miembros.');
@@ -75,22 +132,207 @@ export default function MiembrosPage() {
 
   useEffect(() => { load(); }, []);
 
-  const onSearch = (e) => { e.preventDefault(); load(q); };
+  // Cargar configuración del gimnasio
+  const loadGymConfig = async () => {
+    try {
+      const { data } = await api.get('/admin/config');
+      setGymConfig(data.config);
+    } catch (err) {
+      console.error('No se pudo cargar la configuración del gimnasio:', err);
+    }
+  };
+
+  useEffect(() => { loadGymConfig(); }, []);
+
+  const onSearch = (e) => { e.preventDefault(); load(q, filtro === 'desactivados' ? true : false); };
+
+  const toggleFiltro = (nuevoFiltro) => {
+    setFiltro(nuevoFiltro);
+    const includeInactive = nuevoFiltro === 'desactivados';
+    load(q, includeInactive);
+  };
+
+  // Desactivar miembro (soft delete)
+  const desactivar = async (id) => {
+    try {
+      await api.delete(`/admin/miembros/${id}`);
+      setConfirmDeactivate(null);
+      load(q, filtro === 'desactivados' ? true : false);
+    } catch (err) {
+      setError(err.message || 'No se pudo desactivar el miembro.');
+    }
+  };
+
+  // Eliminar miembro permanentemente (hard delete)
+  const eliminarPermanentemente = async (id) => {
+    try {
+      await api.delete(`/admin/miembros/${id}/permanent`);
+      setConfirmDelete(null);
+      load(q, filtro === 'desactivados' ? true : false);
+    } catch (err) {
+      setError(err.message || 'No se pudo eliminar el miembro permanentemente.');
+    }
+  };
+
+  const askDeactivate = (m) => setConfirmDeactivate(m);
+  const askDelete = (m) => setConfirmDelete(m);
+
+  const doDeactivate = async () => {
+    const m = confirmDeactivate;
+    if (!m) return;
+    try {
+      await api.delete(`/admin/miembros/${m.id_miembro}`);
+      setConfirmDeactivate(null);
+      load(q, filtro === 'desactivados' ? true : false);
+    } catch (err) {
+      setError(err.message || 'No se pudo desactivar el miembro.');
+    }
+  };
+
+  const doDelete = async () => {
+    const m = confirmDelete;
+    if (!m) return;
+    try {
+      await api.delete(`/admin/miembros/${m.id_miembro}/permanent`);
+      setConfirmDelete(null);
+      load(q, filtro === 'desactivados' ? true : false);
+    } catch (err) {
+      setError(err.message || 'No se pudo eliminar el miembro permanentemente.');
+    }
+  };
+
+  // Calcular fecha fin automáticamente según tipo de plan
+  const calcularFechaFin = (tipoPlan, fechaInicio) => {
+    if (!fechaInicio) return '';
+    const inicio = new Date(fechaInicio);
+    let dias = 30;
+    
+    switch (tipoPlan) {
+      case 'MENSUAL': dias = 30; break;
+      case 'TRIMESTRAL': dias = 90; break;
+      case 'SEMESTRAL': dias = 180; break;
+      case 'ANUAL': dias = 365; break;
+      default: dias = 30;
+    }
+    
+    const fin = new Date(inicio);
+    fin.setDate(fin.getDate() + dias);
+    return fin.toISOString().split('T')[0];
+  };
+
+  // Determinar estado del pago
+  const determinarEstadoPago = (valorTotal, valorPagado) => {
+    const total = parseFloat(valorTotal) || 0;
+    const pagado = parseFloat(valorPagado) || 0;
+    if (pagado >= total && total > 0) return 'PAGADO';
+    if (pagado > 0) return 'PARCIAL';
+    return 'PENDIENTE';
+  };
+
+  // Calcular próxima fecha de cobro
+  const calcularProximaFechaCobro = (fechaFin) => {
+    if (!fechaFin) return '';
+    const fin = new Date(fechaFin);
+    const proxima = new Date(fin);
+    proxima.setDate(proxima.getDate() + 1);
+    return proxima.toISOString().split('T')[0];
+  };
+
+  // Manejar cambios en campos que afectan cálculos automáticos
+  const handleFormChange = (field, value) => {
+    const newForm = { ...form, [field]: value };
+    
+    // Si cambia tipo de plan, sugerir valor desde configuración
+    if (field === 'tipo_plan' && gymConfig) {
+      const valorKey = `plan_${value.toLowerCase()}_valor`;
+      const valorSugerido = gymConfig[valorKey] || 0;
+      newForm.valor_total = valorSugerido.toString();
+    }
+    
+    // Si cambia tipo de plan o fecha inicio, recalcular fecha fin
+    if (field === 'tipo_plan' || field === 'fecha_inicio') {
+      const fechaFin = calcularFechaFin(
+        field === 'tipo_plan' ? value : form.tipo_plan,
+        field === 'fecha_inicio' ? value : form.fecha_inicio
+      );
+      newForm.fecha_fin = fechaFin;
+      
+      // Recalcular próxima fecha de cobro
+      const proximaCobro = calcularProximaFechaCobro(fechaFin);
+      newForm.proxima_fecha_cobro = proximaCobro;
+    }
+    
+    // Si cambian valores de pago, recalcular estado
+    if (field === 'valor_total' || field === 'valor_pagado') {
+      const estadoPago = determinarEstadoPago(
+        field === 'valor_total' ? value : form.valor_total,
+        field === 'valor_pagado' ? value : form.valor_pagado
+      );
+      newForm.estado_pago = estadoPago;
+    }
+    
+    setForm(newForm);
+  };
 
   const onSubmit = async (e) => {
     e.preventDefault();
     setError(''); setInfo('');
+    
+    // Validar términos
+    if (!form.acepto_terminos) {
+      setError('Debes aceptar los términos y condiciones.');
+      return;
+    }
+    
     try {
       const payload = { ...form };
       if (!payload.email) delete payload.email;
+      
+      // Calcular fechas automáticamente si no están definidas
+      if (!payload.fecha_inicio) {
+        payload.fecha_inicio = new Date().toISOString().split('T')[0];
+      }
+      if (!payload.fecha_fin) {
+        payload.fecha_fin = calcularFechaFin(payload.tipo_plan, payload.fecha_inicio);
+      }
+      if (!payload.estado_pago) {
+        payload.estado_pago = determinarEstadoPago(payload.valor_total, payload.valor_pagado);
+      }
+      if (!payload.proxima_fecha_cobro) {
+        payload.proxima_fecha_cobro = calcularProximaFechaCobro(payload.fecha_fin);
+      }
+      
       const { data } = await api.post('/admin/miembros', payload);
-      setInfo(`Miembro creado. Código QR: ${data.miembro.codigo_qr}`);
+      
+      // Generar QR visualmente - usar el código QR cifrado que viene del backend
+      const qrImageUrl = await QRCode.toDataURL(data.miembro.codigo_qr);
+      
+      // Guardar la imagen del QR en base de datos
+      try {
+        await api.put(`/admin/miembros/${data.miembro.id_miembro}`, { qr_imagen: qrImageUrl });
+      } catch (err) {
+        console.error('No se pudo guardar la imagen del QR:', err);
+      }
+      
+      setCreatedMember(data.miembro);
+      setQrImage(qrImageUrl);
+      setShowQRModal(true);
       setForm(empty);
       setOpen(false);
       load(q);
     } catch (err) {
       setError(err.message || 'No se pudo crear el miembro.');
     }
+  };
+
+  // Generar enlace de WhatsApp
+  const generarWhatsAppLink = () => {
+    if (!createdMember) return '';
+    const telefono = createdMember.telefono.replace(/\+/g, '');
+    const mensaje = encodeURIComponent(
+      `Hola ${createdMember.nombre}, bienvenido/a a tu gimnasio. Este es tu código de acceso personal. Muéstralo en la entrada cada vez que vengas.`
+    );
+    return `https://wa.me/${telefono}?text=${mensaje}`;
   };
 
   // Abre modal de edicion con el form prellenado.
@@ -133,25 +375,9 @@ export default function MiembrosPage() {
     }
   };
 
-  // Reemplaza window.confirm por Modal.
-  const askDeactivate = (m) => setConfirmDeactivate(m);
-
-  const doDeactivate = async () => {
-    const m = confirmDeactivate;
-    if (!m) return;
-    try {
-      await api.delete(`/admin/miembros/${m.id_miembro}`);
-      setInfo(`Miembro ${m.nombre} desactivado.`);
-      setConfirmDeactivate(null);
-      load(q);
-    } catch (err) {
-      setError(err.message || 'No se pudo eliminar.');
-      setConfirmDeactivate(null);
-    }
-  };
-
   const filtrados = useMemo(() => {
     if (filtro === 'todos') return items;
+    if (filtro === 'desactivados') return items.filter(m => !m.activo);
     return items.filter((m) => {
       if (filtro === 'al-dia')    return !m.vencido && !m.vencePronto && !m.enRiesgo;
       if (filtro === 'vence')     return !!m.vencePronto;
@@ -162,11 +388,12 @@ export default function MiembrosPage() {
   }, [items, filtro]);
 
   const counts = useMemo(() => ({
-    todos: items.length,
-    'al-dia': items.filter((m) => !m.vencido && !m.vencePronto && !m.enRiesgo).length,
-    vence: items.filter((m) => m.vencePronto).length,
-    vencido: items.filter((m) => m.vencido).length,
-    riesgo: items.filter((m) => m.enRiesgo).length,
+    todos: items.filter(m => m.activo).length,
+    'al-dia': items.filter((m) => m.activo && !m.vencido && !m.vencePronto && !m.enRiesgo).length,
+    vence: items.filter((m) => m.activo && m.vencePronto).length,
+    vencido: items.filter((m) => m.activo && m.vencido).length,
+    riesgo: items.filter((m) => m.activo && m.enRiesgo).length,
+    desactivados: items.filter(m => !m.activo).length,
   }), [items]);
 
   return (
@@ -206,57 +433,442 @@ export default function MiembrosPage() {
           <header className="chart-card__head">
             <div>
               <h3>Nuevo miembro</h3>
-              <p>Le generaremos un QR único. También lo agregamos al plan vigente de tu gimnasio.</p>
+              <p>Completa el formulario para registrar un nuevo cliente con su plan de cobros.</p>
             </div>
           </header>
-          <form className="auth-form" onSubmit={onSubmit} noValidate style={{ maxWidth: 720 }}>
-            <div className="auth-form-row">
-              <label className="field">
-                <span className="field-label">Nombre completo</span>
-                <input
-                  className="field-input"
-                  required value={form.nombre}
-                  onChange={(e) => setForm({ ...form, nombre: e.target.value })}
-                  placeholder="Nombre y apellido"
-                />
-              </label>
-              <label className="field">
-                <span className="field-label">Documento</span>
-                <input
-                  className="field-input"
-                  required value={form.documento}
-                  onChange={(e) => setForm({ ...form, documento: e.target.value })}
-                  placeholder="Cédula"
-                />
-              </label>
-            </div>
-            <div className="auth-form-row">
-              <label className="field">
-                <span className="field-label">Teléfono</span>
-                <input
-                  className="field-input"
-                  required value={form.telefono}
-                  onChange={(e) => setForm({ ...form, telefono: e.target.value })}
-                  placeholder="3001234567"
-                  inputMode="numeric"
-                />
-              </label>
-              <label className="field">
-                <span className="field-label">Email (opcional)</span>
-                <input
-                  className="field-input"
-                  type="email"
-                  value={form.email}
-                  onChange={(e) => setForm({ ...form, email: e.target.value })}
-                  placeholder="correo@ejemplo.com"
-                />
-              </label>
-            </div>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button type="submit" className="btn btn-primary btn-lg ripple-host" onClick={crearRipple}>
-                <span className="material-symbols-outlined icon">save</span>
-                Crear miembro
+          
+          {/* Navegación por secciones */}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
+            {[
+              { id: 'personales', label: 'Datos personales' },
+              { id: 'salud', label: 'Salud y emergencia' },
+              { id: 'cobros', label: 'Plan y cobros' },
+              { id: 'adicional', label: 'Info adicional' },
+              { id: 'terminos', label: 'Términos' }
+            ].map((section) => (
+              <button
+                key={section.id}
+                type="button"
+                className={`btn btn-ghost btn-sm ${activeSection === section.id ? 'active' : ''}`}
+                onClick={() => setActiveSection(section.id)}
+              >
+                {section.label}
               </button>
+            ))}
+          </div>
+
+          <form className="auth-form" onSubmit={onSubmit} noValidate style={{ maxWidth: 900 }}>
+            {/* A) Datos personales */}
+            {activeSection === 'personales' && (
+              <div className="form-section anim-fade-up">
+                <h4 style={{ marginBottom: 16, color: 'var(--primary)' }}>Datos personales</h4>
+                <div className="auth-form-row">
+                  <label className="field">
+                    <span className="field-label">Nombre completo *</span>
+                    <input
+                      className="field-input"
+                      required value={form.nombre}
+                      onChange={(e) => handleFormChange('nombre', e.target.value)}
+                      placeholder="Nombre y apellido"
+                    />
+                  </label>
+                  <label className="field">
+                    <span className="field-label">Tipo documento *</span>
+                    <select
+                      className="field-input"
+                      value={form.tipo_documento}
+                      onChange={(e) => handleFormChange('tipo_documento', e.target.value)}
+                    >
+                      {TIPOS_DOCUMENTO.map(tipo => (
+                        <option key={tipo} value={tipo}>{tipo}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <div className="auth-form-row">
+                  <label className="field">
+                    <span className="field-label">Número documento *</span>
+                    <input
+                      className="field-input"
+                      required value={form.documento}
+                      onChange={(e) => handleFormChange('documento', e.target.value)}
+                      placeholder="123456789"
+                    />
+                  </label>
+                  <label className="field">
+                    <span className="field-label">Fecha nacimiento</span>
+                    <DatePicker
+                      selected={form.fecha_nacimiento ? new Date(form.fecha_nacimiento) : null}
+                      onChange={(date) => handleFormChange('fecha_nacimiento', date ? date.toISOString().split('T')[0] : '')}
+                      dateFormat="dd/MM/yyyy"
+                      className="field-input"
+                      placeholderText="Selecciona fecha"
+                      showYearDropdown
+                      scrollableYearDropdown
+                      yearDropdownItemNumber={100}
+                    />
+                  </label>
+                </div>
+                <div className="auth-form-row">
+                  <label className="field">
+                    <span className="field-label">Género</span>
+                    <select
+                      className="field-input"
+                      value={form.genero}
+                      onChange={(e) => handleFormChange('genero', e.target.value)}
+                    >
+                      <option value="">Seleccionar...</option>
+                      {GENEROS.map(g => (
+                        <option key={g} value={g}>{g}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <div className="auth-form-row">
+                  <label className="field">
+                    <span className="field-label">Teléfono / WhatsApp *</span>
+                    <input
+                      className="field-input"
+                      required value={form.telefono}
+                      onChange={(e) => handleFormChange('telefono', e.target.value)}
+                      placeholder="3001234567"
+                      inputMode="numeric"
+                    />
+                  </label>
+                  <label className="field">
+                    <span className="field-label">Email</span>
+                    <input
+                      className="field-input"
+                      type="email"
+                      value={form.email}
+                      onChange={(e) => handleFormChange('email', e.target.value)}
+                      placeholder="correo@ejemplo.com"
+                    />
+                  </label>
+                </div>
+                <div className="auth-form-row">
+                  <label className="field">
+                    <span className="field-label">Dirección completa</span>
+                    <input
+                      className="field-input"
+                      value={form.direccion}
+                      onChange={(e) => handleFormChange('direccion', e.target.value)}
+                      placeholder="Calle 123 #45-67, Barrio"
+                    />
+                  </label>
+                </div>
+              </div>
+            )}
+
+            {/* B) Salud y emergencia */}
+            {activeSection === 'salud' && (
+              <div className="form-section anim-fade-up">
+                <h4 style={{ marginBottom: 16, color: 'var(--primary)' }}>Salud y emergencia</h4>
+                <div className="auth-form-row">
+                  <label className="field">
+                    <span className="field-label">Contacto de emergencia</span>
+                    <input
+                      className="field-input"
+                      value={form.contacto_emergencia}
+                      onChange={(e) => handleFormChange('contacto_emergencia', e.target.value)}
+                      placeholder="Nombre del contacto"
+                    />
+                  </label>
+                  <label className="field">
+                    <span className="field-label">Teléfono emergencia</span>
+                    <input
+                      className="field-input"
+                      value={form.telefono_emergencia}
+                      onChange={(e) => handleFormChange('telefono_emergencia', e.target.value)}
+                      placeholder="3001234567"
+                      inputMode="numeric"
+                    />
+                  </label>
+                </div>
+                <label className="field">
+                  <span className="field-label">Condiciones médicas / lesiones</span>
+                  <textarea
+                    className="field-input"
+                    value={form.condiciones_medicas}
+                    onChange={(e) => handleFormChange('condiciones_medicas', e.target.value)}
+                    placeholder="Información relevante sobre condiciones médicas"
+                    rows={3}
+                  />
+                </label>
+                <label className="field">
+                  <span className="field-label">Alergias</span>
+                  <textarea
+                    className="field-input"
+                    value={form.alergias}
+                    onChange={(e) => handleFormChange('alergias', e.target.value)}
+                    placeholder="Alergias a medicamentos, alimentos, etc."
+                    rows={2}
+                  />
+                </label>
+              </div>
+            )}
+
+            {/* C) Plan y COBROS */}
+            {activeSection === 'cobros' && (
+              <div className="form-section anim-fade-up" style={{ border: '2px solid var(--primary)', borderRadius: 'var(--radius)', padding: 20, background: 'var(--surface-container-low)' }}>
+                <h4 style={{ marginBottom: 16, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span className="material-symbols-outlined icon">payments</span>
+                  Plan y COBROS
+                </h4>
+                <p style={{ marginBottom: 16, fontSize: 13, color: 'var(--on-surface-variant)' }}>
+                  Esta sección es fundamental para controlar los ingresos de tu gimnasio. Registra correctamente los pagos y fechas para evitar perder dinero por planes vencidos.
+                </p>
+                
+                <div className="auth-form-row">
+                  <label className="field">
+                    <span className="field-label">Tipo de plan *</span>
+                    <select
+                      className="field-input"
+                      required value={form.tipo_plan}
+                      onChange={(e) => handleFormChange('tipo_plan', e.target.value)}
+                    >
+                      {TIPOS_PLAN.map(tipo => (
+                        <option key={tipo} value={tipo}>{tipo}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span className="field-label">Fecha inicio *</span>
+                    <DatePicker
+                      selected={form.fecha_inicio ? new Date(form.fecha_inicio) : null}
+                      onChange={(date) => handleFormChange('fecha_inicio', date ? date.toISOString().split('T')[0] : '')}
+                      dateFormat="dd/MM/yyyy"
+                      className="field-input"
+                      placeholderText="Selecciona fecha"
+                      required
+                    />
+                  </label>
+                </div>
+                <div className="auth-form-row">
+                  <label className="field">
+                    <span className="field-label">Fecha fin (calculada automáticamente)</span>
+                    <DatePicker
+                      selected={form.fecha_fin ? new Date(form.fecha_fin) : null}
+                      onChange={(date) => handleFormChange('fecha_fin', date ? date.toISOString().split('T')[0] : '')}
+                      dateFormat="dd/MM/yyyy"
+                      className="field-input"
+                      placeholderText="Calculada automáticamente"
+                    />
+                  </label>
+                  <label className="field">
+                    <span className="field-label">Valor total del plan *</span>
+                    <input
+                      className="field-input"
+                      type="number"
+                      required value={form.valor_total}
+                      onChange={(e) => handleFormChange('valor_total', e.target.value)}
+                      placeholder="0.00"
+                      step="0.01"
+                    />
+                  </label>
+                </div>
+                <div className="auth-form-row">
+                  <label className="field">
+                    <span className="field-label">Valor pagado hoy</span>
+                    <input
+                      className="field-input"
+                      type="number"
+                      value={form.valor_pagado}
+                      onChange={(e) => handleFormChange('valor_pagado', e.target.value)}
+                      placeholder="0.00"
+                      step="0.01"
+                    />
+                  </label>
+                  <label className="field">
+                    <span className="field-label">Estado del pago</span>
+                    <select
+                      className="field-input"
+                      value={form.estado_pago}
+                      onChange={(e) => handleFormChange('estado_pago', e.target.value)}
+                      style={{ 
+                        background: form.estado_pago === 'PAGADO' ? 'var(--success-container)' : 
+                                  form.estado_pago === 'PARCIAL' ? 'var(--warning-container)' : 
+                                  'var(--error-container)'
+                      }}
+                    >
+                      {ESTADOS_PAGO.map(estado => (
+                        <option key={estado} value={estado}>{estado}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <div className="auth-form-row">
+                  <label className="field">
+                    <span className="field-label">Método de pago *</span>
+                    <select
+                      className="field-input"
+                      required value={form.metodo_pago}
+                      onChange={(e) => handleFormChange('metodo_pago', e.target.value)}
+                    >
+                      {METODOS_PAGO.map(metodo => (
+                        <option key={metodo} value={metodo}>{metodo}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span className="field-label">Referencia / comprobante</span>
+                    <input
+                      className="field-input"
+                      value={form.referencia_pago}
+                      onChange={(e) => handleFormChange('referencia_pago', e.target.value)}
+                      placeholder="Número de referencia"
+                    />
+                  </label>
+                </div>
+                <div className="auth-form-row">
+                  <label className="field">
+                    <span className="field-label">Próxima fecha de cobro</span>
+                    <DatePicker
+                      selected={form.proxima_fecha_cobro ? new Date(form.proxima_fecha_cobro) : null}
+                      onChange={(date) => handleFormChange('proxima_fecha_cobro', date ? date.toISOString().split('T')[0] : '')}
+                      dateFormat="dd/MM/yyyy"
+                      className="field-input"
+                      placeholderText="Calculada automáticamente"
+                    />
+                  </label>
+                  <label className="field">
+                    <span className="field-label">Activar recordatorio</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <input
+                        type="checkbox"
+                        checked={form.activar_recordatorio}
+                        onChange={(e) => handleFormChange('activar_recordatorio', e.target.checked)}
+                      />
+                      <input
+                        className="field-input"
+                        type="number"
+                        value={form.dias_recordatorio}
+                        onChange={(e) => handleFormChange('dias_recordatorio', parseInt(e.target.value))}
+                        style={{ width: 80 }}
+                        disabled={!form.activar_recordatorio}
+                      />
+                      <span style={{ fontSize: 12 }}>días antes</span>
+                    </div>
+                  </label>
+                </div>
+              </div>
+            )}
+
+            {/* D) Información adicional */}
+            {activeSection === 'adicional' && (
+              <div className="form-section anim-fade-up">
+                <h4 style={{ marginBottom: 16, color: 'var(--primary)' }}>Información adicional</h4>
+                <div className="auth-form-row">
+                  <label className="field">
+                    <span className="field-label">Objetivo principal</span>
+                    <select
+                      className="field-input"
+                      value={form.objetivo}
+                      onChange={(e) => handleFormChange('objetivo', e.target.value)}
+                    >
+                      <option value="">Seleccionar...</option>
+                      {OBJETIVOS.map(obj => (
+                        <option key={obj} value={obj}>{obj}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span className="field-label">Nivel de experiencia</span>
+                    <select
+                      className="field-input"
+                      value={form.nivel_experiencia}
+                      onChange={(e) => handleFormChange('nivel_experiencia', e.target.value)}
+                    >
+                      <option value="">Seleccionar...</option>
+                      {NIVELES_EXPERIENCIA.map(nivel => (
+                        <option key={nivel} value={nivel}>{nivel}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <label className="field">
+                  <span className="field-label">Observaciones / notas del entrenador</span>
+                  <textarea
+                    className="field-input"
+                    value={form.observaciones}
+                    onChange={(e) => handleFormChange('observaciones', e.target.value)}
+                    placeholder="Notas adicionales sobre el cliente"
+                    rows={4}
+                  />
+                </label>
+              </div>
+            )}
+
+            {/* E) Términos */}
+            {activeSection === 'terminos' && (
+              <div className="form-section anim-fade-up">
+                <h4 style={{ marginBottom: 16, color: 'var(--primary)' }}>Términos y condiciones</h4>
+                <label className="field" style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 12 }}>
+                  <input
+                    type="checkbox"
+                    required
+                    checked={form.acepto_terminos}
+                    onChange={(e) => handleFormChange('acepto_terminos', e.target.checked)}
+                    style={{ marginTop: 4 }}
+                  />
+                  <span className="field-label" style={{ margin: 0, fontSize: 14 }}>
+                    Acepto los términos y condiciones del gimnasio *
+                  </span>
+                </label>
+                <label className="field" style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
+                  <input
+                    type="checkbox"
+                    checked={form.autorizo_datos}
+                    onChange={(e) => handleFormChange('autorizo_datos', e.target.checked)}
+                    style={{ marginTop: 4 }}
+                  />
+                  <span className="field-label" style={{ margin: 0, fontSize: 14 }}>
+                    Autorizo el uso de mis datos para fines administrativos y de contacto
+                  </span>
+                </label>
+              </div>
+            )}
+
+            {/* Botones de navegación y acción */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 24, paddingTop: 20, borderTop: '1px solid var(--border-subtle)' }}>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => {
+                  const sections = ['personales', 'salud', 'cobros', 'adicional', 'terminos'];
+                  const currentIndex = sections.indexOf(activeSection);
+                  if (currentIndex > 0) {
+                    setActiveSection(sections[currentIndex - 1]);
+                  }
+                }}
+                disabled={activeSection === 'personales'}
+              >
+                ← Anterior
+              </button>
+              
+              {activeSection !== 'terminos' ? (
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => {
+                    const sections = ['personales', 'salud', 'cobros', 'adicional', 'terminos'];
+                    const currentIndex = sections.indexOf(activeSection);
+                    if (currentIndex < sections.length - 1) {
+                      setActiveSection(sections[currentIndex + 1]);
+                    }
+                  }}
+                >
+                  Siguiente →
+                </button>
+              ) : (
+                <button type="submit" className="btn btn-primary btn-lg ripple-host" onClick={crearRipple}>
+                  <span className="material-symbols-outlined icon">save</span>
+                  Crear miembro y generar QR
+                </button>
+              )}
+            </div>
+            
+            <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
               <button type="button" className="btn btn-ghost btn-lg" onClick={() => setOpen(false)}>
                 Cancelar
               </button>
@@ -287,7 +899,7 @@ export default function MiembrosPage() {
               role="tab"
               aria-selected={filtro === f.id}
               className={`chip${filtro === f.id ? ' chip-active' : ''}`}
-              onClick={() => setFiltro(f.id)}
+              onClick={() => toggleFiltro(f.id)}
             >
               {f.label}
               <span className="chip-count">{counts[f.id] ?? 0}</span>
@@ -365,13 +977,34 @@ export default function MiembrosPage() {
                     </td>
                     <td><BadgeEstado estado={estadoDeMiembro(m)} /></td>
                     <td className="row-actions">
-                      <button
-                        className="btn btn-ghost btn-sm"
-                        onClick={(e) => { e.stopPropagation(); askDeactivate(m); }}
-                        aria-label={`Desactivar a ${m.nombre}`}
-                      >
-                        <span className="material-symbols-outlined icon">person_remove</span>
-                      </button>
+                      {m.activo ? (
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          onClick={(e) => { e.stopPropagation(); askDeactivate(m); }}
+                          aria-label={`Desactivar a ${m.nombre}`}
+                        >
+                          <span className="material-symbols-outlined icon">person_remove</span>
+                        </button>
+                      ) : (
+                        <>
+                          <button
+                            className="btn btn-ghost btn-sm"
+                            onClick={(e) => { e.stopPropagation(); askDelete(m); }}
+                            aria-label={`Eliminar permanentemente a ${m.nombre}`}
+                            title="Eliminar permanentemente"
+                          >
+                            <span className="material-symbols-outlined icon" style={{ color: 'var(--error)' }}>delete_forever</span>
+                          </button>
+                          <button
+                            className="btn btn-ghost btn-sm"
+                            onClick={(e) => { e.stopPropagation(); openEdit(m); }}
+                            aria-label={`Reactivar a ${m.nombre}`}
+                            title="Reactivar"
+                          >
+                            <span className="material-symbols-outlined icon" style={{ color: 'var(--success)' }}>person_add</span>
+                          </button>
+                        </>
+                      )}
                     </td>
                   </tr>
                 );
@@ -563,6 +1196,159 @@ export default function MiembrosPage() {
           revertirse editando al miembro.
         </p>
       </Modal>
+
+      {/* Modal de confirmación para eliminación permanente */}
+      <Modal
+        open={Boolean(confirmDelete)}
+        onClose={() => setConfirmDelete(null)}
+        title="Eliminar miembro permanentemente"
+        footer={
+          <>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => setConfirmDelete(null)}
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              className="btn btn-danger ripple-host"
+              onClick={(e) => { desactivarRipple(e); doDelete(); }}
+            >
+              <span className="material-symbols-outlined icon">delete_forever</span>
+              Sí, eliminar permanentemente
+            </button>
+          </>
+        }
+      >
+        <p style={{ margin: 0, lineHeight: 1.5 }}>
+          ¿Seguro que quieres eliminar permanentemente a{' '}
+          <strong>{confirmDelete?.nombre}</strong>?
+        </p>
+        <p style={{ marginTop: 10, color: 'var(--error)', fontSize: 13, fontWeight: 500 }}>
+          Esta accion NO se puede deshacer. Se eliminaran todos los datos del miembro
+          incluyendo historial de pagos, check-ins y QR.
+        </p>
+      </Modal>
+
+      {/* Modal para mostrar QR generado */}
+      <Modal
+        open={showQRModal}
+        onClose={() => setShowQRModal(false)}
+        title="¡Miembro creado exitosamente!"
+        footer={
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => setShowQRModal(false)}
+          >
+            Cerrar
+          </button>
+        }
+      >
+        <div style={{ textAlign: 'center', padding: '20px 0' }}>
+          {qrImage && (
+            <div style={{ marginBottom: 20 }}>
+              <img 
+                src={qrImage} 
+                alt="Código QR del miembro" 
+                style={{ 
+                  width: '100%',
+                  maxWidth: 250,
+                  height: 'auto',
+                  margin: '0 auto',
+                  display: 'block',
+                  border: '2px solid var(--primary)',
+                  borderRadius: 'var(--radius)'
+                }} 
+              />
+              <p style={{ marginTop: 10, fontSize: 14, color: 'var(--on-surface-variant)', wordBreak: 'break-all' }}>
+                Código QR: <strong>{createdMember?.codigo_qr}</strong>
+              </p>
+            </div>
+          )}
+          
+          <div style={{ 
+            background: 'var(--surface-container-low)', 
+            padding: 16, 
+            borderRadius: 'var(--radius)',
+            marginBottom: 20,
+            textAlign: 'left',
+            fontSize: 13
+          }}>
+            <h5 style={{ margin: '0 0 10px 0', color: 'var(--primary)' }}>Información del cliente:</h5>
+            <p style={{ margin: '4px 0' }}><strong>Nombre:</strong> {createdMember?.nombre}</p>
+            <p style={{ margin: '4px 0' }}><strong>Documento:</strong> {createdMember?.documento}</p>
+            <p style={{ margin: '4px 0' }}><strong>Teléfono:</strong> {createdMember?.telefono}</p>
+          </div>
+
+          <div style={{ 
+            display: 'flex', 
+            flexDirection: 'column',
+            gap: 10,
+            alignItems: 'center'
+          }}>
+            <a
+              href={generarWhatsAppLink()}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn btn-success btn-lg"
+              style={{ 
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+                textDecoration: 'none',
+                background: '#25D366',
+                color: 'white',
+                width: '100%',
+                maxWidth: 300
+              }}
+            >
+              <span className="material-symbols-outlined icon">chat</span>
+              Enviar QR por WhatsApp
+            </a>
+            
+            <button
+              type="button"
+              className="btn btn-secondary btn-lg"
+              onClick={async () => {
+                try {
+                  const response = await fetch(qrImage);
+                  const blob = await response.blob();
+                  await navigator.clipboard.write([
+                    new ClipboardItem({ 'image/png': blob })
+                  ]);
+                  alert('Imagen del QR copiada al portapapeles. Ahora puedes pegarla en WhatsApp.');
+                } catch (err) {
+                  console.error('Error al copiar:', err);
+                  const link = document.createElement('a');
+                  link.href = qrImage;
+                  link.download = `qr-${createdMember?.codigo_qr}.png`;
+                  link.click();
+                  alert('La imagen se descargó. Puedes adjuntar el archivo descargado en WhatsApp.');
+                }
+              }}
+              style={{ 
+                display: 'inline-flex', 
+                alignItems: 'center', 
+                justifyContent: 'center',
+                gap: 8,
+                width: '100%',
+                maxWidth: 300
+              }}
+            >
+              <span className="material-symbols-outlined icon">content_copy</span>
+              Copiar QR
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      <p style={{ marginTop: 16, fontSize: 12, color: 'var(--on-surface-variant)' }}>
+        El cliente deberá mostrar este QR cada vez que ingrese al gimnasio.
+      </p>
     </PageTransition>
   );
 }

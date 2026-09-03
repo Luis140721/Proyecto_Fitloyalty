@@ -7,6 +7,7 @@ const links = [
   { to: '/admin/miembros',  label: 'Miembros',  icon: 'group',             roles: ['admin', 'receptionist'] },
   { to: '/admin/checkin',   label: 'Check-in',  icon: 'qr_code_scanner',   roles: ['admin', 'receptionist'] },
   { to: '/admin/staff',     label: 'Equipo',    icon: 'badge',             roles: ['admin'] },
+  { to: '/admin/config',    label: 'Configuración', icon: 'settings',      roles: ['admin'] },
 ];
 
 function roleName(r) {
