@@ -28,7 +28,7 @@
 
 .empty-state__icono {
   font-size: 28px;
-  color: var(--primary);
+  color: var(--primary-accent);
 }
 
 .empty-state__titulo {

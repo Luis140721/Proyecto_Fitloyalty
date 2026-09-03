@@ -6,7 +6,7 @@
 /* ---------- Layout shell (no es grid de 2 columnas) ---------- */
 .admin-shell {
   min-height: 100vh;
-  background: var(--bg);
+  background: transparent;   /* deja ver el degradado del body */
   color: var(--on-surface);
   position: relative;
 }
@@ -19,8 +19,9 @@
   left: 0;
   width: 240px;
   height: 100vh;
-  background: var(--surface-container-lowest);
-  border-right: 1px solid var(--border-subtle);
+  background: var(--sidebar-grad);
+  color: var(--sidebar-on);
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
   padding: 24px 16px 32px;
   display: flex;
   flex-direction: column;
@@ -113,7 +114,7 @@
   font-family: var(--font-headline);
   font-weight: 800;
   font-size: 18px;
-  color: var(--primary);
+  color: var(--primary-accent);
   letter-spacing: -0.02em;
   text-decoration: none;
 }
@@ -122,7 +123,7 @@
   display: grid; place-items: center;
   border-radius: var(--radius);
   background: var(--primary);
-  color: var(--bg);
+  color: var(--on-primary);
   font-family: var(--font-headline);
   font-weight: 800;
   font-size: 15px;
@@ -135,7 +136,9 @@
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--on-surface-variant);
+  /* Sobre lavanda los tokens de texto normales pierden contraste, por eso el
+     sidebar usa su propio color con opacidad en vez de --on-surface-variant. */
+  color: rgba(246, 240, 255, 0.60);
   padding: 0 12px 8px;
 }
 .admin-nav {
@@ -147,11 +150,16 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 12px;
-  border-radius: var(--radius);
-  font-family: var(--font-body);
-  font-size: 14px;
-  color: var(--on-surface-variant);
+  padding: 11px 12px;
+  border-radius: var(--radius-lg);
+  /* Mayusculas y fuente de etiqueta, como en la referencia: el menu se lee
+     como navegacion y no compite con el contenido. */
+  font-family: var(--font-label);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(246, 240, 255, 0.82);
   text-decoration: none;
   transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
 }
@@ -159,29 +167,34 @@
   font-size: 20px;
 }
 .admin-nav__item:hover {
-  background: var(--surface-container);
-  color: var(--on-surface);
+  background: rgba(255, 255, 255, 0.14);
+  color: var(--sidebar-on);
   text-decoration: none;
 }
 .admin-nav__item--active {
-  background: var(--primary-soft);
-  color: var(--primary);
-  font-weight: 600;
+  background: var(--brand-grad);
+  color: #FFFFFF;
+  font-weight: 700;
+  box-shadow: 0 4px 16px rgba(192, 38, 211, 0.32);
 }
+/* Punto del item activo: blanco, porque va sobre el degradado morado y el
+   color de marca ahi no se distinguiria. */
 .admin-nav__item--active::before {
   content: '';
-  width: 3px;
-  height: 18px;
-  border-radius: 4px;
-  background: var(--primary);
-  margin-left: -12px;
-  box-shadow: 0 0 8px var(--primary);
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #FFFFFF;
+  margin-left: -2px;
+  margin-right: -2px;
+  box-shadow: none;
+  flex-shrink: 0;
 }
 
 .admin-sidebar__foot {
   margin-top: auto;
   padding: 16px 12px;
-  border-top: 1px solid var(--border-subtle);
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
   display: flex;
   align-items: center;
   gap: 10px;
@@ -198,7 +211,7 @@
   display: block;
   font-family: var(--font-headline);
   font-size: 13px;
-  color: var(--on-surface);
+  color: var(--sidebar-on);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .admin-sidebar__user-meta span {
@@ -206,7 +219,7 @@
   font-size: 10px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--primary);
+  color: rgba(246, 240, 255, 0.62);
 }
 
 /* ---------- Header ---------- */
@@ -219,7 +232,7 @@
   justify-content: space-between;
   gap: 12px;
   padding: 18px clamp(24px, 3vw, 32px);
-  background: rgba(0, 0, 0, 0.70);
+  background: rgba(37, 39, 45, 0.72);
   backdrop-filter: blur(14px) saturate(140%);
   -webkit-backdrop-filter: blur(14px) saturate(140%);
   border-bottom: 1px solid var(--border-subtle);
@@ -305,7 +318,7 @@
 }
 .admin-header__action:hover {
   background: var(--surface-container-high);
-  color: var(--primary);
+  color: var(--primary-accent);
 }
 .admin-header__action--badge { position: relative; }
 .admin-header__action--badge::after {
@@ -374,7 +387,7 @@
   padding: 28px;
   background: var(--surface);
   border: 1px solid var(--border-subtle);
-  border-top: 1px solid rgba(255,255,255,0.05);
+  border-top: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   position: relative;
   overflow: hidden;
@@ -594,9 +607,8 @@
   margin: 0 auto;
   border: 1px dashed var(--primary);
   border-radius: var(--radius-lg);
-  background:
-    repeating-linear-gradient(45deg, rgba(168,85,247,0.06) 0 12px, transparent 12px 24px),
-    var(--surface-container-lowest);
+  /* Sin rayas diagonales: fondo plano. */
+  background: var(--surface-container-lowest);
   display: grid;
   place-items: center;
   color: var(--on-surface-variant);
@@ -605,7 +617,7 @@
 }
 .scanner-frame__icon {
   font-size: 64px;
-  color: var(--primary);
+  color: var(--primary-accent);
   margin-bottom: 12px;
 }
 
@@ -638,7 +650,7 @@
   font-size: 10px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--primary);
+  color: var(--primary-accent);
   margin-top: 4px;
 }
 
@@ -647,7 +659,7 @@
   width: 28px; height: 28px;
   border-radius: 50%;
   border: 3px solid var(--surface-container-high);
-  border-top-color: var(--primary);
+  border-top-color: var(--primary-accent);
   animation: spin 0.9s linear infinite;
 }
 
@@ -666,8 +678,8 @@
   gap: 14px;
   padding: 14px 18px;
   border-radius: var(--radius-lg);
-  background: linear-gradient(120deg, rgba(168,85,247,0.18), rgba(34,211,238,0.10));
-  border: 1px solid rgba(168,85,247,0.35);
+  background: linear-gradient(120deg, rgba(168, 85, 247,0.18), rgba(34,211,238,0.10));
+  border: 1px solid rgba(168, 85, 247,0.35);
   margin-bottom: 24px;
 }
 .trial-banner__icon {
@@ -675,7 +687,7 @@
   display: grid; place-items: center;
   border-radius: 50%;
   background: var(--surface-container-high);
-  color: var(--primary);
+  color: var(--primary-accent);
 }
 .trial-banner__text strong { display: block; color: var(--on-surface); font-family: var(--font-headline); }
 .trial-banner__text span { display: block; font-size: 13px; color: var(--on-surface-variant); margin-top: 2px; }
@@ -707,7 +719,7 @@
 .table-card {
   background: var(--surface);
   border: 1px solid var(--border-subtle);
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  border-top: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   overflow: hidden;
   min-width: 0;
@@ -760,7 +772,7 @@
 .checkin-scanner {
   background: var(--surface);
   border: 1px solid var(--border-subtle);
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  border-top: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   padding: 24px;
   display: flex;
@@ -794,9 +806,8 @@
   width: 100%;
   border-radius: var(--radius-lg);
   border: 1px dashed var(--primary);
-  background:
-    repeating-linear-gradient(45deg, rgba(168,85,247,0.06) 0 12px, transparent 12px 24px),
-    var(--surface-container-lowest);
+  /* Sin rayas diagonales: fondo plano. */
+  background: var(--surface-container-lowest);
   overflow: hidden;
   display: grid;
   place-items: center;
@@ -824,7 +835,7 @@
   width: 96px; height: 96px;
   border-radius: var(--radius-lg);
   background: var(--surface-container);
-  color: var(--primary);
+  color: var(--primary-accent);
   border: 1px solid var(--border-subtle);
 }
 .checkin-frame__qr .material-symbols-outlined {
@@ -985,9 +996,146 @@
   color: var(--on-surface-variant);
   white-space: nowrap;
 }
-.role-pill--admin   { color: var(--primary);   border-color: rgba(168, 85, 247, 0.45); background: var(--primary-soft); }
+.role-pill--admin   { color: var(--primary-accent);   border-color: rgba(168, 85, 247, 0.45); background: var(--primary-soft); }
 .role-pill--recep   { color: var(--info);      border-color: rgba(96, 165, 250, 0.45); background: rgba(96, 165, 250, 0.10); }
 .role-pill--trainer { color: var(--success);   border-color: rgba(74, 222, 128, 0.45); background: rgba(74, 222, 128, 0.10); }
 
 /* ---------- Fila clickeable (Miembros) ---------- */
 .table tbody tr.member-row-clickable { cursor: pointer; }
+
+/* ============================================================
+   RESPONSIVE — correcciones moviles (<= 700px)
+
+   Problemas detectados midiendo en 375x812 (iPhone SE):
+
+   1. Tablas: `.table` es width:100% y `td` usa word-break:break-word.
+      Con 4-5 columnas en 375px cada celda queda en ~60px y las
+      palabras se parten letra a letra ("da / cvi / d / me / sa" en
+      Equipo). La solucion NO es encoger mas: es dar un ancho minimo
+      legible a la tabla y dejar que su contenedor haga scroll lateral.
+
+   2. Los botones de accion del encabezado (`.admin-page-head`) van en
+      un div sin flex-wrap, asi que "Nuevo miembro" se salia 14px del
+      viewport en Miembros.
+
+   3. `.staff-card` es flex-row: en movil ponia el titulo a la izquierda
+      y el texto aplastado a la derecha.
+   ============================================================ */
+@media (max-width: 700px) {
+  /* --- 0. Los items de grid/flex traen min-width:auto, que impide
+     encogerlos por debajo de su contenido. Sin esto, el min-width de la
+     tabla (regla 1) estira la columna entera y desborda la pagina en vez
+     de hacer scroll solo dentro de la tabla. --- */
+  .staff-shell > *,
+  .checkin-shell > *,
+  .admin-cols > *,
+  .admin-cols-3 > *,
+  .kpi-grid > * {
+    min-width: 0;
+  }
+
+  /* --- 1. Tablas con scroll horizontal en vez de texto destrozado --- */
+  /* Los contenedores ya declaran overflow-x:auto (.table-scroll en
+     Miembros, style inline en Equipo); solo faltaba el ancho minimo
+     para que ese scroll llegue a activarse en vez de comprimir. */
+  .table-card { overflow-x: auto; }
+  .table-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .table {
+    min-width: 560px;          /* fuerza el scroll en vez de comprimir */
+  }
+  .table th,
+  .table td {
+    padding: 12px 14px;
+    white-space: nowrap;       /* evita el corte letra a letra */
+    word-break: normal;
+  }
+  /* Celdas que si pueden partir en varias lineas (correos largos). */
+  .table td.cell-wrap {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  /* --- 2. Botonera del encabezado: ocupa el ancho y envuelve --- */
+  .admin-page-head { gap: 12px; }
+  .admin-page-head > div:last-child {
+    display: flex;
+    flex-wrap: wrap;
+    width: 100%;
+    gap: 10px;
+  }
+  .admin-page-head > div:last-child > .btn {
+    flex: 1 1 auto;
+    justify-content: center;
+    min-width: 0;
+  }
+
+  /* --- 3. Tarjetas laterales de Equipo: titulo arriba, no al lado --- */
+  .staff-card {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  /* --- 4. Buscador de Miembros: que ocupe toda la fila --- */
+  .filter-bar__search { flex: 1 1 100%; }
+  .filter-bar__chips  { margin-left: 0; }
+}
+
+/* Pantallas muy angostas (<= 380px): apretar paddings del panel. */
+@media (max-width: 380px) {
+  .admin-page-head__title { font-size: 24px; }
+  .table { min-width: 520px; }
+  .chart-card { padding: 16px 14px; }
+}
+
+
+/* ============================================================
+   Panel del codigo QR en el detalle del miembro
+   Mismo QR que se muestra al registrar, ahora disponible tambien al
+   ver/editar para reimprimirlo o reenviarlo.
+   ============================================================ */
+.miembro-qr-panel {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px;
+  margin-bottom: 18px;
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-glass);
+  box-shadow: var(--surface-bevel);
+}
+.miembro-qr-panel__img {
+  width: 96px;
+  height: 96px;
+  flex-shrink: 0;
+  border-radius: var(--radius);
+  background: #FFFFFF;   /* el QR necesita fondo blanco para que un lector lo lea */
+  padding: 6px;
+}
+.miembro-qr-panel__img--vacio {
+  display: grid;
+  place-items: center;
+  background: var(--surface-container-low);
+  color: var(--on-surface-variant);
+}
+.miembro-qr-panel__img--vacio .material-symbols-outlined { font-size: 40px; }
+.miembro-qr-panel__body { min-width: 0; flex: 1; }
+.miembro-qr-panel__codigo {
+  display: block;
+  margin: 4px 0 10px;
+  font-family: var(--font-label);
+  font-size: 15px;
+  letter-spacing: 0.04em;
+  color: var(--on-surface);
+  word-break: break-all;
+}
+.miembro-qr-panel__acciones { display: flex; flex-wrap: wrap; gap: 8px; }
+
+@media (max-width: 560px) {
+  .miembro-qr-panel { flex-direction: column; align-items: flex-start; }
+  .miembro-qr-panel__acciones .btn { flex: 1 1 auto; justify-content: center; }
+}

@@ -66,7 +66,11 @@ const createSchema = z.object({
   tipo_documento: z.enum(['CC', 'TI', 'NIT', 'CE', 'PP']).default('CC'),
   documento: z.string().min(4, 'El documento es requerido'),
   fecha_nacimiento: z.string().optional(),
-  genero: z.enum(['Masculino', 'Femenino', 'Otro', 'Prefiero no decir']).optional(),
+  // El select de genero puede quedar en "Seleccionar...", que llega como
+  // cadena vacia: se traduce a "sin dato" en vez de romper la validacion.
+  genero: z.enum(['Masculino', 'Femenino', 'Otro', 'Prefiero no decir'])
+    .optional()
+    .or(z.literal('').transform(() => undefined)),
   telefono:  z.string().min(7, 'El telefono es requerido'),
   email:     z.string().email().optional().or(z.literal('').transform(() => undefined)),
   direccion: z.string().optional(),
@@ -98,12 +102,52 @@ const createSchema = z.object({
   qr_imagen: z.string().optional(), // Imagen del QR en base64
 });
 
+/**
+ * Campos editables de un miembro.
+ *
+ * Antes solo aceptaba nombre, telefono, email, activo y qr_imagen: el resto
+ * del formulario se enviaba pero zod lo descartaba en silencio, asi que el
+ * usuario creia haber guardado y no se guardaba nada. Ahora se aceptan todas
+ * las columnas de datos del miembro.
+ *
+ * Quedan FUERA a proposito:
+ *   - id_miembro / id_gimnasio: identidad, no se tocan.
+ *   - codigo_qr: lo genera el servidor; cambiarlo invalidaria el QR impreso
+ *     que el miembro ya tiene.
+ *   - fecha_registro: es un hecho historico.
+ *
+ * Las cadenas vacias se convierten a null para no guardar "" en columnas
+ * opcionales.
+ */
+const vacioANull = (schema) =>
+  schema.optional().or(z.literal('').transform(() => null)).nullable();
+
 const updateSchema = z.object({
-  nombre:   z.string().min(2).optional(),
-  telefono: z.string().min(7).optional(),
-  email:    z.string().email().optional().or(z.literal('').transform(() => undefined)),
-  activo:   z.boolean().optional(),
+  nombre:    z.string().min(2).optional(),
+  documento: z.string().min(3).optional(),
+  telefono:  z.string().min(7).optional(),
+  email:     z.string().email().optional().or(z.literal('').transform(() => null)).nullable(),
+  activo:    z.boolean().optional(),
   qr_imagen: z.string().optional(),
+
+  // Datos personales
+  tipo_documento:       vacioANull(z.string().max(10)),
+  fecha_nacimiento:     vacioANull(z.string()),
+  genero:               vacioANull(z.string().max(20)),
+  codigo_pais_telefono: vacioANull(z.string().max(5)),
+  ciudad:               vacioANull(z.string().max(100)),
+  direccion:            vacioANull(z.string()),
+
+  // Salud y emergencia
+  contacto_emergencia:  vacioANull(z.string().max(100)),
+  telefono_emergencia:  vacioANull(z.string().max(20)),
+  condiciones_medicas:  vacioANull(z.string()),
+  alergias:             vacioANull(z.string()),
+
+  // Perfil de entrenamiento
+  objetivo:             vacioANull(z.string().max(50)),
+  nivel_experiencia:    vacioANull(z.string().max(30)),
+  observaciones:        vacioANull(z.string()),
 });
 
 function parse(schema, payload) {
@@ -469,7 +513,14 @@ router.get(
 
     try {
       const { rows } = await pool.query(
-        'SELECT id_miembro, nombre, documento, telefono, email, codigo_qr, activo, fecha_registro FROM miembro WHERE id_miembro = $1 AND id_gimnasio = $2',
+        /* Trae TODAS las columnas editables. Si faltara alguna, el formulario
+           de edicion la precargaria vacia y al guardar la borraria. */
+        `SELECT id_miembro, nombre, documento, telefono, email, codigo_qr, qr_imagen,
+                activo, fecha_registro, tipo_documento, fecha_nacimiento, genero,
+                codigo_pais_telefono, ciudad, direccion, contacto_emergencia,
+                telefono_emergencia, condiciones_medicas, alergias, objetivo,
+                nivel_experiencia, observaciones
+           FROM miembro WHERE id_miembro = $1 AND id_gimnasio = $2`,
         [id, gymId]
       );
       if (rows.length === 0) throw new AppError(404, 'Miembro no encontrado', 'MEMBER_NOT_FOUND');
