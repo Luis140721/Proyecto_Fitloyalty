@@ -341,7 +341,7 @@
   font-family: var(--font-display);
   font-weight: 800;
   font-size: 24px;
-  background: var(--bg);
+  background: var(--surface-container-lowest);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius);
   color: var(--primary-accent);
