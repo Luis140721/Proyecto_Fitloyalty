@@ -29,9 +29,22 @@ export default function CheckinPage() {
   const [cameraEnabled, setCameraEnabled] = useState(false);
   const [scannerError, setScannerError] = useState(null);
   const scannerRef = useRef(null);
-  const lastScannedRef = useRef(null);
-  const scanTimeoutRef = useRef(null);
-  const isProcessingRef = useRef(false); // Flag para evitar múltiples peticiones simultáneas
+
+  /*
+   * El callback del lector se registra UNA vez, cuando se enciende la camara,
+   * y se queda con los valores de ese render para siempre. Por eso el control
+   * del rebote vive en refs y no en estado: `submitting` alli dentro seria
+   * eternamente false y el guardia no serviria de nada.
+   */
+  const ultimoCodigoRef = useRef(null);   // ultimo QR aceptado
+  const ultimoScanRef = useRef(0);        // ultima vez que se vio ese QR
+  const enviandoRef = useRef(false);      // hay un POST en vuelo
+  const limpiarFeedbackRef = useRef(null);
+
+  // Cuanto debe desaparecer un QR de la camara antes de volver a contarlo.
+  const ESPERA_MISMO_QR_MS = 4000;
+  // Cuanto se queda el resultado en pantalla antes de dejarla lista otra vez.
+  const LIMPIAR_FEEDBACK_MS = 5000;
 
   // IDs de checkins conocidos para detectar el "mas nuevo" cuando llega un nuevo set.
   const knownIdsRef = useRef(new Set());
@@ -72,58 +85,49 @@ export default function CheckinPage() {
           fps: 10,
           qrbox: { width: 250, height: 250 },
           aspectRatio: 1.0,
+          // Usar cámara trasera y evitar modo espejo
           facingMode: 'environment',
-          supportedScanTypes: [0],
-          videoConstraints: {
-            facingMode: 'environment',
-            width: { ideal: 1280 },
-            height: { ideal: 720 }
-          }
         },
         false
       );
 
       scanner.render(
         (decodedText) => {
-          // SISTEMA AUTOMÁTICO: Ignorar si estamos procesando
-          if (isProcessingRef.current) {
-            console.log('⏸️ Procesando, ignorando escaneo');
+          /*
+           * La libreria dispara este callback ~10 veces por segundo mientras el
+           * QR siga delante de la camara, asi que aqui se decide si ESTE disparo
+           * cuenta como un ingreso nuevo o es el mismo codigo todavia en cuadro.
+           *
+           * La clave es refrescar la marca de tiempo en cada disparo repetido:
+           * asi la cuenta atras no empieza cuando se escaneo, sino cuando el
+           * codigo DEJO de verse. Alguien que sostenga su QR un minuto entero
+           * registra una sola vez; el siguiente miembro entra de inmediato
+           * porque su codigo es distinto.
+           */
+          const ahora = Date.now();
+          const mismoCodigo = ultimoCodigoRef.current === decodedText;
+          const enFrio = ahora - ultimoScanRef.current < ESPERA_MISMO_QR_MS;
+
+          if (mismoCodigo && enFrio) {
+            ultimoScanRef.current = ahora;   // sigue en cuadro: reinicia la espera
             return;
           }
-          
-          // Ignorar mismo QR consecutivo
-          if (lastScannedRef.current === decodedText) {
-            console.log('� Mismo QR, ignorando');
-            return;
-          }
-          
-          console.log('📷 QR escaneado:', decodedText);
-          
-          // Bloquear inmediatamente
-          isProcessingRef.current = true;
-          lastScannedRef.current = decodedText;
-          setCodigo(decodedText);
+          if (enviandoRef.current) return;   // hay un POST en vuelo
+
+          ultimoCodigoRef.current = decodedText;
+          ultimoScanRef.current = ahora;
           setScannerError(null);
-          
-          // Procesar check-in
-          handleAutoCheckIn(decodedText)
-            .finally(() => {
-              // REINICIAR ESCÁNER automáticamente después de procesar
-              setTimeout(() => {
-                console.log('🔄 Reiniciando escáner para nuevos escaneos');
-                isProcessingRef.current = false;
-                lastScannedRef.current = null;
-              }, 3000); // 3 segundos de espera
-            });
+          handleAutoCheckIn(decodedText);
         },
-        (errorMessage) => {
-          // Ignorar errores normales de escaneo
+        () => {
+          // Silencio: la libreria reporta "no encontre QR" en cada cuadro.
         }
       );
 
       scannerRef.current = scanner;
 
       return () => {
+        if (limpiarFeedbackRef.current) clearTimeout(limpiarFeedbackRef.current);
         if (scannerRef.current) {
           scannerRef.current.clear().catch(console.error);
         }
@@ -133,26 +137,13 @@ export default function CheckinPage() {
 
   const toggleCamera = async () => {
     if (cameraEnabled) {
-      // Desactivar cámara - LIMPIEZA COMPLETA
+      // Desactivar cámara
       if (scannerRef.current) {
         await scannerRef.current.clear();
         scannerRef.current = null;
       }
-      
-      // RESET COMPLETO DE FLAGS cuando se apaga la cámara
-      console.log('🔄 RESET COMPLETO: Limpiando todos los flags al desactivar cámara');
-      isProcessingRef.current = false;
-      lastScannedRef.current = null;
-      if (scanTimeoutRef.current) {
-        clearTimeout(scanTimeoutRef.current);
-        scanTimeoutRef.current = null;
-      }
-      
       setCameraEnabled(false);
       setScannerError(null);
-      setCodigo('');
-      setFeedback(null);
-      setError('');
     } else {
       // Activar cámara
       setCameraEnabled(true);
@@ -160,53 +151,33 @@ export default function CheckinPage() {
     }
   };
 
-  // FUNCIÓN DE RESET MANUAL PARA EMERGENCIAS
-  const manualReset = () => {
-    console.log('🚨 RESET MANUAL ACTIVADO');
-    
-    // Limpiar todos los flags
-    isProcessingRef.current = false;
-    lastScannedRef.current = null;
-    if (scanTimeoutRef.current) {
-      clearTimeout(scanTimeoutRef.current);
-      scanTimeoutRef.current = null;
-    }
-    
-    // Limpiar estado
-    setSubmitting(false);
-    setCodigo('');
-    setDocumento('');
-    setFeedback(null);
-    setError('');
-    
-    console.log('✅ RESET MANUAL COMPLETADO');
+  /** Deja el panel en blanco para el siguiente miembro, sin apagar la camara. */
+  const prepararSiguiente = () => {
+    if (limpiarFeedbackRef.current) clearTimeout(limpiarFeedbackRef.current);
+    limpiarFeedbackRef.current = setTimeout(() => {
+      setFeedback(null);
+      setFrameFlash(null);
+      setError('');
+    }, LIMPIAR_FEEDBACK_MS);
   };
 
   const handleAutoCheckIn = async (qrCode) => {
-    // Evitar múltiples envíos simultáneos
-    if (submitting) {
-      console.log('Ya está submitiendo, ignorando');
-      return;
-    }
-    
-    console.log('Iniciando check-in para:', qrCode);
-    const payload = { metodo: 'QR', codigo: qrCode.trim() };
+    if (enviandoRef.current) return;
+    enviandoRef.current = true;
     setSubmitting(true);
+    setError('');
+
     try {
-      const { data } = await api.post('/admin/checkin', payload);
-      const fbType = data.advertencia ? 'warning' : 'success';
-      console.log('Check-in exitoso:', data);
-      
-      // Mensaje más claro y visible para el usuario
-      const successMessage = data.advertencia 
-        ? `⚠️ ${data.message}` 
-        : `✅ Ingreso exitoso: ${data.miembro?.nombre || 'Usuario'}`;
-        
+      const { data } = await api.post('/admin/checkin', { metodo: 'QR', codigo: qrCode.trim() });
+
+      // El backend responde 200 y `duplicado` cuando ese miembro ya marco hace
+      // un momento: se avisa, pero no se celebra como un ingreso nuevo.
+      const fbType = data.duplicado ? 'warning' : data.advertencia ? 'warning' : 'success';
       setFeedback({
         type: fbType,
-        msg: successMessage,
+        msg: data.message,
         miembro: data.miembro,
-        advertencia: data.advertencia,
+        advertencia: data.duplicado ? 'ya-registrado' : data.advertencia,
       });
       setFrameFlash({ type: fbType, key: Date.now() });
       if (fbType === 'success') vibrate(80);
@@ -214,30 +185,18 @@ export default function CheckinPage() {
       await loadRecent();
     } catch (err) {
       console.error('Error en check-in:', err);
-      
-      // Manejo específico para diferentes tipos de errores
-      let errorMsg = err.message || 'No se pudo registrar el check-in.';
-      let errorType = 'error';
-      
-      if (err.response?.status === 404) {
-        errorMsg = 'Usuario no encontrado. Verifica que el QR sea correcto.';
-      } else if (err.response?.status === 429) {
-        // Error de rate limit - check-in duplicado
-        errorMsg = err.response?.data?.message || 'Check-in ya registrado recientemente. Por favor espera.';
-        errorType = 'warning'; // Usar warning en lugar de error para duplicados
-      }
-      
+      const errorMsg = err.response?.status === 404
+        ? 'Usuario no encontrado. Verifica que el QR sea correcto.'
+        : err.message || 'No se pudo registrar el check-in.';
       setError(errorMsg);
-      setFeedback({ type: errorType, msg: errorMsg, advertencia: true, miembro: null });
-      setFrameFlash({ type: errorType, key: Date.now() });
-      
-      // Para errores de duplicado, no limpiar el código para permitir reintentos manuales
-      if (err.response?.status !== 429) {
-        setCodigo('');
-      }
+      setFeedback({ type: 'error', msg: errorMsg, advertencia: true, miembro: null });
+      setFrameFlash({ type: 'error', key: Date.now() });
+      // Un fallo no debe dejar el codigo bloqueado: hay que poder reintentar.
+      ultimoCodigoRef.current = null;
     } finally {
+      enviandoRef.current = false;
       setSubmitting(false);
-      console.log('Check-in finalizado, flag de submitting liberado');
+      prepararSiguiente();
     }
   };
 
@@ -303,10 +262,6 @@ export default function CheckinPage() {
             <span className="material-symbols-outlined icon">refresh</span>
             Actualizar
           </button>
-          <button className="btn btn-ghost" onClick={manualReset} style={{ color: 'var(--error)' }}>
-            <span className="material-symbols-outlined icon">restart_alt</span>
-            Reset
-          </button>
         </div>
       </header>
 
@@ -350,8 +305,8 @@ export default function CheckinPage() {
               key={frameFlash ? `frame-${frameFlash.key}` : 'frame-stable'}
               aria-hidden="true"
               style={{ 
-                minHeight: cameraEnabled ? '350px' : '300px', 
-                height: cameraEnabled ? 'auto' : '300px',
+                minHeight: cameraEnabled ? '400px' : 'auto', 
+                height: cameraEnabled ? '400px' : 'auto',
                 maxHeight: cameraEnabled ? '60vh' : 'auto'
               }}
             >
@@ -364,7 +319,7 @@ export default function CheckinPage() {
                   </div>
                 </>
               ) : (
-                <div id="qr-reader" style={{ width: '100%', height: '100%', minHeight: '350px' }}></div>
+                <div id="qr-reader" style={{ width: '100%', height: '100%', minHeight: '400px' }}></div>
               )}
             </div>
 
@@ -468,7 +423,9 @@ export default function CheckinPage() {
                 {feedback.miembro?.nombre && (
                   <small style={{ display: 'block', marginTop: 4, fontSize: 12 }}>
                     {feedback.miembro.nombre} ({feedback.miembro.documento})
-                    {feedback.advertencia && ' — revisar antes de dejar entrar'}
+                    {feedback.advertencia === 'ya-registrado'
+                      ? ' — no se registró de nuevo'
+                      : feedback.advertencia && ' — revisar antes de dejar entrar'}
                   </small>
                 )}
                 {feedback.miembro?.codigo_qr && feedback.type !== 'error' && (
