@@ -66,7 +66,11 @@ const createSchema = z.object({
   tipo_documento: z.enum(['CC', 'TI', 'NIT', 'CE', 'PP']).default('CC'),
   documento: z.string().min(4, 'El documento es requerido'),
   fecha_nacimiento: z.string().optional(),
-  genero: z.enum(['Masculino', 'Femenino', 'Otro', 'Prefiero no decir']).optional(),
+  // El select de genero puede quedar en "Seleccionar...", que llega como
+  // cadena vacia: se traduce a "sin dato" en vez de romper la validacion.
+  genero: z.enum(['Masculino', 'Femenino', 'Otro', 'Prefiero no decir'])
+    .optional()
+    .or(z.literal('').transform(() => undefined)),
   telefono:  z.string().min(7, 'El telefono es requerido'),
   email:     z.string().email().optional().or(z.literal('').transform(() => undefined)),
   direccion: z.string().optional(),
