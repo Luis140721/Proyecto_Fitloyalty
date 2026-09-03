@@ -2,9 +2,6 @@ import { useEffect, useMemo, useState, useRef } from 'react';
 import DatePicker, { registerLocale } from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import { es } from 'date-fns/locale/es';
-
-/* El calendario viene en ingles por defecto ("September 2026"). */
-registerLocale('es', es);
 import { api } from '../api';
 import CardGlass from '../components/CardGlass';
 import BadgeEstado, { estadoDeMiembro } from '../components/BadgeEstado';
@@ -85,6 +82,21 @@ function textoAFecha(texto) {
   return fecha;
 }
 
+/**
+ * Acepta "DD/MM/YYYY" o "YYYY-MM-DD" y devuelve un Date. Devuelve null si el
+ * texto aun no es una fecha completa: mientras se teclea llegan cadenas como
+ * "03/" que new Date() convierte en Invalid Date y hacen reventar
+ * toISOString() mas adelante.
+ */
+function aFecha(texto) {
+  if (!texto) return null;
+  if (texto.includes('/')) return textoAFecha(texto);
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(texto);
+  if (!m) return null;
+  const f = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return Number.isNaN(f.getTime()) ? null : f;
+}
+
 /** Convierte Date a "DD/MM/YYYY". */
 function fechaATexto(fecha) {
   if (!fecha) return '';
@@ -159,6 +171,14 @@ function convertFromISODate(isoDate) {
   const [year, month, day] = parts;
   return `${day}/${month}/${year}`;
 }
+
+/* Duracion de cada plan, en dias. Lo que no este aqui dura un mes. */
+const DIAS_POR_PLAN = {
+  MENSUAL: 30,
+  TRIMESTRAL: 90,
+  SEMESTRAL: 180,
+  ANUAL: 365,
+};
 
 const empty = {
   // Datos personales
@@ -445,27 +465,11 @@ export default function MiembrosPage() {
 
   // Calcular fecha fin automáticamente según tipo de plan
   const calcularFechaFin = (tipoPlan, fechaInicio) => {
-    if (!fechaInicio) return '';
-    
-    // Convertir de DD/MM/YYYY a ISO si es necesario
-    const isoDate = fechaInicio.includes('/') ? convertToISODate(fechaInicio) : fechaInicio;
-    const inicio = new Date(isoDate);
-    let dias = 30;
-    
-    switch (tipoPlan) {
-      case 'MENSUAL': dias = 30; break;
-      case 'TRIMESTRAL': dias = 90; break;
-      case 'SEMESTRAL': dias = 180; break;
-      case 'ANUAL': dias = 365; break;
-      default: dias = 30;
-    }
-    
+    const inicio = aFecha(fechaInicio);
+    if (!inicio) return '';          // fecha a medio escribir: aun no hay que calcular
     const fin = new Date(inicio);
-    fin.setDate(fin.getDate() + dias);
-    const isoResult = fin.toISOString().split('T')[0];
-    
-    // Convertir de vuelta a DD/MM/YYYY
-    return convertFromISODate(isoResult);
+    fin.setDate(fin.getDate() + (DIAS_POR_PLAN[tipoPlan] ?? 30));
+    return fechaATexto(fin);
   };
 
   // Determinar estado del pago
@@ -479,18 +483,26 @@ export default function MiembrosPage() {
 
   // Calcular próxima fecha de cobro
   const calcularProximaFechaCobro = (fechaFin) => {
-    if (!fechaFin) return '';
-    
-    // Convertir de DD/MM/YYYY a ISO si es necesario
-    const isoDate = fechaFin.includes('/') ? convertToISODate(fechaFin) : fechaFin;
-    const fin = new Date(isoDate);
+    const fin = aFecha(fechaFin);
+    if (!fin) return '';
     const proxima = new Date(fin);
     proxima.setDate(proxima.getDate() + 1);
-    const isoResult = proxima.toISOString().split('T')[0];
-    
-    // Convertir de vuelta a DD/MM/YYYY
-    return convertFromISODate(isoResult);
+    return fechaATexto(proxima);
   };
+
+  /*
+   * Las fechas derivadas se calculan aqui y no dentro de cada onChange. En el
+   * onChange solo se recalculaban al TOCAR el tipo de plan o la fecha de
+   * inicio, asi que un formulario recien abierto (que ya trae MENSUAL y la
+   * fecha de hoy puestas) se quedaba con "Calculada automaticamente" vacio
+   * hasta que el usuario cambiaba algo a mano.
+   */
+  useEffect(() => {
+    const fin = calcularFechaFin(form.tipo_plan, form.fecha_inicio);
+    const proxima = calcularProximaFechaCobro(fin);
+    if (fin === form.fecha_fin && proxima === form.proxima_fecha_cobro) return;
+    setForm((f) => ({ ...f, fecha_fin: fin, proxima_fecha_cobro: proxima }));
+  }, [form.tipo_plan, form.fecha_inicio, form.fecha_fin, form.proxima_fecha_cobro]);
 
   // Manejar cambios en campos que afectan cálculos automáticos
   const handleFormChange = (field, value) => {
@@ -510,19 +522,6 @@ export default function MiembrosPage() {
       const valorKey = `plan_${value.toLowerCase()}_valor`;
       const valorSugerido = gymConfig[valorKey] || 0;
       newForm.valor_total = valorSugerido.toString();
-    }
-    
-    // Si cambia tipo de plan o fecha inicio, recalcular fecha fin
-    if (field === 'tipo_plan' || field === 'fecha_inicio') {
-      const fechaFin = calcularFechaFin(
-        field === 'tipo_plan' ? value : form.tipo_plan,
-        field === 'fecha_inicio' ? value : form.fecha_inicio
-      );
-      newForm.fecha_fin = fechaFin;
-      
-      // Recalcular próxima fecha de cobro
-      const proximaCobro = calcularProximaFechaCobro(fechaFin);
-      newForm.proxima_fecha_cobro = proximaCobro;
     }
     
     // Si cambian valores de pago, recalcular estado
@@ -586,13 +585,14 @@ export default function MiembrosPage() {
         payload.fecha_inicio = new Date().toISOString().split('T')[0];
       }
       if (!payload.fecha_fin) {
-        payload.fecha_fin = calcularFechaFin(payload.tipo_plan, payload.fecha_inicio);
+        // Los calculos devuelven DD/MM/YYYY; al backend van en ISO.
+        payload.fecha_fin = convertToISODate(calcularFechaFin(payload.tipo_plan, payload.fecha_inicio));
       }
       if (!payload.estado_pago) {
         payload.estado_pago = determinarEstadoPago(payload.valor_total, payload.valor_pagado);
       }
       if (!payload.proxima_fecha_cobro) {
-        payload.proxima_fecha_cobro = calcularProximaFechaCobro(payload.fecha_fin);
+        payload.proxima_fecha_cobro = convertToISODate(calcularProximaFechaCobro(payload.fecha_fin));
       }
       
       const { data } = await api.post('/admin/miembros', payload);
@@ -1095,12 +1095,16 @@ export default function MiembrosPage() {
                 <div className="auth-form-row">
                   <label className="field">
                     <span className="field-label">Próxima fecha de cobro</span>
-                    <DatePicker
-                      selected={form.proxima_fecha_cobro ? new Date(form.proxima_fecha_cobro) : null}
-                      onChange={(date) => handleFormChange('proxima_fecha_cobro', date ? date.toISOString().split('T')[0] : '')}
-                      dateFormat="dd/MM/yyyy"
+                    {/* Igual que "fecha fin": la calcula el formulario, no se
+                        escribe a mano. Antes era un DatePicker suelto que leia
+                        el texto con new Date(), y "04/09/2027" se interpretaba
+                        como el 9 de abril. */}
+                    <CampoFecha
+                      value={form.proxima_fecha_cobro}
+                      onChange={(value) => handleFormChange('proxima_fecha_cobro', value)}
                       className="field-input"
-                      placeholderText="Calculada automáticamente"
+                      placeholder="Calculada automáticamente"
+                      readOnly
                     />
                   </label>
                   <label className="field">
