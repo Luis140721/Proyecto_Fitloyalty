@@ -424,7 +424,8 @@ export default function MiembrosPage() {
   // Generar enlace de WhatsApp
   const generarWhatsAppLink = () => {
     if (!createdMember) return '';
-    const telefono = createdMember.telefono.replace(/\+/g, '');
+    // Limpiar el número de teléfono: remover espacios, guiones, paréntesis y el signo +
+    const telefono = createdMember.telefono.replace(/[\s\-\(\)\+]/g, '');
     const mensaje = encodeURIComponent(
       `Hola ${createdMember.nombre}, bienvenido/a a tu gimnasio. Este es tu código de acceso personal. Muéstralo en la entrada cada vez que vengas.`
     );
