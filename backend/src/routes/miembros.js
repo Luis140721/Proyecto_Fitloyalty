@@ -24,6 +24,7 @@ const { requireActiveTrial } = require('../lib/trial');
 const { z } = require('zod');
 const { formatZodError } = require('../lib/validators');
 const { sendMemberQR } = require('../lib/email');
+const QRCode = require('qrcode');
 
 const router = express.Router();
 
@@ -363,12 +364,20 @@ router.post(
       // Enviar email con el QR si el miembro tiene email
       if (data.email) {
         try {
+          // Generar imagen del QR en base64 para el correo
+          let qrImageUrl = null;
+          try {
+            qrImageUrl = await QRCode.toDataURL(codigo_qr);
+          } catch (qrErr) {
+            console.error('[POST /admin/miembros] Error generando imagen QR:', qrErr.message);
+          }
+          
           await sendMemberQR({
             to: data.email,
             memberName: data.nombre,
             gymName,
-            qrCode: codigo_qr_cifrado,
-            qrImageUrl: data.qr_imagen || null
+            qrCode: codigo_qr, // Enviar código descifrado para que sea legible
+            qrImageUrl: qrImageUrl
           });
         } catch (emailErr) {
           console.error('[POST /admin/miembros] Error enviando email:', emailErr.message);
