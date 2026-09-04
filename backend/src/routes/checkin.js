@@ -15,6 +15,7 @@ const { authenticate, authorize } = require('../middleware/auth');
 const asyncHandler = require('../lib/asyncHandler');
 const { AppError } = require('../lib/errors');
 const { requireActiveTrial } = require('../lib/trial');
+const { ULTIMO_PLAN } = require('../lib/planes');
 const { z } = require('zod');
 const { formatZodError } = require('../lib/validators');
 
@@ -129,17 +130,22 @@ router.post(
         throw new AppError(400, 'codigo o documento requerido', 'VALIDATION_ERROR');
       }
 
-      // Validar membresia activa
+      /*
+       * Estado del plan. Se lee de `plan_cobro`, que es donde el alta guarda
+       * el plan del miembro; antes se consultaba `membresia`, que nunca se
+       * llena, y por eso TODO ingreso salia marcado como "sin membresia"
+       * aunque la persona estuviera al dia.
+       */
       const { rows: mem } = await pool.query(
-        `SELECT estado, fecha_fin FROM membresia
-         WHERE id_miembro = $1
-         ORDER BY fecha_fin DESC NULLS LAST LIMIT 1`,
+        `SELECT tipo_plan, fecha_fin, estado_pago FROM ${ULTIMO_PLAN} pc
+          WHERE pc.id_miembro = $1`,
         [miembro.id_miembro]
       );
       const m = mem[0];
-      const hoy = new Date();
       const sinMembresia = !m;
-      const membresiaVencida = m && (m.estado !== 'ACTIVA' || new Date(m.fecha_fin) < hoy);
+      // Se compara por fecha, no por marca de tiempo: un plan que vence hoy
+      // todavia sirve hoy.
+      const membresiaVencida = !!(m && m.fecha_fin && new Date(m.fecha_fin) < new Date(new Date().toDateString()));
 
       /*
        * Anti-rebote. El lector de QR dispara varias veces por segundo mientras
@@ -187,7 +193,11 @@ router.post(
       );
 
       return res.status(201).json({
-        message: membresiaVencida ? 'Membresia no activa. Ingreso registrado con aviso.' : 'Ingreso registrado.',
+        message: membresiaVencida
+          ? 'Plan vencido. Ingreso registrado con aviso.'
+          : sinMembresia
+            ? 'Sin plan registrado. Ingreso registrado con aviso.'
+            : 'Ingreso registrado.',
         duplicado: false,
         checkin: rows[0],
         miembro: { 
@@ -198,7 +208,7 @@ router.post(
           qr_imagen: miembro.qr_imagen
         },
         membresia: m || null,
-        advertencia: sinMembresia ? 'sin-membresia' : membresiaVencida ? 'membresia-vencida' : null,
+        advertencia: membresiaVencida ? 'membresia-vencida' : sinMembresia ? 'sin-membresia' : null,
       });
     } catch (err) {
       if (err instanceof AppError) throw err;

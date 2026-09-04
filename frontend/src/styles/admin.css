@@ -1430,3 +1430,101 @@
   .checkin-destello--warning,
   .checkin-destello--error { animation-duration: 1ms; }
 }
+
+/* ==========================================================================
+   Aviso: acciones (etiqueta + WhatsApp)
+   ========================================================================== */
+
+.aviso__acciones {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.aviso__wa {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  border-radius: 5px;
+  background: #1F8F4E;
+  color: #FFFFFF;
+  font-family: var(--font-label);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+}
+.aviso__wa:hover { background: #25A55C; }
+.aviso__wa:active { transform: scale(0.96); }
+.aviso__wa:focus-visible { outline: 2px solid #4ADE80; outline-offset: 2px; }
+
+/* Ya se le escribio en esta sesion: se apaga para no repetir sin querer. */
+.aviso__wa--enviado {
+  background: rgba(255, 255, 255, 0.10);
+  color: var(--on-surface-variant);
+}
+.aviso__wa--enviado:hover { background: rgba(255, 255, 255, 0.14); }
+
+.aviso__sin-tel {
+  font-family: var(--font-label);
+  font-size: 9.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--outline);
+  white-space: nowrap;
+}
+
+/* ==========================================================================
+   Editor del plan dentro del modal del miembro
+   ========================================================================== */
+
+.plan-editor {
+  background: var(--surface-accent);
+  border: 1px solid var(--surface-accent-border);
+  border-radius: var(--radius-lg);
+  padding: 18px 20px 20px;
+  margin-bottom: 22px;
+}
+
+.plan-editor__cabecera {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+.plan-editor__cabecera h4 {
+  margin: 0 0 3px;
+  font-family: var(--font-headline);
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+.plan-editor__cabecera p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--on-surface-variant);
+  max-width: 44ch;
+}
+
+.plan-editor__estado {
+  flex-shrink: 0;
+  font-family: var(--font-label);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  padding: 4px 9px;
+  border-radius: 5px;
+  white-space: nowrap;
+}
+.plan-editor__estado--pagado    { background: rgba(74, 222, 128, 0.16); color: #6EE7A0; }
+.plan-editor__estado--parcial   { background: rgba(251, 191, 36, 0.16); color: #FBBF24; }
+.plan-editor__estado--pendiente { background: rgba(248, 113, 113, 0.16); color: #F87171; }
+
+.plan-editor__guardar { margin-top: 14px; }

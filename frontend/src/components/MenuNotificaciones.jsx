@@ -24,6 +24,8 @@ export default function MenuNotificaciones() {
   const [abierto, setAbierto] = useState(false);
   const [avisos, setAvisos] = useState([]);
   const [cargando, setCargando] = useState(false);
+  // Avisos a los que ya se les escribio en esta sesion, para marcarlos.
+  const [enviados, setEnviados] = useState(() => new Set());
   const [error, setError] = useState('');
   const contenedorRef = useRef(null);
   const navigate = useNavigate();
@@ -70,6 +72,31 @@ export default function MenuNotificaciones() {
     navigate(`/admin/miembros?q=${encodeURIComponent(aviso.nombreMiembro || '')}`);
   };
 
+  /**
+   * Abre WhatsApp con el mensaje ya escrito. No se envia solo: se deja listo
+   * para que la persona lo revise y le de enviar, que ademas es lo que exige
+   * WhatsApp desde un enlace.
+   *
+   * El envio queda registrado en el sistema para poder demostrar que se
+   * contacto al miembro, aunque la entrega la haga el telefono del gimnasio.
+   */
+  const escribirPorWhatsapp = async (aviso, e) => {
+    e.stopPropagation();          // no navegar al miembro al mismo tiempo
+    const url = `https://wa.me/${aviso.telefono}?text=${encodeURIComponent(aviso.mensaje || '')}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+    setEnviados((prev) => new Set(prev).add(aviso.id));
+    try {
+      await api.post('/admin/notificaciones/enviado', {
+        idMiembro: aviso.idMiembro,
+        canal: 'WHATSAPP',
+        tipo: aviso.tipo,
+      });
+    } catch (_) {
+      // Si no se pudo dejar constancia, el mensaje igual se abrio: no vale
+      // la pena interrumpir al usuario por el registro.
+    }
+  };
+
   return (
     <div className="menu-flotante" ref={contenedorRef}>
       <button
@@ -114,7 +141,29 @@ export default function MenuNotificaciones() {
                   <strong>{a.titulo}</strong>
                   <small>{a.detalle}</small>
                 </span>
-                <span className="aviso__etiqueta">{ETIQUETA_TIPO[a.tipo] || a.tipo}</span>
+                <span className="aviso__acciones">
+                  <span className="aviso__etiqueta">{ETIQUETA_TIPO[a.tipo] || a.tipo}</span>
+                  {a.telefono ? (
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      className={`aviso__wa${enviados.has(a.id) ? ' aviso__wa--enviado' : ''}`}
+                      onClick={(e) => escribirPorWhatsapp(a, e)}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') escribirPorWhatsapp(a, e); }}
+                      title={`Escribirle a ${a.nombreMiembro} por WhatsApp`}
+                    >
+                      <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" fill="currentColor">
+                        <path d="M17.5 14.4c-.3-.2-1.7-.9-2-1s-.5-.1-.7.1-.7 1-.9 1.2-.3.2-.6 0a8 8 0 0 1-2.4-1.5 9 9 0 0 1-1.6-2c-.2-.3 0-.5.1-.6l.5-.6.3-.5v-.5l-1-2.3c-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.8.4-.3.3-1 1-1 2.5s1.1 2.9 1.2 3.1a11.4 11.4 0 0 0 4.4 3.9c.6.2 1.1.4 1.5.5.6.2 1.2.2 1.6.1.5-.1 1.7-.7 1.9-1.4s.2-1.2.2-1.3-.2-.2-.5-.3Z"/>
+                        <path d="M20.5 3.5A10.4 10.4 0 0 0 3.9 16.1L2.5 21.5l5.5-1.4a10.4 10.4 0 0 0 12.5-16.6ZM12 20.2c-1.6 0-3.2-.4-4.5-1.2l-.3-.2-3.3.9.9-3.2-.2-.3a8.6 8.6 0 1 1 7.4 4Z"/>
+                      </svg>
+                      {enviados.has(a.id) ? 'Enviado' : 'WhatsApp'}
+                    </span>
+                  ) : (
+                    <span className="aviso__sin-tel" title="Este miembro no tiene un teléfono válido registrado">
+                      Sin teléfono
+                    </span>
+                  )}
+                </span>
               </button>
             ))}
           </div>
