@@ -230,6 +230,9 @@ export default function CheckinPage() {
       setFrameFlash({ type: 'error', key: Date.now() });
     } finally {
       setSubmitting(false);
+      // Tambien por el formulario manual: el panel se limpia solo y queda
+      // listo para el siguiente, igual que al escanear.
+      prepararSiguiente();
     }
   };
 
@@ -296,14 +299,17 @@ export default function CheckinPage() {
               </div>
             </header>
 
+            {/*
+              Este contenedor NO puede llevar `key` variable. Antes cambiaba en
+              cada lectura para re-disparar la animacion del borde, y cambiar la
+              key hace que React destruya y vuelva a crear todo el subarbol,
+              incluido el <div id="qr-reader"> donde vive el <video>. La camara
+              se quedaba en gris porque la libreria seguia apuntando a un nodo
+              que ya no estaba en la pagina. El destello ahora lo pinta una capa
+              hermana, y el lector no se toca.
+            */}
             <div
-              className={
-                'checkin-frame' +
-                (frameFlash?.type === 'success' ? ' checkin-frame--flash-success' : '') +
-                (frameFlash?.type === 'warning' ? ' checkin-frame--flash-warning' : '')
-              }
-              key={frameFlash ? `frame-${frameFlash.key}` : 'frame-stable'}
-              aria-hidden="true"
+              className="checkin-frame"
               style={{ 
                 minHeight: cameraEnabled ? '400px' : 'auto', 
                 height: cameraEnabled ? '400px' : 'auto',
@@ -320,6 +326,14 @@ export default function CheckinPage() {
                 </>
               ) : (
                 <div id="qr-reader" style={{ width: '100%', height: '100%', minHeight: '400px' }}></div>
+              )}
+
+              {frameFlash && (
+                <span
+                  key={frameFlash.key}
+                  className={`checkin-destello checkin-destello--${frameFlash.type}`}
+                  aria-hidden="true"
+                />
               )}
             </div>
 
