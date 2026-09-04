@@ -1139,3 +1139,294 @@
   .miembro-qr-panel { flex-direction: column; align-items: flex-start; }
   .miembro-qr-panel__acciones .btn { flex: 1 1 auto; justify-content: center; }
 }
+
+/* ==========================================================================
+   Encabezado: identidad del gimnasio, saludo y reloj
+   ========================================================================== */
+
+.admin-header__identidad {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.admin-header__gimnasio {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--on-surface);
+  line-height: 1.15;
+}
+.admin-header__gimnasio .icon { font-size: 19px; color: var(--primary-accent); }
+.admin-header__gimnasio span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-header__saludo { display: flex; flex-direction: column; gap: 1px; }
+
+.admin-header__hola {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--on-surface-variant);
+  line-height: 1.3;
+}
+.admin-header__hola strong { color: var(--on-surface); font-weight: 600; }
+
+.admin-header__fecha {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-family: var(--font-label);
+  font-size: 11.5px;
+  letter-spacing: 0.02em;
+  color: var(--on-label);
+}
+.admin-header__fecha .icon { font-size: 14px; }
+/* Solo la inicial: `capitalize` pondria en mayuscula tambien los "de". */
+.admin-header__dia::first-letter { text-transform: uppercase; }
+/* La hora cambia cada segundo: ancho tabular para que los digitos no bailen. */
+.admin-header__hora { font-variant-numeric: tabular-nums; }
+
+.admin-header__seccion {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 3px 0 0;
+  font-family: var(--font-label);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--on-surface-variant);
+}
+.admin-header__seccion .icon { font-size: 15px; color: var(--primary-accent); }
+
+/* En pantallas estrechas el encabezado ya va apretado: se deja lo esencial. */
+@media (max-width: 720px) {
+  .admin-header__seccion,
+  .admin-header__dia { display: none; }
+  .admin-header__gimnasio { font-size: 15px; }
+}
+
+/* ==========================================================================
+   Menus flotantes del encabezado (avisos y perfil)
+   ========================================================================== */
+
+.menu-flotante { position: relative; }
+
+.menu-flotante__contador {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: var(--primary-accent);
+  color: #1A0B24;
+  font-family: var(--font-label);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 17px;
+  text-align: center;
+}
+
+.menu-flotante__panel {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 80;
+  width: min(340px, calc(100vw - 32px));
+  /* Opaco a proposito: con el cristal translucido del resto de la interfaz se
+     leian por debajo los botones de la pagina y el panel resultaba ilegible. */
+  background: #241E30;
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 20px 44px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+
+.menu-flotante__cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 8px 12px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.menu-flotante__cabecera strong {
+  font-family: var(--font-label);
+  font-size: 11px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--on-label);
+}
+
+.menu-flotante__cuerpo { max-height: 60vh; overflow-y: auto; }
+
+.menu-flotante__vacio {
+  margin: 0;
+  padding: 22px 16px;
+  font-size: 13.5px;
+  color: var(--on-surface-variant);
+  text-align: center;
+}
+
+/* --- Un aviso --- */
+
+.aviso {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  width: 100%;
+  padding: 12px 14px;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.aviso:last-child { border-bottom: 0; }
+.aviso:hover,
+.aviso:focus-visible { background: rgba(255, 255, 255, 0.07); }
+
+.aviso__icono { font-size: 20px; margin-top: 1px; }
+.aviso--vencida    .aviso__icono { color: #F87171; }
+.aviso--por-vencer .aviso__icono { color: var(--primary-accent); }
+.aviso--riesgo     .aviso__icono { color: #FBBF24; }
+
+.aviso__texto { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.aviso__texto strong { font-size: 13.5px; font-weight: 600; line-height: 1.3; }
+.aviso__texto small { font-size: 12px; color: var(--on-surface-variant); }
+
+.aviso__etiqueta {
+  flex-shrink: 0;
+  font-family: var(--font-label);
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.10);
+  color: var(--on-surface-variant);
+}
+
+/* --- Perfil --- */
+
+.menu-perfil__disparador {
+  display: grid;
+  place-items: center;
+  padding: 2px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease-out);
+}
+.menu-perfil__disparador:hover,
+.menu-perfil__disparador:focus-visible { border-color: var(--primary-accent); }
+
+.menu-flotante__panel--perfil { width: min(300px, calc(100vw - 32px)); }
+
+.menu-perfil__ficha {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 16px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.menu-perfil__datos { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.menu-perfil__datos strong { font-size: 15px; font-weight: 700; }
+.menu-perfil__datos small {
+  font-size: 12px;
+  color: var(--on-surface-variant);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.menu-perfil__rol {
+  align-self: flex-start;
+  margin-top: 3px;
+  font-family: var(--font-label);
+  font-size: 10px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: var(--surface-accent);
+  border: 1px solid var(--surface-accent-border);
+  color: var(--on-label);
+}
+
+.menu-perfil__lista { margin: 0; padding: 14px 16px; display: grid; gap: 10px; }
+.menu-perfil__lista > div { display: flex; justify-content: space-between; gap: 12px; }
+.menu-perfil__lista dt {
+  font-family: var(--font-label);
+  font-size: 10.5px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--on-surface-variant);
+}
+.menu-perfil__lista dd {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.menu-perfil__acciones {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 16px 16px;
+  border-top: 1px solid var(--border-subtle);
+}
+.menu-perfil__acciones > * { justify-content: center; }
+
+/* ==========================================================================
+   Check-in: destello sobre el visor
+   --------------------------------------------------------------------------
+   Va en una capa aparte, encima del video, para no tener que re-montar el
+   contenedor del lector cada vez que se registra un ingreso.
+   ========================================================================== */
+
+.checkin-destello {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 2;
+}
+.checkin-destello--success { animation: destelloOk 900ms ease-out both; }
+.checkin-destello--warning { animation: destelloAviso 900ms ease-out both; }
+.checkin-destello--error   { animation: destelloError 900ms ease-out both; }
+
+@keyframes destelloOk {
+  0%   { box-shadow: inset 0 0 0 3px rgba(74, 222, 128, 0.95); background: rgba(74, 222, 128, 0.16); }
+  100% { box-shadow: inset 0 0 0 3px rgba(74, 222, 128, 0);    background: rgba(74, 222, 128, 0); }
+}
+@keyframes destelloAviso {
+  0%   { box-shadow: inset 0 0 0 3px rgba(232, 121, 249, 0.95); background: rgba(232, 121, 249, 0.16); }
+  100% { box-shadow: inset 0 0 0 3px rgba(232, 121, 249, 0);    background: rgba(232, 121, 249, 0); }
+}
+@keyframes destelloError {
+  0%   { box-shadow: inset 0 0 0 3px rgba(248, 113, 113, 0.95); background: rgba(248, 113, 113, 0.16); }
+  100% { box-shadow: inset 0 0 0 3px rgba(248, 113, 113, 0);    background: rgba(248, 113, 113, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .checkin-destello--success,
+  .checkin-destello--warning,
+  .checkin-destello--error { animation-duration: 1ms; }
+}

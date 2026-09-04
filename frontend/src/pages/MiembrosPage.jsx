@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, useRef } from 'react';
 import DatePicker, { registerLocale } from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import { es } from 'date-fns/locale/es';
+import { useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import CardGlass from '../components/CardGlass';
 import BadgeEstado, { estadoDeMiembro } from '../components/BadgeEstado';
@@ -267,6 +268,7 @@ function formularioVacio() {
 }
 
 export default function MiembrosPage() {
+  const [searchParams] = useSearchParams();
   const [items, setItems]   = useState([]);
   const [q, setQ]           = useState('');
   const [filtro, setFiltro] = useState('todos');
@@ -392,7 +394,16 @@ export default function MiembrosPage() {
     }
   };
 
-  useEffect(() => { load(); }, []);
+  /*
+   * Los avisos de la campana llevan a esta pantalla con ?q=<nombre>. Se
+   * respeta esa busqueda en la carga inicial para caer directo en el miembro
+   * del aviso en vez de en la lista completa.
+   */
+  useEffect(() => {
+    const inicial = searchParams.get('q') || '';
+    if (inicial) setQ(inicial);
+    load(inicial);
+  }, [searchParams]);
 
   // Cargar configuración del gimnasio
   const loadGymConfig = async () => {
