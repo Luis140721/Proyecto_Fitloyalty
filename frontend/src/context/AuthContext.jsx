@@ -31,6 +31,8 @@ function normalizeUser(u) {
 
 export function AuthProvider({ children }) {
   const [user, setUser]       = useState(null);
+  // Datos del gimnasio al que pertenece la sesion (nombre, logo, estado).
+  const [gym, setGym]         = useState(null);
   const [loading, setLoading] = useState(true);
   const [ready, setReady]     = useState(false);
 
@@ -42,7 +44,7 @@ export function AuthProvider({ children }) {
       return;
     }
     api.get('/auth/me')
-      .then(({ data }) => setUser(normalizeUser(data.user)))
+      .then(({ data }) => { setUser(normalizeUser(data.user)); setGym(data.gym || null); })
       .catch(() => {
         // Si /auth/me falla (token inválido o backend caído), NO borramos el token
         // a la ligera: podría ser un blip de red y el usuario sigue logueado.
@@ -59,6 +61,7 @@ export function AuthProvider({ children }) {
     if (data.token) {
       localStorage.setItem('fitloyalty_token', data.token);
       setUser(normalizeUser(data.user));
+      setGym(data.gym || null);
     }
     return data.user;
   }, []);
@@ -82,10 +85,11 @@ export function AuthProvider({ children }) {
     try { await api.post('/auth/logout'); } catch (_) {}
     localStorage.removeItem('fitloyalty_token');
     setUser(null);
+    setGym(null);
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, ready, login, register, acceptInvite, logout, api }}>
+    <AuthContext.Provider value={{ user, gym, loading, ready, login, register, acceptInvite, logout, api }}>
       {children}
     </AuthContext.Provider>
   );

@@ -23,6 +23,7 @@ const { AppError } = require('../lib/errors');
 const { requireActiveTrial } = require('../lib/trial');
 const { z } = require('zod');
 const { formatZodError } = require('../lib/validators');
+const { ULTIMO_PLAN } = require('../lib/planes');
 const { sendMemberQR } = require('../lib/email');
 const QRCode = require('qrcode');
 
@@ -478,14 +479,12 @@ router.get(
       );
       if (rows.length === 0) throw new AppError(404, 'Miembro no encontrado.', 'MEMBER_NOT_FOUND');
 
-      // Membresia actual
+      // Plan vigente (vive en plan_cobro, no en la tabla membresia).
       const { rows: mem } = await pool.query(
-        `SELECT m.estado, m.fecha_inicio, m.fecha_fin, p.nombre AS plan
-         FROM membresia m
-         LEFT JOIN plan_membresia p ON p.id_plan = m.id_plan
-         WHERE m.id_miembro = $1
-         ORDER BY m.fecha_fin DESC NULLS LAST
-         LIMIT 1`,
+        `SELECT estado_pago AS estado, fecha_inicio, fecha_fin,
+                INITCAP(LOWER(tipo_plan)) AS plan
+           FROM ${ULTIMO_PLAN} pc
+          WHERE pc.id_miembro = $1`,
         [rows[0].id_miembro]
       );
 
@@ -632,6 +631,116 @@ router.delete(
       console.error('[DELETE /admin/miembros/:id/permanent] Error:', err.message);
       throw new AppError(503, 'No pudimos eliminar el miembro. Intenta de nuevo.', 'DB_UNREACHABLE');
     }
+  })
+);
+
+// ---------------------------------------------------------------------------
+// GET  /api/admin/miembros/:id/plan   -> plan vigente del miembro
+// PUT  /api/admin/miembros/:id/plan   -> cambia o renueva el plan
+// ---------------------------------------------------------------------------
+
+const planSchema = z.object({
+  tipo_plan: z.enum(['MENSUAL', 'TRIMESTRAL', 'SEMESTRAL', 'ANUAL', 'CLASES_SUELTAS', 'ILIMITADO', 'OTRO']),
+  fecha_inicio: z.string().min(10),
+  fecha_fin: z.string().min(10),
+  valor_total: z.coerce.number().min(0),
+  valor_pagado: z.coerce.number().min(0),
+  metodo_pago: z.enum(['EFECTIVO', 'TRANSFERENCIA', 'TARJETA', 'PSE', 'NEQUI', 'DAVIPLATA', 'OTRO']),
+  referencia_pago: z.string().max(80).optional().or(z.literal('')),
+  proxima_fecha_cobro: z.string().optional().or(z.literal('')),
+});
+
+router.get(
+  '/admin/miembros/:id/plan',
+  authenticate,
+  authorize('admin', 'receptionist'),
+  asyncHandler(async (req, res) => {
+    const { rows } = await pool.query(
+      `SELECT pc.id_plan_cobro, pc.tipo_plan, pc.fecha_inicio, pc.fecha_fin,
+              pc.valor_total, pc.valor_pagado, pc.metodo_pago, pc.referencia_pago,
+              pc.estado_pago, pc.proxima_fecha_cobro
+         FROM plan_cobro pc
+         INNER JOIN miembro m ON m.id_miembro = pc.id_miembro
+        WHERE pc.id_miembro = $1 AND m.id_gimnasio = $2 AND pc.activo = TRUE
+        ORDER BY pc.fecha_fin DESC NULLS LAST, pc.id_plan_cobro DESC
+        LIMIT 1`,
+      [req.params.id, req.user.gymId]
+    );
+    return res.json({ plan: rows[0] || null });
+  })
+);
+
+router.put(
+  '/admin/miembros/:id/plan',
+  authenticate,
+  authorize('admin', 'receptionist'),
+  requireActiveTrial(pool),
+  asyncHandler(async (req, res) => {
+    const parsed = parse(planSchema, req.body);
+    if (!parsed.ok) throw new AppError(parsed.status, parsed.error, 'VALIDATION_ERROR', { issues: parsed.issues });
+    const d = parsed.data;
+    const gymId = req.user.gymId;
+
+    if (new Date(d.fecha_fin) < new Date(d.fecha_inicio)) {
+      throw new AppError(400, 'El vencimiento no puede ser anterior al inicio.', 'VALIDATION_ERROR');
+    }
+    if (d.valor_pagado > d.valor_total) {
+      throw new AppError(400, 'Lo pagado no puede superar el valor del plan.', 'VALIDATION_ERROR');
+    }
+
+    // El miembro tiene que ser de ESTE gimnasio: el id llega por la URL y no
+    // se puede confiar en el.
+    const { rows: duenio } = await pool.query(
+      'SELECT id_miembro FROM miembro WHERE id_miembro = $1 AND id_gimnasio = $2',
+      [req.params.id, gymId]
+    );
+    if (duenio.length === 0) throw new AppError(404, 'Miembro no encontrado.', 'MEMBER_NOT_FOUND');
+
+    // El estado del pago se deduce de los valores; no lo manda el cliente.
+    const estado = d.valor_pagado >= d.valor_total && d.valor_total > 0
+      ? 'PAGADO'
+      : d.valor_pagado > 0 ? 'PARCIAL' : 'PENDIENTE';
+
+    const { rows: actual } = await pool.query(
+      `SELECT id_plan_cobro FROM plan_cobro
+        WHERE id_miembro = $1 AND activo = TRUE
+        ORDER BY fecha_fin DESC NULLS LAST, id_plan_cobro DESC LIMIT 1`,
+      [req.params.id]
+    );
+
+    let plan;
+    if (actual.length > 0) {
+      const { rows } = await pool.query(
+        `UPDATE plan_cobro
+            SET tipo_plan = $1, fecha_inicio = $2, fecha_fin = $3, valor_total = $4,
+                valor_pagado = $5, metodo_pago = $6, referencia_pago = $7,
+                estado_pago = $8, proxima_fecha_cobro = $9,
+                actualizado_por = $10, fecha_actualizacion = NOW()
+          WHERE id_plan_cobro = $11
+        RETURNING *`,
+        [d.tipo_plan, d.fecha_inicio, d.fecha_fin, d.valor_total, d.valor_pagado,
+         d.metodo_pago, d.referencia_pago || null, estado, d.proxima_fecha_cobro || null,
+         req.user.id, actual[0].id_plan_cobro]
+      );
+      plan = rows[0];
+    } else {
+      // Un miembro creado antes de que existiera el plan de cobro no tiene
+      // fila: en ese caso se crea en vez de fallar.
+      const { rows } = await pool.query(
+        `INSERT INTO plan_cobro
+           (id_miembro, id_gimnasio, tipo_plan, fecha_inicio, fecha_fin, valor_total,
+            valor_pagado, metodo_pago, referencia_pago, estado_pago, proxima_fecha_cobro,
+            activo, actualizado_por)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,TRUE,$12)
+        RETURNING *`,
+        [req.params.id, gymId, d.tipo_plan, d.fecha_inicio, d.fecha_fin, d.valor_total,
+         d.valor_pagado, d.metodo_pago, d.referencia_pago || null, estado,
+         d.proxima_fecha_cobro || null, req.user.id]
+      );
+      plan = rows[0];
+    }
+
+    return res.json({ message: 'Plan actualizado.', plan });
   })
 );
 

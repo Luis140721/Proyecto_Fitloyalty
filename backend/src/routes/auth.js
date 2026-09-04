@@ -208,7 +208,7 @@ router.post('/login', asyncHandler(async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT u.id_usuario, u.nombre, u.email, u.password_hash, u.id_gimnasio, u.activo,
-              g.activo AS gym_activo, g.trial_ends_at,
+              g.activo AS gym_activo, g.trial_ends_at, g.nombre AS gym_nombre, g.logo_url AS gym_logo,
               CASE WHEN u.id_rol = 1 THEN 'ADMINISTRADOR'
                    WHEN u.id_rol = 2 THEN 'RECEPCIONISTA'
                    WHEN u.id_rol = 3 THEN 'ENTRENADOR'
@@ -249,6 +249,8 @@ router.post('/login', asyncHandler(async (req, res) => {
     user: usuarioSeguro(usuario),
     gym: {
       id: usuario.id_gimnasio,
+      name: usuario.gym_nombre,
+      logoUrl: usuario.gym_logo,
       trialEndsAt: usuario.trial_ends_at,
       active: usuario.gym_activo,
     },
@@ -261,7 +263,8 @@ router.post('/login', asyncHandler(async (req, res) => {
 router.get('/me', authenticate, asyncHandler(async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT u.*, g.activo AS gym_activo, g.trial_ends_at
+      `SELECT u.*, g.activo AS gym_activo, g.trial_ends_at,
+              g.nombre AS gym_nombre, g.logo_url AS gym_logo
        FROM usuario u
        INNER JOIN gimnasio g ON g.id_gimnasio = u.id_gimnasio
        WHERE u.id_usuario = $1 AND u.activo = TRUE`,
@@ -271,7 +274,13 @@ router.get('/me', authenticate, asyncHandler(async (req, res) => {
     if (!u) throw new AppError(404, 'Usuario no encontrado', 'USER_NOT_FOUND');
     return res.json({
       user: usuarioSeguro(u),
-      gym: { id: u.id_gimnasio, active: u.gym_activo, trialEndsAt: u.trial_ends_at },
+      gym: {
+        id: u.id_gimnasio,
+        name: u.gym_nombre,
+        logoUrl: u.gym_logo,
+        active: u.gym_activo,
+        trialEndsAt: u.trial_ends_at,
+      },
     });
   } catch (err) {
     if (err instanceof AppError) throw err;

@@ -13,6 +13,7 @@ const express = require('express');
 const pool = require('../db/db');
 const { authenticate, authorize } = require('../middleware/auth');
 const asyncHandler = require('../lib/asyncHandler');
+const { ULTIMO_PLAN } = require('../lib/planes');
 const { AppError } = require('../lib/errors');
 const { requireActiveTrial } = require('../lib/trial');
 
@@ -127,11 +128,18 @@ router.get(
           WHERE id_gimnasio = $1 AND valido = TRUE AND fecha_hora::date = CURRENT_DATE`,
         [gymId]
       );
+      /*
+       * Los planes de los miembros viven en `plan_cobro`, que es donde escribe
+       * el alta. Las tablas `membresia` y `pago` del diseno original quedaron
+       * sin conectar, y por leer de ellas estas tarjetas mostraban cero
+       * siempre, incluso con el gimnasio lleno.
+       */
       const vencen7 = await pool.query(
-        `SELECT COUNT(*)::int AS total FROM membresia m
-          INNER JOIN miembro mb ON mb.id_miembro = m.id_miembro
-          WHERE mb.id_gimnasio = $1 AND m.estado = 'ACTIVA'
-            AND m.fecha_fin BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '7 days'`,
+        `SELECT COUNT(*)::int AS total
+           FROM ${ULTIMO_PLAN} pc
+           INNER JOIN miembro mb ON mb.id_miembro = pc.id_miembro
+          WHERE mb.id_gimnasio = $1 AND mb.activo = TRUE
+            AND pc.fecha_fin BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '7 days'`,
         [gymId]
       );
       const activos90 = await pool.query(
@@ -159,19 +167,18 @@ router.get(
       const enRiesgoList = await pool.query(
         `SELECT m.nombre::text AS nombre,
                 (CURRENT_DATE - MAX(c.fecha_hora)::date)::int AS dias_sin,
-                COALESCE(p.precio, 89900)::int AS monto
+                COALESCE(p.valor_total, 89900)::int AS monto
            FROM miembro m
            LEFT JOIN checkin c ON c.id_miembro = m.id_miembro
            LEFT JOIN LATERAL (
-             SELECT me.fecha_fin, me.id_plan
-               FROM membresia me
-              WHERE me.id_miembro = m.id_miembro
-              ORDER BY me.fecha_fin DESC
+             SELECT pc.valor_total
+               FROM plan_cobro pc
+              WHERE pc.id_miembro = m.id_miembro AND pc.activo = TRUE
+              ORDER BY pc.fecha_fin DESC NULLS LAST, pc.id_plan_cobro DESC
               LIMIT 1
-           ) lastm ON TRUE
-           LEFT JOIN plan_membresia p ON p.id_plan = lastm.id_plan
+           ) p ON TRUE
           WHERE m.id_gimnasio = $1 AND m.activo = TRUE
-          GROUP BY m.id_miembro, m.nombre, p.precio
+          GROUP BY m.id_miembro, m.nombre, p.valor_total
          HAVING MAX(c.fecha_hora) IS NULL OR MAX(c.fecha_hora) < NOW() - INTERVAL '15 days'
           ORDER BY dias_sin DESC NULLS FIRST
           LIMIT 4`,
@@ -194,14 +201,14 @@ router.get(
       }
 
       const proximos = await pool.query(
-        `SELECT mb.id_miembro, mb.nombre AS miembro, mb.documento, p.nombre AS plan, me.fecha_fin,
-                (me.fecha_fin - CURRENT_DATE)::int AS dias_restantes
-           FROM membresia me
-           INNER JOIN miembro mb ON mb.id_miembro = me.id_miembro
-           INNER JOIN plan_membresia p ON p.id_plan = me.id_plan
-          WHERE mb.id_gimnasio = $1 AND me.estado = 'ACTIVA'
-            AND me.fecha_fin BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '30 days'
-          ORDER BY me.fecha_fin ASC LIMIT 8`,
+        `SELECT mb.id_miembro, mb.nombre AS miembro, mb.documento,
+                INITCAP(LOWER(pc.tipo_plan)) AS plan, pc.fecha_fin,
+                (pc.fecha_fin - CURRENT_DATE)::int AS dias_restantes
+           FROM ${ULTIMO_PLAN} pc
+           INNER JOIN miembro mb ON mb.id_miembro = pc.id_miembro
+          WHERE mb.id_gimnasio = $1 AND mb.activo = TRUE
+            AND pc.fecha_fin BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '30 days'
+          ORDER BY pc.fecha_fin ASC LIMIT 8`,
         [gymId]
       );
 
@@ -215,37 +222,36 @@ router.get(
       );
 
       // Cobros del mes (pagos PAGADOS dentro del mes actual).
+      // Lo efectivamente recaudado este mes, segun lo abonado en cada plan.
       const ingresosMes = await pool.query(
-        `SELECT COALESCE(SUM(p.monto), 0)::int AS total
-           FROM pago p
-           INNER JOIN membresia me ON me.id_membresia = p.id_membresia
-           INNER JOIN miembro mb ON mb.id_miembro = me.id_miembro
-          WHERE mb.id_gimnasio = $1
-            AND p.estado = 'PAGADO'
-            AND p.fecha_pago >= date_trunc('month', CURRENT_DATE)
-            AND p.fecha_pago <  date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'`,
+        `SELECT COALESCE(SUM(pc.valor_pagado), 0)::int AS total
+           FROM plan_cobro pc
+           INNER JOIN miembro mb ON mb.id_miembro = pc.id_miembro
+          WHERE mb.id_gimnasio = $1 AND pc.activo = TRUE
+            AND pc.fecha_creacion >= date_trunc('month', CURRENT_DATE)
+            AND pc.fecha_creacion <  date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'`,
         [gymId]
       );
 
       // Cobros pendientes (cualquier mes).
+      // Planes con saldo: los que quedaron pendientes o pagados a medias.
       const cobrosPendientes = await pool.query(
         `SELECT COUNT(*)::int AS total
-           FROM pago p
-           INNER JOIN membresia me ON me.id_membresia = p.id_membresia
-           INNER JOIN miembro mb ON mb.id_miembro = me.id_miembro
-          WHERE mb.id_gimnasio = $1 AND p.estado = 'PENDIENTE'`,
+           FROM ${ULTIMO_PLAN} pc
+           INNER JOIN miembro mb ON mb.id_miembro = pc.id_miembro
+          WHERE mb.id_gimnasio = $1 AND mb.activo = TRUE
+            AND pc.estado_pago IN ('PENDIENTE', 'PARCIAL')`,
         [gymId]
       );
 
       // Plan mas vendido entre membresias activas.
       const planTop = await pool.query(
-        `SELECT p.nombre::text AS plan, COUNT(*)::int AS cnt
-           FROM membresia me
-           INNER JOIN plan_membresia p ON p.id_plan = me.id_plan
-           INNER JOIN miembro mb ON mb.id_miembro = me.id_miembro
-          WHERE mb.id_gimnasio = $1 AND me.estado = 'ACTIVA'
-          GROUP BY p.id_plan, p.nombre
-          ORDER BY cnt DESC, p.nombre ASC
+        `SELECT INITCAP(LOWER(pc.tipo_plan))::text AS plan, COUNT(*)::int AS cnt
+           FROM plan_cobro pc
+           INNER JOIN miembro mb ON mb.id_miembro = pc.id_miembro
+          WHERE mb.id_gimnasio = $1 AND mb.activo = TRUE AND pc.activo = TRUE
+          GROUP BY pc.tipo_plan
+          ORDER BY cnt DESC, plan ASC
           LIMIT 1`,
         [gymId]
       );
@@ -293,16 +299,14 @@ router.get(
                 mb.documento::text     AS documento,
                 COALESCE(mb.telefono::text, '')  AS telefono,
                 COALESCE(mb.email::text, '')     AS email,
-                p.nombre::text         AS plan,
-                me.fecha_fin::text     AS fecha_fin,
-                (me.fecha_fin - CURRENT_DATE)::int AS dias_restantes
+                INITCAP(LOWER(pc.tipo_plan))::text AS plan,
+                pc.fecha_fin::text     AS fecha_fin,
+                (pc.fecha_fin - CURRENT_DATE)::int AS dias_restantes
            FROM miembro mb
-           INNER JOIN membresia me ON me.id_miembro = mb.id_miembro
-           INNER JOIN plan_membresia p ON p.id_plan = me.id_plan
+           INNER JOIN ${ULTIMO_PLAN} pc ON pc.id_miembro = mb.id_miembro
           WHERE mb.id_gimnasio = $1
             AND mb.activo = TRUE
-            AND me.estado = 'ACTIVA'
-          ORDER BY me.fecha_fin ASC`,
+          ORDER BY pc.fecha_fin ASC`,
         [gymId]
       );
 

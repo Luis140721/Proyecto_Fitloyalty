@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, useRef } from 'react';
 import DatePicker, { registerLocale } from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import { es } from 'date-fns/locale/es';
+import { useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import CardGlass from '../components/CardGlass';
 import BadgeEstado, { estadoDeMiembro } from '../components/BadgeEstado';
@@ -274,6 +275,7 @@ function formularioVacio(gymConfig) {
 }
 
 export default function MiembrosPage() {
+  const [searchParams] = useSearchParams();
   const [items, setItems]   = useState([]);
   const [q, setQ]           = useState('');
   const [filtro, setFiltro] = useState('todos');
@@ -285,6 +287,12 @@ export default function MiembrosPage() {
   const [editError, setEditError] = useState('');
   const [editLoading, setEditLoading] = useState(false);
   const [editQr, setEditQr] = useState('');      // imagen del QR en el detalle
+  // Plan del miembro que se esta editando. Va aparte del resto de la ficha
+  // porque vive en otra tabla y se guarda con su propia peticion.
+  const [planForm, setPlanForm] = useState(null);
+  const [planGuardando, setPlanGuardando] = useState(false);
+  const [planMsg, setPlanMsg] = useState('');
+  const [planError, setPlanError] = useState('');
   const [qrCopiado, setQrCopiado] = useState(false);
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
@@ -399,7 +407,16 @@ export default function MiembrosPage() {
     }
   };
 
-  useEffect(() => { load(); }, []);
+  /*
+   * Los avisos de la campana llevan a esta pantalla con ?q=<nombre>. Se
+   * respeta esa busqueda en la carga inicial para caer directo en el miembro
+   * del aviso en vez de en la lista completa.
+   */
+  useEffect(() => {
+    const inicial = searchParams.get('q') || '';
+    if (inicial) setQ(inicial);
+    load(inicial);
+  }, [searchParams]);
 
   // Cargar configuración del gimnasio
   const loadGymConfig = async () => {
@@ -544,15 +561,18 @@ export default function MiembrosPage() {
       return sig;
     });
 
-    // Si cambia tipo de plan, sugerir valor desde configuración
+    /*
+     * Al cambiar el plan se propone el precio que el gimnasio tenga
+     * configurado. Solo si hay uno de verdad: el valor llega como cadena
+     * ("0.00"), y una cadena vacia de contenido sigue siendo "verdadera" en
+     * JavaScript, asi que un `if (valor)` a secas ponia el precio en cero y
+     * borraba lo que el usuario habia escrito.
+     */
     if (field === 'tipo_plan' && gymConfig) {
-      const valorKey = `plan_${value.toLowerCase()}_valor`;
-      const valorSugerido = gymConfig[valorKey] || 0;
-      newForm.valor_total = valorSugerido.toString();
-      console.log(`Plan cambiado a ${value}, valor sugerido: ${valorSugerido}`);
-      // Mostrar mensaje informativo temporal
-      setInfo(`Valor sugerido según configuración: $${valorSugerido.toLocaleString('es-CO')}`);
-      setTimeout(() => setInfo(''), 3000);
+      const sugerido = Number(gymConfig[`plan_${String(value).toLowerCase()}_valor`]);
+      if (Number.isFinite(sugerido) && sugerido > 0) {
+        newForm.valor_total = String(Math.round(sugerido));
+      }
     }
     
     // Si cambian valores de pago, recalcular estado
@@ -694,10 +714,93 @@ export default function MiembrosPage() {
         try { setEditQr(await QRCode.toDataURL(full.codigo_qr)); }
         catch (_) { /* si falla el dibujo, igual mostramos el codigo en texto */ }
       }
+      await cargarPlan(m.id_miembro);
     } catch (err) {
       setEditError(err.message || 'No pudimos cargar los datos completos del miembro.');
     } finally {
       setEditLoading(false);
+    }
+  };
+
+  /** Trae el plan vigente del miembro y lo pasa al formato del formulario. */
+  const cargarPlan = async (idMiembro) => {
+    setPlanError(''); setPlanMsg('');
+    try {
+      const { data } = await api.get(`/admin/miembros/${idMiembro}/plan`);
+      const p = data.plan;
+      setPlanForm({
+        tipo_plan: p?.tipo_plan || 'MENSUAL',
+        fecha_inicio: p?.fecha_inicio ? fechaATexto(new Date(p.fecha_inicio)) : hoyEnTexto(),
+        fecha_fin: p?.fecha_fin ? fechaATexto(new Date(p.fecha_fin)) : '',
+        valor_total: p?.valor_total != null ? String(Math.round(Number(p.valor_total))) : '',
+        valor_pagado: p?.valor_pagado != null ? String(Math.round(Number(p.valor_pagado))) : '0',
+        metodo_pago: p?.metodo_pago || 'EFECTIVO',
+        referencia_pago: p?.referencia_pago || '',
+        estado_pago: p?.estado_pago || 'PENDIENTE',
+        existe: Boolean(p),
+      });
+    } catch (err) {
+      setPlanError('No pudimos cargar el plan de este miembro.');
+      setPlanForm(null);
+    }
+  };
+
+  /**
+   * Cambia un campo del plan y recalcula lo que depende de el: el vencimiento
+   * sale del tipo de plan, y el estado del pago de los valores. Igual que en
+   * el alta, para que las dos pantallas se comporten igual.
+   */
+  const cambiarPlan = (campo, valor) => {
+    setPlanMsg('');
+    setPlanForm((prev) => {
+      const sig = { ...prev, [campo]: valor };
+      if (campo === 'tipo_plan' || campo === 'fecha_inicio') {
+        sig.fecha_fin = calcularFechaFin(sig.tipo_plan, sig.fecha_inicio);
+      }
+      if (campo === 'tipo_plan' && gymConfig) {
+        // Mismo cuidado que en el alta: solo se propone un precio real.
+        const sugerido = Number(gymConfig[`plan_${String(valor).toLowerCase()}_valor`]);
+        if (Number.isFinite(sugerido) && sugerido > 0) {
+          sig.valor_total = String(Math.round(sugerido));
+        }
+      }
+      sig.estado_pago = determinarEstadoPago(sig.valor_total, sig.valor_pagado);
+      return sig;
+    });
+  };
+
+  const guardarPlan = async () => {
+    if (!planForm || !editing) return;
+    setPlanError(''); setPlanMsg('');
+
+    const inicio = textoAFecha(planForm.fecha_inicio);
+    const fin = textoAFecha(planForm.fecha_fin);
+    if (!inicio) return setPlanError('La fecha de inicio no es valida. Usa DD/MM/AAAA.');
+    if (!fin) return setPlanError('La fecha de vencimiento no es valida. Usa DD/MM/AAAA.');
+    if (fin < inicio) return setPlanError('El vencimiento no puede ser anterior al inicio.');
+    if (Number(planForm.valor_pagado) > Number(planForm.valor_total)) {
+      return setPlanError('Lo pagado no puede superar el valor del plan.');
+    }
+
+    setPlanGuardando(true);
+    try {
+      await api.put(`/admin/miembros/${editing.id_miembro}/plan`, {
+        tipo_plan: planForm.tipo_plan,
+        fecha_inicio: convertToISODate(planForm.fecha_inicio),
+        fecha_fin: convertToISODate(planForm.fecha_fin),
+        valor_total: Number(planForm.valor_total) || 0,
+        valor_pagado: Number(planForm.valor_pagado) || 0,
+        metodo_pago: planForm.metodo_pago,
+        referencia_pago: planForm.referencia_pago || '',
+        proxima_fecha_cobro: convertToISODate(calcularProximaFechaCobro(planForm.fecha_fin)),
+      });
+      setPlanMsg('Plan actualizado.');
+      await cargarPlan(editing.id_miembro);
+      await load(q, filtro === 'desactivados');
+    } catch (err) {
+      setPlanError(err.message || 'No pudimos guardar el plan.');
+    } finally {
+      setPlanGuardando(false);
     }
   };
 
@@ -717,6 +820,8 @@ export default function MiembrosPage() {
   const closeEdit = () => {
     if (editSaving) return;
     setEditing(null);
+    setPlanForm(null);
+    setPlanMsg(''); setPlanError('');
     setEditForm(empty);
     setEditError('');
     setEditQr('');
@@ -1668,6 +1773,118 @@ export default function MiembrosPage() {
             <p className="field-hint" style={{ marginBottom: 12 }}>
               Cargando los datos completos del miembro…
             </p>
+          )}
+
+          {/* --- Plan del miembro ------------------------------------------
+              Vive en otra tabla, asi que tiene su propio boton de guardar y
+              no viaja con el resto de la ficha. */}
+          {planForm && (
+            <section className="plan-editor">
+              <header className="plan-editor__cabecera">
+                <div>
+                  <h4>Plan y cobro</h4>
+                  <p>
+                    {planForm.existe
+                      ? 'Cambia el plan, renueva el vencimiento o registra un pago.'
+                      : 'Este miembro aún no tiene plan. Créale uno acá.'}
+                  </p>
+                </div>
+                <span className={`plan-editor__estado plan-editor__estado--${planForm.estado_pago.toLowerCase()}`}>
+                  {planForm.estado_pago}
+                </span>
+              </header>
+
+              <div className="auth-form-row">
+                <label className="field">
+                  <span className="field-label">Tipo de plan</span>
+                  <select
+                    className="field-input"
+                    value={planForm.tipo_plan}
+                    onChange={(e) => cambiarPlan('tipo_plan', e.target.value)}
+                  >
+                    {TIPOS_PLAN.map((t) => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </label>
+                <label className="field">
+                  <span className="field-label">Inicio</span>
+                  <CampoFecha
+                    value={planForm.fecha_inicio}
+                    onChange={(v) => cambiarPlan('fecha_inicio', v)}
+                    anosAtras={5}
+                  />
+                </label>
+              </div>
+
+              <div className="auth-form-row">
+                <label className="field">
+                  <span className="field-label">Vence</span>
+                  <CampoFecha
+                    value={planForm.fecha_fin}
+                    onChange={(v) => cambiarPlan('fecha_fin', v)}
+                    anosAtras={5}
+                  />
+                  <span className="field-hint">Se calcula sola al cambiar el plan, pero puedes ajustarla.</span>
+                </label>
+                <label className="field">
+                  <span className="field-label">Valor del plan</span>
+                  <input
+                    className="field-input"
+                    type="number"
+                    min="0"
+                    value={planForm.valor_total}
+                    onChange={(e) => cambiarPlan('valor_total', e.target.value)}
+                    placeholder="0"
+                  />
+                </label>
+              </div>
+
+              <div className="auth-form-row">
+                <label className="field">
+                  <span className="field-label">Valor pagado</span>
+                  <input
+                    className="field-input"
+                    type="number"
+                    min="0"
+                    value={planForm.valor_pagado}
+                    onChange={(e) => cambiarPlan('valor_pagado', e.target.value)}
+                    placeholder="0"
+                  />
+                </label>
+                <label className="field">
+                  <span className="field-label">Método de pago</span>
+                  <select
+                    className="field-input"
+                    value={planForm.metodo_pago}
+                    onChange={(e) => cambiarPlan('metodo_pago', e.target.value)}
+                  >
+                    {METODOS_PAGO.map((m) => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                </label>
+              </div>
+
+              <label className="field">
+                <span className="field-label">Referencia o comprobante</span>
+                <input
+                  className="field-input"
+                  value={planForm.referencia_pago}
+                  onChange={(e) => cambiarPlan('referencia_pago', e.target.value)}
+                  placeholder="Número de transacción, recibo…"
+                />
+              </label>
+
+              {planError && <p className="field-error">{planError}</p>}
+              {planMsg && <p className="field-ok">{planMsg}</p>}
+
+              <button
+                type="button"
+                className="btn btn-primary btn-sm plan-editor__guardar"
+                onClick={guardarPlan}
+                disabled={planGuardando}
+              >
+                <span className="material-symbols-outlined icon">savings</span>
+                {planGuardando ? 'Guardando…' : 'Guardar plan'}
+              </button>
+            </section>
           )}
 
           <div className="auth-form-row">
