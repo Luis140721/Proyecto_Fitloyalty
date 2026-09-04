@@ -263,15 +263,8 @@ function SkeletonRows({ cols, rows = 6 }) {
  * abrir el formulario, no cuando se cargo el modulo. Si no, una pestana
  * abierta desde ayer propondria la fecha de ayer.
  */
-function formularioVacio(gymConfig) {
-  const baseForm = { ...empty, fecha_inicio: hoyEnTexto() };
-  
-  // Si hay configuración y el plan por defecto es MENSUAL, sugerir el valor
-  if (gymConfig && gymConfig.plan_mensual_valor) {
-    baseForm.valor_total = gymConfig.plan_mensual_valor.toString();
-  }
-  
-  return baseForm;
+function formularioVacio() {
+  return { ...empty, fecha_inicio: hoyEnTexto() };
 }
 
 export default function MiembrosPage() {
@@ -280,7 +273,7 @@ export default function MiembrosPage() {
   const [q, setQ]           = useState('');
   const [filtro, setFiltro] = useState('todos');
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState(() => formularioVacio(null));
+  const [form, setForm] = useState(formularioVacio);
   const [editing, setEditing] = useState(null);
   const [editForm, setEditForm] = useState(empty);
   const [editSaving, setEditSaving] = useState(false);
@@ -423,20 +416,12 @@ export default function MiembrosPage() {
     try {
       const { data } = await api.get('/admin/config');
       setGymConfig(data.config);
-      console.log('Configuración del gimnasio cargada:', data.config);
     } catch (err) {
       console.error('No se pudo cargar la configuración del gimnasio:', err);
     }
   };
 
   useEffect(() => { loadGymConfig(); }, []);
-
-  // Cuando se abre el modal de creación, asegurar que la configuración esté cargada
-  useEffect(() => {
-    if (open && !gymConfig) {
-      loadGymConfig();
-    }
-  }, [open]);
 
   const onSearch = (e) => { e.preventDefault(); load(q, filtro === 'desactivados' ? true : false); };
 
@@ -535,18 +520,6 @@ export default function MiembrosPage() {
     if (fin === form.fecha_fin && proxima === form.proxima_fecha_cobro) return;
     setForm((f) => ({ ...f, fecha_fin: fin, proxima_fecha_cobro: proxima }));
   }, [form.tipo_plan, form.fecha_inicio, form.fecha_fin, form.proxima_fecha_cobro]);
-
-  // Sugerir valor del plan cuando se carga la configuración y el formulario está vacío
-  useEffect(() => {
-    if (gymConfig && form.tipo_plan && !form.valor_total) {
-      const valorKey = `plan_${form.tipo_plan.toLowerCase()}_valor`;
-      const valorSugerido = gymConfig[valorKey] || 0;
-      if (valorSugerido > 0) {
-        setForm((f) => ({ ...f, valor_total: valorSugerido.toString() }));
-        console.log(`Valor sugerido aplicado para ${form.tipo_plan}: ${valorSugerido}`);
-      }
-    }
-  }, [gymConfig, form.tipo_plan]);
 
   // Manejar cambios en campos que afectan cálculos automáticos
   const handleFormChange = (field, value) => {
@@ -661,7 +634,7 @@ export default function MiembrosPage() {
       setCreatedMember(data.miembro);
       setQrImage(qrImageUrl);
       setShowQRModal(true);
-      setForm(formularioVacio(gymConfig));
+      setForm(formularioVacio());
       setOpen(false);
       load(q);
       setInfo('Miembro creado exitosamente.');
@@ -959,95 +932,6 @@ export default function MiembrosPage() {
           </div>
 
           <form className="auth-form" onSubmit={onSubmit} noValidate style={{ maxWidth: 900 }}>
-            {/* Configuración del gimnasio - visible en todas las secciones */}
-            {gymConfig && (
-              <div style={{ 
-                marginBottom: 24, 
-                padding: 16, 
-                background: 'var(--surface-container-low)', 
-                borderRadius: 'var(--radius)', 
-                border: '1px solid var(--border-subtle)',
-                fontSize: 13
-              }}>
-                <div style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: 8, 
-                  marginBottom: 12,
-                  color: 'var(--primary)',
-                  fontWeight: 600,
-                  fontSize: 14
-                }}>
-                  <span className="material-symbols-outlined icon">settings</span>
-                  Configuración del Gimnasio - Precios de Planes
-                </div>
-                <div style={{ 
-                  display: 'grid', 
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', 
-                  gap: 12 
-                }}>
-                  {gymConfig.plan_mensual_valor !== undefined && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ color: 'var(--on-surface-variant)' }}>Mensual:</span>
-                      <span style={{ fontWeight: 600, color: 'var(--on-surface)' }}>
-                        ${Number(gymConfig.plan_mensual_valor).toLocaleString('es-CO')}
-                      </span>
-                    </div>
-                  )}
-                  {gymConfig.plan_trimestral_valor !== undefined && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ color: 'var(--on-surface-variant)' }}>Trimestral:</span>
-                      <span style={{ fontWeight: 600, color: 'var(--on-surface)' }}>
-                        ${Number(gymConfig.plan_trimestral_valor).toLocaleString('es-CO')}
-                      </span>
-                    </div>
-                  )}
-                  {gymConfig.plan_semestral_valor !== undefined && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ color: 'var(--on-surface-variant)' }}>Semestral:</span>
-                      <span style={{ fontWeight: 600, color: 'var(--on-surface)' }}>
-                        ${Number(gymConfig.plan_semestral_valor).toLocaleString('es-CO')}
-                      </span>
-                    </div>
-                  )}
-                  {gymConfig.plan_anual_valor !== undefined && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ color: 'var(--on-surface-variant)' }}>Anual:</span>
-                      <span style={{ fontWeight: 600, color: 'var(--on-surface)' }}>
-                        ${Number(gymConfig.plan_anual_valor).toLocaleString('es-CO')}
-                      </span>
-                    </div>
-                  )}
-                  {gymConfig.plan_clases_suelta_valor !== undefined && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ color: 'var(--on-surface-variant)' }}>Clases Sueltas:</span>
-                      <span style={{ fontWeight: 600, color: 'var(--on-surface)' }}>
-                        ${Number(gymConfig.plan_clases_suelta_valor).toLocaleString('es-CO')}
-                      </span>
-                    </div>
-                  )}
-                  {gymConfig.plan_ilimitado_valor !== undefined && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ color: 'var(--on-surface-variant)' }}>Ilimitado:</span>
-                      <span style={{ fontWeight: 600, color: 'var(--on-surface)' }}>
-                        ${Number(gymConfig.plan_ilimitado_valor).toLocaleString('es-CO')}
-                      </span>
-                    </div>
-                  )}
-                </div>
-                <div style={{ 
-                  marginTop: 12, 
-                  paddingTop: 12, 
-                  borderTop: '1px solid var(--border-subtle)',
-                  fontSize: 11,
-                  color: 'var(--on-surface-variant)',
-                  fontStyle: 'italic'
-                }}>
-                  Estos valores se sugieren automáticamente al seleccionar el tipo de plan en la sección "Plan y cobros".
-                </div>
-              </div>
-            )}
-
             {/* A) Datos personales */}
             {activeSection === 'personales' && (
               <div className="form-section anim-fade-up">
@@ -1254,37 +1138,14 @@ export default function MiembrosPage() {
                   </label>
                   <label className="field">
                     <span className="field-label">Valor total del plan *</span>
-                    <div style={{ position: 'relative' }}>
-                      <input
-                        className="field-input"
-                        type="number"
-                        required value={form.valor_total}
-                        onChange={(e) => handleFormChange('valor_total', e.target.value)}
-                        placeholder="0.00"
-                        step="0.01"
-                        style={{ 
-                          paddingRight: gymConfig && form.tipo_plan ? '120px' : '16px',
-                          background: gymConfig && form.tipo_plan ? 'var(--surface-container-low)' : 'white'
-                        }}
-                      />
-                      {gymConfig && form.tipo_plan && (
-                        <div style={{ 
-                          position: 'absolute', 
-                          right: 8, 
-                          top: '50%', 
-                          transform: 'translateY(-50%)',
-                          fontSize: 11,
-                          color: 'var(--primary)',
-                          fontWeight: 600,
-                          background: 'var(--primary-container)',
-                          padding: '4px 8px',
-                          borderRadius: 4,
-                          pointerEvents: 'none'
-                        }}>
-                          Sugerido
-                        </div>
-                      )}
-                    </div>
+                    <input
+                      className="field-input"
+                      type="number"
+                      required value={form.valor_total}
+                      onChange={(e) => handleFormChange('valor_total', e.target.value)}
+                      placeholder="0.00"
+                      step="0.01"
+                    />
                   </label>
                 </div>
                 <div className="auth-form-row">
@@ -1554,10 +1415,7 @@ export default function MiembrosPage() {
                       titulo="Sin miembros que mostrar"
                       descripcion="No hay miembros que coincidan con el filtro actual."
                       ctaLabel="Nuevo miembro"
-                      onCta={() => {
-                        setOpen(true);
-                        setForm(formularioVacio(gymConfig));
-                      }}
+                      onCta={() => setOpen(true)}
                     />
                   </td>
                 </tr>
@@ -1645,10 +1503,7 @@ export default function MiembrosPage() {
               titulo="Sin miembros que mostrar"
               descripcion="No hay miembros que coincidan con el filtro actual."
               ctaLabel="Nuevo miembro"
-              onCta={() => {
-                setOpen(true);
-                setForm(formularioVacio(gymConfig));
-              }}
+              onCta={() => setOpen(true)}
             />
           )}
           {filtrados.map((m) => {

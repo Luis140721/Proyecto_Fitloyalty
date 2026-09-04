@@ -802,9 +802,8 @@
 
 .checkin-frame {
   position: relative;
+  aspect-ratio: 16 / 9;
   width: 100%;
-  min-height: 300px;
-  max-height: 60vh;
   border-radius: var(--radius-lg);
   border: 1px dashed var(--primary);
   /* Sin rayas diagonales: fondo plano. */
@@ -813,43 +812,6 @@
   display: grid;
   place-items: center;
   transition: border-color 200ms var(--ease-out), box-shadow 200ms var(--ease-out);
-}
-
-/* Responsive improvements para camera */
-@media (max-width: 768px) {
-  .checkin-frame {
-    min-height: 250px;
-    max-height: 50vh;
-  }
-}
-
-@media (max-width: 480px) {
-  .checkin-frame {
-    min-height: 200px;
-    max-height: 45vh;
-  }
-}
-
-/* Estilos específicos para el contenedor de la cámara QR */
-.checkin-frame #qr-reader {
-  width: 100% !important;
-  height: 100% !important;
-  min-height: inherit;
-  max-height: inherit;
-}
-
-.checkin-frame #qr-reader video {
-  width: 100% !important;
-  height: 100% !important;
-  object-fit: cover !important;
-  border-radius: var(--radius-lg);
-}
-
-.checkin-frame #qr-reader__scan_region {
-  width: 100% !important;
-  height: 100% !important;
-  overflow: hidden !important;
-  border-radius: var(--radius-lg);
 }
 .checkin-frame__scan {
   position: absolute;
