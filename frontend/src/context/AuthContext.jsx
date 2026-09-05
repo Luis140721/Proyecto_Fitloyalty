@@ -45,11 +45,22 @@ export function AuthProvider({ children }) {
     }
     api.get('/auth/me')
       .then(({ data }) => { setUser(normalizeUser(data.user)); setGym(data.gym || null); })
-      .catch(() => {
-        // Si /auth/me falla (token inválido o backend caído), NO borramos el token
-        // a la ligera: podría ser un blip de red y el usuario sigue logueado.
-        // Solo limpiamos si el backend responde 401/403 explícitamente.
-        // El backend devuelve 401 cuando el token no es válido.
+      .catch((err) => {
+        /*
+         * Un fallo de red no debe cerrar la sesion: puede ser un bajon de
+         * conexion y el usuario sigue siendo quien dice ser. Pero si el
+         * servidor responde que el token no sirve (401/403) o que ese usuario
+         * ya no existe (404), el token esta muerto y hay que soltarlo.
+         *
+         * Antes el catch estaba vacio, asi que un token muerto se quedaba
+         * guardado para siempre y la aplicacion devolvia al login una y otra
+         * vez sin explicar por que.
+         */
+        if ([401, 403, 404].includes(err?.status)) {
+          localStorage.removeItem('fitloyalty_token');
+          setUser(null);
+          setGym(null);
+        }
       })
       .finally(() => {
         setLoading(false);
