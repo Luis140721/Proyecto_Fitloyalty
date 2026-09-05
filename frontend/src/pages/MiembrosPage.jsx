@@ -1454,7 +1454,7 @@ export default function MiembrosPage() {
                 <th>Documento</th>
                 <th>Contacto</th>
                 <th>QR</th>
-                <th>Estado</th>
+                <th className="col-estado">Estado</th>
                 <th aria-label="Acciones" />
               </tr>
             </thead>
@@ -1511,7 +1511,7 @@ export default function MiembrosPage() {
                         {m.codigo_qr}
                       </code>
                     </td>
-                    <td>
+                    <td className="col-estado">
                       <div className="celda-estado">
                         <BadgeEstado estado={estadoDeMiembro(m)} />
                         <BotonWhatsapp m={m} />
