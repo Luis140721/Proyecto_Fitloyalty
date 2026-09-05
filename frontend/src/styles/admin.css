@@ -1528,3 +1528,55 @@
 .plan-editor__estado--pendiente { background: rgba(248, 113, 113, 0.16); color: #F87171; }
 
 .plan-editor__guardar { margin-top: 14px; }
+
+/* ==========================================================================
+   Estado del miembro en la lista, con su boton de aviso al lado
+   --------------------------------------------------------------------------
+   El boton solo aparece en quien hay que contactar (plan vencido, por vencer
+   o lleva tiempo sin venir), asi que la columna no se llena de ruido.
+   ========================================================================== */
+
+.celda-estado {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.wa-fila {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  border: 0;
+  border-radius: 5px;
+  background: #1F8F4E;
+  color: #FFFFFF;
+  font-family: var(--font-label);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+}
+.wa-fila:hover { background: #25A55C; }
+.wa-fila:active { transform: scale(0.96); }
+.wa-fila:focus-visible { outline: 2px solid #4ADE80; outline-offset: 2px; }
+
+/* Ya se le escribio en esta sesion: se apaga para no repetir sin querer. */
+.wa-fila--enviado {
+  background: rgba(255, 255, 255, 0.10);
+  color: var(--on-surface-variant);
+  cursor: default;
+}
+.wa-fila--enviado:hover { background: rgba(255, 255, 255, 0.14); }
+
+.wa-fila--sin {
+  background: transparent;
+  color: var(--outline);
+  cursor: default;
+  padding-left: 0;
+}
+.wa-fila--sin:hover { background: transparent; }
