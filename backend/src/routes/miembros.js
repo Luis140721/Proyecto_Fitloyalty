@@ -227,30 +227,75 @@ router.get(
     const q = (req.query.q || '').trim();
     const includeInactive = req.query.includeInactive === 'true';
 
-    const where = ['id_gimnasio = $1'];
+    const where = ['m.id_gimnasio = $1'];
     const params = [gymId];
     if (!includeInactive) {
-      where.push('activo = TRUE');
+      where.push('m.activo = TRUE');
     }
     if (q) {
       params.push(`%${q.toLowerCase()}%`);
       const i = params.length;
-      where.push(`(LOWER(nombre) LIKE $${i} OR LOWER(documento) LIKE $${i} OR LOWER(COALESCE(email,'')) LIKE $${i} OR LOWER(codigo_qr) = LOWER($${i + 1}))`);
+      where.push(`(LOWER(m.nombre) LIKE $${i} OR LOWER(m.documento) LIKE $${i} OR LOWER(COALESCE(m.email,'')) LIKE $${i} OR LOWER(m.codigo_qr) = LOWER($${i + 1}))`);
       params.push(q);
     }
 
     const offset = page * pageSize;
     try {
+      /*
+       * El estado de cada miembro (al dia / vence pronto / vencido / en
+       * riesgo) se calcula aqui, en la misma consulta. Antes la lista devolvia
+       * solo los datos del miembro y el front esperaba unas banderas que nadie
+       * mandaba, asi que TODOS salian "al dia" y los filtros de arriba no
+       * encontraban a nadie.
+       *
+       * Los umbrales son los del gimnasio: los mismos que usan los avisos de
+       * la campana, para que las dos pantallas nunca se contradigan.
+       */
+      const { rows: cfg } = await pool.query(
+        `SELECT
+           COALESCE(cg.dias_recordatorio_default, cn.dias_aviso_vencimiento, 7)::int AS dias_aviso,
+           COALESCE(cn.umbral_alerta_amarilla, 15)::int AS dias_riesgo
+         FROM (SELECT 1) x
+         LEFT JOIN config_gimnasio cg       ON cg.id_gimnasio = $1
+         LEFT JOIN configuracion_gimnasio cn ON cn.id_gimnasio = $1`,
+        [gymId]
+      );
+      const diasAviso  = cfg[0]?.dias_aviso  ?? 7;
+      const diasRiesgo = cfg[0]?.dias_riesgo ?? 15;
+
       const { rows } = await pool.query(
-        `SELECT id_miembro, nombre, documento, telefono, email, codigo_qr, activo, fecha_registro
-         FROM miembro
-         WHERE ${where.join(' AND ')}
-         ORDER BY nombre ASC
-         LIMIT ${pageSize} OFFSET ${offset}`,
-        params
+        `SELECT m.id_miembro, m.nombre, m.documento, m.telefono, m.email,
+                m.codigo_qr, m.activo, m.fecha_registro,
+                pc.tipo_plan, pc.fecha_fin, pc.estado_pago,
+                -- Vencido: el plan ya paso de fecha. Un plan que vence hoy
+                -- todavia sirve hoy, por eso la comparacion es estricta.
+                (pc.fecha_fin IS NOT NULL AND pc.fecha_fin < CURRENT_DATE) AS vencido,
+                (pc.fecha_fin IS NOT NULL
+                 AND pc.fecha_fin >= CURRENT_DATE
+                 AND pc.fecha_fin <= CURRENT_DATE + ($${params.length + 1} || ' days')::interval) AS "vencePronto",
+                -- En riesgo: lleva mucho sin aparecer, o nunca ha entrado.
+                (ult.ultima IS NULL
+                 OR ult.ultima < NOW() - ($${params.length + 2} || ' days')::interval) AS "enRiesgo",
+                ult.ultima AS ultimo_ingreso
+           FROM miembro m
+           LEFT JOIN LATERAL (
+             SELECT p.tipo_plan, p.fecha_fin, p.estado_pago
+               FROM plan_cobro p
+              WHERE p.id_miembro = m.id_miembro AND p.activo = TRUE
+              ORDER BY p.fecha_fin DESC NULLS LAST, p.id_plan_cobro DESC
+              LIMIT 1
+           ) pc ON TRUE
+           LEFT JOIN LATERAL (
+             SELECT MAX(c.fecha_hora) AS ultima
+               FROM checkin c WHERE c.id_miembro = m.id_miembro
+           ) ult ON TRUE
+          WHERE ${where.join(' AND ')}
+          ORDER BY m.nombre ASC
+          LIMIT ${pageSize} OFFSET ${offset}`,
+        [...params, diasAviso, diasRiesgo]
       );
       const totalQ = await pool.query(
-        `SELECT COUNT(*)::int AS total FROM miembro WHERE ${where.join(' AND ')}`,
+        `SELECT COUNT(*)::int AS total FROM miembro m WHERE ${where.join(' AND ')}`,
         params
       );
 
