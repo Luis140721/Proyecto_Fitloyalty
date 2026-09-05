@@ -24,6 +24,7 @@ const { requireActiveTrial } = require('../lib/trial');
 const { z } = require('zod');
 const { formatZodError } = require('../lib/validators');
 const { ULTIMO_PLAN } = require('../lib/planes');
+const { telefonoWhatsapp, mensajeParaMiembro, enPalabras } = require('../lib/mensajes');
 const { sendMemberQR } = require('../lib/email');
 const QRCode = require('qrcode');
 
@@ -276,7 +277,11 @@ router.get(
                 -- En riesgo: lleva mucho sin aparecer, o nunca ha entrado.
                 (ult.ultima IS NULL
                  OR ult.ultima < NOW() - ($${params.length + 2} || ' days')::interval) AS "enRiesgo",
-                ult.ultima AS ultimo_ingreso
+                ult.ultima AS ultimo_ingreso,
+                (CURRENT_DATE - pc.fecha_fin)::int          AS dias_vencido,
+                (pc.fecha_fin - CURRENT_DATE)::int          AS dias_para_vencer,
+                (CURRENT_DATE - ult.ultima::date)::int      AS dias_sin_venir,
+                m.codigo_pais_telefono
            FROM miembro m
            LEFT JOIN LATERAL (
              SELECT p.tipo_plan, p.fecha_fin, p.estado_pago
@@ -299,7 +304,37 @@ router.get(
         params
       );
 
-      return res.json({ miembros: rows, total: totalQ.rows[0].total, page, pageSize });
+      /*
+       * A cada miembro que haya que contactar se le adjunta el telefono y el
+       * mensaje ya redactado, para poder escribirle desde la misma lista sin
+       * tener que abrir la campana. Es el mismo texto que usa la campana,
+       * porque sale del mismo helper.
+       */
+      const { rows: gimnasio } = await pool.query(
+        'SELECT nombre FROM gimnasio WHERE id_gimnasio = $1',
+        [gymId]
+      );
+      const nombreGym = gimnasio[0]?.nombre || 'tu gimnasio';
+
+      const miembros = rows.map((m) => {
+        const motivo = m.vencido ? 'vencida' : m.vencePronto ? 'por-vencer' : m.enRiesgo ? 'riesgo' : null;
+        if (!motivo) return { ...m, whatsapp: null };
+
+        const dato = motivo === 'vencida'    ? enPalabras(m.dias_vencido, 'pasado')
+                   : motivo === 'por-vencer' ? enPalabras(m.dias_para_vencer, 'futuro')
+                   :                           enPalabras(m.dias_sin_venir, 'plano');
+
+        return {
+          ...m,
+          whatsapp: {
+            motivo,
+            telefono: telefonoWhatsapp(m.telefono, m.codigo_pais_telefono),
+            mensaje: mensajeParaMiembro(motivo, nombreGym, m.nombre, dato),
+          },
+        };
+      });
+
+      return res.json({ miembros, total: totalQ.rows[0].total, page, pageSize });
     } catch (err) {
       console.error('[GET /admin/miembros] Error:', err.message);
       throw new AppError(503, 'No pudimos listar los miembros. Intenta de nuevo.', 'DB_UNREACHABLE');
