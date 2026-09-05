@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
+import IconoWhatsapp from './IconoWhatsapp';
 
 /**
  * components/MenuNotificaciones.jsx
@@ -152,10 +153,7 @@ export default function MenuNotificaciones() {
                       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') escribirPorWhatsapp(a, e); }}
                       title={`Escribirle a ${a.nombreMiembro} por WhatsApp`}
                     >
-                      <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" fill="currentColor">
-                        <path d="M17.5 14.4c-.3-.2-1.7-.9-2-1s-.5-.1-.7.1-.7 1-.9 1.2-.3.2-.6 0a8 8 0 0 1-2.4-1.5 9 9 0 0 1-1.6-2c-.2-.3 0-.5.1-.6l.5-.6.3-.5v-.5l-1-2.3c-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.8.4-.3.3-1 1-1 2.5s1.1 2.9 1.2 3.1a11.4 11.4 0 0 0 4.4 3.9c.6.2 1.1.4 1.5.5.6.2 1.2.2 1.6.1.5-.1 1.7-.7 1.9-1.4s.2-1.2.2-1.3-.2-.2-.5-.3Z"/>
-                        <path d="M20.5 3.5A10.4 10.4 0 0 0 3.9 16.1L2.5 21.5l5.5-1.4a10.4 10.4 0 0 0 12.5-16.6ZM12 20.2c-1.6 0-3.2-.4-4.5-1.2l-.3-.2-3.3.9.9-3.2-.2-.3a8.6 8.6 0 1 1 7.4 4Z"/>
-                      </svg>
+                      <IconoWhatsapp />
                       {enviados.has(a.id) ? 'Enviado' : 'WhatsApp'}
                     </span>
                   ) : (

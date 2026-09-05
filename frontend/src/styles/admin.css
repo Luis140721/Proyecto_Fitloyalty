@@ -1536,17 +1536,33 @@
    o lleva tiempo sin venir), asi que la columna no se llena de ruido.
    ========================================================================== */
 
+/*
+ * Rejilla de dos columnas, no flex: las etiquetas de estado tienen anchos
+ * distintos ("Al dia" contra "Vence pronto"), y en flex cada boton arrancaba
+ * en un punto distinto y la columna se veia desordenada. Con un ancho fijo
+ * para la etiqueta, todos los botones quedan alineados entre si.
+ */
 .celda-estado {
-  display: flex;
+  display: grid;
+  grid-template-columns: 124px auto;
   align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
 }
+.celda-estado .badge-estado { justify-content: center; width: 100%; }
+
+/* En la tarjeta de movil no hay columna que respetar: se deja fluir. */
+.miembro-card .celda-estado {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.miembro-card .celda-estado .badge-estado { width: auto; }
 
 .wa-fila {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  justify-content: center;
+  gap: 6px;
   padding: 4px 9px;
   border: 0;
   border-radius: 5px;
