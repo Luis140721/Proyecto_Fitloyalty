@@ -12,6 +12,8 @@
     "concurrently": "^9.2.1"
   },
   "dependencies": {
-    "@getbrevo/brevo": "^6.0.3"
+    "@getbrevo/brevo": "^6.0.3",
+    "qrcode-terminal": "^0.12.0",
+    "whatsapp-web.js": "^1.34.7"
   }
 }
