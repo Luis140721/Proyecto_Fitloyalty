@@ -97,3 +97,10 @@ render_*.json
 login_*.json
 clase_2_ui_*.html
 render.exe
+
+# Temporary files from history cleanup
+filter_callback.py
+filter_help.txt
+filter_log.txt
+push_log.txt
+
