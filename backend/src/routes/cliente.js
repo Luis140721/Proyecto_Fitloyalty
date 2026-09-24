@@ -39,11 +39,11 @@ const router = express.Router();
 
 // ---------------------------------------------------------------------------
 // POST /api/cliente/login
-// v2 (2026-09-23): ahora login por TELEFONO + CONTRASENA en vez de
-// documento + PIN de 4 digitos. Mas seguro, mas estandar.
+// v3 (2026-09-23): login por TELEFONO + CONTRASENA, SIN pedir gimnasio.
+// El backend busca el miembro por telefono en TODOS los gimnasios activos.
+// El gimnasio del miembro viene en la respuesta para que la app lo muestre.
 // ---------------------------------------------------------------------------
 const loginSchema = z.object({
-  gimnasio: z.string().min(1, 'Codigo de gimnasio requerido'),
   telefono: z.string().regex(/^3\d{9}$/, 'Telefono debe ser 10 digitos y empezar por 3 (ej. 3001234567)'),
   password: z.string().min(6, 'La contrasena debe tener minimo 6 caracteres'),
 });
@@ -53,71 +53,52 @@ router.post('/login', asyncHandler(async (req, res) => {
   if (!parsed.success) {
     throw new AppError(400, 'Datos invalidos: ' + parsed.error.issues[0].message, 'VALIDATION_ERROR');
   }
-  const { gimnasio: gymCode, telefono, password } = parsed.data;
+  const { telefono, password } = parsed.data;
 
   try {
-    // 1) Buscar gimnasio por codigo (NIT o nombre).
-    //    Postgres distingue acentos tanto en = como en ILIKE, asi que
-    //    usamos TRANSLATE para normalizar acentos comunes a su base
-    //    en AMBOS lados antes de comparar.
-    const { rows: gyms } = await pool.query(
-      `SELECT id_gimnasio, nombre, activo, trial_ends_at, plan_activo
-         FROM gimnasio
-        WHERE LOWER(TRANSLATE(COALESCE(nit, ''), 'áéíóúÁÉÍÓÚñÑüÜ', 'aeiouAEIOUnNuU'))
-           = LOWER(TRANSLATE($1,                'áéíóúÁÉÍÓÚñÑüÜ', 'aeiouAEIOUnNuU'))
-           OR LOWER(TRANSLATE(nombre,           'áéíóúÁÉÍÓÚñÑüÜ', 'aeiouAEIOUnNuU'))
-           = LOWER(TRANSLATE($1,                'áéíóúÁÉÍÓÚñÑüÜ', 'aeiouAEIOUnNuU'))
-        LIMIT 1`,
-      [gymCode.trim()]
-    );
-    if (gyms.length === 0) throw new AppError(404, 'Gimnasio no encontrado', 'GYM_NOT_FOUND');
-    const gym = gyms[0];
-
-    if (!gym.activo) {
-      throw new AppError(403, 'Este gimnasio esta inactivo. Contacta al administrador.', 'GYM_INACTIVE');
-    }
-
-    // 2) Buscar miembro por (gimnasio, telefono). Filtra activo y con app_acceso.
-    //    Quitamos espacios y guiones del telefono en BD para comparar limpio.
+    // 1) Buscar miembro por telefono en todos los gyms activos.
+    //    Quitamos espacios y guiones para comparar limpio.
     const { rows: miembros } = await pool.query(
-      `SELECT id_miembro, id_gimnasio, nombre, documento, telefono, email,
-              codigo_qr, qr_imagen, foto_url, activo, fecha_registro,
-              password_hash, app_acceso
-         FROM miembro
-        WHERE id_gimnasio = $1
-          AND REPLACE(REPLACE(COALESCE(telefono, ''), ' ', ''), '-', '') = $2
-          AND activo = TRUE
+      `SELECT m.id_miembro, m.id_gimnasio, m.nombre, m.documento, m.telefono, m.email,
+              m.codigo_qr, m.qr_imagen, m.foto_url, m.activo, m.fecha_registro,
+              m.password_hash, m.app_acceso,
+              g.nombre AS gym_nombre, g.activo AS gym_activo, g.plan_activo
+         FROM miembro m
+         INNER JOIN gimnasio g ON g.id_gimnasio = m.id_gimnasio
+        WHERE REPLACE(REPLACE(COALESCE(m.telefono, ''), ' ', ''), '-', '') = $1
+          AND m.activo = TRUE AND g.activo = TRUE
+        ORDER BY m.id_miembro ASC
         LIMIT 1`,
-      [gym.id_gimnasio, telefono.trim()]
+      [telefono.trim()]
     );
     if (miembros.length === 0) {
       throw new AppError(404, 'No encontramos un miembro activo con ese telefono.', 'MEMBER_NOT_FOUND');
     }
-    const miembro = miembros[0];
+    const row = miembros[0];
 
-    if (miembro.app_acceso === false) {
+    if (row.app_acceso === false) {
       throw new AppError(403, 'Tu acceso a la app esta desactivado. Habla con el administrador.', 'APP_ACCESS_DENIED');
     }
 
-    if (!miembro.password_hash) {
+    if (!row.password_hash) {
       throw new AppError(403, 'Aun no tienes contrasena asignada. Pide al administrador que te la asigne en el panel.', 'PASSWORD_NOT_SET');
     }
 
-    // 3) Comparar contrasena con bcrypt.
-    const ok = await bcrypt.compare(password, miembro.password_hash);
+    // 2) Comparar contrasena con bcrypt.
+    const ok = await bcrypt.compare(password, row.password_hash);
     if (!ok) throw new AppError(401, 'Contrasena incorrecta.', 'BAD_PASSWORD');
 
-    // 4) Generar JWT de cliente (NO de staff).
-    const token = generarTokenCliente(miembro);
+    // 3) Generar JWT de cliente (NO de staff).
+    const token = generarTokenCliente(row);
 
     return res.json({
       message: 'Inicio de sesion exitoso',
       token,
-      miembro: miembroSeguro(miembro),
+      miembro: miembroSeguro(row),
       gimnasio: {
-        id:        gym.id_gimnasio,
-        nombre:    gym.nombre,
-        planActivo: gym.plan_activo,
+        id:        row.id_gimnasio,
+        nombre:    row.gym_nombre,
+        planActivo: row.plan_activo,
       },
     });
   } catch (err) {
