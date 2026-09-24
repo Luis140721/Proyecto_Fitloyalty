@@ -59,3 +59,65 @@ function enPalabras(dias, modo = 'pasado') {
 }
 
 module.exports = { telefonoWhatsapp, mensajeParaMiembro, enPalabras };
+
+// ---------------------------------------------------------------------------
+// Plantillas usadas por el job automatico de avisos de vencimiento
+// (jobs/expiracion.js). Aqui centralizadas para mantener el texto facil
+// de editar y consistente entre el job y cualquier otro envio futuro.
+// ---------------------------------------------------------------------------
+
+const G = (s) => String(s == null ? '' : s);
+
+/**
+ * Mensaje de bienvenida con QR que recibe un miembro cuando se le asigna
+ * plan y se crea su acceso a la app. Lo usa `miembros.js` justo despues
+ * de crear el socio (Daniel lo metio asi).
+ */
+function bienvenidaConQr({ nombre, gymNombre, diasParaVencer }) {
+  const dias = Number.isFinite(diasParaVencer) ? Math.max(0, diasParaVencer) : 30;
+  return [
+    `¡Hola *${G(nombre)}*! 👋 Bienvenido a *${G(gymNombre)}*.`,
+    `Tu registro ha sido exitoso. Tu plan esta vigente por ${dias} dias y tu codigo QR de acceso es el siguiente:`,
+  ].join(' ');
+}
+
+/**
+ * Mensaje que se manda N dias antes de que se venza el plan. Cada gym
+ * decide su propio N (columna gimnasio.dias_aviso_vencimiento).
+ */
+function avisoVencimiento({ nombre, gymNombre, tipoPlan, fechaFin, diasRestantes }) {
+  const fecha = fechaFin
+    ? new Date(fechaFin).toLocaleDateString('es-CO', { day: '2-digit', month: 'long', year: 'numeric' })
+    : 'proximamente';
+  const d = Number(diasRestantes);
+  const cuando = d === 0
+    ? 'Tu plan vence *hoy*'
+    : d === 1
+      ? 'Tu plan vence *mañana*'
+      : `Tu plan vence en *${d} dias*`;
+  return [
+    `¡Hola *${G(nombre)}*! 👋 Te escribimos desde *${G(gymNombre)}*.`,
+    `${cuando} (${fecha}). Tu plan *${G(tipoPlan) || 'actual'}* se vence pronto.`,
+    `Renueva tu membresia antes de la fecha para no perder el acceso.`,
+  ].join('\n');
+}
+
+/**
+ * Mensaje que se manda el mismo dia del vencimiento. Es un segundo aviso
+ * para los gimnasios que quieren recordatorio el dia D.
+ */
+function avisoVenceHoy({ nombre, gymNombre, tipoPlan, fechaFin }) {
+  const fecha = fechaFin
+    ? new Date(fechaFin).toLocaleDateString('es-CO', { day: '2-digit', month: 'long', year: 'numeric' })
+    : 'hoy';
+  return [
+    `¡Hola *${G(nombre)}*! 👋 Desde *${G(gymNombre)}* te recordamos:`,
+    `Tu plan *${G(tipoPlan) || 'actual'}* se vence *hoy* (${fecha}).`,
+    `Te invitamos a renovarlo para seguir entrenando con nosotros. 💪`,
+  ].join('\n');
+}
+
+module.exports = {
+  telefonoWhatsapp, mensajeParaMiembro, enPalabras,
+  bienvenidaConQr, avisoVencimiento, avisoVenceHoy,
+};
