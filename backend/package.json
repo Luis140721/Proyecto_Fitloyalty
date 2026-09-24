@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
-    "seed": "node src/db/seed_pg.js"
+    "seed": "node src/db/seed_pg.js",
+    "postinstall": "node scripts/postinstall.js"
   },
   "dependencies": {
     "@getbrevo/brevo": "^6.0.3",
