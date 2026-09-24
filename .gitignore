@@ -104,3 +104,7 @@ filter_help.txt
 filter_log.txt
 push_log.txt
 
+# --- whatsapp-web.js: cache y sesion local (NO subir al repo) ---
+backend/.wwebjs_auth/
+backend/.wwebjs_cache/
+
