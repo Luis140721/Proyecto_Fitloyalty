@@ -16,6 +16,7 @@
  */
 const express = require('express');
 const crypto  = require('crypto');
+const bcrypt  = require('bcryptjs');
 const pool    = require('../db/db');
 const { authenticate, authorize } = require('../middleware/auth');
 const asyncHandler = require('../lib/asyncHandler');
@@ -101,6 +102,11 @@ const createSchema = z.object({
   autorizo_datos: z.boolean().default(false),
   activo: z.boolean().default(true),
   qr_imagen: z.string().optional(), // Imagen del QR en base64
+  // Contrasena para la app movil del cliente. Si viene vacia/null, no se
+  // asigna (el miembro no podra entrar a la app hasta que se la asignen).
+  // Se guarda hasheada con bcrypt en password_hash.
+  password: z.string().min(6, 'La contrasena debe tener minimo 6 caracteres').optional().or(z.literal('').transform(() => undefined)),
+  app_acceso: z.boolean().default(true),
 });
 
 /**
@@ -149,6 +155,14 @@ const updateSchema = z.object({
   objetivo:             vacioANull(z.string().max(50)),
   nivel_experiencia:    vacioANull(z.string().max(30)),
   observaciones:        vacioANull(z.string()),
+
+  // App móvil del cliente
+  // password: si llega string >=6 chars, se hashea y se guarda en password_hash.
+  //           si llega '', se interpreta como "borrar contrasena" (null en BD).
+  //           si no viene, NO se toca el password_hash existente.
+  // app_acceso: booleano para apagar/encender acceso a la app del miembro.
+  password: z.string().min(6, 'La contrasena debe tener minimo 6 caracteres').optional(),
+  app_acceso: z.boolean().optional(),
 });
 
 function parse(schema, payload) {
@@ -321,6 +335,10 @@ router.post(
         email: data.email
       });
       
+      // Hashear contrasena si viene (bcrypt). Si no viene, queda NULL = miembro
+      // todavia sin contrasena (no podra loguearse a la app hasta que se asigne).
+      const password_hash = data.password ? await bcrypt.hash(data.password, 10) : null;
+
       let miembroRows;
       try {
         const result = await pool.query(
@@ -329,30 +347,36 @@ router.post(
             telefono, email, direccion,
             contacto_emergencia, telefono_emergencia, condiciones_medicas, alergias,
             objetivo, nivel_experiencia, observaciones,
-            acepto_terminos, autorizo_datos, codigo_qr, qr_imagen
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
-          RETURNING id_miembro, nombre, documento, telefono, email, codigo_qr, qr_imagen, activo, fecha_registro`,
+            acepto_terminos, autorizo_datos, codigo_qr, qr_imagen,
+            password_hash, password_set_at, app_acceso
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
+          RETURNING id_miembro, nombre, documento, telefono, email, codigo_qr, qr_imagen,
+                    activo, fecha_registro, app_acceso,
+                    (password_hash IS NOT NULL) AS password_asignada`,
           [
-            gymId, 
-            data.nombre.trim(), 
-            data.tipo_documento, 
-            data.documento, 
-            data.fecha_nacimiento || null, 
+            gymId,
+            data.nombre.trim(),
+            data.tipo_documento,
+            data.documento,
+            data.fecha_nacimiento || null,
             data.genero || null,
-            data.telefono, 
-            data.email || null, 
+            data.telefono,
+            data.email || null,
             data.direccion || null,
-            data.contacto_emergencia || null, 
-            data.telefono_emergencia || null, 
-            data.condiciones_medicas || null, 
+            data.contacto_emergencia || null,
+            data.telefono_emergencia || null,
+            data.condiciones_medicas || null,
             data.alergias || null,
-            data.objetivo || null, 
-            data.nivel_experiencia || null, 
+            data.objetivo || null,
+            data.nivel_experiencia || null,
             data.observaciones || null,
-            data.acepto_terminos, 
-            data.autorizo_datos, 
+            data.acepto_terminos,
+            data.autorizo_datos,
             codigo_qr_cifrado,
-            data.qr_imagen || null
+            data.qr_imagen || null,
+            password_hash,
+            password_hash ? new Date() : null,
+            data.app_acceso !== false, // default true
           ]
         );
         miembroRows = result.rows;
@@ -550,6 +574,16 @@ router.put(
     const params = [];
     for (const [k, v] of Object.entries(parsed.data)) {
       if (v === undefined) continue;
+
+      // Caso especial: 'password' -> hashear y guardar en password_hash.
+      if (k === 'password') {
+        const hashed = await bcrypt.hash(String(v), 10);
+        params.push(hashed);
+        campos.push(`password_hash = $${params.length}`);
+        campos.push(`password_set_at = CURRENT_TIMESTAMP`);
+        continue;
+      }
+
       params.push(k === 'email' && v ? v.toLowerCase() : v);
       campos.push(`${k} = $${params.length}`);
     }
@@ -564,7 +598,9 @@ router.put(
       const { rows } = await pool.query(
         `UPDATE miembro SET ${campos.join(', ')}
          WHERE id_miembro = $${idIdx} AND id_gimnasio = $${gymIdx}
-         RETURNING id_miembro, nombre, documento, telefono, email, codigo_qr, qr_imagen, activo, fecha_registro`,
+         RETURNING id_miembro, nombre, documento, telefono, email, codigo_qr, qr_imagen,
+                   activo, fecha_registro, app_acceso,
+                   (password_hash IS NOT NULL) AS password_asignada`,
         params
       );
       if (rows.length === 0) throw new AppError(404, 'Miembro no encontrado', 'MEMBER_NOT_FOUND');
