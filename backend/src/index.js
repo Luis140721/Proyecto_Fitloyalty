@@ -93,6 +93,10 @@ app.use('/api/vista',     require('./routes/vista'));
 app.use('/api/cliente/login', clienteLoginLimiter);
 app.use('/api/cliente', clienteRoutes);
 
+// Endpoints administrativos para gatillar manualmente los jobs
+// automaticos (cron). Solo accesible por usuarios con rol admin.
+app.use('/api/jobs', require('./routes/jobs'));
+
 app.get('/api/healthz', (_req, res) => res.json({ status: 'ok', uptime: process.uptime() }));
 
 app.get('/api/health', asyncHandler(async (req, res) => {
@@ -129,6 +133,14 @@ async function iniciar() {
   app.listen(PORT, () => {
     console.log(`[OK] FitLoyalty API corriendo en http://localhost:${PORT}`);
     console.log(`[OK] Health: http://localhost:${PORT}/api/health\n`);
+
+    // Arrancamos el scheduler (cron interno) despues de que el server
+    // escucha, para que si falla el cron no tumbe el arranque.
+    try {
+      require('./jobs/scheduler').start();
+    } catch (err) {
+      console.error('[scheduler] No se pudo arrancar:', err.message);
+    }
   });
 }
 
