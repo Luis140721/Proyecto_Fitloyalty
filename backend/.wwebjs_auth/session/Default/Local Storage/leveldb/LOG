@@ -1,6 +1,0 @@
-2026/09/10-19:41:54.653 590c Reusing MANIFEST C:\Users\dftv3\Documents\Proyecto_fitloyaltly\Proyecto_Fitloyalty\backend\.wwebjs_auth\session\Default\Local Storage\leveldb/MANIFEST-000001
-2026/09/10-19:41:54.662 590c Recovering log #4
-2026/09/10-19:41:54.667 590c Reusing old log C:\Users\dftv3\Documents\Proyecto_fitloyaltly\Proyecto_Fitloyalty\backend\.wwebjs_auth\session\Default\Local Storage\leveldb/000004.log 
-2026/09/10-19:45:29.374 58dc Level-0 table #8: started
-2026/09/10-19:45:29.406 58dc Level-0 table #8: 15397 bytes OK
-2026/09/10-19:45:29.414 58dc Delete type=0 #4
