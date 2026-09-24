@@ -10,6 +10,7 @@
  *   /api/admin/miembros -> CRUD miembros
  *   /api/admin/checkin  -> check-in manual/QR
  *   /api/admin/dashboard -> KPIs
+ *   /api/cliente      -> App movil del miembro (login, perfil, QR, gamificacion)
  *   /api/health       -> healthcheck
  */
 require('dotenv').config();
@@ -28,6 +29,7 @@ const checkinRoutes  = require('./routes/checkin');
 const billingRoutes  = require('./routes/billing');
 const dashboardRoutes = require('./routes/dashboard');
 const configRoutes   = require('./routes/config');
+const clienteRoutes  = require('./routes/cliente');
 
 const app  = express();
 const PORT = process.env.PORT || 3001;
@@ -55,7 +57,9 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// Rate limits: login 5/min, forgot 3/min
+// Rate limits: login 5/min, forgot 3/min, cliente-login 10/min (más permisivo
+// porque es el cliente final el que se equivoca, no un atacante de fuerza bruta
+// sobre el panel admin).
 const loginLimiter = rateLimit({
   windowMs: 60 * 1000, max: 5,
   standardHeaders: true, legacyHeaders: false,
@@ -65,6 +69,11 @@ const forgotLimiter = rateLimit({
   windowMs: 60 * 1000, max: 3,
   standardHeaders: true, legacyHeaders: false,
   message: { error: 'Demasiadas solicitudes. Intenta de nuevo en un minuto.' },
+});
+const clienteLoginLimiter = rateLimit({
+  windowMs: 60 * 1000, max: 10,
+  standardHeaders: true, legacyHeaders: false,
+  message: { error: 'Demasiados intentos. Intenta de nuevo en un minuto.' },
 });
 
 app.use('/api/auth/login', loginLimiter);
@@ -80,6 +89,9 @@ app.use('/api', configRoutes);
 app.use('/api', require('./routes/notificaciones'));
 app.use('/api/asistencia', require('./routes/asistencia'));
 app.use('/api/vista',     require('./routes/vista'));
+// App movil del cliente. El rate limit va SOLO sobre el login.
+app.use('/api/cliente/login', clienteLoginLimiter);
+app.use('/api/cliente', clienteRoutes);
 
 app.get('/api/healthz', (_req, res) => res.json({ status: 'ok', uptime: process.uptime() }));
 

@@ -125,6 +125,48 @@ function generarResetToken(usuario, { secret, expiresIn } = {}) {
   return jwt.sign(payload, secret || process.env.JWT_SECRET, opts);
 }
 
+/**
+ * Genera el JWT para la APP MÓVIL DEL CLIENTE (miembro del gimnasio).
+ *
+ * Payload DIFERENTE al de staff:
+ *   - NO tiene `id` (de usuario staff), tiene `idMiembro`.
+ *   - NO tiene `email` obligatorio (muchos miembros no tienen correo).
+ *   - role siempre es 'cliente' (el middleware requireClient lo valida).
+ *
+ * Asi un token de staff no sirve para rutas /cliente/* y viceversa.
+ */
+function generarTokenCliente(miembro, { secret, expiresIn } = {}) {
+  const payload = {
+    idMiembro: miembro.id_miembro,
+    gymId:     miembro.id_gimnasio,
+    documento: miembro.documento,
+    role:      'cliente',
+  };
+  const opts = { expiresIn: expiresIn || '30d' };
+  return jwt.sign(payload, secret || process.env.JWT_SECRET, opts);
+}
+
+/**
+ * Proyecta una fila de `miembro` al objeto seguro que se devuelve a la app.
+ * NUNCA incluye pin_hash.
+ */
+function miembroSeguro(m) {
+  return {
+    id:           m.id_miembro,
+    gymId:        m.id_gimnasio,
+    nombre:       m.nombre,
+    documento:    m.documento,
+    telefono:     m.telefono,
+    email:        m.email,
+    codigoQr:     m.codigo_qr,
+    qrImagen:     m.qr_imagen || null,
+    fotoUrl:      m.foto_url || null,
+    activo:       m.activo,
+    fechaRegistro: m.fecha_registro,
+    appAcceso:    m.app_acceso !== false, // default true si la columna no existe
+  };
+}
+
 module.exports = {
   mapRol,
   validarEmail,
@@ -136,4 +178,6 @@ module.exports = {
   usuarioSeguro,
   generarToken,
   generarResetToken,
+  generarTokenCliente,
+  miembroSeguro,
 };

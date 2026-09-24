@@ -4,18 +4,19 @@
  * CRUD de miembros (socios) del gimnasio del usuario autenticado.
  * Multi-tenant: todas las queries filtran por id_gimnasio.
  *
- *   GET    /api/admin/miembros         -> lista paginada + busqueda por nombre/doc
- *   POST   /api/admin/miembros         -> crea un miembro (genera codigo_qr)
- *   GET    /api/admin/miembros/:id     -> detalle
- *   PUT    /api/admin/miembros/:id     -> actualiza nombre/telefono/email/activo
- *   DELETE /api/admin/miembros/:id     -> soft-delete (activo = false)
- *   GET    /api/admin/miembros/lookup  -> busqueda por codigo_qr/documento (para checkin)
+ *   GET    /api/admin/miembros        -> lista paginada + busqueda por nombre/doc
+ *   POST   /api/admin/miembros        -> crea un miembro (genera codigo_qr)
+ *   GET    /api/admin/miembros/:id    -> detalle
+ *   PUT    /api/admin/miembros/:id    -> actualiza nombre/telefono/email/activo
+ *   DELETE /api/admin/miembros/:id    -> soft-delete (activo = false)
+ *   GET    /api/admin/miembros/lookup -> busqueda por codigo_qr/documento (para checkin)
  *
  * Handlers async con asyncHandler para que cualquier rechazo llegue al
  * errorHandler central con respuesta consistente.
  */
 const express = require('express');
 const crypto  = require('crypto');
+const bcrypt  = require('bcryptjs');
 const pool    = require('../db/db');
 const { authenticate, authorize } = require('../middleware/auth');
 const asyncHandler = require('../lib/asyncHandler');
@@ -26,6 +27,7 @@ const { formatZodError } = require('../lib/validators');
 const { ULTIMO_PLAN } = require('../lib/planes');
 const { telefonoWhatsapp, mensajeParaMiembro, enPalabras } = require('../lib/mensajes');
 const { sendMemberQR } = require('../lib/email');
+const { sendWhatsAppQR } = require('../lib/whatsapp'); // <-- NUEVO: Importado el servicio de WhatsApp
 const QRCode = require('qrcode');
 
 const router = express.Router();
@@ -64,7 +66,7 @@ function decryptQrCode(encrypted) {
 
 const createSchema = z.object({
   // Datos personales
-  nombre:    z.string().min(2, 'El nombre es requerido'),
+  nombre:     z.string().min(2, 'El nombre es requerido'),
   tipo_documento: z.enum(['CC', 'TI', 'NIT', 'CE', 'PP']).default('CC'),
   documento: z.string().min(4, 'El documento es requerido'),
   fecha_nacimiento: z.string().optional(),
@@ -102,6 +104,11 @@ const createSchema = z.object({
   autorizo_datos: z.boolean().default(false),
   activo: z.boolean().default(true),
   qr_imagen: z.string().optional(), // Imagen del QR en base64
+  // Contrasena para la app movil del cliente. Si viene vacia/null, no se
+  // asigna (el miembro no podra entrar a la app hasta que se la asignen).
+  // Se guarda hasheada con bcrypt en password_hash.
+  password: z.string().min(6, 'La contrasena debe tener minimo 6 caracteres').optional().or(z.literal('').transform(() => undefined)),
+  app_acceso: z.boolean().default(true),
 });
 
 /**
@@ -133,12 +140,12 @@ const updateSchema = z.object({
   qr_imagen: z.string().optional(),
 
   // Datos personales
-  tipo_documento:       vacioANull(z.string().max(10)),
-  fecha_nacimiento:     vacioANull(z.string()),
-  genero:               vacioANull(z.string().max(20)),
+  tipo_documento:      vacioANull(z.string().max(10)),
+  fecha_nacimiento:    vacioANull(z.string()),
+  genero:              vacioANull(z.string().max(20)),
   codigo_pais_telefono: vacioANull(z.string().max(5)),
-  ciudad:               vacioANull(z.string().max(100)),
-  direccion:            vacioANull(z.string()),
+  ciudad:              vacioANull(z.string().max(100)),
+  direccion:           vacioANull(z.string()),
 
   // Salud y emergencia
   contacto_emergencia:  vacioANull(z.string().max(100)),
@@ -150,6 +157,14 @@ const updateSchema = z.object({
   objetivo:             vacioANull(z.string().max(50)),
   nivel_experiencia:    vacioANull(z.string().max(30)),
   observaciones:        vacioANull(z.string()),
+
+  // App móvil del cliente
+  // password: si llega string >=6 chars, se hashea y se guarda en password_hash.
+  //           si llega '', se interpreta como "borrar contrasena" (null en BD).
+  //           si no viene, NO se toca el password_hash existente.
+  // app_acceso: booleano para apagar/encender acceso a la app del miembro.
+  password: z.string().min(6, 'La contrasena debe tener minimo 6 caracteres').optional(),
+  app_acceso: z.boolean().optional(),
 });
 
 function parse(schema, payload) {
@@ -242,23 +257,13 @@ router.get(
 
     const offset = page * pageSize;
     try {
-      /*
-       * El estado de cada miembro (al dia / vence pronto / vencido / en
-       * riesgo) se calcula aqui, en la misma consulta. Antes la lista devolvia
-       * solo los datos del miembro y el front esperaba unas banderas que nadie
-       * mandaba, asi que TODOS salian "al dia" y los filtros de arriba no
-       * encontraban a nadie.
-       *
-       * Los umbrales son los del gimnasio: los mismos que usan los avisos de
-       * la campana, para que las dos pantallas nunca se contradigan.
-       */
       const { rows: cfg } = await pool.query(
         `SELECT
-           COALESCE(cg.dias_recordatorio_default, cn.dias_aviso_vencimiento, 7)::int AS dias_aviso,
-           COALESCE(cn.umbral_alerta_amarilla, 15)::int AS dias_riesgo
-         FROM (SELECT 1) x
-         LEFT JOIN config_gimnasio cg       ON cg.id_gimnasio = $1
-         LEFT JOIN configuracion_gimnasio cn ON cn.id_gimnasio = $1`,
+            COALESCE(cg.dias_recordatorio_default, cn.dias_aviso_vencimiento, 7)::int AS dias_aviso,
+            COALESCE(cn.umbral_alerta_amarilla, 15)::int AS dias_riesgo
+           FROM (SELECT 1) x
+           LEFT JOIN config_gimnasio cg       ON cg.id_gimnasio = $1
+           LEFT JOIN configuracion_gimnasio cn ON cn.id_gimnasio = $1`,
         [gymId]
       );
       const diasAviso  = cfg[0]?.dias_aviso  ?? 7;
@@ -268,15 +273,12 @@ router.get(
         `SELECT m.id_miembro, m.nombre, m.documento, m.telefono, m.email,
                 m.codigo_qr, m.activo, m.fecha_registro,
                 pc.tipo_plan, pc.fecha_fin, pc.estado_pago,
-                -- Vencido: el plan ya paso de fecha. Un plan que vence hoy
-                -- todavia sirve hoy, por eso la comparacion es estricta.
                 (pc.fecha_fin IS NOT NULL AND pc.fecha_fin < CURRENT_DATE) AS vencido,
                 (pc.fecha_fin IS NOT NULL
-                 AND pc.fecha_fin >= CURRENT_DATE
-                 AND pc.fecha_fin <= CURRENT_DATE + ($${params.length + 1} || ' days')::interval) AS "vencePronto",
-                -- En riesgo: lleva mucho sin aparecer, o nunca ha entrado.
+                  AND pc.fecha_fin >= CURRENT_DATE
+                  AND pc.fecha_fin <= CURRENT_DATE + ($${params.length + 1} || ' days')::interval) AS "vencePronto",
                 (ult.ultima IS NULL
-                 OR ult.ultima < NOW() - ($${params.length + 2} || ' days')::interval) AS "enRiesgo",
+                  OR ult.ultima < NOW() - ($${params.length + 2} || ' days')::interval) AS "enRiesgo",
                 ult.ultima AS ultimo_ingreso,
                 (CURRENT_DATE - pc.fecha_fin)::int          AS dias_vencido,
                 (pc.fecha_fin - CURRENT_DATE)::int          AS dias_para_vencer,
@@ -304,12 +306,6 @@ router.get(
         params
       );
 
-      /*
-       * A cada miembro que haya que contactar se le adjunta el telefono y el
-       * mensaje ya redactado, para poder escribirle desde la misma lista sin
-       * tener que abrir la campana. Es el mismo texto que usa la campana,
-       * porque sale del mismo helper.
-       */
       const { rows: gimnasio } = await pool.query(
         'SELECT nombre FROM gimnasio WHERE id_gimnasio = $1',
         [gymId]
@@ -358,7 +354,6 @@ router.post(
     const gymId = req.user.gymId;
 
     try {
-      // Duplicados por gimnasio (solo verificar miembros activos)
       const { rows: dupDoc } = await pool.query(
         'SELECT id_miembro FROM miembro WHERE id_gimnasio = $1 AND documento = $2 AND activo = TRUE',
         [gymId, data.documento]
@@ -373,7 +368,6 @@ router.post(
         if (dupMail.length > 0) throw new AppError(409, 'Ya existe un miembro activo con ese correo.', 'MEMBER_EMAIL_TAKEN');
       }
 
-      // Generar codigo_qr unico (reintentar si choca)
       let codigo_qr;
       for (let i = 0; i < 5; i += 1) {
         const candidate = genQrCode(gymId);
@@ -382,25 +376,17 @@ router.post(
       }
       if (!codigo_qr) throw new AppError(500, 'No se pudo generar un codigo QR unico. Reintenta.', 'QR_GENERATION_FAILED');
 
-      // Cifrar el código QR para mayor seguridad
       const codigo_qr_cifrado = encryptQrCode(codigo_qr);
 
-      // Calcular fechas y estado de pago automáticamente si no se proporcionan
       const fechaInicio = data.fecha_inicio || new Date().toISOString().split('T')[0];
       const fechaFin = data.fecha_fin || calcularFechaFin(data.tipo_plan, fechaInicio);
       const estadoPago = data.estado_pago || determinarEstadoPago(data.valor_total, data.valor_pagado);
       const proximaFechaCobro = data.proxima_fecha_cobro || calcularProximaFechaCobro(fechaFin);
-
-      // Insertar miembro con todos los campos (guardar código QR cifrado)
-      console.log('[POST /admin/miembros] Intentando insertar miembro con datos:', {
-        gymId,
-        nombre: data.nombre,
-        tipo_documento: data.tipo_documento,
-        documento: data.documento,
-        telefono: data.telefono,
-        email: data.email
-      });
       
+      // Hashear contrasena si viene (bcrypt). Si no viene, queda NULL = miembro
+      // todavia sin contrasena (no podra loguearse a la app hasta que se asigne).
+      const password_hash = data.password ? await bcrypt.hash(data.password, 10) : null;
+
       let miembroRows;
       try {
         const result = await pool.query(
@@ -409,50 +395,46 @@ router.post(
             telefono, email, direccion,
             contacto_emergencia, telefono_emergencia, condiciones_medicas, alergias,
             objetivo, nivel_experiencia, observaciones,
-            acepto_terminos, autorizo_datos, codigo_qr, qr_imagen
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
-          RETURNING id_miembro, nombre, documento, telefono, email, codigo_qr, qr_imagen, activo, fecha_registro`,
+            acepto_terminos, autorizo_datos, codigo_qr, qr_imagen,
+            password_hash, password_set_at, app_acceso
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
+          RETURNING id_miembro, nombre, documento, telefono, email, codigo_qr, qr_imagen,
+                    activo, fecha_registro, app_acceso,
+                    (password_hash IS NOT NULL) AS password_asignada`,
           [
-            gymId, 
-            data.nombre.trim(), 
-            data.tipo_documento, 
-            data.documento, 
-            data.fecha_nacimiento || null, 
+            gymId,
+            data.nombre.trim(),
+            data.tipo_documento,
+            data.documento,
+            data.fecha_nacimiento || null,
             data.genero || null,
-            data.telefono, 
-            data.email || null, 
+            data.telefono,
+            data.email || null,
             data.direccion || null,
-            data.contacto_emergencia || null, 
-            data.telefono_emergencia || null, 
-            data.condiciones_medicas || null, 
+            data.contacto_emergencia || null,
+            data.telefono_emergencia || null,
+            data.condiciones_medicas || null,
             data.alergias || null,
-            data.objetivo || null, 
-            data.nivel_experiencia || null, 
+            data.objetivo || null,
+            data.nivel_experiencia || null,
             data.observaciones || null,
-            data.acepto_terminos, 
-            data.autorizo_datos, 
+            data.acepto_terminos,
+            data.autorizo_datos,
             codigo_qr_cifrado,
-            data.qr_imagen || null
+            data.qr_imagen || null,
+            password_hash,
+            password_hash ? new Date() : null,
+            data.app_acceso !== false, // default true
           ]
         );
         miembroRows = result.rows;
-        console.log('[POST /admin/miembros] Miembro insertado exitosamente:', miembroRows[0]);
       } catch (dbErr) {
         console.error('[POST /admin/miembros] Error en INSERT de miembro:', dbErr);
-        console.error('[POST /admin/miembros] Detalles del error:', {
-          message: dbErr.message,
-          code: dbErr.code,
-          detail: dbErr.detail,
-          hint: dbErr.hint,
-          table: dbErr.table,
-          column: dbErr.column
-        });
         throw new AppError(500, 'No pudimos crear el miembro. Intenta de nuevo.', 'DB_UNREACHABLE');
       }
 
       const miembroId = miembroRows[0].id_miembro;
 
-      // Insertar plan y cobros
       const valorTotal = parseFloat(data.valor_total) || 0;
       const valorPagado = parseFloat(data.valor_pagado) || 0;
 
@@ -479,34 +461,44 @@ router.post(
         ]
       );
 
-      // Obtener nombre del gimnasio para el email
       const { rows: gymRows } = await pool.query(
         'SELECT nombre FROM gimnasio WHERE id_gimnasio = $1',
         [gymId]
       );
       const gymName = gymRows[0]?.nombre || 'tu gimnasio';
 
-      // Enviar email con el QR si el miembro tiene email
+      let qrImageUrl = null;
+      try {
+        qrImageUrl = await QRCode.toDataURL(codigo_qr);
+      } catch (qrErr) {
+        console.error('[POST /admin/miembros] Error generando imagen QR:', qrErr.message);
+      }
+
       if (data.email) {
         try {
-          // Generar imagen del QR en base64 para el correo
-          let qrImageUrl = null;
-          try {
-            qrImageUrl = await QRCode.toDataURL(codigo_qr);
-          } catch (qrErr) {
-            console.error('[POST /admin/miembros] Error generando imagen QR:', qrErr.message);
-          }
-          
           await sendMemberQR({
             to: data.email,
             memberName: data.nombre,
             gymName,
-            qrCode: codigo_qr, // Enviar código descifrado para que sea legible
+            qrCode: codigo_qr,
             qrImageUrl: qrImageUrl
           });
         } catch (emailErr) {
           console.error('[POST /admin/miembros] Error enviando email:', emailErr.message);
-          // No fallar el registro si el email falla
+        }
+      }
+
+      if (data.telefono) {
+        try {
+          await sendWhatsAppQR(
+            data.telefono,
+            data.nombre,
+            gymName,
+            codigo_qr,
+            qrImageUrl
+          );
+        } catch (waErr) {
+          console.error('[POST /admin/miembros] Error enviando WhatsApp:', waErr.message);
         }
       }
 
@@ -559,7 +551,6 @@ router.get(
       );
       if (rows.length === 0) throw new AppError(404, 'Miembro no encontrado.', 'MEMBER_NOT_FOUND');
 
-      // Plan vigente (vive en plan_cobro, no en la tabla membresia).
       const { rows: mem } = await pool.query(
         `SELECT estado_pago AS estado, fecha_inicio, fecha_fin,
                 INITCAP(LOWER(tipo_plan)) AS plan
@@ -592,8 +583,6 @@ router.get(
 
     try {
       const { rows } = await pool.query(
-        /* Trae TODAS las columnas editables. Si faltara alguna, el formulario
-           de edicion la precargaria vacia y al guardar la borraria. */
         `SELECT id_miembro, nombre, documento, telefono, email, codigo_qr, qr_imagen,
                 activo, fecha_registro, tipo_documento, fecha_nacimiento, genero,
                 codigo_pais_telefono, ciudad, direccion, contacto_emergencia,
@@ -630,6 +619,16 @@ router.put(
     const params = [];
     for (const [k, v] of Object.entries(parsed.data)) {
       if (v === undefined) continue;
+
+      // Caso especial: 'password' -> hashear y guardar en password_hash.
+      if (k === 'password') {
+        const hashed = await bcrypt.hash(String(v), 10);
+        params.push(hashed);
+        campos.push(`password_hash = $${params.length}`);
+        campos.push(`password_set_at = CURRENT_TIMESTAMP`);
+        continue;
+      }
+
       params.push(k === 'email' && v ? v.toLowerCase() : v);
       campos.push(`${k} = $${params.length}`);
     }
@@ -644,7 +643,9 @@ router.put(
       const { rows } = await pool.query(
         `UPDATE miembro SET ${campos.join(', ')}
          WHERE id_miembro = $${idIdx} AND id_gimnasio = $${gymIdx}
-         RETURNING id_miembro, nombre, documento, telefono, email, codigo_qr, qr_imagen, activo, fecha_registro`,
+         RETURNING id_miembro, nombre, documento, telefono, email, codigo_qr, qr_imagen,
+                   activo, fecha_registro, app_acceso,
+                   (password_hash IS NOT NULL) AS password_asignada`,
         params
       );
       if (rows.length === 0) throw new AppError(404, 'Miembro no encontrado', 'MEMBER_NOT_FOUND');
@@ -768,15 +769,12 @@ router.put(
       throw new AppError(400, 'Lo pagado no puede superar el valor del plan.', 'VALIDATION_ERROR');
     }
 
-    // El miembro tiene que ser de ESTE gimnasio: el id llega por la URL y no
-    // se puede confiar en el.
     const { rows: duenio } = await pool.query(
       'SELECT id_miembro FROM miembro WHERE id_miembro = $1 AND id_gimnasio = $2',
       [req.params.id, gymId]
     );
     if (duenio.length === 0) throw new AppError(404, 'Miembro no encontrado.', 'MEMBER_NOT_FOUND');
 
-    // El estado del pago se deduce de los valores; no lo manda el cliente.
     const estado = d.valor_pagado >= d.valor_total && d.valor_total > 0
       ? 'PAGADO'
       : d.valor_pagado > 0 ? 'PARCIAL' : 'PENDIENTE';
@@ -804,8 +802,6 @@ router.put(
       );
       plan = rows[0];
     } else {
-      // Un miembro creado antes de que existiera el plan de cobro no tiene
-      // fila: en ese caso se crea en vez de fallar.
       const { rows } = await pool.query(
         `INSERT INTO plan_cobro
            (id_miembro, id_gimnasio, tipo_plan, fecha_inicio, fecha_fin, valor_total,
@@ -824,4 +820,5 @@ router.put(
   })
 );
 
+// LÍNEA OBLIGATORIA PARA EXPORTAR EL ROUTER Y EVITAR EL ERROR DE EXPRESS
 module.exports = router;
