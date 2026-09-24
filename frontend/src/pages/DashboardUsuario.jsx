@@ -37,6 +37,26 @@ export default function DashboardUsuario() {
     return () => { alive = false; };
   }, []);
 
+  // --- AGREGAMOS ESTA LÍNEA PARA VER LOS DATOS EN LA CONSOLA DEL NAVEGADOR ---
+  console.log("Datos del usuario:", user);
+
+  // --- INICIO DEL BLOQUEO POR MEMBRESÍA VENCIDA ---
+  // Revisa si en tu base de datos el estado llega como 'vencido', 'inactivo', etc.
+  if (user && (user.estado === 'vencido' || user.estado === 'inactivo')) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '70vh', textAlign: 'center', padding: '20px' }}>
+        <span className="material-symbols-outlined" style={{ fontSize: '80px', color: '#ff4d4f' }}>
+          block
+        </span>
+        <h1 style={{ marginTop: '20px', fontSize: '28px' }}>Membresía Vencida</h1>
+        <p style={{ marginTop: '10px', fontSize: '16px', color: 'var(--on-surface-variant)', maxWidth: '400px' }}>
+          Tu mensualidad ha expirado y el acceso a tu perfil está bloqueado. Por favor, acércate a la recepción del gimnasio para renovar tu plan.
+        </p>
+      </div>
+    );
+  }
+  // --- FIN DEL BLOQUEO ---
+
   return (
     <>
       <header className="admin-page-head">

@@ -5,6 +5,7 @@ import { es } from 'date-fns/locale/es';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import CardGlass from '../components/CardGlass';
+import IconoWhatsapp from '../components/IconoWhatsapp';
 import BadgeEstado, { estadoDeMiembro } from '../components/BadgeEstado';
 import EmptyState from '../components/EmptyState';
 import PageTransition from '../components/PageTransition';
@@ -269,6 +270,8 @@ function formularioVacio() {
 
 export default function MiembrosPage() {
   const [searchParams] = useSearchParams();
+  // Miembros a los que ya se les escribio en esta sesion, para marcar el boton.
+  const [contactados, setContactados] = useState(() => new Set());
   const [items, setItems]   = useState([]);
   const [q, setQ]           = useState('');
   const [filtro, setFiltro] = useState('todos');
@@ -775,6 +778,57 @@ export default function MiembrosPage() {
     } finally {
       setPlanGuardando(false);
     }
+  };
+
+  /**
+   * Escribe al miembro por WhatsApp con el mensaje que arma el servidor segun
+   * su situacion (plan vencido, por vencer, o lleva tiempo sin venir). No se
+   * envia solo: se abre el chat para que la persona lo revise, que es ademas
+   * lo unico que permite WhatsApp desde un enlace.
+   */
+  const escribirPorWhatsapp = async (m, e) => {
+    e.stopPropagation();                 // no abrir la ficha al mismo tiempo
+    const w = m.whatsapp;
+    if (!w?.telefono) return;
+    window.open(
+      `https://wa.me/${w.telefono}?text=${encodeURIComponent(w.mensaje || '')}`,
+      '_blank',
+      'noopener,noreferrer'
+    );
+    setContactados((prev) => new Set(prev).add(m.id_miembro));
+    try {
+      await api.post('/admin/notificaciones/enviado', {
+        idMiembro: m.id_miembro,
+        canal: 'WHATSAPP',
+        tipo: w.motivo,
+      });
+    } catch (_) {
+      // El mensaje ya se abrio; no vale la pena molestar por el registro.
+    }
+  };
+
+  /** Boton de WhatsApp de una fila. Solo sale si hay algo que decirle. */
+  const BotonWhatsapp = ({ m }) => {
+    if (!m.whatsapp) return null;
+    if (!m.whatsapp.telefono) {
+      return (
+        <span className="wa-fila wa-fila--sin" title="Sin un teléfono válido registrado">
+          Sin teléfono
+        </span>
+      );
+    }
+    const ya = contactados.has(m.id_miembro);
+    return (
+      <button
+        type="button"
+        className={`wa-fila${ya ? ' wa-fila--enviado' : ''}`}
+        onClick={(e) => escribirPorWhatsapp(m, e)}
+        title={`Escribirle a ${m.nombre} por WhatsApp`}
+      >
+        <IconoWhatsapp />
+        {ya ? 'Enviado' : 'Avisar'}
+      </button>
+    );
   };
 
   /** Copia el codigo QR al portapapeles y confirma en el propio boton. */
@@ -1400,7 +1454,7 @@ export default function MiembrosPage() {
                 <th>Documento</th>
                 <th>Contacto</th>
                 <th>QR</th>
-                <th>Estado</th>
+                <th className="col-estado">Estado</th>
                 <th aria-label="Acciones" />
               </tr>
             </thead>
@@ -1457,7 +1511,12 @@ export default function MiembrosPage() {
                         {m.codigo_qr}
                       </code>
                     </td>
-                    <td><BadgeEstado estado={estadoDeMiembro(m)} /></td>
+                    <td className="col-estado">
+                      <div className="celda-estado">
+                        <BadgeEstado estado={estadoDeMiembro(m)} />
+                        <BotonWhatsapp m={m} />
+                      </div>
+                    </td>
                     <td className="row-actions">
                       {m.activo ? (
                         <button
@@ -1516,7 +1575,10 @@ export default function MiembrosPage() {
                     <strong>{m.nombre}</strong>
                     {m.email && <small>{m.email}</small>}
                   </div>
-                  <BadgeEstado estado={estadoDeMiembro(m)} />
+                  <div className="celda-estado">
+                    <BadgeEstado estado={estadoDeMiembro(m)} />
+                    <BotonWhatsapp m={m} />
+                  </div>
                 </header>
                 <dl className="miembro-card__data">
                   <div>

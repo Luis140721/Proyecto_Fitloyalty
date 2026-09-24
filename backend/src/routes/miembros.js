@@ -4,12 +4,12 @@
  * CRUD de miembros (socios) del gimnasio del usuario autenticado.
  * Multi-tenant: todas las queries filtran por id_gimnasio.
  *
- *   GET    /api/admin/miembros         -> lista paginada + busqueda por nombre/doc
- *   POST   /api/admin/miembros         -> crea un miembro (genera codigo_qr)
- *   GET    /api/admin/miembros/:id     -> detalle
- *   PUT    /api/admin/miembros/:id     -> actualiza nombre/telefono/email/activo
- *   DELETE /api/admin/miembros/:id     -> soft-delete (activo = false)
- *   GET    /api/admin/miembros/lookup  -> busqueda por codigo_qr/documento (para checkin)
+ *   GET    /api/admin/miembros        -> lista paginada + busqueda por nombre/doc
+ *   POST   /api/admin/miembros        -> crea un miembro (genera codigo_qr)
+ *   GET    /api/admin/miembros/:id    -> detalle
+ *   PUT    /api/admin/miembros/:id    -> actualiza nombre/telefono/email/activo
+ *   DELETE /api/admin/miembros/:id    -> soft-delete (activo = false)
+ *   GET    /api/admin/miembros/lookup -> busqueda por codigo_qr/documento (para checkin)
  *
  * Handlers async con asyncHandler para que cualquier rechazo llegue al
  * errorHandler central con respuesta consistente.
@@ -25,7 +25,9 @@ const { requireActiveTrial } = require('../lib/trial');
 const { z } = require('zod');
 const { formatZodError } = require('../lib/validators');
 const { ULTIMO_PLAN } = require('../lib/planes');
+const { telefonoWhatsapp, mensajeParaMiembro, enPalabras } = require('../lib/mensajes');
 const { sendMemberQR } = require('../lib/email');
+const { sendWhatsAppQR } = require('../lib/whatsapp'); // <-- NUEVO: Importado el servicio de WhatsApp
 const QRCode = require('qrcode');
 
 const router = express.Router();
@@ -64,7 +66,7 @@ function decryptQrCode(encrypted) {
 
 const createSchema = z.object({
   // Datos personales
-  nombre:    z.string().min(2, 'El nombre es requerido'),
+  nombre:     z.string().min(2, 'El nombre es requerido'),
   tipo_documento: z.enum(['CC', 'TI', 'NIT', 'CE', 'PP']).default('CC'),
   documento: z.string().min(4, 'El documento es requerido'),
   fecha_nacimiento: z.string().optional(),
@@ -138,12 +140,12 @@ const updateSchema = z.object({
   qr_imagen: z.string().optional(),
 
   // Datos personales
-  tipo_documento:       vacioANull(z.string().max(10)),
-  fecha_nacimiento:     vacioANull(z.string()),
-  genero:               vacioANull(z.string().max(20)),
+  tipo_documento:      vacioANull(z.string().max(10)),
+  fecha_nacimiento:    vacioANull(z.string()),
+  genero:              vacioANull(z.string().max(20)),
   codigo_pais_telefono: vacioANull(z.string().max(5)),
-  ciudad:               vacioANull(z.string().max(100)),
-  direccion:            vacioANull(z.string()),
+  ciudad:              vacioANull(z.string().max(100)),
+  direccion:           vacioANull(z.string()),
 
   // Salud y emergencia
   contacto_emergencia:  vacioANull(z.string().max(100)),
@@ -241,34 +243,94 @@ router.get(
     const q = (req.query.q || '').trim();
     const includeInactive = req.query.includeInactive === 'true';
 
-    const where = ['id_gimnasio = $1'];
+    const where = ['m.id_gimnasio = $1'];
     const params = [gymId];
     if (!includeInactive) {
-      where.push('activo = TRUE');
+      where.push('m.activo = TRUE');
     }
     if (q) {
       params.push(`%${q.toLowerCase()}%`);
       const i = params.length;
-      where.push(`(LOWER(nombre) LIKE $${i} OR LOWER(documento) LIKE $${i} OR LOWER(COALESCE(email,'')) LIKE $${i} OR LOWER(codigo_qr) = LOWER($${i + 1}))`);
+      where.push(`(LOWER(m.nombre) LIKE $${i} OR LOWER(m.documento) LIKE $${i} OR LOWER(COALESCE(m.email,'')) LIKE $${i} OR LOWER(m.codigo_qr) = LOWER($${i + 1}))`);
       params.push(q);
     }
 
     const offset = page * pageSize;
     try {
+      const { rows: cfg } = await pool.query(
+        `SELECT
+            COALESCE(cg.dias_recordatorio_default, cn.dias_aviso_vencimiento, 7)::int AS dias_aviso,
+            COALESCE(cn.umbral_alerta_amarilla, 15)::int AS dias_riesgo
+           FROM (SELECT 1) x
+           LEFT JOIN config_gimnasio cg       ON cg.id_gimnasio = $1
+           LEFT JOIN configuracion_gimnasio cn ON cn.id_gimnasio = $1`,
+        [gymId]
+      );
+      const diasAviso  = cfg[0]?.dias_aviso  ?? 7;
+      const diasRiesgo = cfg[0]?.dias_riesgo ?? 15;
+
       const { rows } = await pool.query(
-        `SELECT id_miembro, nombre, documento, telefono, email, codigo_qr, activo, fecha_registro
-         FROM miembro
-         WHERE ${where.join(' AND ')}
-         ORDER BY nombre ASC
-         LIMIT ${pageSize} OFFSET ${offset}`,
-        params
+        `SELECT m.id_miembro, m.nombre, m.documento, m.telefono, m.email,
+                m.codigo_qr, m.activo, m.fecha_registro,
+                pc.tipo_plan, pc.fecha_fin, pc.estado_pago,
+                (pc.fecha_fin IS NOT NULL AND pc.fecha_fin < CURRENT_DATE) AS vencido,
+                (pc.fecha_fin IS NOT NULL
+                  AND pc.fecha_fin >= CURRENT_DATE
+                  AND pc.fecha_fin <= CURRENT_DATE + ($${params.length + 1} || ' days')::interval) AS "vencePronto",
+                (ult.ultima IS NULL
+                  OR ult.ultima < NOW() - ($${params.length + 2} || ' days')::interval) AS "enRiesgo",
+                ult.ultima AS ultimo_ingreso,
+                (CURRENT_DATE - pc.fecha_fin)::int          AS dias_vencido,
+                (pc.fecha_fin - CURRENT_DATE)::int          AS dias_para_vencer,
+                (CURRENT_DATE - ult.ultima::date)::int      AS dias_sin_venir,
+                m.codigo_pais_telefono
+           FROM miembro m
+           LEFT JOIN LATERAL (
+             SELECT p.tipo_plan, p.fecha_fin, p.estado_pago
+               FROM plan_cobro p
+              WHERE p.id_miembro = m.id_miembro AND p.activo = TRUE
+              ORDER BY p.fecha_fin DESC NULLS LAST, p.id_plan_cobro DESC
+              LIMIT 1
+           ) pc ON TRUE
+           LEFT JOIN LATERAL (
+             SELECT MAX(c.fecha_hora) AS ultima
+               FROM checkin c WHERE c.id_miembro = m.id_miembro
+           ) ult ON TRUE
+          WHERE ${where.join(' AND ')}
+          ORDER BY m.nombre ASC
+          LIMIT ${pageSize} OFFSET ${offset}`,
+        [...params, diasAviso, diasRiesgo]
       );
       const totalQ = await pool.query(
-        `SELECT COUNT(*)::int AS total FROM miembro WHERE ${where.join(' AND ')}`,
+        `SELECT COUNT(*)::int AS total FROM miembro m WHERE ${where.join(' AND ')}`,
         params
       );
 
-      return res.json({ miembros: rows, total: totalQ.rows[0].total, page, pageSize });
+      const { rows: gimnasio } = await pool.query(
+        'SELECT nombre FROM gimnasio WHERE id_gimnasio = $1',
+        [gymId]
+      );
+      const nombreGym = gimnasio[0]?.nombre || 'tu gimnasio';
+
+      const miembros = rows.map((m) => {
+        const motivo = m.vencido ? 'vencida' : m.vencePronto ? 'por-vencer' : m.enRiesgo ? 'riesgo' : null;
+        if (!motivo) return { ...m, whatsapp: null };
+
+        const dato = motivo === 'vencida'    ? enPalabras(m.dias_vencido, 'pasado')
+                   : motivo === 'por-vencer' ? enPalabras(m.dias_para_vencer, 'futuro')
+                   :                           enPalabras(m.dias_sin_venir, 'plano');
+
+        return {
+          ...m,
+          whatsapp: {
+            motivo,
+            telefono: telefonoWhatsapp(m.telefono, m.codigo_pais_telefono),
+            mensaje: mensajeParaMiembro(motivo, nombreGym, m.nombre, dato),
+          },
+        };
+      });
+
+      return res.json({ miembros, total: totalQ.rows[0].total, page, pageSize });
     } catch (err) {
       console.error('[GET /admin/miembros] Error:', err.message);
       throw new AppError(503, 'No pudimos listar los miembros. Intenta de nuevo.', 'DB_UNREACHABLE');
@@ -292,7 +354,6 @@ router.post(
     const gymId = req.user.gymId;
 
     try {
-      // Duplicados por gimnasio (solo verificar miembros activos)
       const { rows: dupDoc } = await pool.query(
         'SELECT id_miembro FROM miembro WHERE id_gimnasio = $1 AND documento = $2 AND activo = TRUE',
         [gymId, data.documento]
@@ -307,7 +368,6 @@ router.post(
         if (dupMail.length > 0) throw new AppError(409, 'Ya existe un miembro activo con ese correo.', 'MEMBER_EMAIL_TAKEN');
       }
 
-      // Generar codigo_qr unico (reintentar si choca)
       let codigo_qr;
       for (let i = 0; i < 5; i += 1) {
         const candidate = genQrCode(gymId);
@@ -316,24 +376,12 @@ router.post(
       }
       if (!codigo_qr) throw new AppError(500, 'No se pudo generar un codigo QR unico. Reintenta.', 'QR_GENERATION_FAILED');
 
-      // Cifrar el código QR para mayor seguridad
       const codigo_qr_cifrado = encryptQrCode(codigo_qr);
 
-      // Calcular fechas y estado de pago automáticamente si no se proporcionan
       const fechaInicio = data.fecha_inicio || new Date().toISOString().split('T')[0];
       const fechaFin = data.fecha_fin || calcularFechaFin(data.tipo_plan, fechaInicio);
       const estadoPago = data.estado_pago || determinarEstadoPago(data.valor_total, data.valor_pagado);
       const proximaFechaCobro = data.proxima_fecha_cobro || calcularProximaFechaCobro(fechaFin);
-
-      // Insertar miembro con todos los campos (guardar código QR cifrado)
-      console.log('[POST /admin/miembros] Intentando insertar miembro con datos:', {
-        gymId,
-        nombre: data.nombre,
-        tipo_documento: data.tipo_documento,
-        documento: data.documento,
-        telefono: data.telefono,
-        email: data.email
-      });
       
       // Hashear contrasena si viene (bcrypt). Si no viene, queda NULL = miembro
       // todavia sin contrasena (no podra loguearse a la app hasta que se asigne).
@@ -380,23 +428,13 @@ router.post(
           ]
         );
         miembroRows = result.rows;
-        console.log('[POST /admin/miembros] Miembro insertado exitosamente:', miembroRows[0]);
       } catch (dbErr) {
         console.error('[POST /admin/miembros] Error en INSERT de miembro:', dbErr);
-        console.error('[POST /admin/miembros] Detalles del error:', {
-          message: dbErr.message,
-          code: dbErr.code,
-          detail: dbErr.detail,
-          hint: dbErr.hint,
-          table: dbErr.table,
-          column: dbErr.column
-        });
         throw new AppError(500, 'No pudimos crear el miembro. Intenta de nuevo.', 'DB_UNREACHABLE');
       }
 
       const miembroId = miembroRows[0].id_miembro;
 
-      // Insertar plan y cobros
       const valorTotal = parseFloat(data.valor_total) || 0;
       const valorPagado = parseFloat(data.valor_pagado) || 0;
 
@@ -423,34 +461,44 @@ router.post(
         ]
       );
 
-      // Obtener nombre del gimnasio para el email
       const { rows: gymRows } = await pool.query(
         'SELECT nombre FROM gimnasio WHERE id_gimnasio = $1',
         [gymId]
       );
       const gymName = gymRows[0]?.nombre || 'tu gimnasio';
 
-      // Enviar email con el QR si el miembro tiene email
+      let qrImageUrl = null;
+      try {
+        qrImageUrl = await QRCode.toDataURL(codigo_qr);
+      } catch (qrErr) {
+        console.error('[POST /admin/miembros] Error generando imagen QR:', qrErr.message);
+      }
+
       if (data.email) {
         try {
-          // Generar imagen del QR en base64 para el correo
-          let qrImageUrl = null;
-          try {
-            qrImageUrl = await QRCode.toDataURL(codigo_qr);
-          } catch (qrErr) {
-            console.error('[POST /admin/miembros] Error generando imagen QR:', qrErr.message);
-          }
-          
           await sendMemberQR({
             to: data.email,
             memberName: data.nombre,
             gymName,
-            qrCode: codigo_qr, // Enviar código descifrado para que sea legible
+            qrCode: codigo_qr,
             qrImageUrl: qrImageUrl
           });
         } catch (emailErr) {
           console.error('[POST /admin/miembros] Error enviando email:', emailErr.message);
-          // No fallar el registro si el email falla
+        }
+      }
+
+      if (data.telefono) {
+        try {
+          await sendWhatsAppQR(
+            data.telefono,
+            data.nombre,
+            gymName,
+            codigo_qr,
+            qrImageUrl
+          );
+        } catch (waErr) {
+          console.error('[POST /admin/miembros] Error enviando WhatsApp:', waErr.message);
         }
       }
 
@@ -503,7 +551,6 @@ router.get(
       );
       if (rows.length === 0) throw new AppError(404, 'Miembro no encontrado.', 'MEMBER_NOT_FOUND');
 
-      // Plan vigente (vive en plan_cobro, no en la tabla membresia).
       const { rows: mem } = await pool.query(
         `SELECT estado_pago AS estado, fecha_inicio, fecha_fin,
                 INITCAP(LOWER(tipo_plan)) AS plan
@@ -536,8 +583,6 @@ router.get(
 
     try {
       const { rows } = await pool.query(
-        /* Trae TODAS las columnas editables. Si faltara alguna, el formulario
-           de edicion la precargaria vacia y al guardar la borraria. */
         `SELECT id_miembro, nombre, documento, telefono, email, codigo_qr, qr_imagen,
                 activo, fecha_registro, tipo_documento, fecha_nacimiento, genero,
                 codigo_pais_telefono, ciudad, direccion, contacto_emergencia,
@@ -724,15 +769,12 @@ router.put(
       throw new AppError(400, 'Lo pagado no puede superar el valor del plan.', 'VALIDATION_ERROR');
     }
 
-    // El miembro tiene que ser de ESTE gimnasio: el id llega por la URL y no
-    // se puede confiar en el.
     const { rows: duenio } = await pool.query(
       'SELECT id_miembro FROM miembro WHERE id_miembro = $1 AND id_gimnasio = $2',
       [req.params.id, gymId]
     );
     if (duenio.length === 0) throw new AppError(404, 'Miembro no encontrado.', 'MEMBER_NOT_FOUND');
 
-    // El estado del pago se deduce de los valores; no lo manda el cliente.
     const estado = d.valor_pagado >= d.valor_total && d.valor_total > 0
       ? 'PAGADO'
       : d.valor_pagado > 0 ? 'PARCIAL' : 'PENDIENTE';
@@ -760,8 +802,6 @@ router.put(
       );
       plan = rows[0];
     } else {
-      // Un miembro creado antes de que existiera el plan de cobro no tiene
-      // fila: en ese caso se crea en vez de fallar.
       const { rows } = await pool.query(
         `INSERT INTO plan_cobro
            (id_miembro, id_gimnasio, tipo_plan, fecha_inicio, fecha_fin, valor_total,
@@ -780,4 +820,5 @@ router.put(
   })
 );
 
+// LÍNEA OBLIGATORIA PARA EXPORTAR EL ROUTER Y EVITAR EL ERROR DE EXPRESS
 module.exports = router;

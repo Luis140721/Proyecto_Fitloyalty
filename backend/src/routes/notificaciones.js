@@ -28,6 +28,7 @@ const { authenticate, authorize } = require('../middleware/auth');
 const asyncHandler = require('../lib/asyncHandler');
 const { AppError } = require('../lib/errors');
 const { ULTIMO_PLAN } = require('../lib/planes');
+const { telefonoWhatsapp, mensajeParaMiembro } = require('../lib/mensajes');
 const { z } = require('zod');
 const { formatZodError } = require('../lib/validators');
 
@@ -64,33 +65,6 @@ async function leerUmbrales(gymId) {
     diasAviso: Number(c.dias_recordatorio_default) || Number(a.dias_aviso_vencimiento) || POR_DEFECTO.diasAviso,
     diasRiesgo: Number(a.umbral_alerta_amarilla) || POR_DEFECTO.diasRiesgo,
   };
-}
-
-/**
- * Deja el telefono en el formato que espera WhatsApp: solo digitos y con
- * indicativo de pais. Si el numero no sirve devuelve null, y el aviso sale
- * sin boton en vez de con un enlace roto.
- */
-function telefonoWhatsapp(telefono, indicativo) {
-  const limpio = String(telefono || '').replace(/\D/g, '');
-  if (limpio.length < 7) return null;
-  if (limpio.length > 10) return limpio;              // ya trae indicativo
-  const pais = String(indicativo || '57').replace(/\D/g, '') || '57';
-  return `${pais}${limpio}`;
-}
-
-/** Texto que se le manda al miembro segun el motivo del aviso. */
-function mensajeParaMiembro(tipo, gym, nombre, dato) {
-  const primerNombre = String(nombre || '').split(' ')[0];
-  const saludo = `Hola ${primerNombre}, te saludamos de ${gym}.`;
-
-  if (tipo === 'vencida') {
-    return `${saludo} Tu plan vencio ${dato}. Pasa cuando quieras y lo renovamos para que no pierdas el ritmo.`;
-  }
-  if (tipo === 'por-vencer') {
-    return `${saludo} Te recordamos que tu plan vence ${dato}. Puedes renovarlo en recepcion o escribirnos por aqui.`;
-  }
-  return `${saludo} Notamos que llevas ${dato} sin venir y queremos saber como estas. Te esperamos cuando quieras retomar.`;
 }
 
 // ---------------------------------------------------------------------------

@@ -1528,3 +1528,124 @@
 .plan-editor__estado--pendiente { background: rgba(248, 113, 113, 0.16); color: #F87171; }
 
 .plan-editor__guardar { margin-top: 14px; }
+
+/* ==========================================================================
+   Estado del miembro en la lista, con su boton de aviso al lado
+   --------------------------------------------------------------------------
+   El boton solo aparece en quien hay que contactar (plan vencido, por vencer
+   o lleva tiempo sin venir), asi que la columna no se llena de ruido.
+   ========================================================================== */
+
+/*
+ * Columna de estado: el grupo se pega a la derecha, que es donde la vista
+ * cierra. La etiqueta conserva un ancho fijo para que todos los botones caigan
+ * en la misma linea vertical, algo que con flex no pasaba porque "Al dia" y
+ * "Vence pronto" no miden lo mismo.
+ */
+.col-estado { text-align: right; }
+
+.celda-estado {
+  display: inline-grid;
+  /*
+   * Las DOS columnas van a ancho fijo. Si la segunda fuera `auto`, la rejilla
+   * se encogeria en las filas sin boton y, al estar pegada a la derecha, la
+   * etiqueta de esas filas se correria hacia afuera y no coincidiria con las
+   * demas. Con anchos fijos la caja mide igual en todas las filas.
+   */
+  grid-template-columns: 112px 88px;
+  align-items: center;
+  justify-items: end;
+  gap: 7px;
+}
+.celda-estado .badge-estado {
+  width: 100%;
+  justify-content: center;
+  padding: 3px 8px;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+}
+.celda-estado .badge-estado__icono { font-size: 12px; }
+
+/* En la tarjeta de movil no hay columna que alinear: se deja fluir. */
+.miembro-card .col-estado,
+.miembro-card .celda-estado {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 7px;
+}
+.miembro-card .celda-estado .badge-estado { width: auto; }
+.miembro-card .wa-fila { width: auto; }
+
+/*
+ * Boton de aviso, en vidrio: fondo verde translucido con desenfoque detras,
+ * en vez de un bloque solido. El texto va en verde claro y no en blanco
+ * porque sobre una superficie translucida el blanco pierde contraste.
+ */
+.wa-fila {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 3px 10px 3px 8px;
+  border: 1px solid rgba(74, 222, 128, 0.42);
+  border-radius: var(--radius-full);
+  background: linear-gradient(
+      180deg,
+      rgba(74, 222, 128, 0.22) 0%,
+      rgba(31, 143, 78, 0.26) 100%
+    );
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  color: #7DE9A9;
+  font-family: var(--font-label);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+.wa-fila:hover {
+  background: linear-gradient(
+      180deg,
+      rgba(74, 222, 128, 0.34) 0%,
+      rgba(31, 143, 78, 0.38) 100%
+    );
+  border-color: rgba(74, 222, 128, 0.65);
+}
+.wa-fila { width: 100%; }
+.wa-fila:active { transform: scale(0.96); }
+.wa-fila:focus-visible { outline: 2px solid #4ADE80; outline-offset: 2px; }
+.wa-fila svg { width: 12px; height: 12px; }
+
+/* Ya se le escribio en esta sesion: se apaga para no repetir sin querer. */
+.wa-fila--enviado {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--border-subtle);
+  box-shadow: none;
+  color: var(--on-surface-variant);
+  cursor: default;
+}
+.wa-fila--enviado:hover {
+  background: rgba(255, 255, 255, 0.09);
+  border-color: var(--border-subtle);
+}
+
+.wa-fila--sin {
+  font-size: 9px;
+  letter-spacing: 0;
+  text-transform: none;
+  background: transparent;
+  border-color: transparent;
+  backdrop-filter: none;
+  box-shadow: none;
+  color: var(--outline);
+  cursor: default;
+}
+.wa-fila--sin:hover { background: transparent; border-color: transparent; }
