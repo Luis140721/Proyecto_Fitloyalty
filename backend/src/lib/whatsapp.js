@@ -31,6 +31,35 @@ const qrcode = require('qrcode-terminal');
 // normalmente va en false hasta que alguien instale Chrome alla.
 const ENABLED = process.env.ENABLE_WHATSAPP !== 'false';
 
+/**
+ * Resuelve la ruta del Chrome/Chromium que Puppeteer debe usar.
+ *
+ * Orden de busqueda:
+ *   1) PUPPETEER_EXECUTABLE_PATH en env (sirve para forzar una ruta concreta).
+ *   2) require('puppeteer').executablePath() si el paquete `puppeteer`
+ *      esta instalado (su postinstall descarga Chrome a PUPPETEER_CACHE_DIR
+ *      o ~/.cache/puppeteer). Asi, en Render basta con tener `puppeteer`
+ *      como dependencia y Render descarga Chrome en `npm install`.
+ *   3) undefined -> puppeteer-core intenta descubrir un Chrome del sistema
+ *      (util en dev local si tienes Chrome instalado en /usr/bin/google-chrome).
+ */
+function resolveChromiumPath() {
+    if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+        return process.env.PUPPETEER_EXECUTABLE_PATH;
+    }
+    try {
+        // `puppeteer` (no core) expone executablePath() que respeta
+        // PUPPETEER_CACHE_DIR. Si no esta instalado, este require lanza.
+        const puppeteer = require('puppeteer');
+        if (typeof puppeteer.executablePath === 'function') {
+            return puppeteer.executablePath();
+        }
+    } catch (e) {
+        // puppeteer no instalado, seguimos al fallback
+    }
+    return undefined;
+}
+
 let client = null;
 let isReady = false;
 let isInitializing = false;
@@ -38,10 +67,21 @@ let initPromise = null;
 
 // Registrar los listeners solo si esta habilitado.
 if (ENABLED) {
+    const executablePath = resolveChromiumPath();
+    if (executablePath) {
+        console.log('[WhatsApp] Usando Chromium en:', executablePath);
+    } else {
+        console.warn(
+            '[WhatsApp] No se encontro Chrome/Chromium. El envio automatico ' +
+            'fallara hasta que instales puppeteer o definas PUPPETEER_EXECUTABLE_PATH.'
+        );
+    }
+
     client = new Client({
         authStrategy: new LocalAuth(),
         puppeteer: {
             headless: true,
+            executablePath,            // puede ser undefined -> usa el default del sistema
             args: ['--no-sandbox', '--disable-setuid-sandbox']
         }
     });
