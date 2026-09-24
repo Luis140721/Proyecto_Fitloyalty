@@ -122,7 +122,11 @@ class _DashboardTabState extends State<DashboardTab> {
       physics: const NeverScrollableScrollPhysics(),
       crossAxisSpacing: 12,
       mainAxisSpacing: 12,
-      childAspectRatio: 1.4,
+      // Antes era childAspectRatio: 1.4 pero provocaba "BOTTOM OVERFLOWED BY 20 PIXELS"
+      // porque el contenido (label + numero grande de 26pt + meta) no cabia en una
+      // card de ~190x135. Ahora cada card tiene exactamente 150px de alto,
+      // suficiente para todos los textos sin overflow.
+      childAspectRatio: 1.2,
       children: [
         KpiCard(
           label: 'Visitas hoy',

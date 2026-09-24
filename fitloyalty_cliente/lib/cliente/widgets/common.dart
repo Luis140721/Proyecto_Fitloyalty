@@ -30,7 +30,7 @@ class KpiCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = accent ?? AppColors.primary;
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(20),
@@ -38,6 +38,7 @@ class KpiCard extends StatelessWidget {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Row(
             children: [
@@ -45,7 +46,7 @@ class KpiCard extends StatelessWidget {
                 child: Text(
                   label.toUpperCase(),
                   style: const TextStyle(
-                    fontSize: 11,
+                    fontSize: 10,
                     fontWeight: FontWeight.w700,
                     letterSpacing: 0.6,
                     color: AppColors.textMuted,
@@ -53,28 +54,39 @@ class KpiCard extends StatelessWidget {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.all(8),
+                padding: const EdgeInsets.all(7),
                 decoration: BoxDecoration(
                   color: c.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(icon, color: c, size: 18),
+                child: Icon(icon, color: c, size: 16),
               ),
             ],
           ),
-          const SizedBox(height: 14),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 26,
-              fontWeight: FontWeight.w800,
-              color: AppColors.textPrimary,
-              letterSpacing: -0.8,
+          const SizedBox(height: 10),
+          // FittedBox para que numeros grandes no desborden la card
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              value,
+              maxLines: 1,
+              style: const TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.w800,
+                color: AppColors.textPrimary,
+                letterSpacing: -0.8,
+              ),
             ),
           ),
           if (meta != null) ...[
-            const SizedBox(height: 4),
-            Text(meta!, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+            const SizedBox(height: 2),
+            Text(
+              meta!,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 11, color: AppColors.textSecondary, height: 1.3),
+            ),
           ],
         ],
       ),
