@@ -60,7 +60,7 @@ services:
       JWT_SECRET:   ${JWT_SECRET:?JWT_SECRET es obligatorio, define uno en .env}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
       SUPPORT_EMAIL: ${SUPPORT_EMAIL:-fitloyaltysaas@gmail.com}
-      SUPPORT_TRIAL_DAYS: ${SUPPORT_TRIAL_DAYS:-7}
+      SUPPORT_TRIAL_DAYS: ${SUPPORT_TRIAL_DAYS:-14}
       # Correo: lib/email.js usa la API HTTPS de Brevo (Render free bloquea SMTP).
       # Sin BREVO_API_KEY los correos caen a modo consola y NO se envian.
       BREVO_API_KEY: ${BREVO_API_KEY:-}
