@@ -2,20 +2,18 @@
 /**
  * scripts/postinstall.js
  *
- * Se ejecuta automaticamente despues de `npm install` (definido en
- * package.json -> scripts.postinstall). Su unico trabajo es garantizar
- * que Chrome este descargado para Puppeteer.
+ * Se ejecuta automaticamente despues de `npm install`. Garantiza que
+ * Chrome y chrome-headless-shell esten descargados para Puppeteer.
  *
  * Por que existe:
- *   En Render free tier, el cache de puppeteer (~/.cache/puppeteer/) a
- *   veces conserva el marker file pero NO el binario de Chrome real
- *   (especialmente despues de un clearCache). Esto hace que
- *   `puppeteer.executablePath()` devuelva un path que apunta a un
- *   archivo inexistente, y Chrome falla con "Browser was not found".
+ *   En Render free tier el cache de puppeteer a veces conserva el
+ *   marker file pero NO el binario real (sobre todo despues de
+ *   clearCache). Eso rompe `puppeteer.executablePath()` con
+ *   "Browser was not found".
  *
- *   Solucion: despues de instalar deps, forzar la descarga/verificacion
- *   del Chrome con el comando oficial de puppeteer. Si falla (sin red,
- *   etc.) no rompe el build (exit 0).
+ *   Ademas de chrome (full), instalamos chrome-headless-shell como
+ *   fallback. Es mas pequeno (~80MB vs 250MB), arranca mas rapido,
+ *   y suele sobrevivir mejor al cache de Render.
  */
 
 const { execSync } = require('child_process');
@@ -24,13 +22,38 @@ const path = require('path');
 
 const log = (...a) => console.log('[postinstall]', ...a);
 
+function listCache() {
+    const home = process.env.HOME || process.env.USERPROFILE || '/tmp';
+    const cacheDir = path.join(home, '.cache', 'puppeteer');
+    log('Cache dir:', cacheDir);
+    if (fs.existsSync(cacheDir)) {
+        try {
+            const entries = fs.readdirSync(cacheDir, { withFileTypes: true });
+            for (const e of entries) {
+                const full = path.join(cacheDir, e.name);
+                if (e.isDirectory()) {
+                    log('  DIR ', full);
+                    try {
+                        const sub = fs.readdirSync(full);
+                        log('       contiene:', sub.slice(0, 10).join(', '), sub.length > 10 ? `... (+${sub.length - 10})` : '');
+                    } catch {}
+                } else {
+                    log('  FILE', full);
+                }
+            }
+        } catch (e) {
+            log('No se pudo leer cache:', e.message);
+        }
+    } else {
+        log('Cache dir no existe');
+    }
+}
+
 try {
-    // Detecta la version de Chrome que Puppeteer espera
     let puppeteer;
     try {
         puppeteer = require('puppeteer');
     } catch (e) {
-        // puppeteer no instalado, no hacemos nada
         log('puppeteer no instalado, saltando');
         process.exit(0);
     }
@@ -38,20 +61,39 @@ try {
     const expectedPath = puppeteer.executablePath();
     log('Chrome esperado en:', expectedPath);
 
+    listCache();
+
     if (fs.existsSync(expectedPath)) {
-        log('Chrome ya esta instalado, nada que hacer');
-        process.exit(0);
+        log('Chrome (full) ya esta OK');
+    } else {
+        log('Chrome (full) NO encontrado, instalando...');
+        try {
+            execSync('npx puppeteer browsers install chrome', {
+                stdio: 'inherit',
+                cwd: path.dirname(__dirname),
+                timeout: 240000,
+            });
+            log('Chrome (full) instalado OK');
+        } catch (e) {
+            log('Fallback chrome (full):', e.message);
+        }
     }
 
-    log('Chrome NO encontrado, descargando...');
-    execSync('npx puppeteer browsers install chrome', {
-        stdio: 'inherit',
-        cwd: path.dirname(__dirname),
-    });
-    log('Chrome instalado OK');
+    // Tambien instalamos chrome-headless-shell como plan B (mas pequeno)
+    try {
+        log('Instalando chrome-headless-shell como fallback...');
+        execSync('npx puppeteer browsers install chrome-headless-shell', {
+            stdio: 'inherit',
+            cwd: path.dirname(__dirname),
+            timeout: 240000,
+        });
+        log('chrome-headless-shell instalado OK');
+    } catch (e) {
+        log('chrome-headless-shell fallo (no es critico):', e.message);
+    }
+
+    listCache();
 } catch (err) {
-    // No rompemos el build si falla la descarga (sin red, etc.)
-    console.error('[postinstall] Error al instalar Chrome:', err.message);
-    console.error('[postinstall] El deploy continua, pero WhatsApp no funcionara hasta que se arregle.');
+    console.error('[postinstall] Error general:', err.message);
 }
 process.exit(0);

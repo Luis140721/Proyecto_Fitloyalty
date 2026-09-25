@@ -36,27 +36,57 @@ const ENABLED = process.env.ENABLE_WHATSAPP !== 'false';
  *
  * Orden de busqueda:
  *   1) PUPPETEER_EXECUTABLE_PATH en env (sirve para forzar una ruta concreta).
- *   2) require('puppeteer').executablePath() si el paquete `puppeteer`
- *      esta instalado (su postinstall descarga Chrome a PUPPETEER_CACHE_DIR
- *      o ~/.cache/puppeteer). Asi, en Render basta con tener `puppeteer`
- *      como dependencia y Render descarga Chrome en `npm install`.
- *   3) undefined -> puppeteer-core intenta descubrir un Chrome del sistema
- *      (util en dev local si tienes Chrome instalado en /usr/bin/google-chrome).
+ *   2) Chrome (full) que descargo puppeteer al instalar: require('puppeteer').executablePath().
+ *      Si esa ruta NO existe en disco (caso comun en Render free tier donde el
+ *      marker se conserva pero el binario no), seguimos al siguiente.
+ *   3) chrome-headless-shell que descargamos via postinstall:
+ *      ~/.cache/puppeteer/chrome-headless-shell/linux-{ver}/chrome-headless-shell-linux64/chrome-headless-shell
+ *   4) undefined -> puppeteer-core busca un Chrome del sistema.
  */
 function resolveChromiumPath() {
     if (process.env.PUPPETEER_EXECUTABLE_PATH) {
         return process.env.PUPPETEER_EXECUTABLE_PATH;
     }
+    const fs = require('fs');
+    const path = require('path');
+
+    // 1) Chrome (full)
     try {
-        // `puppeteer` (no core) expone executablePath() que respeta
-        // PUPPETEER_CACHE_DIR. Si no esta instalado, este require lanza.
         const puppeteer = require('puppeteer');
         if (typeof puppeteer.executablePath === 'function') {
-            return puppeteer.executablePath();
+            const p = puppeteer.executablePath();
+            if (fs.existsSync(p)) return p;
+            // Fallo silencioso: el marker dice una cosa, el disco otra.
+            console.warn('[WhatsApp] Chrome full esperado en', p, 'pero NO existe en disco. Probando chrome-headless-shell...');
         }
     } catch (e) {
-        // puppeteer no instalado, seguimos al fallback
+        // puppeteer no instalado
     }
+
+    // 2) chrome-headless-shell (mas ligero, mejor compatibilidad con Render)
+    try {
+        const puppeteer = require('puppeteer');
+        if (typeof puppeteer.executablePath === 'function') {
+            const exe = puppeteer.executablePath();
+            const cacheDir = path.dirname(path.dirname(path.dirname(exe))); // ~/.cache/puppeteer
+            // Buscamos cualquier chrome-headless-shell-linux64/chrome-headless-shell dentro del cache
+            const headlessShell = path.join(cacheDir, 'chrome-headless-shell');
+            if (fs.existsSync(headlessShell)) {
+                const versions = fs.readdirSync(headlessShell);
+                for (const ver of versions) {
+                    const candidate = path.join(headlessShell, ver, 'chrome-headless-shell-linux64', 'chrome-headless-shell');
+                    if (fs.existsSync(candidate)) {
+                        console.log('[WhatsApp] Usando chrome-headless-shell en:', candidate);
+                        return candidate;
+                    }
+                }
+            }
+        }
+    } catch (e) {
+        // ignorar
+    }
+
+    // 3) Sin executablePath -> puppeteer-core buscara en el sistema
     return undefined;
 }
 
