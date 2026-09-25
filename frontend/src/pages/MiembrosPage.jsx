@@ -870,6 +870,12 @@ export default function MiembrosPage() {
             'No se pudo enviar el WhatsApp. Verifica que el cliente este autenticado (QR en logs de Render).'
         );
       }
+      if (data.cliente_listo === false) {
+        setEditError(
+          data.mensaje ||
+            'El cliente de WhatsApp no esta autenticado en el servidor. Pide que escaneen el QR desde los logs de Render.'
+        );
+      }
     } catch (err) {
       setEditError(err.response?.data?.error || err.message || 'No se pudo enviar el contrato.');
     } finally {

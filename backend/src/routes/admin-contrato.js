@@ -101,15 +101,36 @@ router.post(
         const texto = armarContrato(m);
         const version = (req.body && req.body.version) || 'v1';
 
+        // Verificamos honestamente si el cliente de WhatsApp esta listo
+        // ANTES de intentar enviar. Si no, le avisamos al admin que
+        // escanee el QR de auth en los logs de Render primero.
+        if (!whatsapp.isWhatsAppReady()) {
+            const r = await pool.query(`
+                INSERT INTO contrato_enviado
+                    (id_miembro, id_gimnasio, enviado_por, telefono_destino,
+                     plantilla_version, exito, error_mensaje)
+                VALUES ($1, $2, $3, $4, $5, $6, $7)
+                RETURNING id_contrato_enviado, creado_en
+            `, [m.id_miembro, m.id_gimnasio, req.user.id || null,
+                tel, version, false,
+                'Cliente WhatsApp no autenticado (QR sin escanear en logs de Render)']);
+            return res.json({
+                ok: true,
+                exito: false,
+                contrato_id: r.rows[0].id_contrato_enviado,
+                creado_en: r.rows[0].creado_en,
+                telefono: tel,
+                gimnasio_id: m.id_gimnasio,
+                mensaje: 'El cliente de WhatsApp no esta autenticado. Pide a un admin que escanee el QR de autenticacion desde los logs del servidor (Render > Logs). Una vez escaneado, re-envia el contrato.',
+                cliente_listo: false,
+                preview: texto,
+            });
+        }
+
         let exito = false;
         let errorMensaje = null;
         try {
-            // sendWhatsAppText es tolerante a fallos: si el modulo esta
-            // deshabilitado o el cliente no esta listo, NO lanza, solo
-            // loguea. Asi que aqui lo que capturamos es la excepcion
-            // de error real (red, formato, etc.).
             await whatsapp.sendWhatsAppText(tel, texto);
-            // Si llegamos aqui sin lanzar, asumimos exito
             exito = true;
         } catch (err) {
             exito = false;
