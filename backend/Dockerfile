@@ -6,7 +6,11 @@ WORKDIR /app
 RUN apk add --no-cache python3 make g++
 
 COPY package.json package-lock.json* ./
+# scripts/ va antes del install: npm corre el postinstall durante `npm install`
+# y si el archivo todavia no esta, el build falla con "Cannot find module".
+COPY scripts ./scripts
 # Si falla lockf strict, npm ci --no-audit --no-fund --prefer-offline
+ENV PUPPETEER_SKIP_DOWNLOAD=true
 RUN npm install --no-audit --no-fund
 
 # Etapa runtime: solo deps de produccion + codigo. Imagen pequena y reproducible.
@@ -18,6 +22,11 @@ ENV NODE_ENV=production \
     NPM_CONFIG_LOGLEVEL=warn
 
 COPY package.json package-lock.json* ./
+COPY scripts ./scripts
+# Esta imagen no usa el envio automatico por WhatsApp, asi que el postinstall
+# se salta la descarga de Chrome (~330 MB) y la imagen no se infla. Para
+# probarlo aqui: quita esta linea y pon ENABLE_WHATSAPP=true en el compose.
+ENV PUPPETEER_SKIP_DOWNLOAD=true
 RUN npm install --omit=dev --no-audit --no-fund && npm cache clean --force
 
 # Codigo fuente y migraciones. NO copiamos node_modules (ya esta arriba).

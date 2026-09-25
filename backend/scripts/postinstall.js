@@ -49,6 +49,21 @@ function listCache() {
     }
 }
 
+/*
+ * Hay entornos que no necesitan Chrome: la imagen de Docker para desarrollo
+ * levanta la API sin el modulo de WhatsApp, y bajar ~330 MB de navegador en
+ * cada build la vuelve enorme y lenta sin ganar nada.
+ *
+ * Se sale temprano cuando el modulo esta apagado (ENABLE_WHATSAPP=false) o
+ * cuando se pide saltar la descarga con la variable estandar de Puppeteer.
+ * Render no define ninguna de las dos, asi que alli el comportamiento no
+ * cambia y sigue descargando Chrome como hasta ahora.
+ */
+if (process.env.ENABLE_WHATSAPP === 'false' || process.env.PUPPETEER_SKIP_DOWNLOAD === 'true') {
+    log('WhatsApp deshabilitado en este entorno; no se descarga Chrome.');
+    process.exit(0);
+}
+
 try {
     let puppeteer;
     try {
