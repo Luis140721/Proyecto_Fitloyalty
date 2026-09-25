@@ -290,6 +290,8 @@ export default function MiembrosPage() {
   const [planMsg, setPlanMsg] = useState('');
   const [planError, setPlanError] = useState('');
   const [qrCopiado, setQrCopiado] = useState(false);
+  const [enviandoContrato, setEnviandoContrato] = useState(false);
+  const [editInfo, setEditInfo] = useState('');
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
   const [loading, setLoading] = useState(false);
@@ -844,6 +846,37 @@ export default function MiembrosPage() {
     }
   };
 
+  /**
+   * Envia el contrato de membresia al miembro por WhatsApp via el backend.
+   * El backend genera el texto prod-ready y lo manda. Si el cliente de
+   * WhatsApp no esta autenticado, devuelve exito=false y le avisamos al
+   * admin que escanee el QR desde los logs de Render.
+   */
+  const enviarContratoPorWhatsapp = async () => {
+    if (!editing?.id_miembro || enviandoContrato) return;
+    setEnviandoContrato(true);
+    setEditError('');
+    try {
+      const r = await api.post(
+        `/admin/miembros/${editing.id_miembro}/contrato/enviar`,
+        { version: 'v1' }
+      );
+      const data = r.data || r;
+      if (data.exito) {
+        setEditInfo(`Contrato enviado al ${data.telefono}.`);
+      } else {
+        setEditError(
+          data.mensaje ||
+            'No se pudo enviar el WhatsApp. Verifica que el cliente este autenticado (QR en logs de Render).'
+        );
+      }
+    } catch (err) {
+      setEditError(err.response?.data?.error || err.message || 'No se pudo enviar el contrato.');
+    } finally {
+      setEnviandoContrato(false);
+    }
+  };
+
   const closeEdit = () => {
     if (editSaving) return;
     setEditing(null);
@@ -851,6 +884,7 @@ export default function MiembrosPage() {
     setPlanMsg(''); setPlanError('');
     setEditForm(empty);
     setEditError('');
+    setEditInfo('');
     setEditQr('');
     setQrCopiado(false);
   };
@@ -1649,6 +1683,12 @@ export default function MiembrosPage() {
               <span>{editError}</span>
             </div>
           )}
+          {editInfo && (
+            <div className="alert alert-success" role="status" style={{ marginBottom: 12 }}>
+              <span className="material-symbols-outlined icon">check_circle</span>
+              <span>{editInfo}</span>
+            </div>
+          )}
 
           {/* ---------- Codigo QR del miembro ----------
               El mismo QR que se muestra al registrar, disponible tambien aqui
@@ -1681,6 +1721,18 @@ export default function MiembrosPage() {
                       Descargar
                     </a>
                   )}
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={enviarContratoPorWhatsapp}
+                    disabled={enviandoContrato || !editing?.id_miembro}
+                    title="Envia el contrato de membresia por WhatsApp al miembro"
+                  >
+                    <span className="material-symbols-outlined icon">
+                      {enviandoContrato ? 'hourglass_empty' : 'description'}
+                    </span>
+                    {enviandoContrato ? 'Enviando...' : 'Enviar contrato'}
+                  </button>
                 </div>
               </div>
             </section>

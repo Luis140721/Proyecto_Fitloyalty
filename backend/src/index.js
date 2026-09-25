@@ -80,6 +80,7 @@ app.use('/api/auth/login', loginLimiter);
 app.use('/api/auth/forgot-password', forgotLimiter);
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', require('./routes/admin'));
+app.use('/api/admin/miembros', require('./routes/admin-contrato'));
 app.use('/api', staffRoutes);
 app.use('/api', miembrosRoutes);
 app.use('/api', checkinRoutes);
