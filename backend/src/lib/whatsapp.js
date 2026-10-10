@@ -246,8 +246,23 @@ async function sendWhatsAppText(telefono, texto) {
     }
 }
 
+/**
+ * Devuelve true si el cliente de WhatsApp esta listo para enviar
+ * mensajes (modulo habilitado + Puppeteer inicializado + QR escaneado).
+ * Util para que los endpoints admin puedan reportar honestamente al
+ * usuario si el envio realmente va a llegar.
+ */
+function isWhatsAppReady() {
+    return ENABLED && !!client && isReady;
+}
+
+function isWhatsAppModuleEnabled() {
+    return ENABLED;
+}
+
 module.exports = {
     sendWhatsAppQR,
     sendWhatsAppText,
+    isWhatsAppReady,
     isWhatsAppEnabled: () => ENABLED,
 };
