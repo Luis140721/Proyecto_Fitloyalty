@@ -18,7 +18,7 @@ services:
       - key: JWT_EXPIRES_IN
         value: 24h
       - key: TRIAL_DAYS
-        value: 7
+        value: 14
       - key: DEV_EMAILS
         value: dev@fitloyalty.local,staging@fitloyalty.local
       - key: BREVO_API_KEY

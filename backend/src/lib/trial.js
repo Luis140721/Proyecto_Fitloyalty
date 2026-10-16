@@ -14,7 +14,7 @@
  *     suscripcion de pago ya activa (modo "sin trial").
  */
 
-const TRIAL_DAYS = 7;
+const TRIAL_DAYS = 14;
 
 function trialDays() {
   const raw = process.env.TRIAL_DAYS;
