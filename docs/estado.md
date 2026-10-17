@@ -2,7 +2,7 @@
 
 - **Fecha:** 2026-10-16
 - **Rama:** `docs/avance-requisitos` (PR hacia `main`)
-- **Código verificado:** `main` @ `54b19fa` (merge del PR #3). Ese commit es también la **copia de seguridad** del docx y del Excel de historias: para recuperar la versión anterior basta con `git show 54b19fa:"Documentación/Proyecto FitLoyalty.docx" > copia.docx`.
+- **Código verificado:** `main` @ `54b19fa` (merge del PR #3). Después entró a `main` el PR #5 (`8acab31`: `CONTRIBUTING.md` y check de nombre de rama en el CI, sin cambios en el código de la app); se fusionó en esta rama y la evidencia del CI (RQNF-09) se tomó de esa versión. Ese commit es también la **copia de seguridad** del docx y del Excel de historias: para recuperar la versión anterior basta con `git show 54b19fa:"Documentación/Proyecto FitLoyalty.docx" > copia.docx`.
 - **Responsable de esta tarea:** agente ejecutor (Claude de Luis). Solo documentación y Excel; las implementaciones las hace Santiago en sus propias ramas.
 
 ## Resultado
@@ -79,4 +79,4 @@ El resto de filas coincide con el borrador.
 - Porcentajes: abrir `docs/avance-requisitos.xlsx` → Resumen (todas las cifras son fórmulas sobre las matrices).
 - Cada evidencia: hoja Evidencias, con la ruta del archivo y la línea en el commit `54b19fa`.
 - Cobertura: `docs/evidencias/cobertura-backend-2026-10-16.txt`.
-- CI: pestaña Actions del repositorio (ejecución exitosa en `main` 54b19fa).
+- CI: pestaña Actions del repositorio (ejecución exitosa en `main` 8acab31).
