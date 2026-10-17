@@ -108,3 +108,7 @@ push_log.txt
 backend/.wwebjs_auth/
 backend/.wwebjs_cache/
 
+# --- Archivos de bloqueo de Office / LibreOffice (se crean al abrir un documento)
+~$*
+.~lock.*#
+

@@ -327,13 +327,12 @@ docker compose logs backend | grep EMAIL
 
 ## Ramas
 
-| Rama                 | Contenido |
-|----------------------|-----------|
-| `main`               | Rama principal |
-| `integracion-docker` | Integra el stack de Docker con los componentes de UI. **Rama al día** |
-| `santiago`           | Backend, despliegue y Docker |
-| `luis-frontend`      | Componentes de interfaz |
-| `principal`          | Documentación y evidencias |
+En GitHub solo existe **`main`**, que tiene todo el trabajo integrado. Cada cambio se
+hace en una rama corta desde `main` (`feat/…`, `fix/…`, `docs/…` o `chore/…`) y entra
+por Pull Request con el CI en verde. No se hace push directo a `main`.
+
+Flujo completo, convención de nombres y cómo sincronizar una copia anterior a la
+limpieza de ramas en [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ---
 
