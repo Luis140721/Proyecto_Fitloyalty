@@ -327,12 +327,15 @@ docker compose logs backend | grep EMAIL
 
 ## Ramas
 
-En GitHub solo existe **`main`**, que tiene todo el trabajo integrado. Cada cambio se
-hace en una rama corta desde `main` (`feat/…`, `fix/…`, `docs/…` o `chore/…`) y entra
-por Pull Request con el CI en verde. No se hace push directo a `main`.
+| Rama | Para qué |
+|---|---|
+| `main` | Lo estable: lo que se despliega y se entrega. Solo recibe releases desde `develop`, aprobadas por otra persona |
+| `develop` | Integración del trabajo de todos |
+| `feat/…`, `fix/…`, `docs/…`, `chore/…` | Una por tarea; sale de `develop`, vuelve a `develop` por Pull Request y se borra al fusionar |
 
-Flujo completo, convención de nombres y cómo sincronizar una copia anterior a la
-limpieza de ramas en [`CONTRIBUTING.md`](CONTRIBUTING.md).
+Nadie hace push directo a `main` ni a `develop`. Flujo completo, releases, dueños de archivos y
+convención de nombres en [`CONTRIBUTING.md`](CONTRIBUTING.md). Plan de la semana en
+[`docs/plan-trabajo.md`](docs/plan-trabajo.md).
 
 ---
 

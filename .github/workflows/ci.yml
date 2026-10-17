@@ -3,7 +3,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, develop]
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -18,10 +18,10 @@ jobs:
         env:
           RAMA: ${{ github.head_ref }}
         run: |
-          if [[ "$RAMA" =~ ^(feat|fix|docs|chore)/[a-z0-9][a-z0-9._/-]*$ || "$RAMA" =~ ^(dependabot/|revert-) ]]; then
+          if [[ "$RAMA" =~ ^(feat|feature|fix|docs|chore)/[a-z0-9][a-z0-9._/-]*$ || "$RAMA" =~ ^(dependabot/|revert-) || "$RAMA" == "develop" ]]; then
             echo "Nombre de rama válido: $RAMA"
           else
-            echo "::error::La rama '$RAMA' no sigue la convención: feat/…, fix/…, docs/… o chore/… en minúsculas. Ver CONTRIBUTING.md"
+            echo "::error::La rama '$RAMA' no sigue la convención: feat/…, fix/…, docs/… o chore/… en minúsculas (o develop para una release). Ver CONTRIBUTING.md"
             exit 1
           fi
 
