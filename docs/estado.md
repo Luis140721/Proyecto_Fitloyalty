@@ -11,35 +11,37 @@
 
 | Alcance | RF | RNF | Global |
 |---|---:|---:|---:|
-| Completo, conservando RQF-23 a RQF-26 (41) | 65,4 % (17 puntos de 26) | 60,0 % (9 puntos de 15) | **63,4 % (26 puntos de 41)** |
-| Si se retiran RQF-23 a RQF-25 y RQF-26 se fusiona en RQF-15 (37), recomendación del verificador | 63,6 % (14 puntos de 22) | 60,0 % (9 puntos de 15) | **62,2 % (23 puntos de 37)** |
+| **Final (RQF-01..22, RQNF-01..15)** | 63,6 % (14 puntos de 22) | 60,0 % (9 puntos de 15) | **62,2 % (23 puntos de 37)** |
 | Solo original del docx (RQF-01..12, RQNF-01..08) | 50,0 % (6 puntos de 12) | 50,0 % (4 puntos de 8) | 50,0 % (10 puntos de 20) |
 
-Fórmula: (implementados + 0,5 × parciales) / total; los puntos son esa suma. **No llega al 80 %**: con 41 requisitos faltan 6,8 puntos (el 80 % son 32,8); con 37, faltan 6,6 (el 80 % son 29,6). El PR #4 decía 80,5 % porque daba por implementados requisitos que el código no respalda (ver «Correcciones»).
+Fórmula: (implementados + 0,5 × parciales) / total; los puntos son esa suma. Coincide con la cifra conciliada del verificador (62,2 %, 23/37). **No llega al 80 %: faltan 6,6 puntos** (el 80 % de 37 son 29,6); ver la hoja «Trabajo pendiente». El PR #4 decía 80,5 % porque daba por implementados requisitos que el código no respalda y contaba aparte funciones que repetían otras (ver «Correcciones»).
 
-**Decisión pendiente de Luis:** retirar RQF-23, RQF-24 y RQF-25 y fusionar RQF-26 en RQF-15 (62,2 % sobre 37) o conservarlos con los estados corregidos (63,4 % sobre 41). Hasta que decida, quedan como están; los porcentajes del Excel son fórmulas y se recalculan solos.
+**Decisión de Luis aplicada (2026-10-16):** se retiraron RQF-23 (repetía RQF-08), RQF-24 (repetía RQF-05) y RQF-25 (repetía RQF-03 y es un defecto de seguridad), y RQF-26 (editar el perfil) se fusionó en RQF-15. La numeración queda consecutiva, sin renumerar. Con los cuatro, el avance habría sido 63,4 % (26 puntos de 41).
 
-**Ruta más corta al 80 %** (hoja «Trabajo pendiente», 41 requisitos): diez arreglos o pruebas de esfuerzo bajo (CORS, eliminación de cuenta, avisos de WhatsApp, límites de intentos, prueba de usabilidad y de navegadores, inactividad, horas pico y aviso de acceso bloqueado), luego cerrar la fuga entre gimnasios y quitar `scryptSync` del check-in (RQNF-05) y, recién entonces, medir el check-in con unos 200 miembros (RQNF-01) → **81,7 %**. RQF-25 no suma en la ruta: es un duplicado y un defecto, y su arreglo cuenta en RQNF-05.
+**Ruta más corta al 80 %** (hoja «Trabajo pendiente»):
+- Diez arreglos o pruebas de esfuerzo bajo: CORS, eliminación de cuenta, avisos de WhatsApp, límites de intentos, prueba de usabilidad y de navegadores, inactividad, horas pico y aviso de acceso bloqueado.
+- Luego, cerrar la fuga entre gimnasios y quitar `scryptSync` del check-in (RQNF-05).
+- Recién entonces, medir el check-in con unos 200 miembros (RQNF-01) → **82,4 %**.
 
 ## Qué se hizo
 
 1. **`docs/Proyecto FitLoyalty - requisitos actualizados.docx`**: se rearmó desde el original de `Documentación/` (54b19fa). Solo cambian las tablas 5 y 6 y un párrafo de resumen tras cada una; el resto del documento conserva el mismo texto y las demás partes del archivo (imágenes, estilos, encabezados) son idénticas byte a byte.
-   - Numeración de Santiago (RQF-01..26, RQNF-01..15), con columnas Estado y Evidencia.
+   - Numeración de Santiago sin los requisitos retirados (RQF-01..22, RQNF-01..15), con columnas Estado y Evidencia.
    - Estilo del original en todas las filas: Times New Roman 12, encabezado verde, sombreado alterno. En la versión de Santiago, las filas nuevas y las columnas agregadas usaban otra fuente en 8–9 pt.
    - La descripción de RQF-08 pasó de la fuente Gungsuh (herencia de Google Docs) a Times New Roman.
-   - Se revisó en Word: 25 páginas, sin palabras partidas ni texto sobrante.
+   - Se revisó renderizado en Word: sin palabras partidas ni texto sobrante.
 2. **`docs/avance-requisitos.xlsx`**: el Excel de Santiago con sus hojas Resumen, RF, RNF y Trabajo pendiente, sus dos gráficos y su estilo.
    - Todas las cifras ahora son fórmulas; en la versión de Santiago eran números fijos.
    - La escala y la meta son celdas editables en Resumen, y se agregó la tabla del alcance original.
    - RF y RNF incluyen los estados verificados, evidencia archivo:línea, Puntaje, Origen, HU y referencias.
    - «Trabajo pendiente» es la ruta al 80 %.
-   - Hoja nueva **Evidencias** (EV-01..54).
+   - Hoja nueva **Evidencias** (EV-01..50).
    - Se recalculó con Excel: 0 errores de fórmula.
 3. **`Documentación/Plantilla historias de usuario.xlsx`**:
    - HU-54..58 reapuntadas a la numeración de Santiago.
-   - HU-34 cubre también RQF-24.
-   - Nuevas HU-59..66 para RQF-17, 18, 20, 21, 22, 23, 25 y 26, con 5 criterios cada una.
-   - Las 26 RF tienen al menos una HU y la lista de prioridad cubre las 66.
+   - Nuevas HU-59..63 para RQF-17, 18, 20, 21 y 22, con 5 criterios cada una.
+   - HU-64..66 se escribieron para RQF-23, 25 y 26 y, al retirarlos, se reasignaron sin borrarlas: HU-64 a RQF-08, HU-65 a RQF-03 y HU-66 a RQF-15. HU-34 queda en RQF-05 y RQF-07.
+   - Las 22 RF tienen al menos una HU y la lista de prioridad cubre las 66.
    - HU-11 y HU-40 ya no citan RQF-08 por error.
 4. **`Documentación/Proyecto FitLoyalty.docx`**: restaurado al original (54b19fa). La versión final vive solo en `docs/`.
 5. **`docs/matriz-requisitos.md`**: la misma matriz en markdown para revisarla en el PR (foto del 2026-10-16; la fuente con fórmulas es el Excel).
@@ -62,6 +64,9 @@ Segunda ronda, cuando Luis eligió la versión de Santiago como base:
 6. Excel con fórmulas y hoja Evidencias, sin perder hojas ni gráficos.
 7. Sin pruebas en vivo: la verificación es por lectura de código, pruebas existentes y CI.
 
+Tercera ronda, tras el informe del verificador:
+8. Retirar RQF-23, RQF-24 y RQF-25 y fusionar RQF-26 en RQF-15 («retíralos»).
+
 ## Hallazgos del verificador aplicados (fase 2, commit `70dd13c`, sección 12)
 
 Comprobados otra vez contra el código antes de aplicarlos:
@@ -78,8 +83,8 @@ También:
 - **RQF-17:** sigue Implementado, pero ahora anota el riesgo de seguridad: si el correo no sale, el código vuelve en la respuesta (`auth.js:337-346`) y su validación no tiene límite. Se quitó la cita a TC-2.1..2.3 de `Informe_Pruebas_E2E.md`, que probó el flujo viejo por enlace.
 - **RQF-21:** se acotó al pago, porque el plan y la vigencia ya están en RQF-04.
 - **RQF-16:** observación de que el campo «días de prueba» de Configuración no tiene efecto.
-- **Ruta al 80 %:** RQF-25 ya no suma, y RQNF-01 solo cuenta después de corregir la búsqueda del QR y medir con volumen realista.
-- No se tocaron RQF-23 a RQF-26: esperan la decisión de Luis.
+- **Ruta al 80 %:** RQNF-01 solo cuenta después de corregir la búsqueda del QR y medir con volumen realista; RQF-25 dejó de sumar y después se retiró.
+- RQF-23 a RQF-26: retirados o fusionados por decisión de Luis (ver «Resultado»).
 - Las hojas se siguen llamando RF y RNF, como en el Excel de Santiago.
 
 ## Correcciones a la versión de Santiago (PR #4)
@@ -90,7 +95,11 @@ También:
 | RQF-07 | Implementado | Parcial | No hay gráfica de horas pico (es por día de la semana, `dashboard.js:189`) y el panel no se actualiza solo. |
 | RQF-11 | Parcial | Pendiente | Ningún archivo calcula rachas; la app solo lee hitos cargados por SQL. |
 | RQF-12 | Parcial | Pendiente | No hay creación de retos, el check-in no actualiza el progreso y no hay notificación. |
-| RQF-25 | Implementado | Pendiente | `vista.js` no filtra por gimnasio (fuga de datos), la vista no está en las migraciones y ninguna pantalla la usa. |
+| RQF-22 | Implementado | Pendiente | La eliminación de cuenta falla siempre (hallazgo del verificador, ver arriba). |
+| RQF-23 | Implementado | Retirado | Repetía RQF-06, RQF-07 y RQF-08 (el mismo código de la campana). |
+| RQF-24 | Implementado | Retirado | Repetía RQF-05; ninguna pantalla con ruta usa `/api/asistencia`. |
+| RQF-25 | Implementado | Retirado | Repetía RQF-03 y es un defecto: `vista.js` no filtra por gimnasio (fuga de datos); el arreglo queda en RQNF-05. |
+| RQF-26 | Implementado | Fusionado en RQF-15 | Es una pantalla más de la misma app. |
 | RQNF-04 | Pendiente | Parcial | El flujo manual de 2 interacciones sí está en el código; falta la prueba con usuarios. |
 | RQNF-05 | Implementado | Parcial | La fuga de `vista.js` rompe el aislamiento entre gimnasios. |
 | RQNF-15 | Implementado | Pendiente | CORS acepta cualquier origen (`index.js:54`). |
@@ -98,7 +107,7 @@ También:
 Ajustes de redacción:
 - **RQF-13:** se quitó «con veracidad» y se agregó «registrando cada intento como constancia»; el texto conserva «informando si el envío no se pudo completar», que es lo que el sistema debe hacer y por eso queda Parcial.
 - **RQF-14:** el módulo pasa a Gestión de Miembros, porque el aviso es de vencimiento y no de abandono. Además, los días de anticipación los define cada gimnasio, pero solo en la base de datos, sin pantalla.
-- **RQF-15:** dice «hitos y retos» en lugar de «rachas», que no existen.
+- **RQF-15:** dice «hitos y retos» en lugar de «rachas», que no existen, y suma «edición del perfil» (antes RQF-26).
 - **RQF-16:** el módulo pasa a Suscripción SaaS, porque el sistema no cobra, y se agregó el bloqueo al vencer la prueba.
 - **RQF-20:** dice «precio de cada tipo de plan», porque no hay un catálogo de planes editable.
 - **RQNF-09:** se agregó el límite de intentos del login de la app.
@@ -111,7 +120,7 @@ Ajustes de redacción:
 | RQF-13 Contrato por WhatsApp | RQF-13 |
 | RQF-14 Aviso de vencimiento | RQF-14 |
 | RQF-15 Registro + prueba de 14 días | RQF-16 (prueba) + RQF-19 (registro) |
-| RQF-16 App móvil | RQF-15 (+ RQF-26 editar perfil) |
+| RQF-16 App móvil | RQF-15 (incluye la edición del perfil) |
 | RQNF-09 CI | RQNF-11 |
 | Mi Excel de 25 requisitos (62 %) | Reemplazado por el de Santiago corregido (commit `e621df7` en el historial) |
 
@@ -126,7 +135,7 @@ Ajustes de redacción:
 
 ## Hallazgos fuera de alcance (no se tocaron)
 
-- **Seguridad:** la fuga de datos entre gimnasios de `vista.js` (punto 1 de arriba).
+- **Seguridad:** la fuga de datos entre gimnasios de `vista.js` (punto 2 de arriba).
 - **Seguridad:** CORS abierto con `credentials: true` (`index.js:50-57`).
 - **Seguridad:** el código de recuperación de contraseña vuelve en la respuesta si el correo no sale (`auth.js:337-346`), y `verify-reset-code` y `reset-password` no tienen límite de intentos.
 - **Funcional:** `sendWhatsAppText` (`whatsapp.js:222-247`) no avisa cuando falla o cuando el cliente no está listo; por eso el contrato y los avisos de vencimiento se registran como enviados sin haber salido.
