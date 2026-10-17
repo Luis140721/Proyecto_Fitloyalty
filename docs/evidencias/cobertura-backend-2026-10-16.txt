@@ -5,7 +5,7 @@
 #   npx jest --ci --testMatch "**/tests/**/*.test.js" --coverage --collectCoverageFrom="src/**/*.js"
 # Nota: backend/package.json no tiene script "test" y jest.config.js solo mide src/lib y
 # src/middleware; por eso se paso --collectCoverageFrom para medir todo src/.
-# Usado como evidencia de RQNF-07 en docs/avance-requisitos.xlsx (EV-31).
+# Usado como evidencia de RQNF-07 en docs/avance-requisitos.xlsx (hoja Evidencias, filas de RQNF-07).
 #
 FAIL tests/auth-helpers.test.js
   auth-helpers: mapRol
