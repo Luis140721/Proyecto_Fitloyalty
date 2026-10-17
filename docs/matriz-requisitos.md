@@ -8,7 +8,7 @@ Escala: **Implementado = 1**, **Parcial = 0,5** (lo principal funciona pero falt
 
 ## Resumen
 
-**Alcance completo (RQF-01..26, RQNF-01..15)**
+**Alcance completo (RQF-01..22, RQNF-01..15)**
 
 | Alcance | Total | Implementados | Parciales | Pendientes | Puntos | Avance |
 |---|---:|---:|---:|---:|---:|---:|
@@ -55,7 +55,7 @@ Escala: **Implementado = 1**, **Parcial = 0,5** (lo principal funciona pero falt
 
 | Código | Categoría | Origen | Estado | Evidencia verificada | Lo que falta / observación | HU |
 |---|---|---|---|---|---|---|
-| **RQNF-01** | Rendimiento | Original | **Pendiente** | No hay medición registrada. | Medir y documentar (p. ej. 30 check-ins contra el entorno desplegado, tiempo de respuesta de POST /api/admin/checkin). Riesgo: si el QR no coincide directo, checkin.js:83-101 descifra en memoria los QR de todos los miembros del gimnasio. | — |
+| **RQNF-01** | Rendimiento | Original | **Pendiente** | No hay medición registrada. | Primero corregir la búsqueda del QR (paso 11 de «Trabajo pendiente»): si el QR no coincide directo, checkin.js:83-101 descifra en memoria los QR de todos los miembros del gimnasio. Después, medir el check-in con un volumen realista (unos 200 miembros) y registrar el tiempo de respuesta de POST /api/admin/checkin. | — |
 | **RQNF-02** | Disponibilidad | Original | **Pendiente** | Existen /api/healthz y /api/health (index.js:101, :103), pero no hay monitoreo ni reporte de disponibilidad. | Monitor externo sobre /api/healthz con reporte del período; el plan gratuito de Render suspende el servicio por inactividad (scheduler.js:9-10). | — |
 | **RQNF-03** | Seguridad | Original | **Implementado** | bcrypt.hash / compare en registro, login, restablecimiento e invitación (auth.js:145, :231, :447; staff.js:431) y para miembros (miembros.js:388, :625; cliente.js:88); API de producción por HTTPS (frontend/src/api.js:26) y frontend en Vercel con HTTPS. | Observación: la clave de cifrado del QR tiene un valor por defecto en el código (miembros.js:36, checkin.js:19). | — |
 | **RQNF-04** | Usabilidad | Original | **Parcial** | Registro manual en 2 interacciones: escribir el documento y pulsar «Registrar» (CheckinPage.jsx:333, :341-347); el código QR se envía con Enter (CheckinPage.jsx:221-223). | Prueba de usabilidad documentada con personal sin formación técnica (p. ej. 3 personas, conteo de interacciones y tiempo). | HU-32 |
