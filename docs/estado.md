@@ -2,94 +2,123 @@
 
 - **Fecha:** 2026-10-16
 - **Rama:** `docs/avance-requisitos` (PR hacia `main`)
-- **Código verificado:** `main` @ `54b19fa` (merge del PR #3). Después entró a `main` el PR #5 (`8acab31`: `CONTRIBUTING.md` y check de nombre de rama en el CI, sin cambios en el código de la app); se fusionó en esta rama y la evidencia del CI (RQNF-09) se tomó de esa versión. Ese commit es también la **copia de seguridad** del docx y del Excel de historias: para recuperar la versión anterior basta con `git show 54b19fa:"Documentación/Proyecto FitLoyalty.docx" > copia.docx`.
-- **Responsable de esta tarea:** agente ejecutor (Claude de Luis). Solo documentación y Excel; las implementaciones las hace Santiago en sus propias ramas.
+- **Código verificado:** `main` @ `54b19fa`. El PR #5 (`8acab31`) solo agregó `CONTRIBUTING.md` y el check de nombre de rama al CI (sin cambios en el código de la app); se fusionó en esta rama y es la base de la evidencia del CI.
+- **Base de la documentación:** por decisión de Luis, los archivos de Santiago del PR #4 (`docs/borrador-matriz-requisitos` @ `00cdcdb`), verificados y corregidos aquí.
+- **Copias de seguridad:** los originales de `Documentación/` están en `54b19fa` y los archivos de Santiago sin corregir en el commit `5db4e2a` de esta rama (o en `00cdcdb`). Ejemplo: `git show 00cdcdb:docs/avance-requisitos.xlsx > copia.xlsx`.
+- **Responsable de esta tarea:** agente ejecutor (Claude de Luis). Solo documentación y Excel; las implementaciones las hace Santiago en sus ramas.
 
 ## Resultado
 
 | Alcance | RF | RNF | Global |
 |---|---:|---:|---:|
-| Actualizado (RQF-01..16, RQNF-01..09) | 62,5 % (10/16) | 61,1 % (5,5/9) | **62,0 % (15,5/25)** |
-| Original del docx (RQF-01..12, RQNF-01..08) | 50,0 % (6/12) | 56,3 % (4,5/8) | 52,5 % (10,5/20) |
+| Completo (RQF-01..26, RQNF-01..15) | 73,1 % (19/26) | 66,7 % (10/15) | **70,7 % (29/41)** |
+| Solo original del docx (RQF-01..12, RQNF-01..08) | 50,0 % (6/12) | 50,0 % (4/8) | 50,0 % (10/20) |
 
-Fórmula: (implementados + 0,5 × parciales) / total. **No se llega al 80 %**: faltan 4,5 puntos sobre el alcance actualizado. La cifra oficial es la del alcance actualizado; la original queda como referencia.
+Fórmula: (implementados + 0,5 × parciales) / total. **No llega al 80 %**: faltan 3,8 puntos (el 80 % de 41 son 32,8). El PR #4 decía 80,5 % porque daba por implementados varios requisitos que el código no respalda (ver «Correcciones»).
+
+**Ruta más corta al 80 %** (de la hoja «Trabajo pendiente»): corregir CORS (RQNF-15), corregir la fuga de `vista.js` (RQF-25, y con eso RQNF-05), medir el tiempo del check-in (RQNF-01) y hacer la prueba de usabilidad del check-in (RQNF-04) → **80,5 %**. Las dos primeras son de Santiago; las mediciones, de Luis o Santiago.
 
 ## Qué se hizo
 
-1. **Verificación de los 20 requisitos del docx contra el código** (rutas, lib, jobs, migraciones, pruebas, frontend, app Flutter y CI). Cada fila apunta a archivo:línea, endpoint o medición.
-2. **`Documentación/Proyecto FitLoyalty.docx`**: se agregaron RQF-13..16 y RQNF-09 a las tablas 5 y 6, con el mismo formato. Son requisitos que ya existen en el código y no estaban documentados. Solo cambia `word/document.xml`; el resto del archivo queda idéntico byte a byte.
-   - RQF-13 Contrato de membresía por WhatsApp · RQF-14 Avisos automáticos de vencimiento · RQF-15 Registro con prueba gratuita de 14 días · RQF-16 App móvil del miembro · RQNF-09 Integración continua.
-3. **`Documentación/Plantilla historias de usuario.xlsx`**: HU-54..58 para los RF nuevos (5 criterios cada una). Se corrigieron HU-11 y HU-40, que citaban RQF-08 por error, y se volvió a crear la lista desplegable de prioridad, que openpyxl no conserva; ahora cubre las 58 HU. Las 16 RF tienen al menos una HU.
-4. **`docs/avance-requisitos.xlsx`**: hojas Resumen (porcentajes por fórmula, escala y meta editables, gráfico y ruta al 80 %), Matriz RF, Matriz RNF y Evidencias (EV-01..34). Se recalculó y guardó con Excel: 0 errores de fórmula.
-5. **`docs/matriz-requisitos.md`**: la misma matriz en markdown para revisarla en el PR. Es una foto del 2026-10-16; si cambia algún estado, la fuente es el Excel.
-6. **`docs/evidencias/cobertura-backend-2026-10-16.txt`**: medición de cobertura usada para RQNF-07.
+1. **`docs/Proyecto FitLoyalty - requisitos actualizados.docx`**: se rearmó desde el original de `Documentación/` (54b19fa). Solo cambian las tablas 5 y 6 y un párrafo de resumen tras cada una; el resto del documento queda idéntico byte a byte.
+   - Numeración de Santiago (RQF-01..26, RQNF-01..15), con columnas Estado y Evidencia.
+   - Estilo del original en todas las filas: Times New Roman 12, encabezado verde, sombreado alterno. En la versión de Santiago, las filas nuevas y las columnas agregadas usaban otra fuente en 8–9 pt.
+   - La descripción de RQF-08 pasó de la fuente Gungsuh (herencia de Google Docs) a Times New Roman.
+   - Se revisó en Word: 25 páginas, sin palabras partidas ni texto sobrante.
+2. **`docs/avance-requisitos.xlsx`**: el Excel de Santiago con sus hojas Resumen, RF, RNF y Trabajo pendiente, sus dos gráficos y su estilo.
+   - Todas las cifras ahora son fórmulas; en la versión de Santiago eran números fijos.
+   - La escala y la meta son celdas editables en Resumen, y se agregó la tabla del alcance original.
+   - RF y RNF incluyen los estados verificados, evidencia archivo:línea, Puntaje, Origen, HU y referencias.
+   - «Trabajo pendiente» es la ruta al 80 %.
+   - Hoja nueva **Evidencias** (EV-01..53).
+   - Se recalculó con Excel: 0 errores de fórmula.
+3. **`Documentación/Plantilla historias de usuario.xlsx`**:
+   - HU-54..58 reapuntadas a la numeración de Santiago.
+   - HU-34 cubre también RQF-24.
+   - Nuevas HU-59..66 para RQF-17, 18, 20, 21, 22, 23, 25 y 26, con 5 criterios cada una.
+   - Las 26 RF tienen al menos una HU y la lista de prioridad cubre las 66.
+   - HU-11 y HU-40 ya no citan RQF-08 por error.
+4. **`Documentación/Proyecto FitLoyalty.docx`**: restaurado al original (54b19fa). La versión final vive solo en `docs/`.
+5. **`docs/matriz-requisitos.md`**: la misma matriz en markdown para revisarla en el PR (foto del 2026-10-16; la fuente con fórmulas es el Excel).
+6. **`docs/evidencias/cobertura-backend-2026-10-16.txt`**: la medición de cobertura usada para RQNF-07.
 
 ## Criterios acordados con Luis (2026-10-16)
 
-1. Implementado solo si todas las partes del requisito tienen evidencia; Parcial (0,5) si funciona lo principal pero falta alguna parte; No implementado si lo principal no tiene evidencia.
-2. RNF sin medición = «Sin evidencia», vale 0.
-3. Se agregan los 5 requisitos nuevos obligatorios. Los opcionales (recuperación de contraseña, envío del QR al registrar, límite de intentos) **no** se agregaron, para no inflar el alcance.
-4. Solo filas nuevas en las tablas 5 y 6; la sección 4 (módulos) y los casos de uso no se tocaron.
-5. Cifra oficial: alcance actualizado. Se reportan las dos.
-6. No se recorta alcance por ahora: Luis decide con la ruta de abajo.
-7. El docx se editó solo en este worktree. **Luis: cierra Word antes de hacer pull de esta rama.**
-8. La rama se llamó `docs/avance-requisitos`; la sesión anterior que ocupaba el nombre ya lo había liberado, así que no se borró ningún worktree.
-9. Al Excel de HU se le agregan HU, se corrigen referencias y se repone la validación.
-10. La medición de cobertura se guarda como evidencia en `docs/evidencias/`.
-11. No se instaló `gh`: el PR se abre desde el enlace de comparación.
-12. Los hallazgos fuera de alcance solo se anotan aquí (ver abajo).
+Primera ronda:
+- Implementado solo si todas las partes del requisito tienen evidencia; Parcial (0,5) si funciona lo principal pero falta alguna parte; sin evidencia vale 0.
+- La meta es el 80 %. No se recorta alcance; Luis decide con la ruta.
+- Hallazgos fuera de alcance: solo se anotan.
+- No se instala `gh`.
 
-## Correcciones al borrador del PR #4 (`docs/borrador-matriz-requisitos.md`)
+Segunda ronda, cuando Luis eligió la versión de Santiago como base:
+1. Numeración de Santiago (RQF-13..26, RQNF-09..15).
+2. Restaurar el docx de `Documentación/` al original.
+3. Conservar las columnas Estado y Evidencia, con el estilo del original.
+4. Vocabulario Implementado / Parcial / Pendiente.
+5. Aplicar las correcciones de estado y de redacción.
+6. Excel con fórmulas y hoja Evidencias, sin perder hojas ni gráficos.
+7. Sin pruebas en vivo: la verificación es por lectura de código, pruebas existentes y CI.
 
-| Req. | Borrador | Verificado | Motivo |
+## Correcciones a la versión de Santiago (PR #4)
+
+| Req. | PR #4 | Verificado | Motivo |
 |---|---|---|---|
 | RQF-06 | Implementado | Parcial | Bloquea, pero no avisa al administrador del intento bloqueado (`checkin.js:116-136`). |
-| RQF-07 | Implementado | Parcial | No hay gráfica de horas pico (la gráfica es por día de la semana, `dashboard.js:189`) y el panel no se actualiza solo. |
-| RQF-11 | Parcial | No implementado | Ningún archivo calcula rachas; la app solo lee hitos cargados por SQL. |
-| RQF-12 | Parcial | No implementado | No hay creación de retos, el check-in no actualiza el progreso y no hay notificación; la app solo lee retos sembrados. |
-| RQNF-04 | Sin evidencia | Parcial | El flujo manual de 2 interacciones sí está en el código (`CheckinPage.jsx:333, :341-347`); falta la prueba con usuarios. |
-| RQF-02 | Parcial | Parcial (+ hallazgo) | Además, el JWT del personal no expira (`auth-helpers.js:102-113`). |
+| RQF-07 | Implementado | Parcial | No hay gráfica de horas pico (es por día de la semana, `dashboard.js:189`) y el panel no se actualiza solo. |
+| RQF-11 | Parcial | Pendiente | Ningún archivo calcula rachas; la app solo lee hitos cargados por SQL. |
+| RQF-12 | Parcial | Pendiente | No hay creación de retos, el check-in no actualiza el progreso y no hay notificación. |
+| RQF-25 | Implementado | Pendiente | `vista.js` no filtra por gimnasio (fuga de datos), la vista no está en las migraciones y ninguna pantalla la usa. |
+| RQNF-04 | Pendiente | Parcial | El flujo manual de 2 interacciones sí está en el código; falta la prueba con usuarios. |
+| RQNF-05 | Implementado | Parcial | La fuga de `vista.js` rompe el aislamiento entre gimnasios. |
+| RQNF-15 | Implementado | Pendiente | CORS acepta cualquier origen (`index.js:54`). |
 
-El resto de filas coincide con el borrador.
+Ajustes de redacción:
+- **RQF-13:** se cambió «informando con veracidad» por «registrando cada intento como constancia».
+- **RQF-14:** el módulo pasa a Gestión de Miembros, porque el aviso es de vencimiento y no de abandono. Además, los días de anticipación los define cada gimnasio, pero solo en la base de datos, sin pantalla.
+- **RQF-15:** dice «hitos y retos» en lugar de «rachas», que no existen.
+- **RQF-16:** el módulo pasa a Suscripción SaaS, porque el sistema no cobra, y se agregó el bloqueo al vencer la prueba.
+- **RQF-20:** dice «precio de cada tipo de plan», porque no hay un catálogo de planes editable.
+- **RQNF-09:** se agregó el límite de intentos del login de la app.
+- **RQNF-11:** se detalla qué valida el CI.
 
-## Pendiente
+## Equivalencias con mi primera versión (commits anteriores de esta rama)
 
-- **Llegar al 80 %:** Luis decide entre implementar y recortar alcance. La ruta más barata (8 acciones, de RQNF-01 a RQF-04) está en la hoja Resumen y en `docs/matriz-requisitos.md`. Con ella se llega justo al 80 % (20/25).
-- **Revisión visual del docx en Word:** no se pudo renderizar porque Word estaba abierto. La estructura se verificó con python-docx (17 filas en la tabla RF, 10 en la RNF), pero conviene abrirlo y mirar las tablas 5 y 6.
-- **RQNF-08:** no se construyó la imagen Docker (Docker Desktop apagado). Basta con `docker compose build` para dejar evidencia.
-- **Otros Excel de `Documentación/`** (Product Backlog, Matriz de priorización, Cálculo de horas) llegan hasta HU-53 y no incluyen las nuevas HU-54..58. Quedaron fuera de esta tarea.
-
-## Conflicto con el PR #4 (rama `docs/borrador-matriz-requisitos`) — decide Luis
-
-Mientras se hacía esta tarea, la rama del PR #4 dejó de ser un borrador. Ahora agrega su propio `docs/avance-requisitos.xlsx` (**misma ruta que este PR**: el que se fusione de segundo tendrá conflicto) y un segundo documento de requisitos, `docs/Proyecto FitLoyalty - requisitos actualizados.docx`. Además declara un avance del **80,5 %**. Diferencias verificadas:
-
-- **Llega al 80 % ampliando el alcance:** 41 requisitos (26 RF y 15 RNF) frente a 25. Los 21 nuevos incluyen funciones menores o de infraestructura: exportar CSV, vista SQL, listado de asistencia, editar perfil en la app, migraciones, manejador de errores, endpoint de salud, páginas legales y CORS. Esto va contra el criterio 3 acordado (no inflar con opcionales).
-- **Mantiene estados que el código desmiente:** RQF-11 dice «cálculo de rachas» (no existe); RQF-06 y RQF-07 aparecen como Implementado; y su RQNF-15 dice «CORS restringido a los orígenes configurados», cuando `backend/src/index.js:50-57` acepta cualquier origen.
-- **Su Resumen usa números fijos**, no fórmulas.
-- **Numeración distinta:** allí RQF-15 es la app del miembro y RQF-16 la prueba gratuita; aquí es al revés. Si se fusionan los dos, el documento queda con dos versiones de los mismos códigos.
-
-Recomendación: tomar este PR como fuente de la documentación y pedir que el PR #4 retire el Excel y el docx y se quede en implementaciones. Si Luis quiere alguno de los requisitos extra del PR #4, se agregan aquí después de verificarlos contra el código.
+| Mi versión anterior | Numeración final |
+|---|---|
+| RQF-13 Contrato por WhatsApp | RQF-13 |
+| RQF-14 Aviso de vencimiento | RQF-14 |
+| RQF-15 Registro + prueba de 14 días | RQF-16 (prueba) + RQF-19 (registro) |
+| RQF-16 App móvil | RQF-15 (+ RQF-26 editar perfil) |
+| RQNF-09 CI | RQNF-11 |
+| Mi Excel de 25 requisitos (62 %) | Reemplazado por el de Santiago corregido (commit `e621df7` en el historial) |
 
 ## Qué necesito de Santiago
 
-1. **Implementaciones de la ruta** (en ramas `feat/...`): RQF-02 (cierre por inactividad y expiración real del JWT), RQF-07 (horas pico y refresco), RQF-06 (registrar el acceso bloqueado y avisar en la campana), RQF-01 (editar/desactivar personal) y RQF-04 (congelar membresía). Después, si se puede: RQF-08, RQNF-07, RQF-11, RQF-12 y RQF-10.
-2. **Quitar del PR #4 el Excel y el docx de requisitos** (ver la sección anterior) si Luis lo confirma.
-3. **Avisar cada vez que se fusione una**, para cambiar el Estado en `docs/avance-requisitos.xlsx` (solo la columna Estado; lo demás se recalcula) y actualizar la evidencia.
-4. **Medición de RQNF-01** (tiempo del check-in) si tiene el entorno desplegado a mano.
+1. **Urgente (seguridad):** `GET /api/vista/miembros-activos` (`backend/src/routes/vista.js:20-42`) no filtra por gimnasio y solo pide `authenticate`. Cualquier token, incluido el de un miembro en la app, devuelve nombre, documento, teléfono, correo y QR de los miembros de todos los gimnasios. Hay que filtrar por `req.user.gymId` con rol de personal, o retirar la ruta.
+2. **CORS** (`backend/src/index.js:54`): rechazar los orígenes que no estén en `FRONTEND_URL`.
+3. **Implementaciones de la ruta**, en este orden: RQF-02 (cierre por inactividad y expiración real del JWT), RQF-07, RQF-06, RQF-01, RQF-04. Después, si se puede: RQF-08, RQNF-07, RQF-11, RQF-12 y RQF-10.
+4. **El PR #4 ya está integrado aquí:** al fusionar este PR, cerrar el #4 sin fusionarlo, para no volver a meter el 80,5 % sin verificar.
+5. **Avisar cada vez que se fusione una implementación.** Hay que cambiar el Estado en la hoja RF o RNF del Excel (el resto se recalcula) y actualizar a mano la columna Estado y el párrafo de resumen del docx de `docs/`.
 
 ## Hallazgos fuera de alcance (no se tocaron)
 
-- **Seguridad:** el JWT del personal no tiene expiración, porque `generarToken` ignora `JWT_EXPIRES_IN` (`backend/src/lib/auth-helpers.js:102-113`).
-- **Seguridad:** `Evidencias_Sustentacion/Informe_Pruebas_E2E.md` («Datos de prueba generados») deja una contraseña de un usuario de prueba en texto plano en el repositorio. Conviene cambiarla y quitarla del documento.
+- **Seguridad:** la fuga de datos entre gimnasios de `vista.js` (punto 1 de arriba).
+- **Seguridad:** CORS abierto con `credentials: true` (`index.js:50-57`).
+- **Seguridad:** el JWT del personal no expira, porque `generarToken` ignora `JWT_EXPIRES_IN` (`backend/src/lib/auth-helpers.js:102-113`).
+- **Seguridad:** `/api/asistencia` solo exige `authenticate`, así que un miembro desde la app puede listar los ingresos de su gimnasio (`asistencia.js:21`).
+- **Seguridad:** `Evidencias_Sustentacion/Informe_Pruebas_E2E.md` («Datos de prueba generados») deja una contraseña de un usuario de prueba en texto plano. Conviene cambiarla y quitarla del documento.
 - **Seguridad:** la clave para cifrar el QR tiene un valor por defecto en el código (`miembros.js:36`, `checkin.js:19`).
-- **Seguridad:** CORS acepta cualquier origen con `credentials: true`; la lista `FRONTEND_URL` no se aplica porque la última línea del callback también permite (`backend/src/index.js:50-57`).
-- **Pruebas:** 2 de las 23 pruebas de `backend/tests/auth-helpers.test.js` fallan (contraseña con espacios y teléfono con formato `+57 ...`), y `backend/package.json` no tiene script `test`, así que el CI no las ejecuta.
-- **Rendimiento:** si el QR no coincide directo, `checkin.js:83-101` descifra en memoria los QR de todos los miembros del gimnasio. Puede afectar RQNF-01 cuando crezca la base.
-- **Documentación del código:** comentarios que dicen «trial de 7 días» cuando el valor real es 14 (`auth.js:6, :98`, `trial.js:7`).
+- **Pruebas:** 2 de las 23 pruebas de `backend/tests/auth-helpers.test.js` fallan, y `backend/package.json` no tiene script `test`, así que el CI no las ejecuta.
+- **Rendimiento:** si el QR no coincide directo, `checkin.js:83-101` descifra en memoria los QR de todos los miembros del gimnasio.
+- **Código muerto:** `frontend/src/pages/DashboardUsuario.jsx` no tiene ruta en `App.jsx`.
+- **Comentarios desactualizados:** dicen «trial de 7 días» cuando el valor es 14 (`auth.js:6, :98`, `trial.js:7`).
+- **Pendiente de evidencia:** no se construyó la imagen Docker (RQNF-08), porque Docker Desktop estaba apagado.
+- **Otros Excel de `Documentación/`** (Product Backlog, Matriz de priorización, Cálculo de horas) llegan hasta HU-53; no incluyen HU-54..66.
 
 ## Cómo verificar
 
-- Porcentajes: abrir `docs/avance-requisitos.xlsx` → Resumen (todas las cifras son fórmulas sobre las matrices).
-- Cada evidencia: hoja Evidencias, con la ruta del archivo y la línea en el commit `54b19fa`.
-- Cobertura: `docs/evidencias/cobertura-backend-2026-10-16.txt`.
-- CI: pestaña Actions del repositorio (ejecución exitosa en `main` 8acab31).
+- **Porcentajes:** `docs/avance-requisitos.xlsx` → Resumen. Todo son fórmulas sobre las hojas RF y RNF.
+- **Evidencias:** hoja Evidencias, con la ruta del archivo y la línea en el commit `54b19fa`.
+- **Documento:** `docs/Proyecto FitLoyalty - requisitos actualizados.docx`, tablas 5 y 6.
+- **Cobertura:** `docs/evidencias/cobertura-backend-2026-10-16.txt`.
+- **CI:** pestaña Actions del repositorio (ejecución exitosa en `main` 8acab31).
