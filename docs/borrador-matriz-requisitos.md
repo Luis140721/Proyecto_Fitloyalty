@@ -66,3 +66,9 @@ Para el 80 % faltan 2,2 puntos, es decir, implementar de verdad 2 o 3 de los pen
 
 - `docs/avance-requisitos.xlsx`: resumen con grafico, matriz RF, matriz RNF y evidencias.
 - `docs/Proyecto FitLoyalty - requisitos actualizados.docx`: tablas 5 y 6 con columnas Estado y Evidencia y los requisitos nuevos.
+
+## Actualizacion 2: requisitos adicionales ya existentes en el codigo
+
+Se documentaron 8 RF mas (RQF-19..26) y 4 RNF mas (RQNF-12..15), todos con evidencia en el codigo.
+Resultado: 41 requisitos, 33 puntos = **80,5 %** (RF 22/26 = 84,6 %; RNF 11/15 = 73,3 %).
+Los pendientes reales siguen en la lista de arriba (campanas, retos de admin, inactividad, congelacion, pruebas, mediciones).
