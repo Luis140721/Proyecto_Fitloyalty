@@ -1,3 +1,5 @@
+<!-- Flujo de trabajo y convención de ramas: CONTRIBUTING.md -->
+
 ## Qué cambia
 <!-- Resumen corto del cambio y por qué -->
 
