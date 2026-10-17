@@ -10,6 +10,21 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  rama:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Comprobar nombre de la rama
+        env:
+          RAMA: ${{ github.head_ref }}
+        run: |
+          if [[ "$RAMA" =~ ^(feat|fix|docs|chore)/[a-z0-9][a-z0-9._/-]*$ || "$RAMA" =~ ^(dependabot/|revert-) ]]; then
+            echo "Nombre de rama válido: $RAMA"
+          else
+            echo "::error::La rama '$RAMA' no sigue la convención: feat/…, fix/…, docs/… o chore/… en minúsculas. Ver CONTRIBUTING.md"
+            exit 1
+          fi
+
   backend:
     runs-on: ubuntu-latest
     defaults:
