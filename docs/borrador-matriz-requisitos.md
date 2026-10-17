@@ -57,3 +57,12 @@ Para llegar al 80 % (16 / 20) faltan **4 puntos**. Rutas honestas, de mayor a me
 
 Regla: un requisito solo se marca como hecho si hay codigo, prueba o medicion que lo respalde.
 Si despues de hacer lo anterior no se llega al 80 %, se informa el porcentaje real.
+
+## Actualizacion: documentos generados
+
+Al incluir los requisitos que ya existen en el codigo pero no estaban en el documento
+(RQF-13..18 y RQNF-09..11), el avance real queda en **72,4 %** (RF 77,8 %, RNF 63,6 %; 21 de 29 puntos).
+Para el 80 % faltan 2,2 puntos, es decir, implementar de verdad 2 o 3 de los pendientes de la lista anterior.
+
+- `docs/avance-requisitos.xlsx`: resumen con grafico, matriz RF, matriz RNF y evidencias.
+- `docs/Proyecto FitLoyalty - requisitos actualizados.docx`: tablas 5 y 6 con columnas Estado y Evidencia y los requisitos nuevos.
