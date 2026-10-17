@@ -59,17 +59,30 @@ El resto de filas coincide con el borrador.
 - **RQNF-08:** no se construyó la imagen Docker (Docker Desktop apagado). Basta con `docker compose build` para dejar evidencia.
 - **Otros Excel de `Documentación/`** (Product Backlog, Matriz de priorización, Cálculo de horas) llegan hasta HU-53 y no incluyen las nuevas HU-54..58. Quedaron fuera de esta tarea.
 
+## Conflicto con el PR #4 (rama `docs/borrador-matriz-requisitos`) — decide Luis
+
+Mientras se hacía esta tarea, la rama del PR #4 dejó de ser un borrador. Ahora agrega su propio `docs/avance-requisitos.xlsx` (**misma ruta que este PR**: el que se fusione de segundo tendrá conflicto) y un segundo documento de requisitos, `docs/Proyecto FitLoyalty - requisitos actualizados.docx`. Además declara un avance del **80,5 %**. Diferencias verificadas:
+
+- **Llega al 80 % ampliando el alcance:** 41 requisitos (26 RF y 15 RNF) frente a 25. Los 21 nuevos incluyen funciones menores o de infraestructura: exportar CSV, vista SQL, listado de asistencia, editar perfil en la app, migraciones, manejador de errores, endpoint de salud, páginas legales y CORS. Esto va contra el criterio 3 acordado (no inflar con opcionales).
+- **Mantiene estados que el código desmiente:** RQF-11 dice «cálculo de rachas» (no existe); RQF-06 y RQF-07 aparecen como Implementado; y su RQNF-15 dice «CORS restringido a los orígenes configurados», cuando `backend/src/index.js:50-57` acepta cualquier origen.
+- **Su Resumen usa números fijos**, no fórmulas.
+- **Numeración distinta:** allí RQF-15 es la app del miembro y RQF-16 la prueba gratuita; aquí es al revés. Si se fusionan los dos, el documento queda con dos versiones de los mismos códigos.
+
+Recomendación: tomar este PR como fuente de la documentación y pedir que el PR #4 retire el Excel y el docx y se quede en implementaciones. Si Luis quiere alguno de los requisitos extra del PR #4, se agregan aquí después de verificarlos contra el código.
+
 ## Qué necesito de Santiago
 
 1. **Implementaciones de la ruta** (en ramas `feat/...`): RQF-02 (cierre por inactividad y expiración real del JWT), RQF-07 (horas pico y refresco), RQF-06 (registrar el acceso bloqueado y avisar en la campana), RQF-01 (editar/desactivar personal) y RQF-04 (congelar membresía). Después, si se puede: RQF-08, RQNF-07, RQF-11, RQF-12 y RQF-10.
-2. **Avisar cada vez que se fusione una**, para cambiar el Estado en `docs/avance-requisitos.xlsx` (solo la columna Estado; lo demás se recalcula) y actualizar la evidencia.
-3. **Medición de RQNF-01** (tiempo del check-in) si tiene el entorno desplegado a mano.
+2. **Quitar del PR #4 el Excel y el docx de requisitos** (ver la sección anterior) si Luis lo confirma.
+3. **Avisar cada vez que se fusione una**, para cambiar el Estado en `docs/avance-requisitos.xlsx` (solo la columna Estado; lo demás se recalcula) y actualizar la evidencia.
+4. **Medición de RQNF-01** (tiempo del check-in) si tiene el entorno desplegado a mano.
 
 ## Hallazgos fuera de alcance (no se tocaron)
 
 - **Seguridad:** el JWT del personal no tiene expiración, porque `generarToken` ignora `JWT_EXPIRES_IN` (`backend/src/lib/auth-helpers.js:102-113`).
 - **Seguridad:** `Evidencias_Sustentacion/Informe_Pruebas_E2E.md` («Datos de prueba generados») deja una contraseña de un usuario de prueba en texto plano en el repositorio. Conviene cambiarla y quitarla del documento.
 - **Seguridad:** la clave para cifrar el QR tiene un valor por defecto en el código (`miembros.js:36`, `checkin.js:19`).
+- **Seguridad:** CORS acepta cualquier origen con `credentials: true`; la lista `FRONTEND_URL` no se aplica porque la última línea del callback también permite (`backend/src/index.js:50-57`).
 - **Pruebas:** 2 de las 23 pruebas de `backend/tests/auth-helpers.test.js` fallan (contraseña con espacios y teléfono con formato `+57 ...`), y `backend/package.json` no tiene script `test`, así que el CI no las ejecuta.
 - **Rendimiento:** si el QR no coincide directo, `checkin.js:83-101` descifra en memoria los QR de todos los miembros del gimnasio. Puede afectar RQNF-01 cuando crezca la base.
 - **Documentación del código:** comentarios que dicen «trial de 7 días» cuando el valor real es 14 (`auth.js:6, :98`, `trial.js:7`).
