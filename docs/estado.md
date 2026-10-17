@@ -11,16 +11,19 @@
 
 | Alcance | RF | RNF | Global |
 |---|---:|---:|---:|
-| Completo (RQF-01..26, RQNF-01..15) | 73,1 % (19/26) | 66,7 % (10/15) | **70,7 % (29/41)** |
-| Solo original del docx (RQF-01..12, RQNF-01..08) | 50,0 % (6/12) | 50,0 % (4/8) | 50,0 % (10/20) |
+| Completo, conservando RQF-23 a RQF-26 (41) | 65,4 % (17 puntos de 26) | 60,0 % (9 puntos de 15) | **63,4 % (26 puntos de 41)** |
+| Si se retiran RQF-23 a RQF-25 y RQF-26 se fusiona en RQF-15 (37), recomendación del verificador | 63,6 % (14 puntos de 22) | 60,0 % (9 puntos de 15) | **62,2 % (23 puntos de 37)** |
+| Solo original del docx (RQF-01..12, RQNF-01..08) | 50,0 % (6 puntos de 12) | 50,0 % (4 puntos de 8) | 50,0 % (10 puntos de 20) |
 
-Fórmula: (implementados + 0,5 × parciales) / total. **No llega al 80 %**: faltan 3,8 puntos (el 80 % de 41 son 32,8). El PR #4 decía 80,5 % porque daba por implementados varios requisitos que el código no respalda (ver «Correcciones»).
+Fórmula: (implementados + 0,5 × parciales) / total; los puntos son esa suma. **No llega al 80 %**: con 41 requisitos faltan 6,8 puntos (el 80 % son 32,8); con 37, faltan 6,6 (el 80 % son 29,6). El PR #4 decía 80,5 % porque daba por implementados requisitos que el código no respalda (ver «Correcciones»).
 
-**Ruta más corta al 80 %** (de la hoja «Trabajo pendiente»): corregir CORS (RQNF-15), corregir la fuga de `vista.js` (RQF-25, y con eso RQNF-05), medir el tiempo del check-in (RQNF-01) y hacer la prueba de usabilidad del check-in (RQNF-04) → **80,5 %**. Las dos primeras son de Santiago; las mediciones, de Luis o Santiago.
+**Decisión pendiente de Luis:** retirar RQF-23, RQF-24 y RQF-25 y fusionar RQF-26 en RQF-15 (62,2 % sobre 37) o conservarlos con los estados corregidos (63,4 % sobre 41). Hasta que decida, quedan como están; los porcentajes del Excel son fórmulas y se recalculan solos.
+
+**Ruta más corta al 80 %** (hoja «Trabajo pendiente», 41 requisitos): diez arreglos o pruebas de esfuerzo bajo (CORS, eliminación de cuenta, avisos de WhatsApp, límites de intentos, prueba de usabilidad y de navegadores, inactividad, horas pico y aviso de acceso bloqueado), luego cerrar la fuga entre gimnasios y quitar `scryptSync` del check-in (RQNF-05) y, recién entonces, medir el check-in con unos 200 miembros (RQNF-01) → **81,7 %**. RQF-25 no suma en la ruta: es un duplicado y un defecto, y su arreglo cuenta en RQNF-05.
 
 ## Qué se hizo
 
-1. **`docs/Proyecto FitLoyalty - requisitos actualizados.docx`**: se rearmó desde el original de `Documentación/` (54b19fa). Solo cambian las tablas 5 y 6 y un párrafo de resumen tras cada una; el resto del documento queda idéntico byte a byte.
+1. **`docs/Proyecto FitLoyalty - requisitos actualizados.docx`**: se rearmó desde el original de `Documentación/` (54b19fa). Solo cambian las tablas 5 y 6 y un párrafo de resumen tras cada una; el resto del documento conserva el mismo texto y las demás partes del archivo (imágenes, estilos, encabezados) son idénticas byte a byte.
    - Numeración de Santiago (RQF-01..26, RQNF-01..15), con columnas Estado y Evidencia.
    - Estilo del original en todas las filas: Times New Roman 12, encabezado verde, sombreado alterno. En la versión de Santiago, las filas nuevas y las columnas agregadas usaban otra fuente en 8–9 pt.
    - La descripción de RQF-08 pasó de la fuente Gungsuh (herencia de Google Docs) a Times New Roman.
@@ -30,7 +33,7 @@ Fórmula: (implementados + 0,5 × parciales) / total. **No llega al 80 %**: falt
    - La escala y la meta son celdas editables en Resumen, y se agregó la tabla del alcance original.
    - RF y RNF incluyen los estados verificados, evidencia archivo:línea, Puntaje, Origen, HU y referencias.
    - «Trabajo pendiente» es la ruta al 80 %.
-   - Hoja nueva **Evidencias** (EV-01..53).
+   - Hoja nueva **Evidencias** (EV-01..54).
    - Se recalculó con Excel: 0 errores de fórmula.
 3. **`Documentación/Plantilla historias de usuario.xlsx`**:
    - HU-54..58 reapuntadas a la numeración de Santiago.
@@ -59,6 +62,26 @@ Segunda ronda, cuando Luis eligió la versión de Santiago como base:
 6. Excel con fórmulas y hoja Evidencias, sin perder hojas ni gráficos.
 7. Sin pruebas en vivo: la verificación es por lectura de código, pruebas existentes y CI.
 
+## Hallazgos del verificador aplicados (fase 2, commit `70dd13c`, sección 12)
+
+Comprobados otra vez contra el código antes de aplicarlos:
+
+| Req. | Antes | Ahora | Motivo |
+|---|---|---|---|
+| RQF-22 | Implementado | **Pendiente** | La eliminación de cuenta aborta la transacción y el gimnasio queda intacto: `safe()` (`auth.js:496-502`) no usa `SAVEPOINT` y ninguna migración crea `auditoria`. Probado por el verificador en PostgreSQL 18 (§11.2.1). Yo lo había marcado leyendo solo el código. |
+| RQF-13 | Implementado | **Parcial** | Con WhatsApp listo, un envío fallido queda como exitoso: `sendWhatsAppText` se traga el error (`whatsapp.js:244-246`) y el `catch` de `admin-contrato.js:132-138` nunca corre. |
+| RQF-14 | Implementado | **Parcial** | Si WhatsApp no está listo, `sendWhatsAppText` vuelve sin error y el job marca el aviso como enviado (`expiracion.js:206-207`); nunca se reintenta. |
+| RQNF-09 | Implementado | **Parcial** | `verify-reset-code` (`auth.js:360`) y `reset-password` (`:399`) no tienen límite de intentos. |
+| RQNF-10 | Implementado | **Parcial** | Una base creada solo con `backend/migrations` no tiene `vista_miembros_activos`, `auditoria` ni las columnas de `reto` e `hito_gamificacion` que usa el código. |
+
+También:
+- **RQF-17:** sigue Implementado, pero ahora anota el riesgo de seguridad: si el correo no sale, el código vuelve en la respuesta (`auth.js:337-346`) y su validación no tiene límite. Se quitó la cita a TC-2.1..2.3 de `Informe_Pruebas_E2E.md`, que probó el flujo viejo por enlace.
+- **RQF-21:** se acotó al pago, porque el plan y la vigencia ya están en RQF-04.
+- **RQF-16:** observación de que el campo «días de prueba» de Configuración no tiene efecto.
+- **Ruta al 80 %:** RQF-25 ya no suma, y RQNF-01 solo cuenta después de corregir la búsqueda del QR y medir con volumen realista.
+- No se tocaron RQF-23 a RQF-26: esperan la decisión de Luis.
+- Las hojas se siguen llamando RF y RNF, como en el Excel de Santiago.
+
 ## Correcciones a la versión de Santiago (PR #4)
 
 | Req. | PR #4 | Verificado | Motivo |
@@ -73,7 +96,7 @@ Segunda ronda, cuando Luis eligió la versión de Santiago como base:
 | RQNF-15 | Implementado | Pendiente | CORS acepta cualquier origen (`index.js:54`). |
 
 Ajustes de redacción:
-- **RQF-13:** se cambió «informando con veracidad» por «registrando cada intento como constancia».
+- **RQF-13:** se quitó «con veracidad» y se agregó «registrando cada intento como constancia»; el texto conserva «informando si el envío no se pudo completar», que es lo que el sistema debe hacer y por eso queda Parcial.
 - **RQF-14:** el módulo pasa a Gestión de Miembros, porque el aviso es de vencimiento y no de abandono. Además, los días de anticipación los define cada gimnasio, pero solo en la base de datos, sin pantalla.
 - **RQF-15:** dice «hitos y retos» en lugar de «rachas», que no existen.
 - **RQF-16:** el módulo pasa a Suscripción SaaS, porque el sistema no cobra, y se agregó el bloqueo al vencer la prueba.
@@ -94,16 +117,20 @@ Ajustes de redacción:
 
 ## Qué necesito de Santiago
 
-1. **Urgente (seguridad):** `GET /api/vista/miembros-activos` (`backend/src/routes/vista.js:20-42`) no filtra por gimnasio y solo pide `authenticate`. Cualquier token, incluido el de un miembro en la app, devuelve nombre, documento, teléfono, correo y QR de los miembros de todos los gimnasios. Hay que filtrar por `req.user.gymId` con rol de personal, o retirar la ruta.
-2. **CORS** (`backend/src/index.js:54`): rechazar los orígenes que no estén en `FRONTEND_URL`.
-3. **Implementaciones de la ruta**, en este orden: RQF-02 (cierre por inactividad y expiración real del JWT), RQF-07, RQF-06, RQF-01, RQF-04. Después, si se puede: RQF-08, RQNF-07, RQF-11, RQF-12 y RQF-10.
-4. **El PR #4 ya está integrado aquí:** al fusionar este PR, cerrar el #4 sin fusionarlo, para no volver a meter el 80,5 % sin verificar.
-5. **Avisar cada vez que se fusione una implementación.** Hay que cambiar el Estado en la hoja RF o RNF del Excel (el resto se recalcula) y actualizar a mano la columna Estado y el párrafo de resumen del docx de `docs/`.
+1. **Antes de la entrega:** arreglar la eliminación de cuenta (RQF-22: un `SAVEPOINT` por cada `safe()` y no insertar en `auditoria` lo que se borra), relanzar el error en `sendWhatsAppText` (RQF-13 y RQF-14), no devolver el código de recuperación en la respuesta y limitar `verify-reset-code` y `reset-password` (RQF-17 y RQNF-09).
+2. **Urgente (seguridad):** `GET /api/vista/miembros-activos` (`backend/src/routes/vista.js:20-42`) no filtra por gimnasio y solo pide `authenticate`. Cualquier token, incluido el de un miembro en la app, devuelve nombre, documento, teléfono, correo y QR de los miembros de todos los gimnasios. Hay que filtrar por `req.user.gymId` con rol de personal, o retirar la ruta.
+3. **CORS** (`backend/src/index.js:54`): rechazar los orígenes que no estén en `FRONTEND_URL`.
+4. **Implementaciones de la ruta**, en este orden: RQF-02 (cierre por inactividad y expiración real del JWT), RQF-07, RQF-06, RQF-01, RQF-04. Después, si se puede: RQF-08, RQNF-07, RQF-11, RQF-12 y RQF-10.
+5. **El PR #4 ya está integrado aquí:** al fusionar este PR, cerrar el #4 sin fusionarlo, para no volver a meter el 80,5 % sin verificar.
+6. **Avisar cada vez que se fusione una implementación.** Hay que cambiar el Estado en la hoja RF o RNF del Excel (el resto se recalcula) y actualizar a mano la columna Estado y el párrafo de resumen del docx de `docs/`.
 
 ## Hallazgos fuera de alcance (no se tocaron)
 
 - **Seguridad:** la fuga de datos entre gimnasios de `vista.js` (punto 1 de arriba).
 - **Seguridad:** CORS abierto con `credentials: true` (`index.js:50-57`).
+- **Seguridad:** el código de recuperación de contraseña vuelve en la respuesta si el correo no sale (`auth.js:337-346`), y `verify-reset-code` y `reset-password` no tienen límite de intentos.
+- **Funcional:** `sendWhatsAppText` (`whatsapp.js:222-247`) no avisa cuando falla o cuando el cliente no está listo; por eso el contrato y los avisos de vencimiento se registran como enviados sin haber salido.
+- **Funcional:** la eliminación de cuenta (`auth.js:480-561`) siempre falla y responde 500 (RQF-22).
 - **Seguridad:** el JWT del personal no expira, porque `generarToken` ignora `JWT_EXPIRES_IN` (`backend/src/lib/auth-helpers.js:102-113`).
 - **Seguridad:** `/api/asistencia` solo exige `authenticate`, así que un miembro desde la app puede listar los ingresos de su gimnasio (`asistencia.js:21`).
 - **Seguridad:** `Evidencias_Sustentacion/Informe_Pruebas_E2E.md` («Datos de prueba generados») deja una contraseña de un usuario de prueba en texto plano. Conviene cambiarla y quitarla del documento.
