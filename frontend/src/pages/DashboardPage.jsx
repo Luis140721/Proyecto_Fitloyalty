@@ -20,6 +20,8 @@
  *         transition cuando llegan los datos.
  *   - Reemplaza los datos placeholder de "Miembros en riesgo" por la lista real
  *     que devuelve GET /api/admin/dashboard (enRiesgoList, top 4 con 15+ dias).
+ *   - RQF-07: grafica de horas pico (GET /api/admin/dashboard/horas-pico, hoy,
+ *     7 o 30 dias) y refresco automatico cada minuto con la pestana visible.
  *
  * Notas de scope:
  *   - NO se modifica Miembros/Checkin/Staff (PROHIBIDO en esta tarea).
@@ -27,7 +29,7 @@
  *     pero el filtro lo aplicara una mejora futura en MiembrosPage.
  *   - /billing no existe como ruta; por eso el boton "Activar plan" cae al toast.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTrial } from '../context/TrialContext';
@@ -42,6 +44,18 @@ const COP = (n) => '$' + Number(n || 0).toLocaleString('es-CO');
 
 // Duracion del toast interno del Dashboard (no usa ErrorBanner porque es info, no error).
 const TOAST_MS = 5000;
+
+// Cada cuanto se vuelven a pedir las metricas mientras la pestana esta visible.
+const REFRESCO_MS = 60 * 1000;
+
+// Periodos de la grafica de horas pico (deben coincidir con el backend).
+const PERIODOS_HORAS = [
+  { id: 'hoy', label: 'Hoy' },
+  { id: 'semana', label: '7 días' },
+  { id: 'mes', label: '30 días' },
+];
+
+const horaTexto = (h) => `${String(h).padStart(2, '0')}:00`;
 
 function Sparkline({ data, color = '#7C5CE6' }) {
   if (!data || data.length === 0) return null;
@@ -151,6 +165,54 @@ function BarsWeekly({ data, appear = false }) {
   );
 }
 
+/**
+ * BarsHoras: entradas por hora del dia (0-23). La hora pico va en otro color
+ * y cada barra lleva un <title> con el detalle para el tooltip del navegador.
+ */
+function BarsHoras({ horas, horaPico }) {
+  if (!horas || horas.length === 0) return null;
+  const max = Math.max(...horas.map((h) => h.total), 1);
+  const gap = 4;
+  const barW = (600 - gap * (horas.length + 1)) / horas.length;
+  return (
+    <svg viewBox="0 0 600 220" preserveAspectRatio="none" className="chart-svg" role="img"
+      aria-label="Entradas por hora del día">
+      <defs>
+        <linearGradient id="grad-hora" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stopColor="#7C5CE6" stopOpacity="0.85" />
+          <stop offset="100%" stopColor="#7C5CE6" stopOpacity="0.25" />
+        </linearGradient>
+      </defs>
+      {horas.map((h, i) => {
+        const x = gap + i * (barW + gap);
+        const alto = (h.total / max) * 170;
+        const esPico = horaPico && h.hora === horaPico.hora;
+        return (
+          <g key={h.hora}>
+            <rect
+              x={x}
+              y={200 - alto}
+              width={barW}
+              height={alto}
+              rx="3"
+              fill={esPico ? '#F5B94A' : 'url(#grad-hora)'}
+              style={{ transition: 'height 400ms ease, y 400ms ease' }}
+            >
+              <title>{`${horaTexto(h.hora)} – ${horaTexto((h.hora + 1) % 24)}: ${h.total} entradas`}</title>
+            </rect>
+            {h.hora % 3 === 0 && (
+              <text x={x + barW / 2} y={216} fill="#cfc2d6" fontSize="10" textAnchor="middle"
+                fontFamily="JetBrains Mono">
+                {`${h.hora}h`}
+              </text>
+            )}
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
 export default function DashboardPage() {
   const { user } = useAuth();
   const { trial } = useTrial();
@@ -161,22 +223,64 @@ export default function DashboardPage() {
   const [error, setError] = useState('');
   const [barsAppear, setBarsAppear] = useState(false);
   const [toast, setToast] = useState(null); // { message, tone }
+  const [periodoHoras, setPeriodoHoras] = useState('mes');
+  const [horasPico, setHorasPico] = useState(null);
+  const [actualizado, setActualizado] = useState(null); // Date de la ultima carga buena
+  const [refrescando, setRefrescando] = useState(false);
+  const [errorRefresco, setErrorRefresco] = useState(false);
 
-  useEffect(() => {
-    let alive = true;
-    api.get('/admin/dashboard')
-      .then(({ data: payload }) => {
-        if (!alive) return;
-        setData(payload);
-        // Dispara la animacion de barras en el siguiente frame para que
-        // mounten a 0 y luego transicionen a la altura final.
-        requestAnimationFrame(() => setBarsAppear(true));
-      })
-      .catch((err) => {
-        if (alive) setError(err.message || 'No se pudo cargar el dashboard.');
-      });
-    return () => { alive = false; };
+  /*
+   * Pide las metricas y las horas pico. La primera carga muestra el error en
+   * grande; en los refrescos se conservan los datos que ya hay y solo se avisa
+   * con un texto pequeno, para que un corte de red no deje la pantalla vacia.
+   */
+  const hayDatos = useRef(false);
+  const ultimaPeticion = useRef(0);
+
+  const cargar = useCallback(async (periodo) => {
+    // Si llega una respuesta vieja (p. ej. tras cambiar de periodo rapido), se ignora.
+    const n = ++ultimaPeticion.current;
+    setRefrescando(true);
+    try {
+      const [dash, horas] = await Promise.all([
+        api.get('/admin/dashboard'),
+        api.get('/admin/dashboard/horas-pico', { params: { periodo } }),
+      ]);
+      if (n !== ultimaPeticion.current) return;
+      hayDatos.current = true;
+      setData(dash.data);
+      setHorasPico(horas.data);
+      setActualizado(new Date());
+      setError('');
+      setErrorRefresco(false);
+      // Dispara la animacion de barras en el siguiente frame para que
+      // mounten a 0 y luego transicionen a la altura final.
+      requestAnimationFrame(() => setBarsAppear(true));
+    } catch (err) {
+      if (n !== ultimaPeticion.current) return;
+      if (hayDatos.current) setErrorRefresco(true);
+      else setError(err.message || 'No se pudo cargar el dashboard.');
+    } finally {
+      if (n === ultimaPeticion.current) setRefrescando(false);
+    }
   }, []);
+
+  // Carga inicial, al cambiar el periodo y cada REFRESCO_MS mientras la pestana
+  // esta visible. Al volver a la pestana se recarga enseguida.
+  useEffect(() => {
+    cargar(periodoHoras);
+    const id = setInterval(() => {
+      if (document.visibilityState === 'visible') cargar(periodoHoras);
+    }, REFRESCO_MS);
+    const alVolver = () => {
+      if (document.visibilityState === 'visible') cargar(periodoHoras);
+    };
+    document.addEventListener('visibilitychange', alVolver);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener('visibilitychange', alVolver);
+    };
+  }, [cargar, periodoHoras]);
 
   // Auto-dismiss del toast interno.
   useEffect(() => {
@@ -247,8 +351,21 @@ export default function DashboardPage() {
         <div>
           <h1 className="admin-page-head__title">Hola, {user?.name?.split(' ')[0] || 'admin'}</h1>
           <p className="admin-page-head__lead">Acá tienes el resumen de hoy en tu gimnasio.</p>
+          {actualizado && (
+            <p style={{ fontSize: 12, color: errorRefresco ? 'var(--error)' : 'var(--on-surface-variant)', marginTop: 6 }}
+              aria-live="polite">
+              {errorRefresco
+                ? 'No se pudo actualizar; se reintentará en un minuto.'
+                : `Actualizado a las ${actualizado.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })} · se actualiza solo cada minuto`}
+            </p>
+          )}
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
+          <button type="button" className="btn btn-ghost" onClick={() => cargar(periodoHoras)}
+            disabled={refrescando} aria-label="Actualizar el dashboard">
+            <span className="material-symbols-outlined icon">refresh</span>
+            {refrescando ? 'Actualizando…' : 'Actualizar'}
+          </button>
           <button type="button" className="btn btn-ghost" onClick={handleExport}>
             <span className="material-symbols-outlined icon">file_download</span>
             Exportar
@@ -387,12 +504,41 @@ export default function DashboardPage() {
             </article>
           </section>
 
-          <section className="admin-cols" style={{ marginTop: 32 }}>
+          <section style={{ marginTop: 32 }}>
+            <article className="chart-card">
+              <header className="chart-card__head" style={{ flexWrap: 'wrap', gap: 12 }}>
+                <div>
+                  <h3>Horas pico</h3>
+                  <p>
+                    {horasPico?.horaPico
+                      ? `La hora con más entradas es de ${horaTexto(horasPico.horaPico.hora)} a ${horaTexto((horasPico.horaPico.hora + 1) % 24)} (${horasPico.horaPico.total} de ${horasPico.total} entradas, ${horasPico.etiqueta.toLowerCase()}).`
+                      : 'Todavía no hay entradas en este periodo.'}
+                  </p>
+                </div>
+                <div style={{ display: 'flex', gap: 6 }} role="group" aria-label="Periodo de las horas pico">
+                  {PERIODOS_HORAS.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      className={`btn btn-sm ${periodoHoras === p.id ? 'btn-primary' : 'btn-ghost'}`}
+                      aria-pressed={periodoHoras === p.id}
+                      onClick={() => setPeriodoHoras(p.id)}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+              </header>
+              <BarsHoras horas={horasPico?.horas} horaPico={horasPico?.horaPico} />
+            </article>
+          </section>
+
+          <section className="admin-cols" style={{ marginTop: 24 }}>
             <article className="chart-card">
               <header className="chart-card__head">
                 <div>
                   <h3>Asistencia de la semana</h3>
-                  <p>Cuántos miembros vinieron cada día, en los últimos 7 días.</p>
+                  <p>Cuántas entradas hubo cada día de esta semana (desde el lunes).</p>
                 </div>
                 <div className="legend">
                   <span><i className="legend-purple" /> Asistencias</span>
