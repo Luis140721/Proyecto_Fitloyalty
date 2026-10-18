@@ -3,8 +3,9 @@
  *
  * Metricas para la pantalla principal del admin.
  *
- *   GET /api/admin/dashboard        -> KPIs + listas cortas + enRiesgoList real
- *   GET /api/admin/dashboard/export -> descarga CSV de miembros activos + membresia
+ *   GET /api/admin/dashboard            -> KPIs + listas cortas + enRiesgoList real
+ *   GET /api/admin/dashboard/horas-pico -> entradas por hora del dia (hoy, 7 o 30 dias)
+ *   GET /api/admin/dashboard/export     -> descarga CSV de miembros activos + membresia
  *
  * Multi-tenant: todas las queries filtran por id_gimnasio (req.user.gymId).
  * Handlers async con asyncHandler: cualquier rechazo va al errorHandler central.
@@ -278,6 +279,57 @@ router.get(
     } catch (err) {
       console.error('[GET /admin/dashboard] Error:', err.message);
       throw new AppError(503, 'No pudimos cargar las metricas del dashboard. Intenta de nuevo.', 'DB_UNREACHABLE');
+    }
+  })
+);
+
+// ---------------------------------------------------------------------------
+// GET /api/admin/dashboard/horas-pico?periodo=hoy|semana|mes
+// ---------------------------------------------------------------------------
+// Entradas por hora del dia (0-23) en la hora de Colombia. `fecha_hora` es un
+// TIMESTAMP sin zona escrito con la hora de la sesion de la base (UTC en Neon),
+// asi que se interpreta en esa zona y se pasa a America/Bogota antes de sacar
+// la hora; si la base ya esta en hora de Colombia, la conversion no cambia nada.
+const ZONA_GIMNASIO = 'America/Bogota';
+const PERIODOS_HORAS = {
+  hoy: { desde: 'CURRENT_DATE', etiqueta: 'Hoy' },
+  semana: { desde: "CURRENT_DATE - INTERVAL '6 days'", etiqueta: 'Últimos 7 días' },
+  mes: { desde: "CURRENT_DATE - INTERVAL '29 days'", etiqueta: 'Últimos 30 días' },
+};
+
+router.get(
+  '/admin/dashboard/horas-pico',
+  authenticate,
+  authorize('admin'),
+  requireActiveTrial(pool),
+  asyncHandler(async (req, res) => {
+    const gymId = req.user.gymId;
+    const periodo = PERIODOS_HORAS[req.query.periodo] ? req.query.periodo : 'mes';
+    const { desde, etiqueta } = PERIODOS_HORAS[periodo];
+
+    try {
+      // `desde` sale de la lista fija de arriba, nunca del request.
+      const { rows } = await pool.query(
+        `SELECT EXTRACT(HOUR FROM (c.fecha_hora AT TIME ZONE current_setting('TimeZone')) AT TIME ZONE $2)::int AS hora,
+                COUNT(*)::int AS total
+           FROM checkin c
+          WHERE c.id_gimnasio = $1 AND c.valido = TRUE
+            AND c.fecha_hora >= ${desde}
+          GROUP BY hora
+          ORDER BY hora`,
+        [gymId, ZONA_GIMNASIO]
+      );
+
+      const horas = Array.from({ length: 24 }, (_, hora) => ({ hora, total: 0 }));
+      for (const r of rows) horas[r.hora].total = r.total;
+      const total = horas.reduce((acc, h) => acc + h.total, 0);
+      // Si hay empate, gana la hora mas temprana.
+      const pico = total > 0 ? horas.reduce((max, h) => (h.total > max.total ? h : max)) : null;
+
+      return res.json({ periodo, etiqueta, zona: ZONA_GIMNASIO, total, horas, horaPico: pico });
+    } catch (err) {
+      console.error('[GET /admin/dashboard/horas-pico] Error:', err.message);
+      throw new AppError(503, 'No pudimos cargar las horas pico. Intenta de nuevo.', 'DB_UNREACHABLE');
     }
   })
 );
