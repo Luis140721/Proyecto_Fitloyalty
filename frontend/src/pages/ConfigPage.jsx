@@ -13,6 +13,7 @@ export default function ConfigPage() {
     plan_ilimitado_valor: 0,
     recordatorio_cobro_activo: true,
     dias_recordatorio_default: 7,
+    dias_aviso_vencimiento: 3,
     dias_prueba: 7,
   });
   const [loading, setLoading] = useState(false);
@@ -224,6 +225,20 @@ export default function ConfigPage() {
                 min="1"
                 max="30"
                 disabled={!config.recordatorio_cobro_activo}
+              />
+            </label>
+            <label className="field">
+              <span className="field-label">Aviso de vencimiento por WhatsApp (días antes, 0 = desactivado)</span>
+              <input
+                className="field-input"
+                type="number"
+                value={config.dias_aviso_vencimiento ?? 3}
+                onChange={(e) => {
+                  const n = parseInt(e.target.value, 10);
+                  setConfig({ ...config, dias_aviso_vencimiento: Number.isNaN(n) ? 0 : Math.min(30, Math.max(0, n)) });
+                }}
+                min="0"
+                max="30"
               />
             </label>
           </div>

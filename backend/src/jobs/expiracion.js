@@ -122,6 +122,8 @@ async function runJob({ dryRun = false, whatsappClient = null } = {}) {
     omitidosDuplicado: 0,
     omitidosGymDesactivado: 0,
     omitidosSinTelefono: 0,
+    omitidosWhatsappNoListo: 0,
+    errores: 0,
     dryRun,
     detalle: [],
   };
@@ -198,16 +200,23 @@ async function runJob({ dryRun = false, whatsappClient = null } = {}) {
       continue;
     }
 
+    // Si WhatsApp no esta listo NO intentamos enviar ni marcamos nada: el aviso
+    // queda pendiente y se reintenta en la siguiente corrida del scheduler.
+    if (typeof wa.isWhatsAppReady === 'function' && !wa.isWhatsAppReady()) {
+      summary.omitidosWhatsappNoListo += 1;
+      summary.detalle.push({ id: m.id_miembro, motivo: 'whatsapp-no-listo', diasRestantes });
+      continue;
+    }
+
     try {
-      // sendWhatsAppQR es la unica funcion publica de whatsapp.js hoy.
-      // Para mandar texto plano necesitamos otra funcion; mientras tanto,
-      // usamos client.sendMessage directamente via la API interna.
-      // Lo mas limpio: anadir `sendWhatsAppText` a whatsapp.js.
+      // sendWhatsAppText lanza si el envio falla; solo marcamos como enviado
+      // cuando el mensaje realmente salio.
       await wa.sendWhatsAppText(tel, texto);
       await marcarEnviado({ idMiembro: m.id_miembro, idPlanCobro, diasRestantes });
       summary.enviados += 1;
       summary.detalle.push({ id: m.id_miembro, nombre: m.nombre, tel, diasRestantes, status: 'enviado' });
     } catch (err) {
+      summary.errores += 1;
       summary.detalle.push({ id: m.id_miembro, nombre: m.nombre, tel, diasRestantes, status: 'error', error: err.message });
     }
   }
