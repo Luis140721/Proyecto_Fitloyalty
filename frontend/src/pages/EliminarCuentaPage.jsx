@@ -5,7 +5,7 @@ import { api } from '../api';
 import LegalLayout from '../components/LegalLayout';
 
 export default function EliminarCuentaPage() {
-  const { user, logout } = useAuth();
+  const { user, gym, logout } = useAuth();
   const navigate = useNavigate();
   const [confirm, setConfirm] = useState(false);
   const [reason, setReason] = useState('');
@@ -33,7 +33,7 @@ export default function EliminarCuentaPage() {
     <LegalLayout
       title="Eliminar cuenta y datos"
       subtitle="Ejerce tu derecho de supresión conforme al artículo 15 de la Ley 1581 de 2012. Esta acción es irreversible."
-      updated="20 de agosto de 2026"
+      updated="18 de octubre de 2026"
     >
       <h2>¿Qué significa eliminar tu cuenta?</h2>
       <p>
@@ -41,8 +41,8 @@ export default function EliminarCuentaPage() {
       </p>
       <ul>
         <li><strong>Eliminar permanentemente</strong> todos los datos del gimnasio: miembros, membresías, check-ins, usuarios de staff y configuraciones.</li>
-        <li><strong>Revocar todos los tokens</strong> de acceso activos (JWT) de todos los usuarios del gimnasio.</li>
-        <li><strong>Conservar logs de auditoría</strong> por 30 días por obligaciones legales, tras lo cual se destruyen.</li>
+        <li><strong>Cerrar el acceso</strong> de todos los usuarios del gimnasio: sus cuentas dejan de existir y ya no pueden iniciar sesión.</li>
+        <li><strong>Borrar también el historial de auditoría</strong> del gimnasio. En el registro del servidor solo queda el número interno del gimnasio y la fecha de la eliminación, sin datos personales.</li>
         <li><strong>Cancelar la facturación</strong> del plan activo de inmediato.</li>
       </ul>
       <div className="legal-callout">
@@ -60,9 +60,9 @@ export default function EliminarCuentaPage() {
 
       <h2>Plazo de eliminación</h2>
       <p>
-        La eliminación se procesa en un plazo máximo de <strong>10 días hábiles</strong> conforme al
-        artículo 14 del Decreto 1377 de 2013. Durante ese período, la cuenta queda inaccesible pero
-        los datos pueden existir en backups que se destruyen 30 días después.
+        Los datos se borran <strong>en el momento en que confirmas</strong>, dentro del plazo máximo de
+        10 días hábiles que fija el artículo 14 del Decreto 1377 de 2013. Pueden seguir existiendo
+        en copias de respaldo, que se destruyen 30 días después.
       </p>
 
       <h2>Derecho de los miembros del gimnasio</h2>
@@ -75,15 +75,15 @@ export default function EliminarCuentaPage() {
 
       {done ? (
         <>
-          <h2>Solicitud recibida</h2>
+          <h2>Cuenta eliminada</h2>
           <div className="legal-callout">
             <div className="legal-callout__title">
               <span className="material-symbols-outlined">check_circle</span>
-              Cuenta en proceso de eliminación
+              Datos borrados
             </div>
             <p>
-              Tu solicitud se ha procesado correctamente. La eliminación completa se completará en
-              un máximo de 10 días hábiles. Has sido cerrado sesión. Si tienes dudas, escribe a{' '}
+              Los datos del gimnasio se borraron de forma permanente y tu sesión se cerró. Las copias
+              de respaldo se destruyen en 30 días. Si tienes dudas, escribe a{' '}
               <a href="mailto:fitloyaltysaas@gmail.com">fitloyaltysaas@gmail.com</a>.
             </p>
           </div>
@@ -124,7 +124,7 @@ export default function EliminarCuentaPage() {
                 />
                 <span>
                   Entiendo que esta acción es <strong>irreversible</strong> y que todos los datos
-                  del gimnasio <strong>"{user?.gymName || user?.name}"</strong> serán eliminados
+                  del gimnasio <strong>"{gym?.name || user?.name}"</strong> serán eliminados
                   permanentemente, incluyendo miembros, membresías y check-ins.
                 </span>
               </label>
