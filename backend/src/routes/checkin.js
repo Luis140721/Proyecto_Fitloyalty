@@ -19,10 +19,16 @@ const router = express.Router();
 const QR_ENCRYPTION_KEY = process.env.QR_ENCRYPTION_KEY || 'FitLoyalty2024SecretKey';
 const VENTANA_ANTIREBOTE_SEG = Number(process.env.CHECKIN_VENTANA_SEG || 90);
 
+// scryptSync es deliberadamente lento (decenas de ms). Antes se ejecutaba en
+// cada decifrado, y el check-in decifra el QR de CADA miembro del gimnasio:
+// con cientos de miembros eso tardaba segundos (RQNF-01). La clave solo
+// depende de QR_ENCRYPTION_KEY, asi que se deriva una vez.
+const QR_KEY = crypto.scryptSync(QR_ENCRYPTION_KEY, 'salt', 32);
+
 function decryptQrCode(encrypted) {
   try {
     const algorithm = 'aes-256-cbc';
-    const key = crypto.scryptSync(QR_ENCRYPTION_KEY, 'salt', 32);
+    const key = QR_KEY;
     const parts = encrypted.split(':');
     const iv = Buffer.from(parts.shift(), 'hex');
     const encryptedText = parts.join(':');
@@ -225,3 +231,4 @@ router.get(
 );
 
 module.exports = router;
+module.exports.decryptQrCode = decryptQrCode; // expuesto para pruebas
