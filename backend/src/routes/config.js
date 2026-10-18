@@ -18,12 +18,14 @@ const { formatZodError } = require('../lib/validators');
 const router = express.Router();
 
 const configSchema = z.object({
-  plan_mensual_valor: z.number().min(0).optional(),
-  plan_trimestral_valor: z.number().min(0).optional(),
-  plan_semestral_valor: z.number().min(0).optional(),
-  plan_anual_valor: z.number().min(0).optional(),
-  plan_clases_suelta_valor: z.number().min(0).optional(),
-  plan_ilimitado_valor: z.number().min(0).optional(),
+  // PostgreSQL devuelve NUMERIC como texto ("50000.00") y la pantalla lo reenvia
+  // tal cual al guardar; z.coerce acepta tanto numeros como esos textos.
+  plan_mensual_valor: z.coerce.number().min(0).optional(),
+  plan_trimestral_valor: z.coerce.number().min(0).optional(),
+  plan_semestral_valor: z.coerce.number().min(0).optional(),
+  plan_anual_valor: z.coerce.number().min(0).optional(),
+  plan_clases_suelta_valor: z.coerce.number().min(0).optional(),
+  plan_ilimitado_valor: z.coerce.number().min(0).optional(),
   recordatorio_cobro_activo: z.boolean().optional(),
   dias_recordatorio_default: z.number().min(1).max(30).optional(),
   dias_prueba: z.number().min(1).max(90).optional(),
