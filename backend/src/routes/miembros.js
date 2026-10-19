@@ -35,10 +35,16 @@ const router = express.Router();
 // Clave secreta para cifrar QR (en producción debería estar en variables de entorno)
 const QR_ENCRYPTION_KEY = process.env.QR_ENCRYPTION_KEY || 'FitLoyalty2024SecretKey';
 
+// scryptSync es deliberadamente lento y la clave solo depende de
+// QR_ENCRYPTION_KEY: se deriva una vez al cargar el modulo, igual que en
+// checkin.js. Es la misma clave de antes, asi que los QR ya cifrados siguen
+// descifrando igual.
+const QR_KEY = crypto.scryptSync(QR_ENCRYPTION_KEY, 'salt', 32);
+
 // Función para cifrar el código QR
 function encryptQrCode(qrCode) {
   const algorithm = 'aes-256-cbc';
-  const key = crypto.scryptSync(QR_ENCRYPTION_KEY, 'salt', 32);
+  const key = QR_KEY;
   const iv = crypto.randomBytes(16);
   const cipher = crypto.createCipheriv(algorithm, key, iv);
   let encrypted = cipher.update(qrCode, 'utf8', 'hex');
@@ -50,7 +56,7 @@ function encryptQrCode(qrCode) {
 function decryptQrCode(encrypted) {
   try {
     const algorithm = 'aes-256-cbc';
-    const key = crypto.scryptSync(QR_ENCRYPTION_KEY, 'salt', 32);
+    const key = QR_KEY;
     const parts = encrypted.split(':');
     const iv = Buffer.from(parts.shift(), 'hex');
     const encryptedText = parts.join(':');
