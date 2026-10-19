@@ -20,11 +20,11 @@ Solo se marcó lo que está fusionado en `develop` y revisado por el verificador
 
 **Criterio para RQF-13 (sigue Parcial).** El PR #9 arregló lo que lo dejaba en Parcial: `sendWhatsAppText` ahora lanza un error en los cuatro casos de fallo (`whatsapp.js:223-246`), `admin-contrato.js:130-138` registra `exito = false` y hay 5 pruebas. Pero el requisito pide que el administrador pueda enviar el contrato, y tras cada reinicio del servidor eso no pasa: `admin-contrato.js:107` pregunta `isWhatsAppReady()` antes de enviar, el cliente se inicia de forma perezosa (`whatsapp.js:146`) y nadie lo inicia desde ese flujo. El administrador recibe «no autenticado» y la instrucción de escanear un QR que nunca se imprime. Solo funciona si antes otro flujo inició el cliente (el alta de un miembro con teléfono). En Render, que duerme y reinicia el servicio, eso es lo normal. Lo principal funciona, pero falta una parte: Parcial. Pasa a Implementado cuando se quite esa comprobación previa (o se inicie el cliente antes), lo mismo que pide el verificador para el job del PR #10.
 
-**Sin cambio hasta que se fusionen:** RQF-14 (PR #10, el verificador pidió cambios), RQF-07 (PR #16, corregido tras la revisión) y RQF-04 (PR #17, en revisión).
+**Sin cambio hasta que se fusionen:** RQF-14 (PR #10, el verificador pidió cambios), RQF-07 (PR #16, corregido tras la revisión) y RQF-04 (PR #17, en revisión). RQF-04 además necesita que el check-in rechace una membresía congelada: por decisión de Luis (2026-10-18) no entra, con estado `CONGELADO` y el mensaje «Tu membresía está congelada. Pide en recepción que la reactiven para poder ingresar.». Lo implementa Santiago en `checkin.js` y `CheckinPage.jsx`. RQF-04 no pasa a Implementado hasta que los dos cambios estén fusionados y verificados.
 
 **Riesgos anotados, sin cambio de estado:**
 - **RQF-22:** cualquier usuario con rol `admin`, también un administrador invitado, puede eliminar el gimnasio sin volver a escribir su contraseña. Conviene pedirla antes del `BEGIN`.
-- **RQF-09 (por confirmar):** si producción tiene las columnas de `ConsultasDB`, `POST /api/admin/notificaciones/enviado` falla siempre y el frontend lo oculta (`MiembrosPage.jsx:802-808`). Hay que revisar `envio_mensaje` y `notificacion` en la copia de producción; si faltan `canal` o `leido`, RQF-09 baja a Parcial (−0,5).
+- **RQF-09 (por confirmar):** si producción tiene las columnas de `ConsultasDB`, `POST /api/admin/notificaciones/enviado` falla siempre y el frontend lo oculta (`MiembrosPage.jsx:802-808`). Hay que revisar `envio_mensaje` y `notificacion` en la copia de producción; si faltan `canal` o `leido`, RQF-09 baja a Parcial (−0,5). Santiago lo consulta; mientras tanto queda como observación en el Excel.
 
 ## Resultado
 
@@ -163,6 +163,7 @@ Ajustes de redacción:
 - **Seguridad:** el JWT del personal no expira, porque `generarToken` ignora `JWT_EXPIRES_IN` (`backend/src/lib/auth-helpers.js:102-113`).
 - **Seguridad:** `/api/asistencia` solo exige `authenticate`, así que un miembro desde la app puede listar los ingresos de su gimnasio (`asistencia.js:21`). **Resuelto en el PR #11.**
 - **Seguridad:** `Evidencias_Sustentacion/Informe_Pruebas_E2E.md` («Datos de prueba generados») deja una contraseña de un usuario de prueba en texto plano. Conviene cambiarla y quitarla del documento.
+- **Seguridad (2026-10-18):** `COMO_CORRER.md` tenía en la sección de Render una `JWT_SECRET` y una `SMTP_PASSWORD` reales. Se cambiaron por marcadores, pero siguen en el historial del repositorio público: hay que rotar la `JWT_SECRET` en Render y revocar la contraseña de aplicación de Gmail. `Evidencias_Sustentacion/Santiago/C2_Recuperacion_Clave/README.md:27` tiene otra contraseña de aplicación de Gmail; ese archivo es de Santiago y no se tocó.
 - **Seguridad:** la clave para cifrar el QR tiene un valor por defecto en el código (`miembros.js:36`, `checkin.js:19`).
 - **Pruebas:** 2 de las 23 pruebas de `backend/tests/auth-helpers.test.js` fallan, y `backend/package.json` no tiene script `test`, así que el CI no las ejecuta.
 - **Rendimiento:** si el QR no coincide directo, `checkin.js:83-101` descifra en memoria los QR de todos los miembros del gimnasio. **Mejorado en el PR #11:** la clave se deriva una sola vez y queda un descifrado AES por miembro.
