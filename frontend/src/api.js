@@ -119,7 +119,9 @@ function avisarSiSesionExpirada(error) {
   const token = getToken();
   if (!enviado || !token || enviado !== `Bearer ${token}`) return;
   clearToken();
-  try { window.dispatchEvent(new CustomEvent(SESION_EXPIRADA)); } catch (_) {}
+  // El codigo dice por que (ACCOUNT_DISABLED, TOKEN_SIN_VENCIMIENTO...) para el aviso.
+  const code = (error.response.data && error.response.data.code) || null;
+  try { window.dispatchEvent(new CustomEvent(SESION_EXPIRADA, { detail: { code } })); } catch (_) {}
 }
 
 api.interceptors.response.use(

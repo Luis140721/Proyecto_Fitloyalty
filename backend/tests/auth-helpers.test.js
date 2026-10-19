@@ -14,6 +14,9 @@
  *  - Firma y verificación de tokens JWT.
  *  - RQF-02: el token del personal expira (JWT_EXPIRES_IN, 8 h por defecto),
  *    el middleware rechaza el vencido y el del miembro sigue en 30 días.
+ *  - RQF-01: el middleware vuelve a leer al usuario del personal en cada
+ *    peticion (desactivado = 401, rol desde la BD). La lectura se reemplaza
+ *    con establecerBusquedaPersonal para no tocar la base.
  *
  * Corre con `node --test "tests/*.test.js"` (desde backend/) y con Jest (S8
  * agrega `npm test`). Con node --test no existen los globales de Jest: se
@@ -46,7 +49,7 @@ function expectMinimo(actual) {
 }
 
 const jwt = require('jsonwebtoken');
-const { authenticate } = require('../src/middleware/auth');
+const { authenticate, establecerBusquedaPersonal } = require('../src/middleware/auth');
 const {
   mapRol,
   validarEmail,
@@ -294,12 +297,12 @@ describe('RQF-02: vigencia del token del personal', () => {
     );
   });
 
-  test('el middleware authenticate responde 401 con un token vencido', () => {
+  test('el middleware authenticate responde 401 con un token vencido', async () => {
     const haceUnaHora = Math.floor(Date.now() / 1000) - 3600;
     const vencido = jwt.sign({ id: 1, role: 'admin', gymId: 2, iat: haceUnaHora }, SECRET, { expiresIn: 60 });
     const res = { statusCode: 0, body: null, status(c) { this.statusCode = c; return this; }, json(b) { this.body = b; return this; } };
     let siguio = false;
-    authenticate({ headers: { authorization: `Bearer ${vencido}` } }, res, () => { siguio = true; });
+    await authenticate({ headers: { authorization: `Bearer ${vencido}` } }, res, () => { siguio = true; });
     expect(siguio).toBe(false);
     expect(res.statusCode).toBe(401);
     expect(res.body.error).toMatch(/expirado/);
@@ -324,23 +327,69 @@ describe('RQF-02: vigencia del token del personal', () => {
     }
   });
 
-  // authenticate con un token dado: devuelve el status (0 si dejo pasar) y el cuerpo.
-  const autenticar = (token) => {
+  // authenticate con un token dado: devuelve el status (0 si dejo pasar), el
+  // cuerpo, el req.user resultante y lo que recibio next().
+  const autenticar = async (token) => {
+    const req = { headers: { authorization: `Bearer ${token}` } };
     const res = { statusCode: 0, body: null, status(c) { this.statusCode = c; return this; }, json(b) { this.body = b; return this; } };
-    authenticate({ headers: { authorization: `Bearer ${token}` } }, res, () => {});
-    return res;
+    let siguiente;
+    await authenticate(req, res, (err) => { siguiente = err || 'ok'; });
+    return { statusCode: res.statusCode, body: res.body, user: req.user, siguiente };
   };
+  // Usuario del personal "en la BD" para estas pruebas.
+  const enBD = (fila) => establecerBusquedaPersonal(async () => fila);
+  afterAll(() => establecerBusquedaPersonal());
 
-  test('authenticate rechaza (401) un token del personal sin exp, emitido antes de RQF-02', () => {
+  test('authenticate rechaza (401) un token del personal sin exp, emitido antes de RQF-02', async () => {
     const viejo = jwt.sign({ id: 1, role: 'admin', gymId: 2 }, SECRET);
-    const res = autenticar(viejo);
+    const res = await autenticar(viejo);
     expect(res.statusCode).toBe(401);
     expect(res.body.code).toBe('TOKEN_SIN_VENCIMIENTO');
   });
 
-  test('authenticate deja pasar un token del personal con exp y el del miembro', () => {
+  test('authenticate deja pasar un token del personal con exp y el del miembro', async () => {
     delete process.env.JWT_EXPIRES_IN;
-    expect(autenticar(generarToken(admin)).statusCode).toBe(0);
-    expect(autenticar(generarTokenCliente({ id_miembro: 4, id_gimnasio: 2, documento: '123' })).statusCode).toBe(0);
+    enBD({ activo: true, id_gimnasio: 2, rol_nombre: 'ADMINISTRADOR' });
+    expect((await autenticar(generarToken(admin))).statusCode).toBe(0);
+    const miembro = await autenticar(generarTokenCliente({ id_miembro: 4, id_gimnasio: 2, documento: '123' }));
+    expect(miembro.statusCode).toBe(0);
+    expect(miembro.user.role).toBe('cliente');
+  });
+
+  test('RQF-01: un usuario desactivado pierde el acceso aunque su token siga vigente', async () => {
+    enBD({ activo: false, id_gimnasio: 2, rol_nombre: 'ADMINISTRADOR' });
+    const r = await autenticar(generarToken(admin));
+    expect(r.statusCode).toBe(401);
+    expect(r.body.code).toBe('ACCOUNT_DISABLED');
+    expect(r.siguiente).toBe(undefined);
+  });
+
+  test('RQF-01: un usuario que ya no existe o que pasó a otro gimnasio recibe 401', async () => {
+    enBD(null);
+    expect((await autenticar(generarToken(admin))).statusCode).toBe(401);
+    enBD({ activo: true, id_gimnasio: 99, rol_nombre: 'ADMINISTRADOR' });
+    expect((await autenticar(generarToken(admin))).statusCode).toBe(401);
+  });
+
+  test('RQF-01: el rol sale de la BD, no del token (un admin bajado a recepción deja de ser admin)', async () => {
+    enBD({ activo: true, id_gimnasio: 2, rol_nombre: 'RECEPCIONISTA' });
+    const r = await autenticar(generarToken(admin));
+    expect(r.statusCode).toBe(0);
+    expect(jwt.decode(generarToken(admin)).role).toBe('admin');
+    expect(r.user.role).toBe('receptionist');
+  });
+
+  test('RQF-01: si la base falla, responde 503 por el manejador de errores', async () => {
+    establecerBusquedaPersonal(async () => { throw new Error('sin conexion'); });
+    const errorLog = console.error;
+    console.error = () => {};
+    try {
+      const r = await autenticar(generarToken(admin));
+      expect(r.statusCode).toBe(0);
+      expect(r.siguiente.status).toBe(503);
+      expect(r.siguiente.code).toBe('DB_UNREACHABLE');
+    } finally {
+      console.error = errorLog;
+    }
   });
 });

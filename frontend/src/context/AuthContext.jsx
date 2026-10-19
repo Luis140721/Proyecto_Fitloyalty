@@ -47,6 +47,7 @@ function guardarActividad(ms) {
 const AVISOS = {
   inactividad: `Tu sesión se cerró tras ${INACTIVIDAD_MIN} ${INACTIVIDAD_MIN === 1 ? 'minuto' : 'minutos'} sin actividad. Inicia sesión de nuevo.`,
   expirada: 'Tu sesión expiró. Inicia sesión de nuevo.',
+  desactivada: 'Tu cuenta fue desactivada o cambió de gimnasio. Habla con el administrador.',
 };
 
 /**
@@ -87,8 +88,8 @@ export function AuthProvider({ children }) {
 
   /**
    * Cierra la sesion sin pasar por el backend (el JWT es stateless) y, si hay
-   * motivo, deja el aviso en el banner. El de inactividad queda fijo hasta
-   * que lo cierren, porque el usuario no estaba mirando cuando ocurrio.
+   * motivo, deja el aviso en el banner. Los de inactividad y cuenta desactivada
+   * quedan fijos hasta que los cierren; el de sesion vencida se va solo.
    */
   const cerrarSesion = useCallback((motivo) => {
     clearToken();
@@ -97,8 +98,8 @@ export function AuthProvider({ children }) {
     setGym(null);
     if (motivo && avisoRef.current === null) {
       avisoRef.current = pushApiError(
-        { status: 401, code: motivo === 'inactividad' ? 'INACTIVITY_LOGOUT' : 'SESSION_EXPIRED', message: AVISOS[motivo] },
-        { persistent: motivo === 'inactividad' },
+        { status: 401, code: motivo === 'inactividad' ? 'INACTIVITY_LOGOUT' : motivo === 'desactivada' ? 'ACCOUNT_DISABLED' : 'SESSION_EXPIRED', message: AVISOS[motivo] },
+        { persistent: motivo !== 'expirada' },
       );
     }
   }, [pushApiError]);
@@ -137,7 +138,7 @@ export function AuthProvider({ children }) {
 
   // Un 401 de cualquier peticion con el token vigente (api.js) cierra la sesion.
   useEffect(() => {
-    const alExpirar = () => cerrarSesion('expirada');
+    const alExpirar = (e) => cerrarSesion(e?.detail?.code === 'ACCOUNT_DISABLED' ? 'desactivada' : 'expirada');
     window.addEventListener(SESION_EXPIRADA, alExpirar);
     return () => window.removeEventListener(SESION_EXPIRADA, alExpirar);
   }, [cerrarSesion]);
