@@ -124,7 +124,7 @@ Ninguno de los dos archivos `.env` se versiona — están cubiertos por `.gitign
 | Variable             | Obligatoria | Por defecto | Descripción |
 |----------------------|:-----------:|-------------|-------------|
 | `JWT_SECRET`         | **sí**      | —           | Clave de firma de los JWT. El compose falla si no está |
-| `JWT_EXPIRES_IN`     | no          | `7d`        | Vigencia del token |
+| `JWT_EXPIRES_IN`     | no          | `8h`        | Vigencia del token del personal (`8h`, `30m`, `1d`; un número sin unidad son segundos). El de la app del miembro dura 30 días y no cambia. Ojo: `docker-compose.yml` pasa `7d` si no la defines en `.env` |
 | `PORT`               | no          | `3001`      | Puerto del backend |
 | `NODE_ENV`           | no          | `production`| Entorno de ejecución |
 | `SUPPORT_EMAIL`      | no          | `fitloyaltysaas@gmail.com` | Correo de soporte mostrado en los emails |
@@ -143,6 +143,7 @@ Ninguno de los dos archivos `.env` se versiona — están cubiertos por `.gitign
 | Variable         | Obligatoria | Por defecto | Descripción |
 |------------------|:-----------:|-------------|-------------|
 | `VITE_API_BASE`  | no          | vacío       | Déjalo vacío para usar rutas relativas y el proxy de nginx |
+| `VITE_INACTIVIDAD_MIN` | no    | `30`        | Minutos sin actividad (mouse, teclado, toque o scroll) antes de cerrar la sesión del panel. Se lee al compilar (`npm run build`, Vercel); el build de Docker no la recibe y usa 30 |
 | `FRONTEND_PORT`  | no          | `5173`      | Puerto publicado del frontend |
 
 ---

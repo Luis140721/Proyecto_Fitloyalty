@@ -10,7 +10,7 @@
  *   POST /api/auth/forgot-password  -> genera OTP de recuperacion
  *   POST /api/auth/verify-reset-code -> valida OTP, devuelve resetToken
  *   POST /api/auth/reset-password    -> aplica nuevo password con resetToken
- *   DELETE /api/auth/account         -> elimina cuenta y datos del gimnasio (cascade)
+ *   DELETE /api/auth/account         -> el dueño, con su contrasena, elimina la cuenta y los datos del gimnasio
  *
  * Convenciones:
  *   - Codigos de error: 400 validacion, 401 credenciales, 403 sin permiso, 409 duplicado, 500 servidor.
@@ -22,6 +22,7 @@
 const express = require('express');
 const bcrypt  = require('bcryptjs');
 const jwt     = require('jsonwebtoken');
+const { z }   = require('zod');
 const pool    = require('../db/db');
 const { authenticate } = require('../middleware/auth');
 const asyncHandler     = require('../lib/asyncHandler');
@@ -489,9 +490,18 @@ router.post('/reset-password', asyncHandler(async (req, res) => {
 // usuario que se estan borrando y romperia la FK. El rastro queda en el log
 // del servidor (solo ids, sin datos personales).
 //
-// Solo el ADMIN puede ejecutar esta accion. Staff y miembros NO pueden
-// eliminar el gimnasio.
+// Solo el DUEÑO puede ejecutar esta accion, y debe escribir su contrasena en
+// el cuerpo: { password, reason? }. El dueño es el usuario que creo el
+// gimnasio en el signup, es decir, el primero del gimnasio (los demas entran
+// despues, por invitacion). Recepcionistas, admins invitados y miembros NO
+// pueden eliminar el gimnasio.
 // --------------------------------------------------------------------------
+const eliminarCuentaSchema = z.object({
+  password: z.string({ required_error: 'Escribe tu contrasena para confirmar.' })
+    .min(1, 'Escribe tu contrasena para confirmar.'),
+  reason: z.string().max(1000).optional(),
+});
+
 const MIEMBROS_DEL_GYM   = 'SELECT id_miembro FROM miembro WHERE id_gimnasio = $1';
 const USUARIOS_DEL_GYM   = 'SELECT id_usuario FROM usuario WHERE id_gimnasio = $1';
 const MEMBRESIAS_DEL_GYM = `SELECT id_membresia FROM membresia WHERE id_miembro IN (${MIEMBROS_DEL_GYM})`;
@@ -559,6 +569,34 @@ router.delete('/account', authenticate, asyncHandler(async (req, res) => {
   if (!gymId) throw new AppError(400, 'Cuenta sin gimnasio asociado.', 'NO_GYM');
   if (userRole !== 'admin') {
     throw new AppError(403, 'Solo el administrador del gimnasio puede eliminar la cuenta.', 'NOT_ADMIN');
+  }
+  const parsed = parse(eliminarCuentaSchema, req.body);
+  if (!parsed.ok) throw new AppError(parsed.status, parsed.error, 'VALIDATION_ERROR', { issues: parsed.issues });
+
+  // Confirmacion ANTES de abrir la transaccion: que sea el dueño y que la
+  // contrasena coincida. Un token robado o un admin invitado no basta.
+  let cuenta;
+  try {
+    const { rows } = await pool.query(
+      `SELECT u.password_hash,
+              (u.id_usuario = (SELECT MIN(u2.id_usuario) FROM usuario u2 WHERE u2.id_gimnasio = u.id_gimnasio)) AS es_dueno
+         FROM usuario u
+        WHERE u.id_usuario = $1 AND u.id_gimnasio = $2 AND u.activo = TRUE`,
+      [userId, gymId]
+    );
+    cuenta = rows[0];
+  } catch (err) {
+    console.error('[DELETE /auth/account] Error consultando usuario:', err.code, err.message);
+    throw new AppError(503, 'No pudimos validar tu cuenta. Intenta de nuevo.', 'DB_UNREACHABLE');
+  }
+  if (!cuenta) throw new AppError(404, 'Usuario no encontrado', 'USER_NOT_FOUND');
+  if (!cuenta.es_dueno) {
+    throw new AppError(403, 'Solo el dueño del gimnasio (quien creo la cuenta) puede eliminarla.', 'NOT_OWNER');
+  }
+  // 403 y no 401: la sesion es valida. Un 401 haria que el front la diera por
+  // vencida y cerrara la sesion solo por equivocarse de contrasena.
+  if (!(await bcrypt.compare(parsed.data.password, cuenta.password_hash))) {
+    throw new AppError(403, 'La contrasena no coincide.', 'WRONG_PASSWORD');
   }
 
   const client = await pool.connect();

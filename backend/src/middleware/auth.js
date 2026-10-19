@@ -13,13 +13,21 @@ function authenticate(req, res, next) {
 
   const token = authHeader.split(' ')[1];
 
+  let payload;
   try {
-    const payload = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = payload;
-    next();
+    payload = jwt.verify(token, process.env.JWT_SECRET);
   } catch (err) {
     return res.status(401).json({ error: 'Token inválido o expirado' });
   }
+  // Los tokens del personal emitidos antes de RQF-02 no traen `exp` y
+  // jwt.verify los aceptaria para siempre. Se rechazan para obligar a iniciar
+  // sesion de nuevo y recibir uno que vence. El del miembro siempre trae `exp`
+  // (30 dias), pero no se le exige aqui para no sacar a nadie de la app.
+  if (payload.role !== 'cliente' && !payload.exp) {
+    return res.status(401).json({ error: 'Tu sesión es anterior al cambio de seguridad. Inicia sesión de nuevo.', code: 'TOKEN_SIN_VENCIMIENTO' });
+  }
+  req.user = payload;
+  next();
 }
 
 /**
