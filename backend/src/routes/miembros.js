@@ -26,7 +26,7 @@ const { formatZodError } = require('../lib/validators');
 const { ULTIMO_PLAN } = require('../lib/planes');
 const { telefonoWhatsapp, mensajeParaMiembro, enPalabras } = require('../lib/mensajes');
 const { sendMemberQR } = require('../lib/email');
-const { sendWhatsAppQR } = require('../lib/whatsapp'); // <-- NUEVO: Importado el servicio de WhatsApp
+const { sendWhatsAppQR } = require('../lib/whatsapp'); // <-- Importado el servicio de WhatsApp[cite: 7]
 const QRCode = require('qrcode');
 
 const router = express.Router();
@@ -69,8 +69,7 @@ const createSchema = z.object({
   tipo_documento: z.enum(['CC', 'TI', 'NIT', 'CE', 'PP']).default('CC'),
   documento: z.string().min(4, 'El documento es requerido'),
   fecha_nacimiento: z.string().optional(),
-  // El select de genero puede quedar en "Seleccionar...", que llega como
-  // cadena vacia: se traduce a "sin dato" en vez de romper la validacion.
+  // El select de genero puede llegar como cadena vacia
   genero: z.enum(['Masculino', 'Femenino', 'Otro', 'Prefiero no decir'])
     .optional()
     .or(z.literal('').transform(() => undefined)),
@@ -105,23 +104,6 @@ const createSchema = z.object({
   qr_imagen: z.string().optional(), // Imagen del QR en base64
 });
 
-/**
- * Campos editables de un miembro.
- *
- * Antes solo aceptaba nombre, telefono, email, activo y qr_imagen: el resto
- * del formulario se enviaba pero zod lo descartaba en silencio, asi que el
- * usuario creia haber guardado y no se guardaba nada. Ahora se aceptan todas
- * las columnas de datos del miembro.
- *
- * Quedan FUERA a proposito:
- *   - id_miembro / id_gimnasio: identidad, no se tocan.
- *   - codigo_qr: lo genera el servidor; cambiarlo invalidaria el QR impreso
- *     que el miembro ya tiene.
- *   - fecha_registro: es un hecho historico.
- *
- * Las cadenas vacias se convierten a null para no guardar "" en columnas
- * opcionales.
- */
 const vacioANull = (schema) =>
   schema.optional().or(z.literal('').transform(() => null)).nullable();
 
@@ -133,7 +115,6 @@ const updateSchema = z.object({
   activo:    z.boolean().optional(),
   qr_imagen: z.string().optional(),
 
-  // Datos personales
   tipo_documento:      vacioANull(z.string().max(10)),
   fecha_nacimiento:    vacioANull(z.string()),
   genero:              vacioANull(z.string().max(20)),
@@ -141,13 +122,11 @@ const updateSchema = z.object({
   ciudad:              vacioANull(z.string().max(100)),
   direccion:           vacioANull(z.string()),
 
-  // Salud y emergencia
   contacto_emergencia:  vacioANull(z.string().max(100)),
   telefono_emergencia:  vacioANull(z.string().max(20)),
   condiciones_medicas:  vacioANull(z.string()),
   alergias:             vacioANull(z.string()),
 
-  // Perfil de entrenamiento
   objetivo:             vacioANull(z.string().max(50)),
   nivel_experiencia:    vacioANull(z.string().max(30)),
   observaciones:        vacioANull(z.string()),
@@ -160,7 +139,6 @@ function parse(schema, payload) {
 }
 
 function genQrCode(gymId) {
-  // 8 chars legibles, sin ambiguedades (sin 0/O/1/I)
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   const bytes = crypto.randomBytes(8);
   let out = '';
@@ -171,25 +149,14 @@ function genQrCode(gymId) {
 function calcularFechaFin(tipoPlan, fechaInicio) {
   if (!fechaInicio) return null;
   const inicio = new Date(fechaInicio);
-  let dias = 30; // Por defecto mensual
+  let dias = 30;
   
   switch (tipoPlan.toUpperCase()) {
-    case 'MENSUAL':
-      dias = 30;
-      break;
-    case 'TRIMESTRAL':
-      dias = 90;
-      break;
-    case 'SEMESTRAL':
-      dias = 180;
-      break;
-    case 'ANUAL':
-      dias = 365;
-      break;
-    case 'CLASES_SUELTAS':
-    case 'ILIMITADO':
-    default:
-      dias = 30;
+    case 'MENSUAL': dias = 30; break;
+    case 'TRIMESTRAL': dias = 90; break;
+    case 'SEMESTRAL': dias = 180; break;
+    case 'ANUAL': dias = 365; break;
+    default: dias = 30;
   }
   
   const fin = new Date(inicio);
@@ -200,7 +167,6 @@ function calcularFechaFin(tipoPlan, fechaInicio) {
 function determinarEstadoPago(valorTotal, valorPagado) {
   const total = parseFloat(valorTotal) || 0;
   const pagado = parseFloat(valorPagado) || 0;
-  
   if (pagado >= total) return 'PAGADO';
   if (pagado > 0) return 'PARCIAL';
   return 'PENDIENTE';
@@ -210,12 +176,12 @@ function calcularProximaFechaCobro(fechaFin) {
   if (!fechaFin) return null;
   const fin = new Date(fechaFin);
   const proxima = new Date(fin);
-  proxima.setDate(proxima.getDate() + 1); // Un día después de que vence
+  proxima.setDate(proxima.getDate() + 1);
   return proxima.toISOString().split('T')[0];
 }
 
 // ---------------------------------------------------------------------------
-// GET /api/admin/miembros  (paginado + busqueda)
+// GET /api/admin/miembros
 // ---------------------------------------------------------------------------
 router.get(
   '/admin/miembros',
@@ -231,9 +197,7 @@ router.get(
 
     const where = ['m.id_gimnasio = $1'];
     const params = [gymId];
-    if (!includeInactive) {
-      where.push('m.activo = TRUE');
-    }
+    if (!includeInactive) where.push('m.activo = TRUE');
     if (q) {
       params.push(`%${q.toLowerCase()}%`);
       const i = params.length;
@@ -450,6 +414,7 @@ router.post(
         console.error('[POST /admin/miembros] Error generando imagen QR:', qrErr.message);
       }
 
+      // Envío de correo electrónico (bloque único y limpio)
       if (data.email) {
         try {
           await sendMemberQR({
@@ -464,6 +429,7 @@ router.post(
         }
       }
 
+      // Envío de WhatsApp automático con la imagen QR limpia
       if (data.telefono) {
         try {
           await sendWhatsAppQR(
@@ -476,6 +442,8 @@ router.post(
         } catch (waErr) {
           console.error('[POST /admin/miembros] Error enviando WhatsApp:', waErr.message);
         }
+      } else {
+        console.log('[DEBUG] No se encontró teléfono para enviar WhatsApp.');
       }
 
       return res.status(201).json({ 
@@ -501,7 +469,7 @@ router.post(
 );
 
 // ---------------------------------------------------------------------------
-// GET /api/admin/miembros/lookup?codigo=QR-FL-1-XXXX  (para checkin)
+// GET /api/admin/miembros/lookup
 // ---------------------------------------------------------------------------
 router.get(
   '/admin/miembros/lookup',
@@ -623,7 +591,7 @@ router.put(
 );
 
 // ---------------------------------------------------------------------------
-// DELETE /api/admin/miembros/:id  (soft delete)
+// DELETE /api/admin/miembros/:id
 // ---------------------------------------------------------------------------
 router.delete(
   '/admin/miembros/:id',
@@ -652,7 +620,7 @@ router.delete(
 );
 
 // ---------------------------------------------------------------------------
-// DELETE /api/admin/miembros/:id/permanent (hard delete - eliminación permanente)
+// DELETE /api/admin/miembros/:id/permanent
 // ---------------------------------------------------------------------------
 router.delete(
   '/admin/miembros/:id/permanent',
@@ -678,11 +646,6 @@ router.delete(
     }
   })
 );
-
-// ---------------------------------------------------------------------------
-// GET  /api/admin/miembros/:id/plan   -> plan vigente del miembro
-// PUT  /api/admin/miembros/:id/plan   -> cambia o renueva el plan
-// ---------------------------------------------------------------------------
 
 const planSchema = z.object({
   tipo_plan: z.enum(['MENSUAL', 'TRIMESTRAL', 'SEMESTRAL', 'ANUAL', 'CLASES_SUELTAS', 'ILIMITADO', 'OTRO']),
@@ -784,5 +747,4 @@ router.put(
   })
 );
 
-// LÍNEA OBLIGATORIA PARA EXPORTAR EL ROUTER Y EVITAR EL ERROR DE EXPRESS
 module.exports = router;

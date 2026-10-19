@@ -48,14 +48,16 @@ const allowedOrigins = (process.env.FRONTEND_URL || 'http://localhost:5173')
 app.use(cors({
   origin: (origin, cb) => {
     if (!origin) return cb(null, true);
-    if (allowedOrigins.includes(origin)) return cb(null, true);
-    return cb(null, true);
+    if (allowedOrigins.includes(origin)) {
+      return cb(null, true);
+    }
+    return cb(new Error('Bloqueado por CORS: Origen no permitido por FRONTEND_URL.'));
   },
   credentials: true,
 }));
 app.use(express.json());
 
-// Rate limits: login 5/min, forgot 3/min
+// Rate limits: login 5/min, forgot 3/min, verify/reset y account limits
 const loginLimiter = rateLimit({
   windowMs: 60 * 1000, max: 5,
   standardHeaders: true, legacyHeaders: false,
@@ -66,9 +68,28 @@ const forgotLimiter = rateLimit({
   standardHeaders: true, legacyHeaders: false,
   message: { error: 'Demasiadas solicitudes. Intenta de nuevo en un minuto.' },
 });
+const verifyResetLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, max: 5,
+  standardHeaders: true, legacyHeaders: false,
+  message: { error: 'Demasiados intentos de verificación. Intenta más tarde.' },
+});
+const resetPasswordLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, max: 5,
+  standardHeaders: true, legacyHeaders: false,
+  message: { error: 'Demasiados intentos de restablecimiento. Intenta más tarde.' },
+});
+const accountLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, max: 5,
+  standardHeaders: true, legacyHeaders: false,
+  message: { error: 'Demasiadas solicitudes en la cuenta. Intenta más tarde.' },
+});
 
 app.use('/api/auth/login', loginLimiter);
 app.use('/api/auth/forgot-password', forgotLimiter);
+app.use('/api/auth/verify-reset-code', verifyResetLimiter);
+app.use('/api/auth/reset-password', resetPasswordLimiter);
+app.use('/api/auth/account', accountLimiter);
+
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api', staffRoutes);

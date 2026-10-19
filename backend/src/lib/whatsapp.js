@@ -1,18 +1,27 @@
-const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
+const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 
 const client = new Client({
-    authStrategy: new LocalAuth(),
+    authStrategy: new LocalAuth({
+        dataPath: '.wwebjs_auth'
+    }),
     puppeteer: {
         headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
+        args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--no-first-run',
+            '--disable-gpu'
+        ]
     }
 });
 
 let isReady = false;
 
+// Este evento es el que dibuja el código QR en la terminal
 client.on('qr', (qr) => {
-    console.log('Escanea este código QR con el WhatsApp de la recepción:');
+    console.log('--- ESCANEA ESTE QR ---');
     qrcode.generate(qr, { small: true });
 });
 
@@ -25,36 +34,27 @@ client.on('auth_failure', (msg) => {
     console.error('[WhatsApp] Error de autenticación:', msg);
 });
 
-// Iniciar cliente
 client.initialize();
 
-// Función segura para enviar el mensaje con imagen QR
 async function sendWhatsAppQR(telefono, nombre, gymName, qrCodeText, qrBase64) {
     try {
         if (!isReady) {
-            console.warn('[WhatsApp] El cliente aún no está listo o vinculado. Omitiendo envío automático.');
+            console.warn('[WhatsApp] El cliente aún no está listo o vinculado.');
             return;
         }
 
-        // Limpiar el número y asegurar el formato internacional (ej: 57 para Colombia si viene de 10 dígitos)
         let numeroLimpio = telefono.replace(/\D/g, '');
         if (numeroLimpio.length === 10) {
-            numeroLimpio = '57' + numeroLimpio; // Prefijo por defecto para Colombia
+            numeroLimpio = '57' + numeroLimpio;
         }
         const chatId = `${numeroLimpio}@c.us`;
 
-        const saludo = `¡Hola *${nombre}*! 👋 Bienvenido a *${gymName}*. Tu registro ha sido exitoso. Este es tu código QR de acceso:`;
-        await client.sendMessage(chatId, saludo);
-
-        if (qrBase64) {
-            const base64Data = qrBase64.replace(/^data:image\/png;base64,/, '',);
-            const media = new MessageMedia('image/png', base64Data, 'qr-acceso.png');
-            await client.sendMessage(chatId, media);
-        } else {
-            await client.sendMessage(chatId, `Tu código de texto es: ${qrCodeText}`);
-        }
+        const qrImageUrlAPI = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrCodeText)}`;
+        const mensaje = `¡Hola *${nombre}*! 👋 Bienvenido a *${gymName}*. Tu registro se ha completado con éxito.\n\n📱 *Tu tarjeta de acceso QR es la siguiente:* \n${qrImageUrlAPI}\n\n🔑 Código alternativo: *${qrCodeText}*`;
         
-        console.log(`[WhatsApp] Mensaje enviado exitosamente a ${nombre} (${numeroLimpio})`);
+        await client.sendMessage(chatId, mensaje);
+        console.log(`[WhatsApp] ¡Mensaje enviado con éxito a ${nombre}!`);
+        
     } catch (err) {
         console.error('[WhatsApp] Error al enviar el mensaje:', err.message);
     }

@@ -1,3 +1,4 @@
-2026/09/10-19:41:54.569 3610 Reusing MANIFEST C:\Users\dftv3\Documents\Proyecto_fitloyaltly\Proyecto_Fitloyalty\backend\.wwebjs_auth\session\Default\Site Characteristics Database/MANIFEST-000001
-2026/09/10-19:41:54.570 3610 Recovering log #3
-2026/09/10-19:41:54.572 3610 Reusing old log C:\Users\dftv3\Documents\Proyecto_fitloyaltly\Proyecto_Fitloyalty\backend\.wwebjs_auth\session\Default\Site Characteristics Database/000003.log 
+2026/10/09-19:07:48.766 293c Creating DB C:\Users\dftv3\Documents\Proyecto_fitloyaltly\Proyecto_Fitloyalty\backend\.wwebjs_auth\session\Default\Site Characteristics Database since it was missing.
+2026/10/09-19:07:48.777 293c Reusing MANIFEST C:\Users\dftv3\Documents\Proyecto_fitloyaltly\Proyecto_Fitloyalty\backend\.wwebjs_auth\session\Default\Site Characteristics Database/MANIFEST-000001
+2026/10/09-19:07:48.778 293c Recovering log #3
+2026/10/09-19:07:48.779 293c Reusing old log C:\Users\dftv3\Documents\Proyecto_fitloyaltly\Proyecto_Fitloyalty\backend\.wwebjs_auth\session\Default\Site Characteristics Database/000003.log 
