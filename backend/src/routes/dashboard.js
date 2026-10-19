@@ -76,6 +76,21 @@ function inicioLocal(unidad, diasAtras = 0) {
     + ` AT TIME ZONE '${ZONA_GIMNASIO}') AT TIME ZONE current_setting('TimeZone')`;
 }
 
+/*
+ * Membresias congeladas (RQF-04): no cuentan como "por vencer", porque su
+ * vencimiento se corre al descongelarlas. Se mira el mismo plan que elige
+ * ULTIMO_PLAN (mismo orden), que todavia no trae `congelado_desde`; cuando lo
+ * traiga, esto se reduce a `pc.congelado_desde IS NULL`.
+ */
+const SIN_CONGELAR = `NOT EXISTS (
+              SELECT 1 FROM (
+                SELECT congelado_desde FROM plan_cobro
+                 WHERE id_miembro = pc.id_miembro AND activo = TRUE
+                 ORDER BY fecha_fin DESC NULLS LAST, id_plan_cobro DESC
+                 LIMIT 1
+              ) ultimo
+             WHERE ultimo.congelado_desde IS NOT NULL)`;
+
 // ---------------------------------------------------------------------------
 // GET /api/admin/dashboard  (KPIs)
 // ---------------------------------------------------------------------------
@@ -168,7 +183,8 @@ router.get(
            FROM ${ULTIMO_PLAN} pc
            INNER JOIN miembro mb ON mb.id_miembro = pc.id_miembro
           WHERE mb.id_gimnasio = $1 AND mb.activo = TRUE
-            AND pc.fecha_fin BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '7 days'`,
+            AND pc.fecha_fin BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '7 days'
+            AND ${SIN_CONGELAR}`,
         [gymId]
       );
       const activos90 = await pool.query(
@@ -237,6 +253,7 @@ router.get(
            INNER JOIN miembro mb ON mb.id_miembro = pc.id_miembro
           WHERE mb.id_gimnasio = $1 AND mb.activo = TRUE
             AND pc.fecha_fin BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '30 days'
+            AND ${SIN_CONGELAR}
           ORDER BY pc.fecha_fin ASC LIMIT 8`,
         [gymId]
       );
