@@ -9,17 +9,19 @@ export default function EliminarCuentaPage() {
   const navigate = useNavigate();
   const [confirm, setConfirm] = useState(false);
   const [reason, setReason] = useState('');
+  const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [done, setDone] = useState(false);
 
   const onSubmit = async (e) => {
     e.preventDefault();
+    if (!password) { setError('Escribe tu contraseña para confirmar.'); return; }
     if (!confirm) { setError('Debes marcar la casilla de confirmación.'); return; }
     setError('');
     setSubmitting(true);
     try {
-      await api.delete('/auth/account', { data: { reason } });
+      await api.delete('/auth/account', { data: { password, reason } });
       logout();
       setDone(true);
     } catch (err) {
@@ -43,7 +45,6 @@ export default function EliminarCuentaPage() {
         <li><strong>Eliminar permanentemente</strong> todos los datos del gimnasio: miembros, membresías, check-ins, usuarios de staff y configuraciones.</li>
         <li><strong>Cerrar el acceso</strong> de todos los usuarios del gimnasio: sus cuentas dejan de existir y ya no pueden iniciar sesión.</li>
         <li><strong>Borrar también el historial de auditoría</strong> del gimnasio. En el registro del servidor solo queda el número interno del gimnasio y la fecha de la eliminación, sin datos personales.</li>
-        <li><strong>Cancelar la facturación</strong> del plan activo de inmediato.</li>
       </ul>
       <div className="legal-callout">
         <div className="legal-callout__title">
@@ -67,8 +68,8 @@ export default function EliminarCuentaPage() {
 
       <h2>Derecho de los miembros del gimnasio</h2>
       <p>
-        Si eres el Administrador, al eliminar la cuenta también se eliminan los datos de todos los
-        miembros registrados. Si un miembro desea ejercer su derecho de supresión de forma
+        Al eliminar la cuenta del gimnasio también se eliminan los datos de todos los miembros
+        registrados. Si un miembro desea ejercer su derecho de supresión de forma
         individual sin eliminar toda la cuenta del gimnasio, debe solicitarlo directamente al
         gimnasio, quien lo gestionará desde la sección de Miembros.
       </p>
@@ -116,6 +117,18 @@ export default function EliminarCuentaPage() {
                   style={{ resize: 'vertical', fontFamily: 'var(--font-body)' }}
                 />
               </label>
+              <label className="field" style={{ marginBottom: 16 }}>
+                <span className="field-label">Tu contraseña</span>
+                <input
+                  className="field-input"
+                  type="password"
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Escríbela para confirmar que eres el dueño"
+                  required
+                />
+              </label>
               <label className="legal-checkbox">
                 <input
                   type="checkbox"
@@ -132,7 +145,7 @@ export default function EliminarCuentaPage() {
                 <button
                   type="submit"
                   className="btn btn-primary"
-                  disabled={submitting || !confirm}
+                  disabled={submitting || !confirm || !password}
                   style={{ background: 'var(--error)', borderColor: 'var(--error)' }}
                 >
                   <span className="material-symbols-outlined icon">delete_forever</span>
@@ -154,8 +167,8 @@ export default function EliminarCuentaPage() {
                 Inicia sesión para eliminar tu cuenta
               </div>
               <p>
-                Para proteger tu cuenta, solo el Administrador del gimnasio puede solicitar la
-                eliminación.{' '}
+                Para proteger tu cuenta, solo el dueño del gimnasio (quien la creó) puede
+                solicitar la eliminación, y debe confirmar con su contraseña.{' '}
                 <Link to="/login">Inicia sesión</Link> y vuelve a esta página.
               </p>
             </div>
