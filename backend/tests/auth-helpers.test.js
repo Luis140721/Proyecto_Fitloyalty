@@ -311,4 +311,36 @@ describe('RQF-02: vigencia del token del personal', () => {
     expect(vigencia(token)).toBe(30 * 86400);
     expect(jwt.decode(token).role).toBe('cliente');
   });
+
+  test('una vigencia inválida en JWT_EXPIRES_IN cae en 8 horas en vez de romper el login', () => {
+    process.env.JWT_EXPIRES_IN = '8 horas';
+    const avisar = console.warn;
+    console.warn = () => {};
+    try {
+      expect(vigenciaTokenPersonal()).toBe('8h');
+      expect(vigencia(generarToken(admin))).toBe(8 * 3600);
+    } finally {
+      console.warn = avisar;
+    }
+  });
+
+  // authenticate con un token dado: devuelve el status (0 si dejo pasar) y el cuerpo.
+  const autenticar = (token) => {
+    const res = { statusCode: 0, body: null, status(c) { this.statusCode = c; return this; }, json(b) { this.body = b; return this; } };
+    authenticate({ headers: { authorization: `Bearer ${token}` } }, res, () => {});
+    return res;
+  };
+
+  test('authenticate rechaza (401) un token del personal sin exp, emitido antes de RQF-02', () => {
+    const viejo = jwt.sign({ id: 1, role: 'admin', gymId: 2 }, SECRET);
+    const res = autenticar(viejo);
+    expect(res.statusCode).toBe(401);
+    expect(res.body.code).toBe('TOKEN_SIN_VENCIMIENTO');
+  });
+
+  test('authenticate deja pasar un token del personal con exp y el del miembro', () => {
+    delete process.env.JWT_EXPIRES_IN;
+    expect(autenticar(generarToken(admin)).statusCode).toBe(0);
+    expect(autenticar(generarTokenCliente({ id_miembro: 4, id_gimnasio: 2, documento: '123' })).statusCode).toBe(0);
+  });
 });

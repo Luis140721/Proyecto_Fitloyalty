@@ -104,11 +104,27 @@ const STAFF_TOKEN_EXPIRES_DEFAULT = '8h';
  * '1d') o 8 horas si no está definida. jsonwebtoken lee un texto sin unidad
  * como milisegundos ('28800' = 28,8 s), así que un número sin unidad se toma
  * como segundos, que es lo que se espera de una variable de entorno.
+ *
+ * Un valor que jsonwebtoken no entiende (por ejemplo '8 horas') haria fallar
+ * todos los logins con 500: en ese caso se usan las 8 horas y se avisa una vez
+ * en el log.
  */
+const vigenciasRevisadas = new Map();
 function vigenciaTokenPersonal() {
   const v = String(process.env.JWT_EXPIRES_IN || '').trim();
   if (!v) return STAFF_TOKEN_EXPIRES_DEFAULT;
-  return /^\d+$/.test(v) ? Number(v) : v;
+  if (!vigenciasRevisadas.has(v)) {
+    const candidata = /^\d+$/.test(v) ? Number(v) : v;
+    let valida = candidata;
+    try {
+      jwt.sign({}, 'prueba', { expiresIn: candidata });
+    } catch (_) {
+      console.warn(`[auth] JWT_EXPIRES_IN="${v}" no es una vigencia valida (usa 8h, 30m, 1d o segundos). Se usan ${STAFF_TOKEN_EXPIRES_DEFAULT}.`);
+      valida = STAFF_TOKEN_EXPIRES_DEFAULT;
+    }
+    vigenciasRevisadas.set(v, valida);
+  }
+  return vigenciasRevisadas.get(v);
 }
 
 /**
