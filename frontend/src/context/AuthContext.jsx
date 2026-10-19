@@ -11,6 +11,14 @@ const AuthContext = createContext(null);
  * sesion. Se configura con VITE_INACTIVIDAD_MIN al compilar; por defecto 30.
  * La ultima actividad se guarda en localStorage para que todas las pestanas
  * compartan el mismo reloj: usar el panel en una mantiene vivas las demas.
+ *
+ * Solo cuenta lo que hace una persona. Las respuestas del API no cuentan: el
+ * refresco automatico del dashboard mantendria la sesion abierta para siempre.
+ * Para lo que una persona hace sin tocar la pantalla (un kiosco que registra
+ * check-ins solo con la camara), la pagina llama a marcarActividad().
+ *
+ * El cierre por inactividad vive en el navegador; el servidor solo controla
+ * el vencimiento del token (JWT_EXPIRES_IN).
  */
 const INACTIVIDAD_MIN = (() => {
   const n = Number(import.meta.env.VITE_INACTIVIDAD_MIN);
@@ -203,13 +211,21 @@ export function AuthProvider({ children }) {
     return handleAuthResponse(data);
   }, [handleAuthResponse]);
 
+  /**
+   * Cuenta como actividad algo que la persona hizo sin mouse ni teclado, por
+   * ejemplo un check-in correcto con la camara. No hace nada sin sesion.
+   */
+  const marcarActividad = useCallback(() => {
+    if (getToken()) guardarActividad(Date.now());
+  }, []);
+
   const logout = useCallback(async () => {
     try { await api.post('/auth/logout'); } catch (_) {}
     cerrarSesion(null);
   }, [cerrarSesion]);
 
   return (
-    <AuthContext.Provider value={{ user, gym, loading, ready, login, register, acceptInvite, logout, api }}>
+    <AuthContext.Provider value={{ user, gym, loading, ready, login, register, acceptInvite, logout, marcarActividad, api }}>
       {children}
     </AuthContext.Provider>
   );
