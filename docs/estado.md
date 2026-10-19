@@ -1,27 +1,51 @@
 # Estado: avance real de requisitos
 
-- **Fecha:** 2026-10-16
-- **Rama:** `docs/avance-requisitos` (PR hacia `main`)
-- **Código verificado:** `main` @ `54b19fa`. El PR #5 (`8acab31`) solo agregó `CONTRIBUTING.md` y el check de nombre de rama al CI (sin cambios en el código de la app); se fusionó en esta rama y es la base de la evidencia del CI.
+- **Fecha:** 2026-10-18 (actualización tras las fusiones en `develop`; la medición inicial fue el 2026-10-16)
+- **Rama:** `docs/avance-2026-10-18` (PR hacia `develop`). La medición inicial se hizo en `docs/avance-requisitos` (PR #6, ya en `main`).
+- **Código verificado:** `develop` @ `bdf987b` para los requisitos de la actualización (sección siguiente); el resto, `main` @ `54b19fa`. El PR #5 (`8acab31`) solo agregó `CONTRIBUTING.md` y el check de nombre de rama al CI (sin cambios en el código de la app); se fusionó en esta rama y es la base de la evidencia del CI.
 - **Base de la documentación:** por decisión de Luis, los archivos de Santiago del PR #4 (`docs/borrador-matriz-requisitos` @ `00cdcdb`), verificados y corregidos aquí.
 - **Copias de seguridad:** los originales de `Documentación/` están en `54b19fa` y los archivos de Santiago sin corregir en el commit `5db4e2a` de esta rama (o en `00cdcdb`). Ejemplo: `git show 00cdcdb:docs/avance-requisitos.xlsx > copia.xlsx`.
-- **Responsable de esta tarea:** agente ejecutor (Claude de Luis). Solo documentación y Excel; las implementaciones las hace Santiago en sus ramas.
+- **Responsable de esta tarea:** agente ejecutor (Claude de Luis). Solo documentación y Excel; el reparto de las implementaciones está en `docs/plan-trabajo.md`.
+
+## Actualización del 2026-10-18 (tarea L7)
+
+Solo se marcó lo que está fusionado en `develop` y revisado por el verificador (informe en la rama del verificador: `386d168`, sección 14; `94d5fbb`, secciones 15 y 16; `1be53f7`, secciones 18 a 21; `b8f99d2`, secciones 22 a 25).
+
+| Req. | Antes | Ahora | PR | Evidencia y motivo |
+|---|---|---|---|---|
+| RQF-02 | Parcial | **Implementado** | #18 | El token del personal siempre vence: 8 h por defecto o `JWT_EXPIRES_IN`, con 8 h si la configuración no es válida (`auth-helpers.js:113`, `:135-143`); `authenticate` rechaza los tokens sin vencimiento (`middleware/auth.js:63`). La sesión se cierra tras 30 min sin actividad, compartido entre pestañas (`AuthContext.jsx:23-27`, `:150-178`), al vencer el token y ante un 401. Verificador, secciones 22.6 y 25.4. Observaciones: `CheckinPage.jsx` (Santiago) todavía no llama a `marcarActividad()`, así que un kiosco que solo usa la cámara se cierra a los 30 min; `render.yaml:19` usa 24h y `docker-compose.yml:61`, 7d. |
+| RQF-01 | Parcial | **Implementado** | #19 | `PATCH /api/admin/staff/:id` (`staff.js:388`) edita el nombre y el rol, desactiva y reactiva, y protege al dueño (`:424`); `authenticate` vuelve a leer al personal en cada petición (`middleware/auth.js:10`, `:78`), así que una cuenta desactivada pierde el acceso enseguida; dueño explícito en `gimnasio.id_dueno` (migración 013). Verificador, sección 25. Observación: se recomienda una FK compuesta `(id_dueno, id_gimnasio) → usuario (id_usuario, id_gimnasio)`, porque hoy `id_dueno` puede apuntar a un usuario de otro gimnasio. |
+| RQF-07 | Parcial | **Implementado** | #16 y #22 | El día se corta en hora de Colombia (`dashboard.js:69`, `:74`) en «entradas de hoy» (`:170`), la semana (`:233`) y las horas pico (`:337`, `:356`); gráfica de horas pico que abre en «Hoy» (`DashboardPage.jsx:172`, `:226`) y refresco cada 60 s con la pestaña visible, sin cargas en paralelo (`:239-246`, `:279-288`). Desde el #22, «Vencen en 7 días» y «Próximos vencimientos» no cuentan las congeladas (`dashboard.js:85`). Verificador, secciones 19, 21.1 y 24. Observación: las columnas `DATE` siguen con `CURRENT_DATE` en UTC (un día de desfase de 19:00 a 24:00). |
+| RQF-04 | Parcial | **Parcial** | #17 | Congelar y descongelar ya están en `develop` (`miembros.js:810`, `:869`, `:892`; migración 010). Sigue Parcial por decisión de Luis: falta que el job de vencimientos y el check-in salten las congeladas (ver abajo). |
+| RQNF-05 | Parcial | **Implementado** | #11 | `vista.js` exige rol de personal (`:20`), rechaza al personal sin gimnasio (`:28`) y filtra por gimnasio (`:32`, `:46`) sobre la vista de la migración 011; `asistencia.js:22` exige rol de personal; `checkin.js:26, :31` deriva la clave del QR una sola vez; 9 pruebas en `backend/tests/aislamiento.test.js`. Ya no queda ninguna consulta sin filtro de gimnasio. La medición del tiempo con volumen realista sigue en RQNF-01. |
+| RQF-22 | Pendiente | **Implementado** | #15, #21 y #19 | `auth.js:576-641`: solo el dueño, que desde el #19 es `gimnasio.id_dueno` (`:606`), y con su contraseña (`:611`), comprobados antes del `BEGIN` (`:616`); un `SAVEPOINT` por paso (`:562`) y el gimnasio al final (`:623`). El verificador lo probó con el handler real en PostgreSQL 18: 200 sin dejar filas del gimnasio ni tocar las de otro, 403 al administrador invitado y con la contraseña mala, y 500 sin borrar nada si una FK desconocida lo bloquea (secciones 16 y 21.2). |
+| RQF-13 | Parcial | **Parcial** | #9 | Ver el criterio de abajo. |
+| RQNF-10 | Parcial | **Parcial** | #14 | La 009 cierra auditoría y gamificación, pero el código escribe `envio_mensaje.canal` y `notificacion.leido` (`notificaciones.js:211`, `:217`), que no existen en el esquema de producción (verificador, sección 15). |
+
+**Criterio para RQF-13 (sigue Parcial).** El PR #9 arregló lo que lo dejaba en Parcial: `sendWhatsAppText` ahora lanza un error en los cuatro casos de fallo (`whatsapp.js:223-246`), `admin-contrato.js:130-138` registra `exito = false` y hay 5 pruebas. Pero el requisito pide que el administrador pueda enviar el contrato, y tras cada reinicio del servidor eso no pasa: `admin-contrato.js:107` pregunta `isWhatsAppReady()` antes de enviar, el cliente se inicia de forma perezosa (`whatsapp.js:146`) y nadie lo inicia desde ese flujo. El administrador recibe «no autenticado» y la instrucción de escanear un QR que nunca se imprime. Solo funciona si antes otro flujo inició el cliente (el alta de un miembro con teléfono). En Render, que duerme y reinicia el servicio, eso es lo normal. Lo principal funciona, pero falta una parte: Parcial. Pasa a Implementado cuando se quite esa comprobación previa (o se inicie el cliente antes), lo mismo que pide el verificador para el job del PR #10.
+
+**Criterio para RQF-04 (sigue Parcial con el #17 fusionado).** Por decisión de Luis (2026-10-18), una membresía congelada tampoco debe recibir avisos de vencimiento ni entrar al gimnasio. Falta que Santiago haga que el job de vencimientos (`expiracion.js`) salte las congeladas y que el check-in niegue el ingreso con estado `CONGELADO` y el mensaje «Tu membresía está congelada. Pide en recepción que la reactiven para poder ingresar.» (`checkin.js` y `CheckinPage.jsx`). Hoy el job le avisaría a un congelado que su plan vence, y el check-in lo deja entrar. RQF-04 pasa a Implementado cuando esos dos cambios estén fusionados y verificados.
+
+**Sin cambio hasta que se fusione:** RQF-14 (PR #10, el verificador pidió cambios).
+
+**Riesgos anotados, sin cambio de estado:**
+- **RQF-22:** solo el dueño, con su contraseña (PR #21). Falta el límite de intentos en `DELETE /api/auth/account`: con un token robado del dueño se puede probar su contraseña sin freno. Es una línea en `index.js`, antes de la `:81` (zona de Daniel).
+- **RQF-09 (por confirmar):** si producción tiene las columnas de `ConsultasDB`, `POST /api/admin/notificaciones/enviado` falla siempre y el frontend lo oculta (`MiembrosPage.jsx:802-808`). Hay que revisar `envio_mensaje` y `notificacion` en la copia de producción; si faltan `canal` o `leido`, RQF-09 baja a Parcial (−0,5). Santiago lo consulta; mientras tanto queda como observación en el Excel.
 
 ## Resultado
 
 | Alcance | RF | RNF | Global |
 |---|---:|---:|---:|
-| **Final (RQF-01..22, RQNF-01..15)** | 63,6 % (14 puntos de 22) | 60,0 % (9 puntos de 15) | **62,2 % (23 puntos de 37)** |
-| Solo original del docx (RQF-01..12, RQNF-01..08) | 50,0 % (6 puntos de 12) | 50,0 % (4 puntos de 8) | 50,0 % (10 puntos de 20) |
+| **Final (RQF-01..22, RQNF-01..15)** | 75,0 % (16,5 puntos de 22) | 63,3 % (9,5 puntos de 15) | **70,3 % (26 puntos de 37)** |
+| Solo original del docx (RQF-01..12, RQNF-01..08) | 62,5 % (7,5 puntos de 12) | 56,3 % (4,5 puntos de 8) | 60,0 % (12 puntos de 20) |
 
-Fórmula: (implementados + 0,5 × parciales) / total; los puntos son esa suma. Coincide con la cifra conciliada del verificador (62,2 %, 23/37). **No llega al 80 %: faltan 6,6 puntos** (el 80 % de 37 son 29,6); ver la hoja «Trabajo pendiente». El PR #4 decía 80,5 % porque daba por implementados requisitos que el código no respalda y contaba aparte funciones que repetían otras (ver «Correcciones»).
+Fórmula: (implementados + 0,5 × parciales) / total; los puntos son esa suma. El 2026-10-16 el avance era 62,2 % (23/37, la cifra conciliada con el verificador); RQF-22 suma 1 punto, y RQNF-05, RQF-07, RQF-02 y RQF-01 medio cada uno. **No llega al 80 %: faltan 3,6 puntos** (el 80 % de 37 son 29,6); ver la hoja «Trabajo pendiente». El PR #4 decía 80,5 % porque daba por implementados requisitos que el código no respalda y contaba aparte funciones que repetían otras (ver «Correcciones»).
 
 **Decisión de Luis aplicada (2026-10-16):** se retiraron RQF-23 (repetía RQF-08), RQF-24 (repetía RQF-05) y RQF-25 (repetía RQF-03 y es un defecto de seguridad), y RQF-26 (editar el perfil) se fusionó en RQF-15. La numeración queda consecutiva, sin renumerar. Con los cuatro, el avance habría sido 63,4 % (26 puntos de 41).
 
 **Ruta más corta al 80 %** (hoja «Trabajo pendiente»):
-- Diez arreglos o pruebas de esfuerzo bajo: CORS, eliminación de cuenta, avisos de WhatsApp, límites de intentos, prueba de usabilidad y de navegadores, inactividad, horas pico y aviso de acceso bloqueado.
-- Luego, cerrar la fuga entre gimnasios y quitar `scryptSync` del check-in (RQNF-05).
-- Recién entonces, medir el check-in con unos 200 miembros (RQNF-01) → **82,4 %**.
+- Siete arreglos o pruebas de esfuerzo bajo: CORS, envío del contrato tras un reinicio, avisos de WhatsApp, límites de intentos, prueba de usabilidad y de navegadores, y aviso de acceso bloqueado → **81,1 %**, por encima de la meta.
+- Después, medir el check-in con unos 200 miembros (RQNF-01) → 83,8 %. La búsqueda del QR ya se corrigió en el PR #11.
 
 ## Qué se hizo
 
@@ -126,6 +150,8 @@ Ajustes de redacción:
 
 ## Qué necesito de Santiago
 
+> Actualizado el 2026-10-18: la eliminación de cuenta quedó resuelta en el PR #15, el error de `sendWhatsAppText` en el PR #9 (falta que el contrato y el job inicien el cliente tras un reinicio) y la fuga de `vista.js` en el PR #11.
+
 1. **Antes de la entrega:** arreglar la eliminación de cuenta (RQF-22: un `SAVEPOINT` por cada `safe()` y no insertar en `auditoria` lo que se borra), relanzar el error en `sendWhatsAppText` (RQF-13 y RQF-14), no devolver el código de recuperación en la respuesta y limitar `verify-reset-code` y `reset-password` (RQF-17 y RQNF-09).
 2. **Urgente (seguridad):** `GET /api/vista/miembros-activos` (`backend/src/routes/vista.js:20-42`) no filtra por gimnasio y solo pide `authenticate`. Cualquier token, incluido el de un miembro en la app, devuelve nombre, documento, teléfono, correo y QR de los miembros de todos los gimnasios. Hay que filtrar por `req.user.gymId` con rol de personal, o retirar la ruta.
 3. **CORS** (`backend/src/index.js:54`): rechazar los orígenes que no estén en `FRONTEND_URL`.
@@ -135,17 +161,18 @@ Ajustes de redacción:
 
 ## Hallazgos fuera de alcance (no se tocaron)
 
-- **Seguridad:** la fuga de datos entre gimnasios de `vista.js` (punto 2 de arriba).
+- **Seguridad:** la fuga de datos entre gimnasios de `vista.js` (punto 2 de arriba). **Resuelto en el PR #11.**
 - **Seguridad:** CORS abierto con `credentials: true` (`index.js:50-57`).
 - **Seguridad:** el código de recuperación de contraseña vuelve en la respuesta si el correo no sale (`auth.js:337-346`), y `verify-reset-code` y `reset-password` no tienen límite de intentos.
-- **Funcional:** `sendWhatsAppText` (`whatsapp.js:222-247`) no avisa cuando falla o cuando el cliente no está listo; por eso el contrato y los avisos de vencimiento se registran como enviados sin haber salido.
-- **Funcional:** la eliminación de cuenta (`auth.js:480-561`) siempre falla y responde 500 (RQF-22).
-- **Seguridad:** el JWT del personal no expira, porque `generarToken` ignora `JWT_EXPIRES_IN` (`backend/src/lib/auth-helpers.js:102-113`).
-- **Seguridad:** `/api/asistencia` solo exige `authenticate`, así que un miembro desde la app puede listar los ingresos de su gimnasio (`asistencia.js:21`).
+- **Funcional:** `sendWhatsAppText` (`whatsapp.js:222-247`) no avisa cuando falla o cuando el cliente no está listo; por eso el contrato y los avisos de vencimiento se registran como enviados sin haber salido. **Resuelto en el PR #9**; queda que el contrato y el job no inician el cliente tras un reinicio (RQF-13 y PR #10).
+- **Funcional:** la eliminación de cuenta (`auth.js:480-561`) siempre falla y responde 500 (RQF-22). **Resuelto en el PR #15.**
+- **Seguridad:** el JWT del personal no expira, porque `generarToken` ignora `JWT_EXPIRES_IN` (`backend/src/lib/auth-helpers.js:102-113`). **Resuelto en el PR #18.**
+- **Seguridad:** `/api/asistencia` solo exige `authenticate`, así que un miembro desde la app puede listar los ingresos de su gimnasio (`asistencia.js:21`). **Resuelto en el PR #11.**
 - **Seguridad:** `Evidencias_Sustentacion/Informe_Pruebas_E2E.md` («Datos de prueba generados») deja una contraseña de un usuario de prueba en texto plano. Conviene cambiarla y quitarla del documento.
+- **Seguridad (2026-10-18):** `COMO_CORRER.md` tenía en la sección de Render una `JWT_SECRET` y una `SMTP_PASSWORD` reales. Se cambiaron por marcadores, pero siguen en el historial del repositorio público: hay que rotar la `JWT_SECRET` en Render y revocar la contraseña de aplicación de Gmail. `Evidencias_Sustentacion/Santiago/C2_Recuperacion_Clave/README.md:27` tiene otra contraseña de aplicación de Gmail; ese archivo es de Santiago y no se tocó.
 - **Seguridad:** la clave para cifrar el QR tiene un valor por defecto en el código (`miembros.js:36`, `checkin.js:19`).
 - **Pruebas:** 2 de las 23 pruebas de `backend/tests/auth-helpers.test.js` fallan, y `backend/package.json` no tiene script `test`, así que el CI no las ejecuta.
-- **Rendimiento:** si el QR no coincide directo, `checkin.js:83-101` descifra en memoria los QR de todos los miembros del gimnasio.
+- **Rendimiento:** si el QR no coincide directo, `checkin.js:83-101` descifra en memoria los QR de todos los miembros del gimnasio. **Mejorado en el PR #11:** la clave se deriva una sola vez y queda un descifrado AES por miembro.
 - **Código muerto:** `frontend/src/pages/DashboardUsuario.jsx` no tiene ruta en `App.jsx`.
 - **Comentarios desactualizados:** dicen «trial de 7 días» cuando el valor es 14 (`auth.js:6, :98`, `trial.js:7`).
 - **Pendiente de evidencia:** no se construyó la imagen Docker (RQNF-08), porque Docker Desktop estaba apagado.
@@ -154,7 +181,7 @@ Ajustes de redacción:
 ## Cómo verificar
 
 - **Porcentajes:** `docs/avance-requisitos.xlsx` → Resumen. Todo son fórmulas sobre las hojas RF y RNF.
-- **Evidencias:** hoja Evidencias, con la ruta del archivo y la línea en el commit `54b19fa`.
+- **Evidencias:** hoja Evidencias, con la ruta del archivo y la línea en el commit `54b19fa`; las filas fechadas el 2026-10-18 citan `develop` @ `1ddcb24` o, las de RQF-01, RQF-02, RQF-04, RQF-07 y RQF-22, `develop` @ `f3d323c` o `bdf987b`.
 - **Documento:** `docs/Proyecto FitLoyalty - requisitos actualizados.docx`, tablas 5 y 6.
 - **Cobertura:** `docs/evidencias/cobertura-backend-2026-10-16.txt`.
 - **CI:** pestaña Actions del repositorio (ejecución exitosa en `main` 8acab31).
