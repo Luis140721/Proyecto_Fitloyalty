@@ -223,7 +223,7 @@ export default function DashboardPage() {
   const [error, setError] = useState('');
   const [barsAppear, setBarsAppear] = useState(false);
   const [toast, setToast] = useState(null); // { message, tone }
-  const [periodoHoras, setPeriodoHoras] = useState('mes');
+  const [periodoHoras, setPeriodoHoras] = useState('hoy');
   const [horasPico, setHorasPico] = useState(null);
   const [actualizado, setActualizado] = useState(null); // Date de la ultima carga buena
   const [refrescando, setRefrescando] = useState(false);
