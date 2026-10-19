@@ -545,13 +545,18 @@ router.post('/auth/accept-invite', asyncHandler(async (req, res) => {
     const finalName = (nombre || inv.nombre).trim();
     const password_hash = await bcrypt.hash(password, 10);
 
+    // id_rol sale de ID_ROL (en Render no existe la tabla `rol`) y la columna
+    // legacy `rol` se llena si existe: en Neon es NOT NULL y sin ella el INSERT
+    // fallaba, asi que nadie podia aceptar una invitacion.
+    const schema = await detectStaffSchema();
+    const cols = ['id_gimnasio', 'nombre', 'email', 'password_hash', 'id_rol', 'debe_cambiar_clave'];
+    const vals = [inv.id_gimnasio, finalName, inv.email, password_hash, ID_ROL[inv.rol_asignado] ?? ID_ROL.RECEPCIONISTA, false];
+    if (schema.hasRolColumn) { cols.push('rol'); vals.push(inv.rol_asignado); }
     const { rows: userRows } = await client.query(
-      `INSERT INTO usuario (id_gimnasio, nombre, email, password_hash, id_rol, debe_cambiar_clave)
-       VALUES ($1, $2, $3, $4,
-         (SELECT id_rol FROM rol WHERE nombre = $5),
-         FALSE)
+      `INSERT INTO usuario (${cols.join(', ')})
+       VALUES (${cols.map((_, i) => `$${i + 1}`).join(', ')})
        RETURNING id_usuario, nombre, email, id_gimnasio, id_rol`,
-      [inv.id_gimnasio, finalName, inv.email, password_hash, inv.rol_asignado]
+      vals
     );
     const newUser = userRows[0];
 
