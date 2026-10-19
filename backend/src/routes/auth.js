@@ -29,7 +29,7 @@ const asyncHandler     = require('../lib/asyncHandler');
 const { AppError }     = require('../lib/errors');
 const {
   validarEmail, validarContrasena, normEmail,
-  usuarioSeguro, generarToken, generarResetToken, random6,
+  usuarioSeguro, generarToken, generarResetToken, random6, sqlIdDueno,
 } = require('../lib/auth-helpers');
 const { sendRecoveryCode } = require('../lib/email');
 const { trialDays } = require('../lib/trial');
@@ -151,6 +151,17 @@ router.post('/signup', asyncHandler(async (req, res) => {
       [gym.id_gimnasio, ownerName.trim(), ownerEmail.toLowerCase(), password_hash]
     );
     const owner = userRows[0];
+
+    // 3b. Dueño del gimnasio (migracion 013). Si la columna aun no existe, se
+    //     sigue sin ella: el codigo usa el admin activo mas antiguo.
+    await client.query('SAVEPOINT id_dueno');
+    try {
+      await client.query('UPDATE gimnasio SET id_dueno = $1 WHERE id_gimnasio = $2', [owner.id_usuario, gym.id_gimnasio]);
+      await client.query('RELEASE SAVEPOINT id_dueno');
+    } catch (err) {
+      await client.query('ROLLBACK TO SAVEPOINT id_dueno');
+      if (err.code !== '42703') throw err;
+    }
 
     // 4. Configuracion por defecto del gimnasio
     await client.query(
@@ -491,10 +502,11 @@ router.post('/reset-password', asyncHandler(async (req, res) => {
 // del servidor (solo ids, sin datos personales).
 //
 // Solo el DUEÑO puede ejecutar esta accion, y debe escribir su contrasena en
-// el cuerpo: { password, reason? }. El dueño es el usuario que creo el
-// gimnasio en el signup, es decir, el primero del gimnasio (los demas entran
-// despues, por invitacion). Recepcionistas, admins invitados y miembros NO
-// pueden eliminar el gimnasio.
+// el cuerpo: { password, reason? }. El dueño es gimnasio.id_dueno, que el
+// signup llena con el usuario que crea el gimnasio (migracion 013); si falta,
+// el admin activo mas antiguo (sqlIdDueno). Recepcionistas, admins invitados
+// y miembros NO pueden eliminar el gimnasio. El rol que se mira es el de la
+// BD: authenticate lo vuelve a leer en cada peticion.
 // --------------------------------------------------------------------------
 const eliminarCuentaSchema = z.object({
   password: z.string({ required_error: 'Escribe tu contrasena para confirmar.' })
@@ -579,7 +591,7 @@ router.delete('/account', authenticate, asyncHandler(async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT u.password_hash,
-              (u.id_usuario = (SELECT MIN(u2.id_usuario) FROM usuario u2 WHERE u2.id_gimnasio = u.id_gimnasio)) AS es_dueno
+              COALESCE(u.id_usuario = ${sqlIdDueno('u')}, FALSE) AS es_dueno
          FROM usuario u
         WHERE u.id_usuario = $1 AND u.id_gimnasio = $2 AND u.activo = TRUE`,
       [userId, gymId]

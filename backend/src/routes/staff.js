@@ -25,6 +25,7 @@ const { sendStaffInvite } = require('../lib/email');
 const { generateToken, hashToken } = require('../lib/invitations');
 const { z } = require('zod');
 const { formatZodError } = require('../lib/validators');
+const { sqlIdDueno } = require('../lib/auth-helpers');
 
 const router = express.Router();
 
@@ -337,10 +338,9 @@ router.get(
 // GET /api/admin/staff   (lista usuarios staff del gimnasio)
 // Query defensiva: detecta columnas opcionales, deriva rol por CASE.
 // ---------------------------------------------------------------------------
-// El dueño es el primer usuario del gimnasio: el admin que creo la cuenta en el
-// signup (los demas entran despues, por invitacion). No hay otra columna que
-// lo marque.
-const ES_DUENO_EXPR = `(usuario.id_usuario = (SELECT MIN(u2.id_usuario) FROM usuario u2 WHERE u2.id_gimnasio = usuario.id_gimnasio)) AS es_dueno`;
+// El dueño es gimnasio.id_dueno (migracion 013, lo llena el signup); si falta,
+// el admin activo mas antiguo. Ver sqlIdDueno en auth-helpers.js.
+const ES_DUENO_EXPR = `COALESCE(usuario.id_usuario = ${sqlIdDueno('usuario')}, FALSE) AS es_dueno`;
 const ROL_EXPR = `CASE usuario.id_rol WHEN 1 THEN 'ADMINISTRADOR' WHEN 2 THEN 'RECEPCIONISTA' WHEN 3 THEN 'ENTRENADOR' ELSE 'ROL_' || usuario.id_rol::text END AS rol`;
 
 async function listStaffInternal(gymId) {
@@ -380,8 +380,8 @@ router.get(
 //   - Solo un admin, y solo sobre usuarios de SU gimnasio (otro gimnasio = 404).
 //   - Nadie se desactiva ni se quita el rol de administrador a si mismo, para
 //     que el gimnasio no se quede sin quien lo administre.
-//   - La cuenta del dueño (primer usuario del gimnasio) no la desactiva ni la
-//     baja de rol ningun admin.
+//   - La cuenta del dueño (gimnasio.id_dueno) no la desactiva ni la baja de
+//     rol ningun admin.
 //   - Un usuario desactivado no puede iniciar sesion (auth.js responde 403) ni
 //     recuperar la contrasena; GET /api/auth/me le responde 404.
 // ---------------------------------------------------------------------------

@@ -179,6 +179,20 @@ function generarTokenCliente(miembro, { secret, expiresIn } = {}) {
 }
 
 /**
+ * SQL (texto) que devuelve el id del dueño del gimnasio del usuario `alias`:
+ * gimnasio.id_dueno (migracion 013) o, si esta en NULL (gimnasio de una
+ * semilla, dueño borrado) o la columna aun no existe, el admin activo mas
+ * antiguo del gimnasio, nunca un recepcionista. to_jsonb evita el error de
+ * columna inexistente en una base sin la 013.
+ */
+function sqlIdDueno(alias) {
+  return `COALESCE(
+    (SELECT (to_jsonb(g) ->> 'id_dueno')::int FROM gimnasio g WHERE g.id_gimnasio = ${alias}.id_gimnasio),
+    (SELECT MIN(u2.id_usuario) FROM usuario u2
+      WHERE u2.id_gimnasio = ${alias}.id_gimnasio AND u2.id_rol = 1 AND u2.activo))`;
+}
+
+/**
  * Proyecta una fila de `miembro` al objeto seguro que se devuelve a la app.
  * NUNCA incluye pin_hash.
  */
@@ -214,4 +228,5 @@ module.exports = {
   generarResetToken,
   generarTokenCliente,
   miembroSeguro,
+  sqlIdDueno,
 };
