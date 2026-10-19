@@ -12,9 +12,41 @@
  *  - Generación de códigos OTP de 6 dígitos.
  *  - Proyección de usuarioSeguro (nunca expone password_hash).
  *  - Firma y verificación de tokens JWT.
+ *  - RQF-02: el token del personal expira (JWT_EXPIRES_IN, 8 h por defecto),
+ *    el middleware rechaza el vencido y el del miembro sigue en 30 días.
+ *
+ * Corre con `node --test "tests/*.test.js"` (desde backend/) y con Jest (S8
+ * agrega `npm test`). Con node --test no existen los globales de Jest: se
+ * toman de node:test y se arma un `expect` mínimo con node:assert para los
+ * comparadores de aquí.
  */
 
+const assert = require('node:assert/strict');
+const enJest = typeof globalThis.expect === 'function';
+const nodeTest = enJest ? null : require('node:test');
+const describe = enJest ? globalThis.describe : nodeTest.describe;
+const test = enJest ? globalThis.test : nodeTest.test;
+const beforeAll = enJest ? globalThis.beforeAll : nodeTest.before;
+const afterAll = enJest ? globalThis.afterAll : nodeTest.after;
+const afterEach = enJest ? globalThis.afterEach : nodeTest.afterEach;
+const expect = enJest ? globalThis.expect : expectMinimo;
+
+function expectMinimo(actual) {
+  const tiene = (k) => actual !== null && actual !== undefined && k in Object(actual);
+  return {
+    toBe: (v) => assert.equal(actual, v),
+    toMatch: (re) => assert.match(actual, re),
+    toContain: (v) => assert.ok(actual.includes(v), `${actual} no contiene ${v}`),
+    toBeDefined: () => assert.notEqual(actual, undefined),
+    toHaveProperty: (k) => assert.ok(tiene(k), `falta la propiedad ${k}`),
+    not: {
+      toHaveProperty: (k) => assert.ok(!tiene(k), `sobra la propiedad ${k}`),
+    },
+  };
+}
+
 const jwt = require('jsonwebtoken');
+const { authenticate } = require('../src/middleware/auth');
 const {
   mapRol,
   validarEmail,
@@ -26,6 +58,9 @@ const {
   avatarUrl,
   generarToken,
   generarResetToken,
+  generarTokenCliente,
+  vigenciaTokenPersonal,
+  STAFF_TOKEN_EXPIRES_DEFAULT,
 } = require('../src/lib/auth-helpers');
 
 describe('auth-helpers: mapRol', () => {
@@ -208,5 +243,72 @@ describe('auth-helpers: generarToken + generarResetToken', () => {
     expect(payload.id).toBe(99);
     expect(payload.email).toBe('a@b.co');
     expect(payload.exp).toBeDefined();
+  });
+});
+
+describe('RQF-02: vigencia del token del personal', () => {
+  const SECRET = 'test-secret-only-for-jest';
+  const prevSecret = process.env.JWT_SECRET;
+  const prevExpires = process.env.JWT_EXPIRES_IN;
+  const admin = { id_usuario: 1, nombre: 'Ana', email: 'a@x.co', rol_nombre: 'ADMINISTRADOR', id_gimnasio: 2 };
+  const vigencia = (token) => { const p = jwt.verify(token, SECRET); return p.exp - p.iat; };
+
+  beforeAll(() => { process.env.JWT_SECRET = SECRET; });
+  afterEach(() => {
+    if (prevExpires === undefined) delete process.env.JWT_EXPIRES_IN;
+    else process.env.JWT_EXPIRES_IN = prevExpires;
+  });
+  afterAll(() => { process.env.JWT_SECRET = prevSecret; });
+
+  test('sin JWT_EXPIRES_IN el token del personal vence a las 8 horas', () => {
+    delete process.env.JWT_EXPIRES_IN;
+    expect(STAFF_TOKEN_EXPIRES_DEFAULT).toBe('8h');
+    expect(vigenciaTokenPersonal()).toBe('8h');
+    expect(vigencia(generarToken(admin))).toBe(8 * 3600);
+  });
+
+  test('JWT_EXPIRES_IN cambia la vigencia', () => {
+    process.env.JWT_EXPIRES_IN = '30m';
+    expect(vigencia(generarToken(admin))).toBe(30 * 60);
+  });
+
+  test('un número sin unidad en JWT_EXPIRES_IN son segundos, no milisegundos', () => {
+    process.env.JWT_EXPIRES_IN = '3600';
+    expect(vigenciaTokenPersonal()).toBe(3600);
+    expect(vigencia(generarToken(admin))).toBe(3600);
+  });
+
+  test('expiresIn explícito tiene prioridad sobre JWT_EXPIRES_IN', () => {
+    process.env.JWT_EXPIRES_IN = '30m';
+    expect(vigencia(generarToken(admin, { expiresIn: '1h' }))).toBe(3600);
+  });
+
+  test('pasadas las 8 horas jwt.verify rechaza el token', () => {
+    delete process.env.JWT_EXPIRES_IN;
+    const token = generarToken(admin);
+    const { iat } = jwt.decode(token);
+    expect(jwt.verify(token, SECRET, { clockTimestamp: iat + 8 * 3600 - 1 }).id).toBe(1);
+    assert.throws(
+      () => jwt.verify(token, SECRET, { clockTimestamp: iat + 8 * 3600 + 1 }),
+      { name: 'TokenExpiredError' },
+    );
+  });
+
+  test('el middleware authenticate responde 401 con un token vencido', () => {
+    const haceUnaHora = Math.floor(Date.now() / 1000) - 3600;
+    const vencido = jwt.sign({ id: 1, role: 'admin', gymId: 2, iat: haceUnaHora }, SECRET, { expiresIn: 60 });
+    const res = { statusCode: 0, body: null, status(c) { this.statusCode = c; return this; }, json(b) { this.body = b; return this; } };
+    let siguio = false;
+    authenticate({ headers: { authorization: `Bearer ${vencido}` } }, res, () => { siguio = true; });
+    expect(siguio).toBe(false);
+    expect(res.statusCode).toBe(401);
+    expect(res.body.error).toMatch(/expirado/);
+  });
+
+  test('el token del miembro (app Flutter) sigue en 30 días aunque cambie JWT_EXPIRES_IN', () => {
+    process.env.JWT_EXPIRES_IN = '30m';
+    const token = generarTokenCliente({ id_miembro: 4, id_gimnasio: 2, documento: '123' });
+    expect(vigencia(token)).toBe(30 * 86400);
+    expect(jwt.decode(token).role).toBe('cliente');
   });
 });

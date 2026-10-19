@@ -6,7 +6,8 @@
  * testearlas de forma aislada y poder reutilizarlas desde otros routers.
  *
  * Reglas:
- *   - No requieren acceso a variables de entorno.
+ *   - Solo leen variables de entorno para firmar tokens (JWT_SECRET,
+ *     JWT_EXPIRES_IN, RESET_TOKEN_EXPIRES).
  *   - No abren conexiones ni escriben en BD.
  *   - Solo dependen de `jsonwebtoken` para firmar/verificar tokens.
  */
@@ -95,9 +96,25 @@ function usuarioSeguro(u) {
   };
 }
 
+/** Vigencia del JWT del personal cuando JWT_EXPIRES_IN no está definida. */
+const STAFF_TOKEN_EXPIRES_DEFAULT = '8h';
+
 /**
- * Genera el JWT de sesión que se devuelve al cliente.
- * Si `secret` o `expiresIn` son null, usa los valores de `process.env`.
+ * Vigencia del JWT del personal: JWT_EXPIRES_IN (por ejemplo '8h', '30m',
+ * '1d') o 8 horas si no está definida. jsonwebtoken lee un texto sin unidad
+ * como milisegundos ('28800' = 28,8 s), así que un número sin unidad se toma
+ * como segundos, que es lo que se espera de una variable de entorno.
+ */
+function vigenciaTokenPersonal() {
+  const v = String(process.env.JWT_EXPIRES_IN || '').trim();
+  if (!v) return STAFF_TOKEN_EXPIRES_DEFAULT;
+  return /^\d+$/.test(v) ? Number(v) : v;
+}
+
+/**
+ * Genera el JWT de sesión del personal (admin, recepción, entrenador).
+ * Siempre expira (RQF-02): usa `expiresIn` si se pasa o, si no, la vigencia
+ * de vigenciaTokenPersonal(). Si `secret` es null, usa JWT_SECRET.
  */
 function generarToken(usuario, { secret, expiresIn } = {}) {
   const payload = {
@@ -107,8 +124,7 @@ function generarToken(usuario, { secret, expiresIn } = {}) {
     role:  mapRol(usuario.rol_nombre || usuario.rol || usuario.id_rol),
     gymId: usuario.id_gimnasio,
   };
-  const opts = {};
-  if (expiresIn) opts.expiresIn = expiresIn;
+  const opts = { expiresIn: expiresIn || vigenciaTokenPersonal() };
   return jwt.sign(payload, secret || process.env.JWT_SECRET, opts);
 }
 
@@ -176,6 +192,8 @@ module.exports = {
   random6,
   avatarUrl,
   usuarioSeguro,
+  STAFF_TOKEN_EXPIRES_DEFAULT,
+  vigenciaTokenPersonal,
   generarToken,
   generarResetToken,
   generarTokenCliente,
