@@ -215,7 +215,7 @@ router.post('/login', asyncHandler(async (req, res) => {
                    ELSE 'RECEPCIONISTA' END AS rol_nombre
        FROM usuario u
        INNER JOIN gimnasio g ON g.id_gimnasio = u.id_gimnasio
-       WHERE LOWER(u.email) = $1 AND u.activo = TRUE`,
+       WHERE LOWER(u.email) = $1`,
       [email.toLowerCase()]
     );
     usuario = rows[0];
@@ -234,6 +234,12 @@ router.post('/login', asyncHandler(async (req, res) => {
     throw new AppError(500, 'Error validando la contrasena', 'PASSWORD_CHECK_FAILED');
   }
   if (!ok) throw new AppError(401, 'Credenciales incorrectas', 'BAD_CREDENTIALS');
+
+  // Cuenta desactivada por el admin (RQF-01). Se avisa solo despues de validar
+  // la contrasena, para no revelar a cualquiera si un correo existe o no.
+  if (usuario.activo === false) {
+    throw new AppError(403, 'Tu cuenta esta desactivada. Pide al administrador del gimnasio que la reactive.', 'ACCOUNT_DISABLED');
+  }
 
   let token;
   try {
