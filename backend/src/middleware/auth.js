@@ -1,11 +1,47 @@
 const jwt = require('jsonwebtoken');
+const pool = require('../db/db');
+const { mapRol } = require('../lib/auth-helpers');
+const { AppError } = require('../lib/errors');
+
+/**
+ * Lee el estado actual de un usuario del personal. Mismo mapeo de rol que el
+ * login (auth.js): id_rol 1/2/3 y RECEPCIONISTA si no tiene id_rol.
+ */
+async function buscarPersonalEnBD(payload) {
+  const { rows } = await pool.query(
+    `SELECT activo, id_gimnasio,
+            CASE id_rol WHEN 1 THEN 'ADMINISTRADOR' WHEN 2 THEN 'RECEPCIONISTA'
+                        WHEN 3 THEN 'ENTRENADOR' ELSE 'RECEPCIONISTA' END AS rol_nombre
+       FROM usuario
+      WHERE id_usuario = $1`,
+    [payload.id]
+  );
+  return rows[0] || null;
+}
+
+let buscarPersonal = buscarPersonalEnBD;
+
+/**
+ * Solo para pruebas que simulan pool.query: reemplaza la lectura del usuario
+ * del personal por una funcion (payload) => { activo, id_gimnasio, rol_nombre }.
+ * Sin argumento vuelve a la lectura real.
+ */
+function establecerBusquedaPersonal(fn) {
+  buscarPersonal = fn || buscarPersonalEnBD;
+}
 
 /**
  * Middleware que verifica el JWT en el header Authorization.
  * Si es válido, adjunta req.user con { id, email, role, gymId } para staff
  * o { idMiembro, documento, role: 'cliente', gymId } para miembros (app móvil).
+ *
+ * Al personal se le vuelve a leer en cada peticion (RQF-01, HU-04): si lo
+ * desactivaron, ya no existe o lo pasaron a otro gimnasio, responde 401
+ * ACCOUNT_DISABLED aunque su token siga vigente, y el rol sale de la BD, no
+ * del token. Asi un admin desactivado o bajado de rol no puede deshacerlo con
+ * su token viejo. Cuesta una consulta por clave primaria por peticion.
  */
-function authenticate(req, res, next) {
+async function authenticate(req, res, next) {
   const authHeader = req.headers['authorization'];
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'Token requerido' });
@@ -26,8 +62,23 @@ function authenticate(req, res, next) {
   if (payload.role !== 'cliente' && !payload.exp) {
     return res.status(401).json({ error: 'Tu sesión es anterior al cambio de seguridad. Inicia sesión de nuevo.', code: 'TOKEN_SIN_VENCIMIENTO' });
   }
-  req.user = payload;
-  next();
+  if (payload.role === 'cliente') {
+    req.user = payload;
+    return next();
+  }
+
+  let actual;
+  try {
+    actual = await buscarPersonal(payload);
+  } catch (err) {
+    console.error('[authenticate] Error leyendo al usuario:', err.code, err.message);
+    return next(new AppError(503, 'No pudimos validar tu sesión. Intenta de nuevo.', 'DB_UNREACHABLE'));
+  }
+  if (!actual || !actual.activo || actual.id_gimnasio !== payload.gymId) {
+    return res.status(401).json({ error: 'Tu cuenta está desactivada o ya no pertenece a este gimnasio.', code: 'ACCOUNT_DISABLED' });
+  }
+  req.user = { ...payload, role: mapRol(actual.rol_nombre) };
+  return next();
 }
 
 /**
@@ -67,4 +118,4 @@ function requireClient(req, res, next) {
   next();
 }
 
-module.exports = { authenticate, authorize, requireClient };
+module.exports = { authenticate, authorize, requireClient, establecerBusquedaPersonal };
