@@ -19,6 +19,7 @@ const ETIQUETA_TIPO = {
   vencida: 'Vencida',
   'por-vencer': 'Renueva',
   riesgo: 'En riesgo',
+  'acceso-bloqueado': 'Bloqueado',
 };
 
 export default function MenuNotificaciones() {
@@ -44,11 +45,11 @@ export default function MenuNotificaciones() {
     }
   };
 
-  // Se carga al montar para poder pintar el contador, y se refresca cada
-  // dos minutos: son datos que cambian despacio.
+  // Se carga al montar para poder pintar el contador y se refresca cada 30 s,
+  // para que un acceso bloqueado en recepcion le llegue pronto al administrador.
   useEffect(() => {
     cargar();
-    const t = setInterval(cargar, 120000);
+    const t = setInterval(cargar, 30000);
     return () => clearInterval(t);
   }, []);
 
@@ -66,6 +67,17 @@ export default function MenuNotificaciones() {
       document.removeEventListener('keydown', escape);
     };
   }, [abierto]);
+
+  // Marca un acceso bloqueado como visto y lo quita de la lista.
+  const marcarVisto = async (aviso, e) => {
+    e.stopPropagation();
+    setAvisos((prev) => prev.filter((a) => a.id !== aviso.id));
+    try {
+      await api.post(`/admin/notificaciones/acceso-bloqueado/${aviso.idNotificacion}/leida`);
+    } catch (_) {
+      cargar(); // si no se pudo guardar, vuelve a aparecer
+    }
+  };
 
   const irAlMiembro = (aviso) => {
     setAbierto(false);
@@ -144,6 +156,18 @@ export default function MenuNotificaciones() {
                 </span>
                 <span className="aviso__acciones">
                   <span className="aviso__etiqueta">{ETIQUETA_TIPO[a.tipo] || a.tipo}</span>
+                  {a.idNotificacion && (
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      className="aviso__visto"
+                      onClick={(e) => marcarVisto(a, e)}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') marcarVisto(a, e); }}
+                      title="Marcar como visto"
+                    >
+                      Visto
+                    </span>
+                  )}
                   {a.telefono ? (
                     <span
                       role="button"
