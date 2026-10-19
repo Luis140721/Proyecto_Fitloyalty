@@ -4,6 +4,7 @@ import 'react-datepicker/dist/react-datepicker.css';
 import { es } from 'date-fns/locale/es';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../api';
+import { useAuth } from '../context/AuthContext';
 import CardGlass from '../components/CardGlass';
 import IconoWhatsapp from '../components/IconoWhatsapp';
 import BadgeEstado, { estadoDeMiembro } from '../components/BadgeEstado';
@@ -234,6 +235,7 @@ const FILTROS = [
   { id: 'vence',  label: 'Vence pronto' },
   { id: 'vencido',label: 'Vencido' },
   { id: 'riesgo', label: 'En riesgo' },
+  { id: 'congelado', label: 'Congelado' },
   { id: 'desactivados', label: 'Desactivados' },
 ];
 
@@ -289,6 +291,12 @@ export default function MiembrosPage() {
   const [planGuardando, setPlanGuardando] = useState(false);
   const [planMsg, setPlanMsg] = useState('');
   const [planError, setPlanError] = useState('');
+  // Congelar la membresia (RQF-04): solo el administrador.
+  const { user } = useAuth();
+  const esAdmin = user?.role === 'admin';
+  const [congelaciones, setCongelaciones] = useState([]);
+  const [motivoCongelar, setMotivoCongelar] = useState('');
+  const [congelando, setCongelando] = useState(false);
   const [qrCopiado, setQrCopiado] = useState(false);
   const [enviandoContrato, setEnviandoContrato] = useState(false);
   const [editInfo, setEditInfo] = useState('');
@@ -716,10 +724,42 @@ export default function MiembrosPage() {
         referencia_pago: p?.referencia_pago || '',
         estado_pago: p?.estado_pago || 'PENDIENTE',
         existe: Boolean(p),
+        congelado_desde: p?.congelado_desde || null,
+        dias_congelado: p?.dias_congelado ?? 0,
       });
+      setCongelaciones(data.congelaciones || []);
     } catch (err) {
       setPlanError('No pudimos cargar el plan de este miembro.');
       setPlanForm(null);
+      setCongelaciones([]);
+    }
+  };
+
+  /**
+   * Congela o descongela la membresia vigente. Al descongelar, el backend corre
+   * el vencimiento tantos dias como estuvo congelada (RQF-04).
+   */
+  const cambiarCongelamiento = async (accion) => {
+    if (!editing?.id_miembro || congelando) return;
+    if (accion === 'congelar'
+      && !window.confirm('¿Congelar la membresía? Mientras esté congelada no contará como vencida y, al descongelarla, el vencimiento se correrá los días que estuvo congelada.')) {
+      return;
+    }
+    setPlanError(''); setPlanMsg('');
+    setCongelando(true);
+    try {
+      const { data } = await api.post(
+        `/admin/miembros/${editing.id_miembro}/${accion}`,
+        accion === 'congelar' ? { motivo: motivoCongelar.trim() } : {}
+      );
+      setPlanMsg(data.message || (accion === 'congelar' ? 'Membresía congelada.' : 'Membresía descongelada.'));
+      setMotivoCongelar('');
+      await cargarPlan(editing.id_miembro);
+      await load(q, filtro === 'desactivados');
+    } catch (err) {
+      setPlanError(err.message || 'No pudimos cambiar el congelamiento.');
+    } finally {
+      setCongelando(false);
     }
   };
 
@@ -888,6 +928,8 @@ export default function MiembrosPage() {
     setEditing(null);
     setPlanForm(null);
     setPlanMsg(''); setPlanError('');
+    setCongelaciones([]);
+    setMotivoCongelar('');
     setEditForm(empty);
     setEditError('');
     setEditInfo('');
@@ -933,20 +975,22 @@ export default function MiembrosPage() {
     if (filtro === 'todos') return items;
     if (filtro === 'desactivados') return items.filter(m => !m.activo);
     return items.filter((m) => {
-      if (filtro === 'al-dia')    return !m.vencido && !m.vencePronto && !m.enRiesgo;
+      if (filtro === 'al-dia')    return !m.vencido && !m.vencePronto && !m.enRiesgo && !m.congelada;
       if (filtro === 'vence')     return !!m.vencePronto;
       if (filtro === 'vencido')   return !!m.vencido;
       if (filtro === 'riesgo')    return !!m.enRiesgo;
+      if (filtro === 'congelado') return !!m.congelada;
       return true;
     });
   }, [items, filtro]);
 
   const counts = useMemo(() => ({
     todos: items.filter(m => m.activo).length,
-    'al-dia': items.filter((m) => m.activo && !m.vencido && !m.vencePronto && !m.enRiesgo).length,
+    'al-dia': items.filter((m) => m.activo && !m.vencido && !m.vencePronto && !m.enRiesgo && !m.congelada).length,
     vence: items.filter((m) => m.activo && m.vencePronto).length,
     vencido: items.filter((m) => m.activo && m.vencido).length,
     riesgo: items.filter((m) => m.activo && m.enRiesgo).length,
+    congelado: items.filter((m) => m.activo && m.congelada).length,
     desactivados: items.filter(m => !m.activo).length,
   }), [items]);
 
@@ -1859,6 +1903,70 @@ export default function MiembrosPage() {
                 <span className="material-symbols-outlined icon">savings</span>
                 {planGuardando ? 'Guardando…' : 'Guardar plan'}
               </button>
+
+              {/* --- Congelar la membresia (RQF-04) ----------------------- */}
+              {planForm.existe && (
+                <div className="plan-congelar" style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                  {planForm.congelado_desde ? (
+                    <p style={{ fontSize: 13, marginBottom: 10 }}>
+                      <span className="material-symbols-outlined icon" style={{ verticalAlign: 'middle', marginRight: 6 }}>ac_unit</span>
+                      Congelada desde el {new Date(planForm.congelado_desde).toLocaleDateString('es-CO')}
+                      {` (${planForm.dias_congelado} ${planForm.dias_congelado === 1 ? 'día' : 'días'}).`}
+                      {' '}Al descongelarla, el vencimiento se correrá esos días.
+                    </p>
+                  ) : (
+                    <p style={{ fontSize: 13, marginBottom: 10, color: 'var(--on-surface-variant)' }}>
+                      Si el miembro va a dejar de venir por un tiempo (viaje, incapacidad), congela la membresía:
+                      no contará como vencida y los días congelados se suman al vencimiento al descongelarla.
+                    </p>
+                  )}
+
+                  {esAdmin ? (
+                    planForm.congelado_desde ? (
+                      <button type="button" className="btn btn-secondary btn-sm"
+                        onClick={() => cambiarCongelamiento('descongelar')} disabled={congelando}>
+                        <span className="material-symbols-outlined icon">sunny</span>
+                        {congelando ? 'Descongelando…' : 'Descongelar membresía'}
+                      </button>
+                    ) : (
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                        <input
+                          className="field-input"
+                          style={{ flex: '1 1 220px' }}
+                          value={motivoCongelar}
+                          maxLength={200}
+                          onChange={(e) => setMotivoCongelar(e.target.value)}
+                          placeholder="Motivo (opcional): viaje, incapacidad…"
+                          aria-label="Motivo del congelamiento"
+                        />
+                        <button type="button" className="btn btn-secondary btn-sm"
+                          onClick={() => cambiarCongelamiento('congelar')} disabled={congelando}>
+                          <span className="material-symbols-outlined icon">ac_unit</span>
+                          {congelando ? 'Congelando…' : 'Congelar membresía'}
+                        </button>
+                      </div>
+                    )
+                  ) : (
+                    <p className="field-hint">Solo el administrador puede congelar o descongelar la membresía.</p>
+                  )}
+
+                  {congelaciones.length > 0 && (
+                    <ul style={{ marginTop: 12, fontSize: 12, color: 'var(--on-surface-variant)', paddingLeft: 18 }}>
+                      {congelaciones.map((c) => (
+                        <li key={c.id_congelacion}>
+                          {new Date(c.fecha_inicio).toLocaleDateString('es-CO')}
+                          {c.fecha_fin
+                            ? ` → ${new Date(c.fecha_fin).toLocaleDateString('es-CO')} (${c.dias} ${c.dias === 1 ? 'día' : 'días'})`
+                            : ' → sigue congelada'}
+                          {c.motivo ? ` · ${c.motivo}` : ''}
+                          {c.congelada_por ? ` · congeló ${c.congelada_por}` : ''}
+                          {c.descongelada_por ? `, descongeló ${c.descongelada_por}` : ''}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
             </section>
           )}
 
