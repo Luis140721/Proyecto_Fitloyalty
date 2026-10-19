@@ -9,6 +9,7 @@
  *   POST  /api/auth/accept-invite            -> publico: completa el registro con el token
  *   GET   /api/auth/accept-invite/:token     -> publico: devuelve datos de la invitacion (preview)
  *   GET   /api/admin/staff                   -> admin: lista usuarios staff del gimnasio
+ *   PATCH /api/admin/staff/:id               -> admin: edita nombre o rol, desactiva o reactiva
  *
  * Cada handler async va envuelto con asyncHandler para que rechazos lleguen
  * al errorHandler central. Los errores controlados se lanzan con AppError.
@@ -32,6 +33,22 @@ const inviteSchema = z.object({
   nombre:   z.string().min(2, 'El nombre es requerido'),
   rol:      z.enum(['RECEPCIONISTA', 'ADMINISTRADOR']).default('RECEPCIONISTA'),
 });
+
+// Roles que se pueden asignar al editar: los mismos de la invitacion (el CHECK
+// de usuario.rol en Neon solo acepta estos dos).
+const ID_ROL = { ADMINISTRADOR: 1, RECEPCIONISTA: 2 };
+
+const updateStaffSchema = z.object({
+  nombre: z.string().trim()
+    .min(2, 'El nombre debe tener al menos 2 caracteres')
+    .max(100, 'El nombre no puede pasar de 100 caracteres')
+    .optional(),
+  rol:    z.enum(['RECEPCIONISTA', 'ADMINISTRADOR']).optional(),
+  activo: z.boolean().optional(),
+}).strict().refine(
+  (d) => d.nombre !== undefined || d.rol !== undefined || d.activo !== undefined,
+  { message: 'Indica que quieres cambiar: nombre, rol o activo.' }
+);
 
 const acceptSchema = z.object({
   token:    z.string().min(20),
@@ -81,13 +98,18 @@ async function detectStaffSchema() {
         EXISTS (
           SELECT 1 FROM information_schema.columns
           WHERE table_schema='public' AND table_name='usuario' AND column_name='ultimo_acceso'
-        ) AS has_ultimo_acceso
+        ) AS has_ultimo_acceso,
+        EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema='public' AND table_name='usuario' AND column_name='rol'
+        ) AS has_rol_column
     `);
     const r = rows[0] || {};
     return {
       rolTable:         r.rol_exists ? 'rol' : (r.roles_exists ? 'roles' : null),
       hasFechaCreacion: Boolean(r.has_fecha_creacion),
       hasUltimoAcceso:  Boolean(r.has_ultimo_acceso),
+      hasRolColumn:     Boolean(r.has_rol_column),
     };
   } catch (e) {
     // Fallback DEFENSIVO: si NO pudimos inspeccionar information_schema no
@@ -99,6 +121,7 @@ async function detectStaffSchema() {
       rolTable: null,
       hasFechaCreacion: false,
       hasUltimoAcceso: false,
+      hasRolColumn: false,
     };
   }
 }
@@ -314,14 +337,19 @@ router.get(
 // GET /api/admin/staff   (lista usuarios staff del gimnasio)
 // Query defensiva: detecta columnas opcionales, deriva rol por CASE.
 // ---------------------------------------------------------------------------
+// El dueño es el primer usuario del gimnasio: el admin que creo la cuenta en el
+// signup (los demas entran despues, por invitacion). No hay otra columna que
+// lo marque.
+const ES_DUENO_EXPR = `(usuario.id_usuario = (SELECT MIN(u2.id_usuario) FROM usuario u2 WHERE u2.id_gimnasio = usuario.id_gimnasio)) AS es_dueno`;
+const ROL_EXPR = `CASE usuario.id_rol WHEN 1 THEN 'ADMINISTRADOR' WHEN 2 THEN 'RECEPCIONISTA' WHEN 3 THEN 'ENTRENADOR' ELSE 'ROL_' || usuario.id_rol::text END AS rol`;
+
 async function listStaffInternal(gymId) {
   const schema = await detectStaffSchema();
   const selectCols = ['id_usuario', 'nombre', 'email', 'id_rol', 'activo'];
   if (schema.hasFechaCreacion) selectCols.push('fecha_creacion');
   if (schema.hasUltimoAcceso)  selectCols.push('ultimo_acceso');
-  const rolExpr = `CASE usuario.id_rol WHEN 1 THEN 'ADMINISTRADOR' WHEN 2 THEN 'RECEPCIONISTA' WHEN 3 THEN 'ENTRENADOR' ELSE 'ROL_' || usuario.id_rol::text END AS rol`;
   const orderCol = schema.hasFechaCreacion ? 'fecha_creacion' : 'id_usuario';
-  const sql = `SELECT ${selectCols.join(', ')}, ${rolExpr} FROM usuario WHERE id_gimnasio = $1 ORDER BY ${orderCol} DESC`;
+  const sql = `SELECT ${selectCols.join(', ')}, ${ROL_EXPR}, ${ES_DUENO_EXPR} FROM usuario WHERE id_gimnasio = $1 ORDER BY ${orderCol} DESC`;
   const { rows } = await pool.query(sql, [gymId]);
   return rows;
 }
@@ -340,6 +368,93 @@ router.get(
       console.error('[GET /admin/staff] code:', err.code, 'msg:', err.message, 'sql:', err.sql || '(invisible)');
       throw new AppError(503, 'No pudimos listar el equipo. Intenta de nuevo.', 'DB_UNREACHABLE');
     }
+  })
+);
+
+// ---------------------------------------------------------------------------
+// PATCH /api/admin/staff/:id   (RQF-01: editar, desactivar o reactivar)
+//
+// Body (al menos un campo): { nombre?, rol?: 'RECEPCIONISTA'|'ADMINISTRADOR', activo? }
+//
+// Reglas:
+//   - Solo un admin, y solo sobre usuarios de SU gimnasio (otro gimnasio = 404).
+//   - Nadie se desactiva ni se quita el rol de administrador a si mismo, para
+//     que el gimnasio no se quede sin quien lo administre.
+//   - La cuenta del dueño (primer usuario del gimnasio) no la desactiva ni la
+//     baja de rol ningun admin.
+//   - Un usuario desactivado no puede iniciar sesion (auth.js responde 403) ni
+//     recuperar la contrasena; GET /api/auth/me le responde 404.
+// ---------------------------------------------------------------------------
+router.patch(
+  '/admin/staff/:id',
+  authenticate,
+  authorize('admin'),
+  requireActiveTrial(pool),
+  asyncHandler(async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) throw new AppError(400, 'Id invalido', 'VALIDATION_ERROR');
+    const parsed = parse(updateStaffSchema, req.body);
+    if (!parsed.ok) throw new AppError(parsed.status, parsed.error, 'VALIDATION_ERROR', { issues: parsed.issues });
+    const { nombre, rol, activo } = parsed.data;
+    const gymId = req.user.gymId;
+
+    let actual;
+    let schema;
+    try {
+      schema = await detectStaffSchema();
+      const { rows } = await pool.query(
+        `SELECT id_usuario, id_rol, activo, ${ES_DUENO_EXPR}
+           FROM usuario
+          WHERE id_usuario = $1 AND id_gimnasio = $2`,
+        [id, gymId]
+      );
+      actual = rows[0];
+    } catch (err) {
+      console.error('[PATCH /admin/staff/:id] Error consultando usuario:', err.code, err.message);
+      throw new AppError(503, 'No pudimos actualizar al usuario. Intenta de nuevo.', 'DB_UNREACHABLE');
+    }
+    if (!actual) throw new AppError(404, 'Usuario no encontrado en este gimnasio.', 'STAFF_NOT_FOUND');
+
+    const quitaAdmin = rol !== undefined && rol !== 'ADMINISTRADOR' && actual.id_rol === ID_ROL.ADMINISTRADOR;
+    const desactiva  = activo === false && actual.activo;
+    if ((quitaAdmin || desactiva) && actual.id_usuario === req.user.id) {
+      throw new AppError(403, 'No puedes desactivarte ni quitarte el rol de administrador a ti mismo.', 'SELF_LOCKOUT');
+    }
+    if ((quitaAdmin || desactiva) && actual.es_dueno) {
+      throw new AppError(403, 'La cuenta del dueño del gimnasio no se puede desactivar ni dejar sin rol de administrador.', 'OWNER_PROTECTED');
+    }
+
+    const sets = [];
+    const params = [];
+    const set = (col, val) => { params.push(val); sets.push(`${col} = $${params.length}`); };
+    if (nombre !== undefined) set('nombre', nombre);
+    if (rol !== undefined) {
+      set('id_rol', ID_ROL[rol]);
+      // Columna legacy de Neon (NOT NULL con CHECK): se mantiene igual a id_rol.
+      if (schema.hasRolColumn) set('rol', rol);
+    }
+    if (activo !== undefined) set('activo', activo);
+    params.push(id, gymId);
+
+    let actualizado;
+    try {
+      const { rows } = await pool.query(
+        `UPDATE usuario SET ${sets.join(', ')}
+          WHERE id_usuario = $${params.length - 1} AND id_gimnasio = $${params.length}
+          RETURNING id_usuario, nombre, email, id_rol, activo, ${ROL_EXPR}, ${ES_DUENO_EXPR}`,
+        params
+      );
+      actualizado = rows[0];
+    } catch (err) {
+      console.error('[PATCH /admin/staff/:id] Error actualizando usuario:', err.code, err.message);
+      throw new AppError(503, 'No pudimos actualizar al usuario. Intenta de nuevo.', 'DB_UNREACHABLE');
+    }
+    if (!actualizado) throw new AppError(404, 'Usuario no encontrado en este gimnasio.', 'STAFF_NOT_FOUND');
+
+    const message = desactiva ? 'Usuario desactivado. Ya no puede iniciar sesion.'
+      : (activo === true && !actual.activo) ? 'Usuario reactivado.'
+      : 'Usuario actualizado.';
+    return res.json({ message, staff: actualizado });
   })
 );
 

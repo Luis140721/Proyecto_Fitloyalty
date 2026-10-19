@@ -249,6 +249,7 @@ Las rutas marcadas con 🔒 la exigen; sin token responden `401`.
 | POST   | `/admin/staff/invite` 🔒              | Invita a un miembro del equipo por correo |
 | GET    | `/admin/staff/invitations` 🔒         | Invitaciones pendientes |
 | POST   | `/admin/staff/invitations/:id/revoke` 🔒 | Revoca una invitación |
+| PATCH  | `/admin/staff/:id` 🔒                 | Edita nombre o rol, desactiva o reactiva a un usuario del equipo (solo admin; nadie se desactiva a sí mismo y la cuenta del dueño no se desactiva) |
 | GET    | `/auth/accept-invite/:token`          | Valida el token de invitación (público) |
 | POST   | `/auth/accept-invite`                 | Crea la cuenta desde la invitación (público) |
 | GET    | `/asistencia` 🔒                      | Historial de asistencia |
