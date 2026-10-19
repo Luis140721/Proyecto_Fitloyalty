@@ -6,7 +6,8 @@
  * testearlas de forma aislada y poder reutilizarlas desde otros routers.
  *
  * Reglas:
- *   - No requieren acceso a variables de entorno.
+ *   - Solo leen variables de entorno para firmar tokens (JWT_SECRET,
+ *     JWT_EXPIRES_IN, RESET_TOKEN_EXPIRES).
  *   - No abren conexiones ni escriben en BD.
  *   - Solo dependen de `jsonwebtoken` para firmar/verificar tokens.
  */
@@ -95,9 +96,41 @@ function usuarioSeguro(u) {
   };
 }
 
+/** Vigencia del JWT del personal cuando JWT_EXPIRES_IN no está definida. */
+const STAFF_TOKEN_EXPIRES_DEFAULT = '8h';
+
 /**
- * Genera el JWT de sesión que se devuelve al cliente.
- * Si `secret` o `expiresIn` son null, usa los valores de `process.env`.
+ * Vigencia del JWT del personal: JWT_EXPIRES_IN (por ejemplo '8h', '30m',
+ * '1d') o 8 horas si no está definida. jsonwebtoken lee un texto sin unidad
+ * como milisegundos ('28800' = 28,8 s), así que un número sin unidad se toma
+ * como segundos, que es lo que se espera de una variable de entorno.
+ *
+ * Un valor que jsonwebtoken no entiende (por ejemplo '8 horas') haria fallar
+ * todos los logins con 500: en ese caso se usan las 8 horas y se avisa una vez
+ * en el log.
+ */
+const vigenciasRevisadas = new Map();
+function vigenciaTokenPersonal() {
+  const v = String(process.env.JWT_EXPIRES_IN || '').trim();
+  if (!v) return STAFF_TOKEN_EXPIRES_DEFAULT;
+  if (!vigenciasRevisadas.has(v)) {
+    const candidata = /^\d+$/.test(v) ? Number(v) : v;
+    let valida = candidata;
+    try {
+      jwt.sign({}, 'prueba', { expiresIn: candidata });
+    } catch (_) {
+      console.warn(`[auth] JWT_EXPIRES_IN="${v}" no es una vigencia valida (usa 8h, 30m, 1d o segundos). Se usan ${STAFF_TOKEN_EXPIRES_DEFAULT}.`);
+      valida = STAFF_TOKEN_EXPIRES_DEFAULT;
+    }
+    vigenciasRevisadas.set(v, valida);
+  }
+  return vigenciasRevisadas.get(v);
+}
+
+/**
+ * Genera el JWT de sesión del personal (admin, recepción, entrenador).
+ * Siempre expira (RQF-02): usa `expiresIn` si se pasa o, si no, la vigencia
+ * de vigenciaTokenPersonal(). Si `secret` es null, usa JWT_SECRET.
  */
 function generarToken(usuario, { secret, expiresIn } = {}) {
   const payload = {
@@ -107,8 +140,7 @@ function generarToken(usuario, { secret, expiresIn } = {}) {
     role:  mapRol(usuario.rol_nombre || usuario.rol || usuario.id_rol),
     gymId: usuario.id_gimnasio,
   };
-  const opts = {};
-  if (expiresIn) opts.expiresIn = expiresIn;
+  const opts = { expiresIn: expiresIn || vigenciaTokenPersonal() };
   return jwt.sign(payload, secret || process.env.JWT_SECRET, opts);
 }
 
@@ -147,6 +179,20 @@ function generarTokenCliente(miembro, { secret, expiresIn } = {}) {
 }
 
 /**
+ * SQL (texto) que devuelve el id del dueño del gimnasio del usuario `alias`:
+ * gimnasio.id_dueno (migracion 013) o, si esta en NULL (gimnasio de una
+ * semilla, dueño borrado) o la columna aun no existe, el admin activo mas
+ * antiguo del gimnasio, nunca un recepcionista. to_jsonb evita el error de
+ * columna inexistente en una base sin la 013.
+ */
+function sqlIdDueno(alias) {
+  return `COALESCE(
+    (SELECT (to_jsonb(g) ->> 'id_dueno')::int FROM gimnasio g WHERE g.id_gimnasio = ${alias}.id_gimnasio),
+    (SELECT MIN(u2.id_usuario) FROM usuario u2
+      WHERE u2.id_gimnasio = ${alias}.id_gimnasio AND u2.id_rol = 1 AND u2.activo))`;
+}
+
+/**
  * Proyecta una fila de `miembro` al objeto seguro que se devuelve a la app.
  * NUNCA incluye pin_hash.
  */
@@ -176,8 +222,11 @@ module.exports = {
   random6,
   avatarUrl,
   usuarioSeguro,
+  STAFF_TOKEN_EXPIRES_DEFAULT,
+  vigenciaTokenPersonal,
   generarToken,
   generarResetToken,
   generarTokenCliente,
   miembroSeguro,
+  sqlIdDueno,
 };
