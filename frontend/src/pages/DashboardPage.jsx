@@ -236,10 +236,14 @@ export default function DashboardPage() {
    */
   const hayDatos = useRef(false);
   const ultimaPeticion = useRef(0);
+  const enCurso = useRef(false);
 
-  const cargar = useCallback(async (periodo) => {
+  const cargar = useCallback(async (periodo, { automatico = false } = {}) => {
+    // El refresco automatico no lanza otra carga si ya hay una en curso.
+    if (automatico && enCurso.current) return;
     // Si llega una respuesta vieja (p. ej. tras cambiar de periodo rapido), se ignora.
     const n = ++ultimaPeticion.current;
+    enCurso.current = true;
     setRefrescando(true);
     try {
       const [dash, horas] = await Promise.all([
@@ -261,7 +265,10 @@ export default function DashboardPage() {
       if (hayDatos.current) setErrorRefresco(true);
       else setError(err.message || 'No se pudo cargar el dashboard.');
     } finally {
-      if (n === ultimaPeticion.current) setRefrescando(false);
+      if (n === ultimaPeticion.current) {
+        enCurso.current = false;
+        setRefrescando(false);
+      }
     }
   }, []);
 
@@ -270,10 +277,10 @@ export default function DashboardPage() {
   useEffect(() => {
     cargar(periodoHoras);
     const id = setInterval(() => {
-      if (document.visibilityState === 'visible') cargar(periodoHoras);
+      if (document.visibilityState === 'visible') cargar(periodoHoras, { automatico: true });
     }, REFRESCO_MS);
     const alVolver = () => {
-      if (document.visibilityState === 'visible') cargar(periodoHoras);
+      if (document.visibilityState === 'visible') cargar(periodoHoras, { automatico: true });
     };
     document.addEventListener('visibilitychange', alVolver);
     return () => {
