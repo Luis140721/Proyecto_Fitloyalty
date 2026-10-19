@@ -17,8 +17,12 @@ const vistaRouter = require('../src/routes/vista');
 const asistenciaRouter = require('../src/routes/asistencia');
 const checkinRouter = require('../src/routes/checkin');
 const { errorHandler } = require('../src/middleware/errorHandler');
+const { establecerBusquedaPersonal } = require('../src/middleware/auth');
 
-const token = (payload) => jwt.sign(payload, process.env.JWT_SECRET);
+// El personal necesita token con vencimiento y se le vuelve a leer en cada
+// peticion (auth.js); aqui se simula esa lectura. El rol sale de la BD.
+const token = (payload) => jwt.sign(payload, process.env.JWT_SECRET, payload.role === 'cliente' ? {} : { expiresIn: '1h' });
+const ROL_BD = { admin: 'ADMINISTRADOR', receptionist: 'RECEPCIONISTA' };
 const STAFF_G7 = token({ id: 1, role: 'admin', gymId: 7 });
 const RECEP_G9 = token({ id: 2, role: 'receptionist', gymId: 9 });
 const MIEMBRO_G7 = token({ id: 5, role: 'cliente', idMiembro: 5, gymId: 7 });
@@ -26,6 +30,7 @@ const ADMIN_SIN_GYM = token({ id: 3, role: 'admin' });
 
 let server, base;
 beforeAll((done) => {
+  establecerBusquedaPersonal((payload) => ({ activo: true, id_gimnasio: payload.gymId, rol_nombre: ROL_BD[payload.role] }));
   const app = express();
   app.use('/api/vista', vistaRouter);
   app.use('/api/asistencia', asistenciaRouter);
@@ -33,6 +38,7 @@ beforeAll((done) => {
   server = app.listen(0, () => { base = `http://127.0.0.1:${server.address().port}`; done(); });
 });
 afterAll(() => new Promise((resolve) => {
+  establecerBusquedaPersonal(null);
   if (server.closeAllConnections) server.closeAllConnections();
   server.close(() => resolve());
 }));
