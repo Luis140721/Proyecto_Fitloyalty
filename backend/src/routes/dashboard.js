@@ -3,8 +3,9 @@
  *
  * Metricas para la pantalla principal del admin.
  *
- *   GET /api/admin/dashboard        -> KPIs + listas cortas + enRiesgoList real
- *   GET /api/admin/dashboard/export -> descarga CSV de miembros activos + membresia
+ *   GET /api/admin/dashboard            -> KPIs + listas cortas + enRiesgoList real
+ *   GET /api/admin/dashboard/horas-pico -> entradas por hora del dia (hoy, 7 o 30 dias)
+ *   GET /api/admin/dashboard/export     -> descarga CSV de miembros activos + membresia
  *
  * Multi-tenant: todas las queries filtran por id_gimnasio (req.user.gymId).
  * Handlers async con asyncHandler: cualquier rechazo va al errorHandler central.
@@ -46,6 +47,33 @@ function toCsv(rows, columns) {
     .join('\r\n');
   // Linea final con \r\n para que Excel no se queje.
   return `${header}\r\n${body}\r\n`;
+}
+
+/*
+ * Cortes de dia en hora de Colombia.
+ *
+ * `checkin.fecha_hora` es un TIMESTAMP sin zona escrito con la hora de la
+ * sesion de la base (UTC en Neon y en Docker), y CURRENT_DATE tambien es la
+ * fecha de la sesion: en UTC, "hoy" empezaria a las 19:00 de Colombia del dia
+ * anterior. Estas expresiones calculan el corte con el dia de Colombia y lo
+ * devuelven en la zona de la sesion, para compararlo directo con `fecha_hora`
+ * (asi se sigue usando su indice). Si la base ya esta en hora de Colombia, no
+ * cambian nada.
+ *
+ * Ojo: valen para TIMESTAMP sin zona. Si `fecha_hora` pasa a TIMESTAMPTZ, hay
+ * que quitar el paso por current_setting('TimeZone').
+ */
+const ZONA_GIMNASIO = 'America/Bogota';
+
+/** Hora de Colombia de una columna TIMESTAMP sin zona. */
+function enHoraLocal(columna) {
+  return `((${columna}) AT TIME ZONE current_setting('TimeZone')) AT TIME ZONE '${ZONA_GIMNASIO}'`;
+}
+
+/** Inicio del dia ('day') o de la semana ('week', desde el lunes) de Colombia, menos N dias. */
+function inicioLocal(unidad, diasAtras = 0) {
+  return `((date_trunc('${unidad}', now() AT TIME ZONE '${ZONA_GIMNASIO}') - INTERVAL '${diasAtras} days')`
+    + ` AT TIME ZONE '${ZONA_GIMNASIO}') AT TIME ZONE current_setting('TimeZone')`;
 }
 
 // ---------------------------------------------------------------------------
@@ -123,9 +151,10 @@ router.get(
         'SELECT COUNT(*)::int AS total FROM miembro WHERE id_gimnasio = $1 AND activo = TRUE',
         [gymId]
       );
+      // Mismo corte que "Hoy" en las horas pico: el dia de Colombia.
       const checkinsHoy = await pool.query(
         `SELECT COUNT(*)::int AS total FROM checkin
-          WHERE id_gimnasio = $1 AND valido = TRUE AND fecha_hora::date = CURRENT_DATE`,
+          WHERE id_gimnasio = $1 AND valido = TRUE AND fecha_hora >= ${inicioLocal('day')}`,
         [gymId]
       );
       /*
@@ -186,10 +215,10 @@ router.get(
       );
 
       const checkinsSemana = await pool.query(
-        `SELECT EXTRACT(DOW FROM fecha_hora)::int AS dow, COUNT(*)::int AS count
+        `SELECT EXTRACT(DOW FROM ${enHoraLocal('fecha_hora')})::int AS dow, COUNT(*)::int AS count
            FROM checkin
           WHERE id_gimnasio = $1 AND valido = TRUE
-            AND fecha_hora >= date_trunc('week', CURRENT_DATE)
+            AND fecha_hora >= ${inicioLocal('week')}
           GROUP BY dow ORDER BY dow`,
         [gymId]
       );
@@ -278,6 +307,55 @@ router.get(
     } catch (err) {
       console.error('[GET /admin/dashboard] Error:', err.message);
       throw new AppError(503, 'No pudimos cargar las metricas del dashboard. Intenta de nuevo.', 'DB_UNREACHABLE');
+    }
+  })
+);
+
+// ---------------------------------------------------------------------------
+// GET /api/admin/dashboard/horas-pico?periodo=hoy|semana|mes
+// ---------------------------------------------------------------------------
+// Entradas por hora del dia (0-23) en la hora de Colombia. La hora y el inicio
+// de cada periodo se calculan con el dia de Colombia (ver `enHoraLocal` e
+// `inicioLocal` arriba).
+const PERIODOS_HORAS = {
+  hoy: { desde: inicioLocal('day', 0), etiqueta: 'Hoy' },
+  semana: { desde: inicioLocal('day', 6), etiqueta: 'Últimos 7 días' },
+  mes: { desde: inicioLocal('day', 29), etiqueta: 'Últimos 30 días' },
+};
+
+router.get(
+  '/admin/dashboard/horas-pico',
+  authenticate,
+  authorize('admin'),
+  requireActiveTrial(pool),
+  asyncHandler(async (req, res) => {
+    const gymId = req.user.gymId;
+    const periodo = PERIODOS_HORAS[req.query.periodo] ? req.query.periodo : 'mes';
+    const { desde, etiqueta } = PERIODOS_HORAS[periodo];
+
+    try {
+      // `desde` sale de la lista fija de arriba, nunca del request.
+      const { rows } = await pool.query(
+        `SELECT EXTRACT(HOUR FROM ${enHoraLocal('c.fecha_hora')})::int AS hora,
+                COUNT(*)::int AS total
+           FROM checkin c
+          WHERE c.id_gimnasio = $1 AND c.valido = TRUE
+            AND c.fecha_hora >= ${desde}
+          GROUP BY hora
+          ORDER BY hora`,
+        [gymId]
+      );
+
+      const horas = Array.from({ length: 24 }, (_, hora) => ({ hora, total: 0 }));
+      for (const r of rows) horas[r.hora].total = r.total;
+      const total = horas.reduce((acc, h) => acc + h.total, 0);
+      // Si hay empate, gana la hora mas temprana.
+      const pico = total > 0 ? horas.reduce((max, h) => (h.total > max.total ? h : max)) : null;
+
+      return res.json({ periodo, etiqueta, zona: ZONA_GIMNASIO, total, horas, horaPico: pico });
+    } catch (err) {
+      console.error('[GET /admin/dashboard/horas-pico] Error:', err.message);
+      throw new AppError(503, 'No pudimos cargar las horas pico. Intenta de nuevo.', 'DB_UNREACHABLE');
     }
   })
 );
