@@ -1,11 +1,20 @@
 # Estado: avance real de requisitos
 
-- **Fecha:** 2026-10-18 (actualización tras las fusiones en `develop`; la medición inicial fue el 2026-10-16)
-- **Rama:** `docs/avance-2026-10-18` (PR hacia `develop`). La medición inicial se hizo en `docs/avance-requisitos` (PR #6, ya en `main`).
-- **Código verificado:** `develop` @ `bdf987b` para los requisitos de la actualización (sección siguiente); el resto, `main` @ `54b19fa`. El PR #5 (`8acab31`) solo agregó `CONTRIBUTING.md` y el check de nombre de rama al CI (sin cambios en el código de la app); se fusionó en esta rama y es la base de la evidencia del CI.
+- **Fecha:** 2026-10-19 (actualizaciones tras las fusiones en `develop` del 18 y del 19; la medición inicial fue el 2026-10-16)
+- **Rama:** `docs/avance-2026-10-19` (PR hacia `develop`). La del 18 fue `docs/avance-2026-10-18` (PR #20) y la medición inicial se hizo en `docs/avance-requisitos` (PR #6, ya en `main`).
+- **Código verificado:** `develop` @ `dcda269` para los requisitos de las actualizaciones (secciones siguientes); el resto, `main` @ `54b19fa`. El PR #5 (`8acab31`) solo agregó `CONTRIBUTING.md` y el check de nombre de rama al CI (sin cambios en el código de la app); se fusionó en esta rama y es la base de la evidencia del CI.
 - **Base de la documentación:** por decisión de Luis, los archivos de Santiago del PR #4 (`docs/borrador-matriz-requisitos` @ `00cdcdb`), verificados y corregidos aquí.
 - **Copias de seguridad:** los originales de `Documentación/` están en `54b19fa` y los archivos de Santiago sin corregir en el commit `5db4e2a` de esta rama (o en `00cdcdb`). Ejemplo: `git show 00cdcdb:docs/avance-requisitos.xlsx > copia.xlsx`.
 - **Responsable de esta tarea:** agente ejecutor (Claude de Luis). Solo documentación y Excel; el reparto de las implementaciones está en `docs/plan-trabajo.md`.
+
+## Actualización del 2026-10-19 (tarea L7)
+
+| Req. | Antes | Ahora | Fuente | Evidencia y motivo |
+|---|---|---|---|---|
+| RQF-09 | Implementado | **Parcial** | Issue #24 | Santiago confirmó contra una copia de la base real que `POST /api/admin/notificaciones/enviado` no guarda nada: `envio_mensaje` no tiene `canal` (usa `id_canal`, con FK a `canal_comunicacion`, y exige `mensaje_copiado` NOT NULL; también tiene `enviado_por`), y `canal_comunicacion` solo tiene filas para los 3 gimnasios de ejemplo. El endpoint responde 503 y el frontend oculta el error (`MiembrosPage.jsx:847-849`, `MenuNotificaciones.jsx:95-98`). Así, el registro de la fecha y el estado de cada envío no funciona con el esquema real. El insert en `notificacion` (`leido`/`leida` y `tipo`) lo corrige el PR #23. Falta decidir cómo se crea el canal WhatsApp de cada gimnasio, qué va en `mensaje_copiado` y si `enviado_por` es el usuario del token. |
+| RQNF-10 | Parcial | **Parcial** | Issue #24 | La diferencia de `envio_mensaje` y `notificacion` con producción, que el verificador había encontrado en la sección 15, quedó confirmada contra la copia de la base real. |
+
+**No cambian todavía:** RQF-06 (PR #23, en revisión) y RQF-14 (PR #10, con cambios pendientes).
 
 ## Actualización del 2026-10-18 (tarea L7)
 
@@ -30,21 +39,21 @@ Solo se marcó lo que está fusionado en `develop` y revisado por el verificador
 
 **Riesgos anotados, sin cambio de estado:**
 - **RQF-22:** solo el dueño, con su contraseña (PR #21). Falta el límite de intentos en `DELETE /api/auth/account`: con un token robado del dueño se puede probar su contraseña sin freno. Es una línea en `index.js`, antes de la `:81` (zona de Daniel).
-- **RQF-09 (por confirmar):** si producción tiene las columnas de `ConsultasDB`, `POST /api/admin/notificaciones/enviado` falla siempre y el frontend lo oculta (`MiembrosPage.jsx:802-808`). Hay que revisar `envio_mensaje` y `notificacion` en la copia de producción; si faltan `canal` o `leido`, RQF-09 baja a Parcial (−0,5). Santiago lo consulta; mientras tanto queda como observación en el Excel.
+- **RQF-09:** confirmado el 2026-10-19 (issue #24): pasó a Parcial, ver la actualización del 2026-10-19.
 
 ## Resultado
 
 | Alcance | RF | RNF | Global |
 |---|---:|---:|---:|
-| **Final (RQF-01..22, RQNF-01..15)** | 75,0 % (16,5 puntos de 22) | 63,3 % (9,5 puntos de 15) | **70,3 % (26 puntos de 37)** |
-| Solo original del docx (RQF-01..12, RQNF-01..08) | 62,5 % (7,5 puntos de 12) | 56,3 % (4,5 puntos de 8) | 60,0 % (12 puntos de 20) |
+| **Final (RQF-01..22, RQNF-01..15)** | 72,7 % (16 puntos de 22) | 63,3 % (9,5 puntos de 15) | **68,9 % (25,5 puntos de 37)** |
+| Solo original del docx (RQF-01..12, RQNF-01..08) | 58,3 % (7 puntos de 12) | 56,3 % (4,5 puntos de 8) | 57,5 % (11,5 puntos de 20) |
 
-Fórmula: (implementados + 0,5 × parciales) / total; los puntos son esa suma. El 2026-10-16 el avance era 62,2 % (23/37, la cifra conciliada con el verificador); RQF-22 suma 1 punto, y RQNF-05, RQF-07, RQF-02 y RQF-01 medio cada uno. **No llega al 80 %: faltan 3,6 puntos** (el 80 % de 37 son 29,6); ver la hoja «Trabajo pendiente». El PR #4 decía 80,5 % porque daba por implementados requisitos que el código no respalda y contaba aparte funciones que repetían otras (ver «Correcciones»).
+Fórmula: (implementados + 0,5 × parciales) / total; los puntos son esa suma. El 2026-10-16 el avance era 62,2 % (23/37, la cifra conciliada con el verificador); RQF-22 suma 1 punto, y RQNF-05, RQF-07, RQF-02 y RQF-01 medio cada uno; el 2026-10-19 RQF-09 resta medio (issue #24). **No llega al 80 %: faltan 4,1 puntos** (el 80 % de 37 son 29,6); ver la hoja «Trabajo pendiente». El PR #4 decía 80,5 % porque daba por implementados requisitos que el código no respalda y contaba aparte funciones que repetían otras (ver «Correcciones»).
 
 **Decisión de Luis aplicada (2026-10-16):** se retiraron RQF-23 (repetía RQF-08), RQF-24 (repetía RQF-05) y RQF-25 (repetía RQF-03 y es un defecto de seguridad), y RQF-26 (editar el perfil) se fusionó en RQF-15. La numeración queda consecutiva, sin renumerar. Con los cuatro, el avance habría sido 63,4 % (26 puntos de 41).
 
 **Ruta más corta al 80 %** (hoja «Trabajo pendiente»):
-- Siete arreglos o pruebas de esfuerzo bajo: CORS, envío del contrato tras un reinicio, avisos de WhatsApp, límites de intentos, prueba de usabilidad y de navegadores, y aviso de acceso bloqueado → **81,1 %**, por encima de la meta.
+- Ocho arreglos o pruebas de esfuerzo bajo: CORS, envío del contrato tras un reinicio, avisos de WhatsApp, registro de cada envío (RQF-09), límites de intentos, prueba de usabilidad y de navegadores, y aviso de acceso bloqueado → **81,1 %**, por encima de la meta.
 - Después, medir el check-in con unos 200 miembros (RQNF-01) → 83,8 %. La búsqueda del QR ya se corrigió en el PR #11.
 
 ## Qué se hizo
@@ -181,7 +190,7 @@ Ajustes de redacción:
 ## Cómo verificar
 
 - **Porcentajes:** `docs/avance-requisitos.xlsx` → Resumen. Todo son fórmulas sobre las hojas RF y RNF.
-- **Evidencias:** hoja Evidencias, con la ruta del archivo y la línea en el commit `54b19fa`; las filas fechadas el 2026-10-18 citan `develop` @ `1ddcb24` o, las de RQF-01, RQF-02, RQF-04, RQF-07 y RQF-22, `develop` @ `f3d323c` o `bdf987b`.
+- **Evidencias:** hoja Evidencias, con la ruta del archivo y la línea en el commit `54b19fa`; las filas fechadas el 2026-10-18 citan `develop` @ `1ddcb24` o, las de RQF-01, RQF-02, RQF-04, RQF-07 y RQF-22, `develop` @ `f3d323c` o `bdf987b`; las del 2026-10-19 (RQF-09 y RQNF-10), `develop` @ `dcda269` y el issue #24.
 - **Documento:** `docs/Proyecto FitLoyalty - requisitos actualizados.docx`, tablas 5 y 6.
 - **Cobertura:** `docs/evidencias/cobertura-backend-2026-10-16.txt`.
 - **CI:** pestaña Actions del repositorio (ejecución exitosa en `main` 8acab31).
