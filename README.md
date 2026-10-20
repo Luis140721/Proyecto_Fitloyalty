@@ -270,9 +270,26 @@ reiniciar el contenedor no las repite.
 
 ```
 backend/migrations/
-├── 002_esquema_inicial.sql     → tablas, índices y roles
-└── 003_invitacion_staff.sql    → invitaciones de equipo
+├── 002_esquema_inicial.sql                 → tablas, índices y roles
+├── 003_invitacion_staff.sql                → invitaciones de equipo
+├── 004_cliente_pin.sql                     → PIN de la app del miembro
+├── 004_extender_miembro_cobros.sql         → datos del miembro y plan_cobro
+├── 005_cliente_password.sql                → contraseña de la app del miembro
+├── 005_fix_missing_columns.sql             → columnas que faltaban en miembro
+├── 006_gimnasio_dias_aviso.sql             → días de aviso de vencimiento
+├── 007_alerta_vencimiento_enviada.sql      → avisos de vencimiento ya enviados
+├── 008_contrato_enviado.sql                → contratos enviados por WhatsApp
+├── 009_auditoria_y_gamificacion.sql        → auditoria y columnas de hitos y retos
+├── 010_congelar_membresia.sql              → membresías congeladas
+├── 011_vista_miembros_activos_gimnasio.sql → vista filtrable por gimnasio
+├── 013_gimnasio_id_dueno.sql               → dueño del gimnasio (gimnasio.id_dueno)
+└── 014_notificacion_envio_como_produccion.sql → notificacion y envio_mensaje iguales a producción
 ```
+
+La 012 está reservada. La 014 deja `notificacion` y `envio_mensaje` de una base creada
+solo con migraciones iguales a las de producción (`ConsultasDB/`). En producción no
+cambia nada, y una base Docker con filas viejas las conserva en `notificacion_docker` y
+`envio_mensaje_docker`.
 
 ### Vista SQL
 
