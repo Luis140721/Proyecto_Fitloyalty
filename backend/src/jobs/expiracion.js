@@ -51,7 +51,7 @@ async function miembrosPorVencer(dias) {
      FROM miembro m
      JOIN gimnasio g ON g.id_gimnasio = m.id_gimnasio
      INNER JOIN LATERAL (
-       SELECT DISTINCT ON (id_miembro) id_miembro, tipo_plan, fecha_fin, activo
+       SELECT DISTINCT ON (id_miembro) id_miembro, tipo_plan, fecha_fin, activo, congelado_desde
          FROM plan_cobro
         WHERE id_miembro = m.id_miembro AND activo = TRUE
         ORDER BY id_miembro, fecha_fin DESC NULLS LAST, id_plan_cobro DESC
@@ -59,6 +59,7 @@ async function miembrosPorVencer(dias) {
      WHERE m.activo = TRUE
        AND g.activo = TRUE
        AND pc.fecha_fin IS NOT NULL
+       AND pc.congelado_desde IS NULL   -- congelada: su vencimiento se corre al descongelar (RQF-04)
        AND pc.fecha_fin::date BETWEEN CURRENT_DATE AND (CURRENT_DATE + $1::int)
      ORDER BY pc.fecha_fin ASC, m.id_miembro`,
     [dias]
