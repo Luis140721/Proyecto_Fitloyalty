@@ -11,6 +11,7 @@ const asyncHandler = require('../lib/asyncHandler');
 const { AppError } = require('../lib/errors');
 const { requireActiveTrial } = require('../lib/trial');
 const { ULTIMO_PLAN } = require('../lib/planes');
+const { registrarAccesoBloqueado } = require('../lib/accesos');
 const { z } = require('zod');
 const { formatZodError } = require('../lib/validators');
 
@@ -131,6 +132,13 @@ router.post(
       // --- INICIO DEL BLOQUEO ABSOLUTO ---
       // Si la base de datos detecta fecha vencida o que no tiene plan, cortamos el acceso
       if (membresiaVencida || sinMembresia) {
+        // Avisa al administrador por la campana (RQF-06). No frena la respuesta.
+        await registrarAccesoBloqueado(pool, {
+          gymId,
+          idMiembro: miembro.id_miembro,
+          nombre: miembro.nombre,
+          motivo: sinMembresia ? 'SIN_PLAN' : 'VENCIDA',
+        });
         return res.status(200).json({
           miembro: {
             id: miembro.id_miembro,
