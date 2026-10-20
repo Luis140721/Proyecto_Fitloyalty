@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../api';
 import PageTransition from '../components/PageTransition';
 import Ripple from '../components/Ripple';
+import HitosConfig from '../components/HitosConfig';
 
 export default function ConfigPage() {
   const [config, setConfig] = useState({
@@ -269,6 +270,8 @@ export default function ConfigPage() {
           </div>
         </form>
       </section>
+
+      <HitosConfig />
     </PageTransition>
   );
 }

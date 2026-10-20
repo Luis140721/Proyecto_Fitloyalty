@@ -150,6 +150,7 @@ export default function CheckinPage() {
         msg: data.message,
         miembro: data.miembro,
         advertencia: data.duplicado ? 'ya-registrado' : data.advertencia,
+        gamificacion: data.gamificacion,
       });
       setFrameFlash({ type: fbType, key: Date.now() });
       if (fbType === 'success') vibrate(80);
@@ -203,6 +204,7 @@ export default function CheckinPage() {
         msg: data.message,
         miembro: data.miembro,
         advertencia: data.advertencia,
+        gamificacion: data.gamificacion,
       });
       setFrameFlash({ type: fbType, key: Date.now() });
       if (fbType === 'success') vibrate(80);
@@ -372,6 +374,19 @@ export default function CheckinPage() {
                   <small style={{ display: 'block', marginTop: 4, fontSize: 12 }}>
                     {feedback.miembro.nombre} ({feedback.miembro.documento})
                   </small>
+                )}
+                {feedback.gamificacion && (
+                  <span style={{ display: 'block', marginTop: 8, fontSize: 14 }}>
+                    {feedback.gamificacion.hitosNuevos?.length > 0 && (
+                      <strong style={{ display: 'block' }}>
+                        🏆 Hito logrado: {feedback.gamificacion.hitosNuevos.map((h) => h.nombre).join(', ')}
+                      </strong>
+                    )}
+                    {feedback.gamificacion.mensaje}
+                    <small style={{ display: 'block', marginTop: 2 }}>
+                      Racha: {feedback.gamificacion.racha} {feedback.gamificacion.racha === 1 ? 'día' : 'días'} · Asistencias: {feedback.gamificacion.totalAsistencias}
+                    </small>
+                  </span>
                 )}
               </span>
             </div>
