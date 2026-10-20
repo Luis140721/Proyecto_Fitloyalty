@@ -1,7 +1,7 @@
 # Matriz de trazabilidad de requisitos
 
-> Foto del 2026-10-18 generada con los mismos datos que `docs/avance-requisitos.xlsx` (la fuente con fórmulas es el Excel).
-> Numeración del PR #4 (Santiago). Verificada contra `main` @ `54b19fa` el 2026-10-16 y actualizada con los PR fusionados en `develop` @ `bdf987b` (#9, #11, #14 a #19, #21 y #22) según el informe del verificador (secciones 14 a 25).
+> Foto del 2026-10-19 generada con los mismos datos que `docs/avance-requisitos.xlsx` (la fuente con fórmulas es el Excel).
+> Numeración del PR #4 (Santiago). Verificada contra `main` @ `54b19fa` el 2026-10-16 y actualizada con los PR fusionados en `develop` @ `dcda269` (#9, #11 y #14 a #22) según el informe del verificador (secciones 14 a 25) y con la confirmación del issue #24 sobre el esquema real.
 > Documento de requisitos: `docs/Proyecto FitLoyalty - requisitos actualizados.docx`.
 
 Escala: **Implementado = 1**, **Parcial = 0,5** (lo principal funciona pero falta alguna parte), **Pendiente = 0** (no hay código, prueba ni medición que lo respalde). No se hicieron pruebas en vivo.
@@ -12,17 +12,17 @@ Escala: **Implementado = 1**, **Parcial = 0,5** (lo principal funciona pero falt
 
 | Alcance | Total | Implementados | Parciales | Pendientes | Puntos | Avance |
 |---|---:|---:|---:|---:|---:|---:|
-| RF | 22 | 14 | 5 | 3 | 16,5 | **75,0 %** |
+| RF | 22 | 13 | 6 | 3 | 16,0 | **72,7 %** |
 | RNF | 15 | 7 | 5 | 3 | 9,5 | **63,3 %** |
-| Global | 37 | 21 | 10 | 6 | 26,0 | **70,3 %** |
+| Global | 37 | 20 | 11 | 6 | 25,5 | **68,9 %** |
 
 **Solo alcance original del documento (RQF-01..12, RQNF-01..08)**
 
 | Alcance | Total | Implementados | Parciales | Pendientes | Puntos | Avance |
 |---|---:|---:|---:|---:|---:|---:|
-| RF | 12 | 6 | 3 | 3 | 7,5 | **62,5 %** |
+| RF | 12 | 5 | 4 | 3 | 7,0 | **58,3 %** |
 | RNF | 8 | 3 | 3 | 2 | 4,5 | **56,3 %** |
-| Global | 20 | 9 | 6 | 5 | 12,0 | **60,0 %** |
+| Global | 20 | 8 | 7 | 5 | 11,5 | **57,5 %** |
 
 ## Requisitos funcionales
 
@@ -36,7 +36,7 @@ Escala: **Implementado = 1**, **Parcial = 0,5** (lo principal funciona pero falt
 | **RQF-06** | Check-in y Asistencia | Original | **Parcial** | Valida el último plan y responde VENCIDO sin registrar el ingreso (checkin.js:116-136); la pantalla muestra «Acceso denegado» (CheckinPage.jsx:133-143). | Notificar al administrador del intento bloqueado: el intento no se guarda y la campana (notificaciones.js:96-108) solo lista membresías vencidas, no accesos denegados. | HU-15 |
 | **RQF-07** | Dashboard | Original | **Implementado** | GET /api/admin/dashboard: miembros activos (dashboard.js:165, :190), entradas de hoy con el día cortado en hora de Colombia (:170; ayudantes enHoraLocal e inicioLocal en :69 y :74), semana desde el lunes de Colombia (:233) y próximos vencimientos a 30 días (:248), sin las membresías congeladas (:85, :187, :256). GET /api/admin/dashboard/horas-pico (:344; periodos en :337 y hora local en :356): entradas por hora y hora pico. DashboardPage.jsx: gráfica BarsHoras (:172), que abre en «Hoy» (:226); refresco cada 60 s con la pestaña visible y al volver a ella (REFRESCO_MS :49, :279-288), sin cargas en paralelo (:239-246); listado de próximos vencimientos (:610-626). PR #16 y #22. | Implementado (2026-10-18; verificador 1be53f7, secciones 19 y 21.1). Desde el PR #22, «Vencen en 7 días» y «Próximos vencimientos» no cuentan las membresías congeladas. Observación: las comparaciones con columnas DATE (próximas a vencer y vencen en 7 días) siguen con CURRENT_DATE en UTC, así que de 19:00 a 24:00 en Colombia hay un día de desfase. | HU-16, HU-34, HU-41, HU-42, HU-43 |
 | **RQF-08** | Alertas de Abandono | Original | **Parcial** | Lista de miembros sin ingresar en N días calculada al consultar: campana de avisos (notificaciones.js:125-137; umbral del gimnasio, 15 por defecto, :38 y :66), dashboard (dashboard.js:161, :182) y filtro «En riesgo» de miembros (miembros.js:263, MiembrosPage.jsx:939). | Ejecución diaria del motor (el scheduler solo programa vencimientos, scheduler.js:46), los dos niveles Amarilla / Roja, registro en alerta_abandono (tabla sin uso) y pantalla para configurar el umbral (el dashboard usa 15 días fijos). | HU-17, HU-18, HU-44, HU-64 |
-| **RQF-09** | Alertas de Abandono | Original | **Implementado** | Botón de WhatsApp con el mensaje armado para miembros en riesgo (MenuNotificaciones.jsx:86-90, MiembrosPage.jsx:796-802); POST /api/admin/notificaciones/enviado guarda canal, estado ENVIADO y fecha en envio_mensaje (notificaciones.js:188-224). | Observación: solo WhatsApp por enlace wa.me; el estado no confirma la entrega y el correo no se usa para retención. Pendiente de confirmar en la copia de producción si envio_mensaje tiene la columna canal y notificacion la columna leido (verificador: 94d5fbb, sección 15). Si no las tiene, POST /api/admin/notificaciones/enviado falla siempre (el frontend oculta el error, MiembrosPage.jsx:802-808) y RQF-09 baja a Parcial. Santiago lo consulta. | HU-19, HU-20, HU-52 |
+| **RQF-09** | Alertas de Abandono | Original | **Parcial** | Botón de WhatsApp con el mensaje armado para los miembros en riesgo (MenuNotificaciones.jsx:84-99, MiembrosPage.jsx:836-849). El registro de cada envío lo hace POST /api/admin/notificaciones/enviado (notificaciones.js:189), que inserta en envio_mensaje (:211) y en notificacion (:217). | Parcial (2026-10-19): el registro de la fecha y el estado de cada envío no funciona con el esquema real. Santiago lo confirmó contra una copia de la base real (issue #24): envio_mensaje no tiene la columna canal (usa id_canal, con FK a canal_comunicacion, y exige mensaje_copiado NOT NULL; también tiene enviado_por), y canal_comunicacion solo tiene filas para los 3 gimnasios de ejemplo, así que no hay un id_canal válido. El endpoint responde 503 y el frontend oculta el error (MiembrosPage.jsx:847-849, MenuNotificaciones.jsx:95-98). El insert en notificacion (leido/leida y tipo) se corrige en el PR #23. Falta decidir cómo se crea el canal WhatsApp de cada gimnasio (bajo demanda o al registrarlo), qué se guarda en mensaje_copiado (el texto que se abrió en WhatsApp) y si enviado_por es el usuario del token. Además: solo WhatsApp por enlace wa.me; el estado no confirma la entrega y el correo no se usa para retención. | HU-19, HU-20, HU-52 |
 | **RQF-10** | Campañas | Original | **Pendiente** | Solo existen las tablas campana, campana_destinatario y plantilla_mensaje (migración 002:171-202); ninguna ruta ni pantalla las usa. | Todo el módulo: rutas de API, programación de envíos, segmentos y pantalla. | HU-21..HU-24, HU-45, HU-46 |
 | **RQF-11** | Gamificación | Original | **Pendiente** | La app del miembro lee hitos y su estado (cliente.js:340-381, gamificacion_screen.dart), pero ningún archivo calcula rachas ni escribe hito_miembro; los datos que existen vienen del script ConsultasDB/Poblar_Tablas.sql:384-419. | Cálculo de rachas en cada check-in, otorgar hitos, mensaje en la pantalla de check-in y configuración de hitos por el administrador. | HU-25, HU-26, HU-27, HU-47, HU-48 |
 | **RQF-12** | Gamificación | Original | **Pendiente** | La app lista los retos activos con el progreso guardado (cliente.js:392-418), pero no hay ruta ni pantalla para crear retos, el check-in no actualiza reto_miembro y no hay aviso al completar; los retos existentes vienen de ConsultasDB/Poblar_Tablas.sql:456-490. | CRUD de retos para el administrador, actualización del progreso en cada check-in y notificación al completar. | HU-28..HU-31, HU-49, HU-50 |
@@ -64,7 +64,7 @@ Escala: **Implementado = 1**, **Parcial = 0,5** (lo principal funciona pero falt
 | **RQNF-07** | Mantenibilidad | Original | **Parcial** | Capas en backend/src (routes, lib, middleware, jobs, db) y diagrama de arquitectura en el documento (sección 8). Cobertura medida el 2026-10-16: 0 % en routes/checkin.js y routes/notificaciones.js, 1,48 % de líneas en todo el backend; 23 pruebas, 2 fallan. | Script «test» en backend/package.json, pruebas de check-in y alertas hasta ≥ 70 % y corregir las 2 pruebas que fallan. | — |
 | **RQNF-08** | Portabilidad | Original | **Implementado** | backend/Dockerfile (node:24-alpine, multietapa), frontend/Dockerfile + nginx.conf y docker-compose.yml; despliegue en la nube en Render y Vercel (render.yaml, vercel.json). | Observación: no se verificó la construcción de la imagen (Docker Desktop apagado) y Render usa el entorno Node nativo, no el contenedor. Sugerencia: agregar docker build al CI. | — |
 | **RQNF-09** | Seguridad | Nuevo | **Parcial** | express-rate-limit: inicio de sesión 5 por minuto, recuperación de contraseña 3 por minuto y login de la app 10 por minuto (index.js:63-77, :79-80, :94); trust proxy para tomar la IP real detrás de Render (index.js:43). | verify-reset-code (auth.js:360) y reset-password (auth.js:399) no tienen límite: el código de 6 dígitos se puede probar sin límite durante sus 15 minutos de vida. | — |
-| **RQNF-10** | Mantenibilidad | Nuevo | **Parcial** | applyMigrations lee backend/migrations en orden, aplica solo las pendientes y las registra en schema_migrations (migrate.js:15-56); se ejecuta al arrancar (index.js:128-132). Migraciones 002 a 009 y 011: la 009 (PR #14) crea auditoria y agrega las columnas y restricciones de gamificación de producción, y la 011 (PR #11) recrea vista_miembros_activos con id_gimnasio. | Sigue Parcial (verificador: 94d5fbb, sección 15): una base hecha solo con migraciones todavía difiere de producción en 15 tablas, y el código usa dos de ellas: notificaciones.js:211 escribe envio_mensaje.canal y :217 notificacion.leido, que no existen en el esquema de producción (allí son id_canal y leida). Pasa a Implementado con una migración que reconcilie esas dos tablas (o un cambio del código), probada contra la copia de producción. Además hay prefijos repetidos (004 y 005) y backend/src/db/migrations/001_invitacion_staff.sql no se aplica. | — |
+| **RQNF-10** | Mantenibilidad | Nuevo | **Parcial** | applyMigrations lee backend/migrations en orden, aplica solo las pendientes y las registra en schema_migrations (migrate.js:15-56); se ejecuta al arrancar (index.js:128-132). Migraciones 002 a 011 y 013: la 009 (PR #14) crea auditoria y agrega las columnas y restricciones de gamificación de producción, la 010 (PR #17) el congelamiento, la 011 (PR #11) recrea vista_miembros_activos con id_gimnasio y la 013 (PR #19) agrega gimnasio.id_dueno. | Sigue Parcial (verificador: 94d5fbb, sección 15; confirmado contra una copia de la base real en el issue #24): una base hecha solo con migraciones todavía difiere de producción en 15 tablas, y el código usa dos de ellas. notificaciones.js:211 escribe envio_mensaje.canal, que en producción no existe (allí hay id_canal, con FK a canal_comunicacion, y mensaje_copiado NOT NULL); :217 escribe notificacion.leido, que allí es leida (lo corrige el PR #23, en revisión). Pasa a Implementado con una migración que reconcilie esas tablas, o un cambio del código, probado contra la copia de producción. Además hay prefijos repetidos (004 y 005) y backend/src/db/migrations/001_invitacion_staff.sql no se aplica. | — |
 | **RQNF-11** | Mantenibilidad | Nuevo | **Implementado** | .github/workflows/ci.yml corre en pull_request y en push a main (:3-6): el job rama valida el nombre de la rama en cada PR (:13-26), backend npm ci + node --check (:42-44) y frontend npm ci + build (:58-59); ejecución exitosa en main 8acab31 (pestaña Actions). | Observación: el CI todavía no corre pruebas ni mide cobertura. | — |
 | **RQNF-12** | Cumplimiento | Nuevo | **Implementado** | Rutas públicas /legal/terminos, /legal/privacidad y /legal/datos (App.jsx:43-45) con TerminosPage.jsx, PrivacidadPage.jsx y PoliticaDatosPage.jsx. | — | — |
 | **RQNF-13** | Observabilidad | Nuevo | **Implementado** | /api/healthz responde estado y uptime (index.js:101); /api/health comprueba la base de datos y responde 503 si no hay conexión (index.js:103-110). | — | — |
@@ -75,21 +75,22 @@ Escala: **Implementado = 1**, **Parcial = 0,5** (lo principal funciona pero falt
 
 | # | Acción | Requisito | Responsable | Esfuerzo | Suma | Avance acumulado |
 |---:|---|---|---|---|---:|---:|
-| 1 | Rechazar en CORS los orígenes que no estén en FRONTEND_URL (index.js:54) | RQNF-15 | Santiago | Bajo | 1,0 | 73,0 % |
-| 2 | Quitar la comprobación previa de admin-contrato.js:107 (o iniciar el cliente antes de preguntar), junto con el arreglo del PR #10 | RQF-13 | Santiago | Bajo | 0,5 | 74,3 % |
-| 3 | No marcar el aviso como enviado si WhatsApp no está listo (reintentar) y llevar los días a Configuración | RQF-14 | Santiago | Bajo | 0,5 | 75,7 % |
-| 4 | Límite de intentos en verify-reset-code y reset-password | RQNF-09 | Santiago | Bajo | 0,5 | 77,0 % |
-| 5 | Prueba de usabilidad del check-in manual con 3 personas sin formación técnica | RQNF-04 | Luis | Bajo | 0,5 | 78,4 % |
-| 6 | Lista de verificación con capturas en Chrome, Firefox y Edge | RQNF-06 | Luis | Bajo | 0,5 | 79,7 % |
-| 7 | Registrar el acceso bloqueado y mostrarlo en la campana del administrador | RQF-06 | Santiago | Bajo | 0,5 | 81,1 % ✅ meta |
-| 8 | Medir el check-in con un volumen realista (unos 200 miembros) | RQNF-01 | Luis o Santiago | Medio | 1,0 | 83,8 % |
-| 9 | Job de vencimientos y check-in que salten las membresías congeladas (check-in con estado CONGELADO) | RQF-04 | Santiago | Medio | 0,5 | 85,1 % |
-| 10 | Motor diario con Alerta Amarilla / Roja y umbrales editables | RQF-08 | Santiago | Medio | 0,5 | 86,5 % |
-| 11 | Script test, pruebas de check-in y alertas hasta ≥ 70 % de cobertura | RQNF-07 | Santiago | Medio | 0,5 | 87,8 % |
-| 12 | Migración que reconcilie envio_mensaje y notificacion con producción (o cambio del código), probada contra la copia de producción | RQNF-10 | Santiago | Medio | 0,5 | 89,2 % |
-| 13 | Cálculo de rachas, hitos y mensaje en el check-in | RQF-11 | Santiago | Medio | 1,0 | 91,9 % |
-| 14 | Monitor externo de disponibilidad con reporte (depende del plan de Render) | RQNF-02 | Luis | Medio | 1,0 | 94,6 % |
-| 15 | CRUD de retos, progreso automático y aviso al completar | RQF-12 | Santiago | Alto | 1,0 | 97,3 % |
-| 16 | Módulo de campañas y plantillas | RQF-10 | Santiago | Alto | 1,0 | 100,0 % |
+| 1 | Rechazar en CORS los orígenes que no estén en FRONTEND_URL (index.js:54) | RQNF-15 | Santiago | Bajo | 1,0 | 71,6 % |
+| 2 | Quitar la comprobación previa de admin-contrato.js:107 (o iniciar el cliente antes de preguntar), junto con el arreglo del PR #10 | RQF-13 | Santiago | Bajo | 0,5 | 73,0 % |
+| 3 | No marcar el aviso como enviado si WhatsApp no está listo (reintentar) y llevar los días a Configuración | RQF-14 | Santiago | Bajo | 0,5 | 74,3 % |
+| 4 | Buscar o crear el canal WhatsApp del gimnasio, mandar el mensaje desde el frontend e insertar en envio_mensaje con id_canal, mensaje_copiado y enviado_por, con una prueba contra el esquema real (issue #24) | RQF-09 | Santiago | Bajo | 0,5 | 75,7 % |
+| 5 | Límite de intentos en verify-reset-code y reset-password | RQNF-09 | Santiago | Bajo | 0,5 | 77,0 % |
+| 6 | Prueba de usabilidad del check-in manual con 3 personas sin formación técnica | RQNF-04 | Luis | Bajo | 0,5 | 78,4 % |
+| 7 | Lista de verificación con capturas en Chrome, Firefox y Edge | RQNF-06 | Luis | Bajo | 0,5 | 79,7 % |
+| 8 | Registrar el acceso bloqueado y mostrarlo en la campana del administrador | RQF-06 | Santiago | Bajo | 0,5 | 81,1 % ✅ meta |
+| 9 | Medir el check-in con un volumen realista (unos 200 miembros) | RQNF-01 | Luis o Santiago | Medio | 1,0 | 83,8 % |
+| 10 | Job de vencimientos y check-in que salten las membresías congeladas (check-in con estado CONGELADO) | RQF-04 | Santiago | Medio | 0,5 | 85,1 % |
+| 11 | Motor diario con Alerta Amarilla / Roja y umbrales editables | RQF-08 | Santiago | Medio | 0,5 | 86,5 % |
+| 12 | Script test, pruebas de check-in y alertas hasta ≥ 70 % de cobertura | RQNF-07 | Santiago | Medio | 0,5 | 87,8 % |
+| 13 | Migración que reconcilie envio_mensaje y notificacion con producción (o cambio del código), probada contra la copia de producción | RQNF-10 | Santiago | Medio | 0,5 | 89,2 % |
+| 14 | Cálculo de rachas, hitos y mensaje en el check-in | RQF-11 | Santiago | Medio | 1,0 | 91,9 % |
+| 15 | Monitor externo de disponibilidad con reporte (depende del plan de Render) | RQNF-02 | Luis | Medio | 1,0 | 94,6 % |
+| 16 | CRUD de retos, progreso automático y aviso al completar | RQF-12 | Santiago | Alto | 1,0 | 97,3 % |
+| 17 | Módulo de campañas y plantillas | RQF-10 | Santiago | Alto | 1,0 | 100,0 % |
 
-Hoy: 26,0 / 37 puntos = 70,3 %. El 80 % son 29,6 puntos (faltan 3,6).
+Hoy: 25,5 / 37 puntos = 68,9 %. El 80 % son 29,6 puntos (faltan 4,1).
