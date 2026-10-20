@@ -33,11 +33,16 @@
 --         en las reglas de produccion se ajusta (un tipo fuera del CHECK pasa
 --         a SISTEMA, un titulo vacio pasa a 'Notificacion', se corta a 150) y
 --         la copia exacta queda en notificacion_docker.
---       * envio_mensaje: las filas viejas no tienen id_canal y esta migracion
---         no crea canales (decision de Luis), asi que no se pueden pasar a la
---         tabla nueva. Quedan completas en envio_mensaje_docker.
---     Las tablas *_docker solo se crean si habia filas, y tienen FK a gimnasio
---     con ON DELETE CASCADE para que el borrado de cuenta (Ley 1581) las limpie.
+--       * envio_mensaje: las filas de Docker no tienen id_canal y esta
+--         migracion no crea canales (decision de Luis), asi que no caben en la
+--         tabla nueva y quedan completas en envio_mensaje_docker. Si la tabla
+--         ya tenia id_canal y mensaje_copiado (una base de produccion alterada
+--         a mano, por ejemplo con una columna canal agregada), las filas que
+--         cumplen las reglas de la tabla nueva pasan a ella con su mismo id, y
+--         solo las demas van a envio_mensaje_docker.
+--     Las tablas *_docker solo se crean si les toca alguna fila, y tienen FK a
+--     gimnasio con ON DELETE CASCADE para que el borrado de cuenta (Ley 1581)
+--     las limpie.
 --   - Las columnas viejas de Docker (canal, mensaje_error, fecha_creacion de
 --     envio_mensaje; leido de notificacion) no siguen en las tablas: ningun
 --     codigo las lee, y el unico que las escribe es el de /enviado (issue #24),
@@ -157,7 +162,15 @@ DO $$
 DECLARE
     forma_docker BOOLEAN;
     filas        INTEGER;
+    pasadas      INTEGER := 0;
+    con_prod     BOOLEAN;
     secuencia    TEXT;
+    e_alerta     TEXT;
+    e_campana    TEXT;
+    e_plantilla  TEXT;
+    e_enviado    TEXT;
+    e_estado     TEXT;
+    e_fecha      TEXT;
 BEGIN
     SELECT EXISTS (SELECT 1 FROM information_schema.columns
                     WHERE table_schema = 'public' AND table_name = 'envio_mensaje' AND column_name = 'canal')
@@ -180,8 +193,60 @@ BEGIN
     END IF;
 
     SELECT count(*) INTO filas FROM envio_mensaje;
-    IF filas > 0 THEN
-        CREATE TABLE envio_mensaje_docker AS SELECT * FROM envio_mensaje;
+
+    -- Si la tabla vieja ya tiene id_canal y mensaje_copiado (produccion alterada
+    -- a mano), las filas que cumplen las reglas de la tabla nueva (NOT NULL,
+    -- CHECK de estado y FK) pasan a ella con su mismo id. Las demas, y todas las
+    -- de Docker, quedan completas en envio_mensaje_docker.
+    con_prod := EXISTS (SELECT 1 FROM information_schema.columns
+                         WHERE table_schema = 'public' AND table_name = 'envio_mensaje' AND column_name = 'id_canal')
+            AND EXISTS (SELECT 1 FROM information_schema.columns
+                         WHERE table_schema = 'public' AND table_name = 'envio_mensaje' AND column_name = 'mensaje_copiado');
+
+    CREATE TEMP TABLE _envio_viejo ON COMMIT DROP AS SELECT * FROM envio_mensaje;
+    CREATE TEMP TABLE _envio_pasa (id_envio INTEGER PRIMARY KEY) ON COMMIT DROP;
+    IF con_prod THEN
+        -- Columnas opcionales: la de la tabla vieja si existe; si no, NULL (o el
+        -- default de estado). Sin fecha_envio no hay fecha que pasar.
+        e_alerta    := CASE WHEN EXISTS (SELECT 1 FROM information_schema.columns
+                                          WHERE table_schema = 'public' AND table_name = 'envio_mensaje' AND column_name = 'id_alerta')
+                            THEN 'v.id_alerta' ELSE 'NULL::integer' END;
+        e_campana   := CASE WHEN EXISTS (SELECT 1 FROM information_schema.columns
+                                          WHERE table_schema = 'public' AND table_name = 'envio_mensaje' AND column_name = 'id_campana')
+                            THEN 'v.id_campana' ELSE 'NULL::integer' END;
+        e_plantilla := CASE WHEN EXISTS (SELECT 1 FROM information_schema.columns
+                                          WHERE table_schema = 'public' AND table_name = 'envio_mensaje' AND column_name = 'id_plantilla')
+                            THEN 'v.id_plantilla' ELSE 'NULL::integer' END;
+        e_enviado   := CASE WHEN EXISTS (SELECT 1 FROM information_schema.columns
+                                          WHERE table_schema = 'public' AND table_name = 'envio_mensaje' AND column_name = 'enviado_por')
+                            THEN 'v.enviado_por' ELSE 'NULL::integer' END;
+        e_estado    := CASE WHEN EXISTS (SELECT 1 FROM information_schema.columns
+                                          WHERE table_schema = 'public' AND table_name = 'envio_mensaje' AND column_name = 'estado')
+                            THEN 'v.estado' ELSE '''PENDIENTE''' END;
+        e_fecha     := CASE WHEN EXISTS (SELECT 1 FROM information_schema.columns
+                                          WHERE table_schema = 'public' AND table_name = 'envio_mensaje' AND column_name = 'fecha_envio')
+                            THEN 'v.fecha_envio' ELSE 'NULL::timestamp' END;
+        EXECUTE format($sel$
+            INSERT INTO _envio_pasa (id_envio)
+            SELECT v.id_envio FROM _envio_viejo v
+             WHERE v.id_envio IS NOT NULL AND v.id_gimnasio IS NOT NULL AND v.id_miembro IS NOT NULL
+               AND v.id_canal IS NOT NULL AND v.mensaje_copiado IS NOT NULL
+               AND %1$s IN ('PENDIENTE', 'ENVIADO', 'FALLIDO') AND %2$s IS NOT NULL
+               AND EXISTS (SELECT 1 FROM gimnasio g WHERE g.id_gimnasio = v.id_gimnasio)
+               AND EXISTS (SELECT 1 FROM miembro m WHERE m.id_miembro = v.id_miembro)
+               AND EXISTS (SELECT 1 FROM canal_comunicacion c WHERE c.id_canal = v.id_canal)
+               AND (%3$s IS NULL OR EXISTS (SELECT 1 FROM alerta_abandono a WHERE a.id_alerta = %3$s))
+               AND (%4$s IS NULL OR EXISTS (SELECT 1 FROM campana c WHERE c.id_campana = %4$s))
+               AND (%5$s IS NULL OR EXISTS (SELECT 1 FROM plantilla_mensaje p WHERE p.id_plantilla = %5$s))
+               AND (%6$s IS NULL OR EXISTS (SELECT 1 FROM usuario u WHERE u.id_usuario = %6$s))$sel$,
+            e_estado, e_fecha, e_alerta, e_campana, e_plantilla, e_enviado);
+        SELECT count(*) INTO pasadas FROM _envio_pasa;
+    END IF;
+
+    IF filas > pasadas THEN
+        CREATE TABLE envio_mensaje_docker AS
+            SELECT e.* FROM envio_mensaje e
+             WHERE NOT EXISTS (SELECT 1 FROM _envio_pasa p WHERE p.id_envio = e.id_envio);
         ALTER TABLE envio_mensaje_docker
             ADD CONSTRAINT envio_mensaje_docker_id_gimnasio_fkey
             FOREIGN KEY (id_gimnasio) REFERENCES gimnasio(id_gimnasio) ON DELETE CASCADE;
@@ -224,10 +289,33 @@ BEGIN
     EXECUTE format('ALTER SEQUENCE %s OWNED BY envio_mensaje.id_envio', secuencia);
     CREATE INDEX IF NOT EXISTS idx_envio_miembro ON envio_mensaje(id_miembro);
 
-    IF filas > 0 THEN
-        RAISE NOTICE '[014] envio_mensaje reconstruida como en produccion: % filas viejas guardadas en envio_mensaje_docker (sin id_canal no caben en la tabla nueva).',
+    IF pasadas > 0 THEN
+        EXECUTE format($cp$
+            INSERT INTO envio_mensaje (id_envio, id_gimnasio, id_miembro, id_canal, id_alerta, id_campana,
+                                       id_plantilla, mensaje_copiado, estado, fecha_envio, enviado_por)
+            SELECT v.id_envio, v.id_gimnasio, v.id_miembro, v.id_canal, %3$s, %4$s, %5$s,
+                   v.mensaje_copiado, %1$s, %2$s, %6$s
+              FROM _envio_viejo v JOIN _envio_pasa p ON p.id_envio = v.id_envio$cp$,
+            e_estado, e_fecha, e_alerta, e_campana, e_plantilla, e_enviado);
+        -- Que la secuencia siga despues del mayor id copiado (si es la misma de
+        -- antes, ya va mas adelante y no cambia).
+        EXECUTE format('SELECT setval(%L, GREATEST((SELECT max(id_envio) FROM envio_mensaje), (SELECT last_value FROM %s)))',
+                       secuencia, secuencia);
+    END IF;
+
+    IF filas = 0 THEN
+        RAISE NOTICE '[014] envio_mensaje reconstruida como en produccion (estaba vacia).';
+    ELSIF pasadas = filas THEN
+        RAISE NOTICE '[014] envio_mensaje reconstruida como en produccion: las % filas pasaron a la tabla nueva con su mismo id.',
+            filas;
+    ELSIF pasadas > 0 THEN
+        RAISE NOTICE '[014] envio_mensaje reconstruida como en produccion: % filas pasaron a la tabla nueva con su mismo id y % que no cumplen sus reglas quedaron en envio_mensaje_docker.',
+            pasadas, filas - pasadas;
+    ELSIF con_prod THEN
+        RAISE NOTICE '[014] envio_mensaje reconstruida como en produccion: ninguna de las % filas cumple las reglas de la tabla nueva; quedaron en envio_mensaje_docker.',
             filas;
     ELSE
-        RAISE NOTICE '[014] envio_mensaje reconstruida como en produccion (estaba vacia).';
+        RAISE NOTICE '[014] envio_mensaje reconstruida como en produccion: % filas de Docker guardadas en envio_mensaje_docker (les falta id_canal o mensaje_copiado, asi que no caben en la tabla nueva).',
+            filas;
     END IF;
 END $$;
