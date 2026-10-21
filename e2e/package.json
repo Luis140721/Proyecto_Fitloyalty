@@ -1,10 +1,13 @@
 {
   "name": "fitloyalty-e2e",
   "private": true,
+  "engines": { "node": ">=22" },
   "scripts": {
     "test": "playwright test",
     "test:ui": "playwright test --ui",
-    "codegen": "playwright codegen http://localhost:5173"
+    "codegen": "playwright codegen http://localhost:5173",
+    "db:up": "docker compose up -d --wait db-test",
+    "db:down": "docker compose down --volumes"
   },
   "devDependencies": {
     "@playwright/test": "1.49.1"
