@@ -9,6 +9,9 @@ Reglas:
 - Cada semana cambias de capa. No repites capa hasta haber pasado por las cuatro.
 - En la columna escribe la capa y, al cerrar la semana, el enlace a tu PR de tests.
 - Quien revisa tu PR debe haber trabajado en otra capa esa semana.
+- S1 (E2E) y S3 (Front) son semanas de tema común: todo el grupo trabaja en la misma capa y no cuentan para la rotación. Por eso Luis (E2E en S1 y S2) y Daniel (Front en S2 y S3) no rompen la regla.
+
+> La rama de la semana que el bootcamp llama `test/semana-01` aquí se llama `chore/test-semana-01`, porque el check `rama` del CI solo acepta ramas `feat/`, `fix/`, `docs/` o `chore/`.
 
 Propuesta pendiente de acuerdo del grupo; ver [plan-pruebas-bootcamp.md](plan-pruebas-bootcamp.md). Según el bootcamp, en la semana 1 todos hacen E2E y en la 3 todos hacen Front. Cada integrante debe tener commits de test propios en la capa de cada semana.
 

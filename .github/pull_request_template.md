@@ -3,8 +3,12 @@
 ## Qué cambia
 <!-- Resumen corto del cambio y por qué -->
 
-## Cómo probarlo
-<!-- Pasos o comandos para verificarlo -->
+## Cómo probarlo / ¿Cómo lo ejecuto?
+<!-- Pasos o comandos para verificar el cambio. Si el PR trae tests, incluye el comando exacto para correrlos. -->
+
+```bash
+# comandos para verificar el cambio o correr los tests
+```
 
 ## Requisito y evidencia
 <!-- Código del requisito (RQF-xx / RQNF-xx) y evidencia: archivo:línea, prueba o captura -->
@@ -35,9 +39,3 @@
 - [ ] Hice fallar cada test al menos una vez para comprobar que detecta el error
 - [ ] Los tests pasan en local
 - [ ] No hay credenciales ni datos reales en los tests
-
-## ¿Cómo lo ejecuto?
-
-```bash
-# comando para correr estos tests
-```
