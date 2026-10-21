@@ -18,4 +18,4 @@ El umbral de la semana siguiente es el mayor entre el piso del plan y la cobertu
 
 | Semana | Frontend (%) | Backend (%) | Umbral configurado |
 |---|---|---|---|
-| S1 (línea base) | pendiente | 18,08 líneas · 17,16 sentencias · 16,88 ramas · 21,69 funciones | Backend: líneas 18, sentencias 17, ramas 16, funciones 21 |
+| S1 (línea base) | 1,11 líneas · 1,11 sentencias · 10 ramas · 6,12 funciones | 18,08 líneas · 17,16 sentencias · 16,88 ramas · 21,69 funciones | Backend: líneas 18, sentencias 17, ramas 16, funciones 21 · Frontend: líneas 1, sentencias 1, ramas 10, funciones 6 |
