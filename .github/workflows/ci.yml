@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, develop]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rama:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Comprobar nombre de la rama
+        env:
+          RAMA: ${{ github.head_ref }}
+        run: |
+          if [[ "$RAMA" =~ ^(feat|feature|fix|docs|chore)/[a-z0-9][a-z0-9._/-]*$ || "$RAMA" =~ ^(dependabot/|revert-) || "$RAMA" == "develop" ]]; then
+            echo "Nombre de rama válido: $RAMA"
+          else
+            echo "::error::La rama '$RAMA' no sigue la convención: feat/…, fix/…, docs/… o chore/… en minúsculas (o develop para una release). Ver CONTRIBUTING.md"
+            exit 1
+          fi
+
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      PUPPETEER_SKIP_DOWNLOAD: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - name: Comprobar sintaxis de src/
+        run: find src -name '*.js' -print0 | xargs -0 -n1 node --check
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run build

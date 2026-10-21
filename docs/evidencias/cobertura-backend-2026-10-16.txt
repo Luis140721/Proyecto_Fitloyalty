@@ -1,0 +1,134 @@
+# Cobertura del backend - medicion del 2026-10-16
+#
+# Codigo medido: main @ 54b19fa (sin cambios locales).
+# Comando equivalente (desde backend/, despues de npm ci; se ejecuto con Jest 29 de backend/node_modules):
+#   npx jest --ci --testMatch "**/tests/**/*.test.js" --coverage --collectCoverageFrom="src/**/*.js"
+# Nota: backend/package.json no tiene script "test" y jest.config.js solo mide src/lib y
+# src/middleware; por eso se paso --collectCoverageFrom para medir todo src/.
+# Usado como evidencia de RQNF-07 en docs/avance-requisitos.xlsx (hoja Evidencias, filas de RQNF-07).
+#
+FAIL tests/auth-helpers.test.js
+  auth-helpers: mapRol
+    √ mapea nombres de rol al formato del frontend (2 ms)
+    √ mapea ids numéricos de rol
+    √ regresa unknown para entradas nulas o vacías (3 ms)
+    √ regresa snake_case para roles desconocidos
+  auth-helpers: validarEmail
+    √ acepta emails válidos
+    √ rechaza emails inválidos
+  auth-helpers: validarContrasena
+    √ acepta contraseñas válidas (>=6 chars, con dígito, sin espacios)
+    √ rechaza contraseñas muy cortas
+    √ rechaza contraseñas sin dígitos
+    × rechaza contraseñas con espacios (incluso si tienen dígitos) (1 ms)
+    √ rechaza entradas no-string o vacías
+  auth-helpers: validarTelefonoColombiano
+    × acepta teléfonos móviles colombianos (10 dígitos empezando con 3) (1 ms)
+    √ rechaza teléfonos que no empiezan con 3
+    √ rechaza teléfonos con longitud incorrecta
+    √ rechaza entradas no-string o vacías
+  auth-helpers: normEmail
+    √ lowercase + trim
+    √ maneja entradas null/undefined/number sin explotar
+  auth-helpers: random6
+    √ devuelve exactamente 6 dígitos numéricos como string (1 ms)
+  auth-helpers: usuarioSeguro + avatarUrl
+    √ nunca expone password_hash (1 ms)
+    √ respeta foto_url cuando viene en la fila
+    √ avatarUrl hace encode del nombre (1 ms)
+  auth-helpers: generarToken + generarResetToken
+    √ generarToken incluye id, name, email, role, gymId y omite password_hash (3 ms)
+    √ generarResetToken lleva purpose=reset y expira (1 ms)
+
+  ● auth-helpers: validarContrasena › rechaza contraseñas con espacios (incluso si tienen dígitos)
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: false
+    Received: true
+
+      88 |
+      89 |   test('rechaza contraseñas con espacios (incluso si tienen dígitos)', () => {
+    > 90 |     expect(validarContrasena('abc 123')).toBe(false);
+         |                                          ^
+      91 |     expect(validarContrasena(' abc123')).toBe(false);
+      92 |     expect(validarContrasena('abc123 ')).toBe(false);
+      93 |   });
+
+      at Object.<anonymous> (tests/auth-helpers.test.js:90:42)
+
+  ● auth-helpers: validarTelefonoColombiano › acepta teléfonos móviles colombianos (10 dígitos empezando con 3)
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      103 |   test('acepta teléfonos móviles colombianos (10 dígitos empezando con 3)', () => {
+      104 |     expect(validarTelefonoColombiano('3101234567')).toBe(true);
+    > 105 |     expect(validarTelefonoColombiano('+57 310 123 4567')).toBe(true);
+          |                                                           ^
+      106 |     expect(validarTelefonoColombiano('310-123-4567')).toBe(true);
+      107 |   });
+      108 |
+
+      at Object.<anonymous> (tests/auth-helpers.test.js:105:59)
+
+
+=============================== Coverage summary ===============================
+Statements   : 1.68% ( 36/2133 )
+Branches     : 4.06% ( 43/1059 )
+Functions    : 4.5% ( 10/222 )
+Lines        : 1.48% ( 29/1957 )
+================================================================================
+--------------------|---------|----------|---------|---------|-------------------
+File                | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+--------------------|---------|----------|---------|---------|-------------------
+All files           |    1.68 |     4.06 |     4.5 |    1.48 |                   
+ src                |       0 |        0 |       0 |       0 |                   
+  index.js          |       0 |        0 |       0 |       0 | 16-152            
+ src/db             |       0 |        0 |       0 |       0 |                   
+  db.js             |       0 |        0 |       0 |       0 | 9-48              
+  migrate.js        |       0 |        0 |       0 |       0 | 10-82             
+  seed_demo.js      |       0 |        0 |       0 |       0 | 18-202            
+  seed_dev.js       |       0 |        0 |       0 |       0 | 18-128            
+  seed_pg.js        |       0 |        0 |       0 |       0 | 6-47              
+  seed_supremo.js   |       0 |        0 |       0 |       0 | 16-127            
+ src/jobs           |       0 |        0 |       0 |       0 |                   
+  expiracion.js     |       0 |        0 |       0 |       0 | 23-218            
+  scheduler.js      |       0 |        0 |       0 |       0 | 19-76             
+ src/lib            |   10.34 |    16.28 |   14.92 |     9.2 |                   
+  asyncHandler.js   |       0 |      100 |       0 |       0 | 16-21             
+  auth-helpers.js   |      90 |    69.35 |   83.33 |   87.87 | 139-154           
+  email.js          |       0 |        0 |       0 |       0 | 16-323            
+  errors.js         |       0 |        0 |       0 |       0 | 20-29             
+  invitations.js    |       0 |      100 |       0 |       0 | 9-19              
+  mensajes.js       |       0 |        0 |       0 |       0 | 17-172            
+  planes.js         |       0 |      100 |     100 |       0 | 22-31             
+  trial.js          |       0 |        0 |       0 |       0 | 17-81             
+  validators.js     |       0 |        0 |       0 |       0 | 13-94             
+  whatsapp.js       |       0 |        0 |       0 |       0 | 27-267            
+ src/middleware     |       0 |        0 |       0 |       0 |                   
+  auth.js           |       0 |        0 |       0 |       0 | 1-62              
+  errorHandler.js   |       0 |        0 |       0 |       0 | 15-49             
+ src/routes         |       0 |        0 |       0 |       0 |                   
+  admin-contrato.js |       0 |        0 |       0 |       0 | 30-223            
+  admin.js          |       0 |        0 |       0 |       0 | 13-146            
+  asistencia.js     |       0 |      100 |       0 |       0 | 12-62             
+  auth.js           |       0 |        0 |       0 |       0 | 22-563            
+  billing.js        |       0 |        0 |       0 |       0 | 10-43             
+  checkin.js        |       0 |        0 |       0 |       0 | 6-227             
+  cliente.js        |       0 |        0 |       0 |       0 | 28-428            
+  config.js         |       0 |        0 |       0 |       0 | 9-141             
+  dashboard.js      |       0 |        0 |       0 |       0 | 12-342            
+  jobs.js           |       0 |        0 |       0 |       0 | 17-54             
+  miembros.js       |       0 |        0 |       0 |       0 | 17-824            
+  notificaciones.js |       0 |        0 |       0 |       0 | 25-231            
+  staff.js          |       0 |        0 |       0 |       0 | 16-482            
+  vista.js          |       0 |        0 |       0 |       0 | 10-56             
+--------------------|---------|----------|---------|---------|-------------------
+Test Suites: 1 failed, 1 total
+Tests:       2 failed, 21 passed, 23 total
+Snapshots:   0 total
+Time:        9.564 s
+Ran all test suites.

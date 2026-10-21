@@ -1,0 +1,40 @@
+name: fitloyalty_cliente
+description: "FitLoyalty — App móvil del cliente (miembro del gimnasio)."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.13.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+
+  # --- Reuso del patron de la profe (Store_Pro_Ss) ---
+  flutter_dotenv: ^5.2.1
+  flutter_secure_storage: ^9.2.2
+  http: ^1.2.2
+  provider: ^6.1.2
+  connectivity_plus: ^6.0.5
+  shimmer: ^3.0.0
+
+  # --- Extras propios de la app del cliente ---
+  # Para mostrar el codigo QR del miembro (ademas del que ya viene del backend
+  # como imagen base64, esto permite regenerar si hace falta).
+  qr_flutter: ^4.1.0
+  # Para abrir la imagen QR en pantalla completa y hacer zoom.
+  photo_view: ^0.15.0
+  # Para formato de fechas en espanol colombiano.
+  intl: ^0.19.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/.env

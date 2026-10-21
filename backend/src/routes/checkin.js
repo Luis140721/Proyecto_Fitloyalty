@@ -2,11 +2,14 @@
  * routes/checkin.js
  *
  * Check-in de miembros (asistencia al gimnasio).
+<<<<<<< HEAD
  *
  *   POST /api/admin/checkin   -> registra una entrada (manual o por codigo QR)
  *   GET  /api/admin/checkin   -> historial reciente del gimnasio
  *
  * Handlers con asyncHandler: cualquier rechazo va al errorHandler central.
+=======
+>>>>>>> e8b4003970b0a6433993adf9046ad9c5002dc840
  */
 const express = require('express');
 const crypto  = require('crypto');
@@ -21,6 +24,7 @@ const { formatZodError } = require('../lib/validators');
 
 const router = express.Router();
 
+<<<<<<< HEAD
 // Clave secreta para descifrar QR (debe ser la misma que en miembros.js)
 const QR_ENCRYPTION_KEY = process.env.QR_ENCRYPTION_KEY || 'FitLoyalty2024SecretKey';
 
@@ -32,6 +36,11 @@ const QR_ENCRYPTION_KEY = process.env.QR_ENCRYPTION_KEY || 'FitLoyalty2024Secret
 const VENTANA_ANTIREBOTE_SEG = Number(process.env.CHECKIN_VENTANA_SEG || 90);
 
 // Función para descifrar el código QR
+=======
+const QR_ENCRYPTION_KEY = process.env.QR_ENCRYPTION_KEY || 'FitLoyalty2024SecretKey';
+const VENTANA_ANTIREBOTE_SEG = Number(process.env.CHECKIN_VENTANA_SEG || 90);
+
+>>>>>>> e8b4003970b0a6433993adf9046ad9c5002dc840
 function decryptQrCode(encrypted) {
   try {
     const algorithm = 'aes-256-cbc';
@@ -44,7 +53,10 @@ function decryptQrCode(encrypted) {
     decrypted += decipher.final('utf8');
     return decrypted;
   } catch (e) {
+<<<<<<< HEAD
     // Si falla el descifrado, retornar el texto original (para compatibilidad con QRs antiguos)
+=======
+>>>>>>> e8b4003970b0a6433993adf9046ad9c5002dc840
     return encrypted;
   }
 }
@@ -76,7 +88,10 @@ router.post(
     let { codigo, documento, metodo, observacion } = parsed.data;
     const gymId = req.user.gymId;
 
+<<<<<<< HEAD
     // Descifrar el código QR si está cifrado
+=======
+>>>>>>> e8b4003970b0a6433993adf9046ad9c5002dc840
     if (codigo) {
       codigo = decryptQrCode(codigo);
     }
@@ -85,8 +100,12 @@ router.post(
       let miembro;
       
       if (codigo) {
+<<<<<<< HEAD
         // Para búsqueda por código QR, necesitamos comparar con el valor descifrado
         // Primero intentamos buscar directamente (por si es un código antiguo sin cifrar)
+=======
+        // CORRECCIÓN: Se quitó "estado" del SELECT porque no existe en la tabla
+>>>>>>> e8b4003970b0a6433993adf9046ad9c5002dc840
         const { rows: directMatch } = await pool.query(
           `SELECT id_miembro, nombre, documento, codigo_qr, qr_imagen FROM miembro 
            WHERE id_gimnasio = $1 AND activo = TRUE AND codigo_qr = $2 LIMIT 1`,
@@ -96,7 +115,10 @@ router.post(
         if (directMatch.length > 0) {
           miembro = directMatch[0];
         } else {
+<<<<<<< HEAD
           // Si no encontramos con el código original, buscar todos y descifrar para comparar
+=======
+>>>>>>> e8b4003970b0a6433993adf9046ad9c5002dc840
           const { rows: allMembers } = await pool.query(
             `SELECT id_miembro, nombre, documento, codigo_qr, qr_imagen FROM miembro 
              WHERE id_gimnasio = $1 AND activo = TRUE`,
@@ -130,12 +152,15 @@ router.post(
         throw new AppError(400, 'codigo o documento requerido', 'VALIDATION_ERROR');
       }
 
+<<<<<<< HEAD
       /*
        * Estado del plan. Se lee de `plan_cobro`, que es donde el alta guarda
        * el plan del miembro; antes se consultaba `membresia`, que nunca se
        * llena, y por eso TODO ingreso salia marcado como "sin membresia"
        * aunque la persona estuviera al dia.
        */
+=======
+>>>>>>> e8b4003970b0a6433993adf9046ad9c5002dc840
       const { rows: mem } = await pool.query(
         `SELECT tipo_plan, fecha_fin, estado_pago FROM ${ULTIMO_PLAN} pc
           WHERE pc.id_miembro = $1`,
@@ -143,6 +168,7 @@ router.post(
       );
       const m = mem[0];
       const sinMembresia = !m;
+<<<<<<< HEAD
       // Se compara por fecha, no por marca de tiempo: un plan que vence hoy
       // todavia sirve hoy.
       const membresiaVencida = !!(m && m.fecha_fin && new Date(m.fecha_fin) < new Date(new Date().toDateString()));
@@ -157,6 +183,24 @@ router.post(
        * Dentro de la ventana no se inserta nada: se devuelve el ingreso que ya
        * existe, con 200 en vez de 201 para que el front sepa distinguirlos.
        */
+=======
+      const membresiaVencida = !!(m && m.fecha_fin && new Date(m.fecha_fin) < new Date(new Date().toDateString()));
+
+      // --- INICIO DEL BLOQUEO ABSOLUTO ---
+      // Si la base de datos detecta fecha vencida o que no tiene plan, cortamos el acceso
+      if (membresiaVencida || sinMembresia) {
+        return res.status(200).json({
+          miembro: {
+            id: miembro.id_miembro,
+            nombre: miembro.nombre,
+            documento: miembro.documento,
+            estado: 'VENCIDO' // Le enviamos al front la palabra exacta para que active la alerta
+          }
+        });
+      }
+      // --- FIN DEL BLOQUEO ABSOLUTO ---
+
+>>>>>>> e8b4003970b0a6433993adf9046ad9c5002dc840
       const { rows: repetido } = await pool.query(
         `SELECT id_checkin, fecha_hora, metodo
            FROM checkin
@@ -189,6 +233,7 @@ router.post(
         `INSERT INTO checkin (id_miembro, id_gimnasio, metodo, id_usuario, observacion, valido)
          VALUES ($1, $2, $3, $4, $5, $6)
          RETURNING id_checkin, fecha_hora, metodo`,
+<<<<<<< HEAD
         [miembro.id_miembro, gymId, metodo, req.user.id, observacion || null, !membresiaVencida]
       );
 
@@ -198,6 +243,13 @@ router.post(
           : sinMembresia
             ? 'Sin plan registrado. Ingreso registrado con aviso.'
             : 'Ingreso registrado.',
+=======
+        [miembro.id_miembro, gymId, metodo, req.user.id, observacion || null, true]
+      );
+
+      return res.status(201).json({
+        message: 'Ingreso registrado.',
+>>>>>>> e8b4003970b0a6433993adf9046ad9c5002dc840
         duplicado: false,
         checkin: rows[0],
         miembro: { 
@@ -208,7 +260,11 @@ router.post(
           qr_imagen: miembro.qr_imagen
         },
         membresia: m || null,
+<<<<<<< HEAD
         advertencia: membresiaVencida ? 'membresia-vencida' : sinMembresia ? 'sin-membresia' : null,
+=======
+        advertencia: null,
+>>>>>>> e8b4003970b0a6433993adf9046ad9c5002dc840
       });
     } catch (err) {
       if (err instanceof AppError) throw err;

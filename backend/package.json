@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
-    "seed": "node src/db/seed_pg.js"
+    "seed": "node src/db/seed_pg.js",
+    "postinstall": "node scripts/postinstall.js"
   },
   "dependencies": {
     "@getbrevo/brevo": "^6.0.3",
@@ -17,10 +18,21 @@
     "express-rate-limit": "^7.5.1",
     "fitloyalty": "file:..",
     "jsonwebtoken": "^9.0.2",
+<<<<<<< HEAD
     "nodemailer": "^9.0.6",
     "pg": "^8.21.0",
     "qrcode": "^1.5.4",
     "resend": "^6.21.0",
+=======
+    "node-cron": "^4.6.0",
+    "nodemailer": "^9.0.6",
+    "pg": "^8.21.0",
+    "puppeteer": "24.38.0",
+    "qrcode": "^1.5.4",
+    "qrcode-terminal": "^0.12.0",
+    "resend": "^6.21.0",
+    "whatsapp-web.js": "^1.34.7",
+>>>>>>> e8b4003970b0a6433993adf9046ad9c5002dc840
     "zod": "^3.25.76"
   },
   "devDependencies": {

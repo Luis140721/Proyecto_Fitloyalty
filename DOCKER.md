@@ -132,7 +132,11 @@ box" para desarrollo local. Para produccion cambia **obligatoriamente**:
 Si prefieres seguir contra **Neon** (como Render) en vez del Postgres local,
 pon en `.env`:
 ```
+<<<<<<< HEAD
 DATABASE_URL=postgresql://owner:pass@ep-restless-....neon.tech/neondb?sslmode=require
+=======
+DATABASE_URL=postgresql://USER:PASSWORD@HOST/DATABASE?sslmode=require
+>>>>>>> e8b4003970b0a6433993adf9046ad9c5002dc840
 ```
 y elimina el servicio `db` de `docker-compose.yml` (o comenta el bloque).
 

@@ -97,3 +97,21 @@ render_*.json
 login_*.json
 clase_2_ui_*.html
 render.exe
+<<<<<<< HEAD
+=======
+
+# Temporary files from history cleanup
+filter_callback.py
+filter_help.txt
+filter_log.txt
+push_log.txt
+
+# --- whatsapp-web.js: cache y sesion local (NO subir al repo) ---
+backend/.wwebjs_auth/
+backend/.wwebjs_cache/
+
+# --- Archivos de bloqueo de Office / LibreOffice (se crean al abrir un documento)
+~$*
+.~lock.*#
+
+>>>>>>> e8b4003970b0a6433993adf9046ad9c5002dc840

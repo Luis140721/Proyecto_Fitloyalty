@@ -327,6 +327,7 @@ docker compose logs backend | grep EMAIL
 
 ## Ramas
 
+<<<<<<< HEAD
 | Rama                 | Contenido |
 |----------------------|-----------|
 | `main`               | Rama principal |
@@ -334,6 +335,17 @@ docker compose logs backend | grep EMAIL
 | `santiago`           | Backend, despliegue y Docker |
 | `luis-frontend`      | Componentes de interfaz |
 | `principal`          | Documentación y evidencias |
+=======
+| Rama | Para qué |
+|---|---|
+| `main` | Lo estable: lo que se despliega y se entrega. Solo recibe releases desde `develop`, aprobadas por otra persona |
+| `develop` | Integración del trabajo de todos |
+| `feat/…`, `fix/…`, `docs/…`, `chore/…` | Una por tarea; sale de `develop`, vuelve a `develop` por Pull Request y se borra al fusionar |
+
+Nadie hace push directo a `main` ni a `develop`. Flujo completo, releases, dueños de archivos y
+convención de nombres en [`CONTRIBUTING.md`](CONTRIBUTING.md). Plan de la semana en
+[`docs/plan-trabajo.md`](docs/plan-trabajo.md).
+>>>>>>> e8b4003970b0a6433993adf9046ad9c5002dc840
 
 ---
 
