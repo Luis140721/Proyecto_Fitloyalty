@@ -19,6 +19,7 @@ Proyecto formativo — **SENA, TG. Análisis y Desarrollo de Software, Ficha 322
 - [Base de datos](#base-de-datos)
 - [Correo transaccional (Brevo)](#correo-transaccional-brevo)
 - [Ramas](#ramas)
+- [Documentación](docs/README.md)
 - [Problemas frecuentes](#problemas-frecuentes)
 
 ---
@@ -77,7 +78,7 @@ docker compose down -v             # detener y BORRAR la base de datos
 docker compose exec db psql -U fitloyalty -d fitloyalty
 ```
 
-> Guía ampliada de Docker en [`DOCKER.md`](DOCKER.md).
+> Guía ampliada de Docker en [`docs/guias/DOCKER.md`](docs/guias/DOCKER.md).
 
 ---
 
@@ -198,10 +199,10 @@ Proyecto_FitLoyalty/
 │       ├── context/         → AuthContext (JWT + estado global), TrialContext
 │       ├── pages/           → Login, Dashboard, Miembros, Check-in, Equipo…
 │       └── styles/
+├── fitloyalty_cliente/      → app móvil del miembro (Flutter)
 ├── ConsultasDB/             → scripts SQL de creación y poblado
 ├── Documentación/           → backlog, casos de uso, estimaciones
-├── Evidencias_Sustentacion/ → pruebas E2E y QA responsive
-├── Historias de Usuario/    → historias y capturas del tablero Azure DevOps
+├── docs/                    → guías, arquitectura, sustentación, evidencias y seguimiento (ver docs/README.md)
 └── docker-compose.yml
 ```
 
