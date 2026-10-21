@@ -22,6 +22,7 @@ const VENTANA_MIN = 10;
 const MOTIVOS = {
   VENCIDA: 'su membresia esta vencida',
   SIN_PLAN: 'no tiene un plan activo',
+  CONGELADA: 'su membresia esta congelada',
 };
 
 /**

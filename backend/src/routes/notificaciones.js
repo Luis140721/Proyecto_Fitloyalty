@@ -97,13 +97,14 @@ router.get(
         pool.query(
           `SELECT n.id_notificacion, mb.id_miembro, mb.nombre, mb.telefono, mb.codigo_pais_telefono,
                   GREATEST(0, EXTRACT(EPOCH FROM (NOW() - n.fecha_creacion)) / 60)::int AS minutos,
-                  (CURRENT_DATE - pc.fecha_fin)::int AS dias_vencida
+                  (CURRENT_DATE - pc.fecha_fin)::int AS dias_vencida,
+                  (pc.congelado_desde IS NOT NULL) AS congelada
              FROM notificacion n
              INNER JOIN miembro mb ON mb.id_miembro = n.id_miembro AND mb.id_gimnasio = n.id_gimnasio
              LEFT JOIN ${ULTIMO_PLAN} pc ON pc.id_miembro = mb.id_miembro
             WHERE n.id_gimnasio = $1 AND n.tipo = $2 AND n.titulo = $4 AND n.leida = FALSE
               AND n.fecha_creacion > NOW() - INTERVAL '24 hours'
-              AND (pc.fecha_fin IS NULL OR pc.fecha_fin < CURRENT_DATE)
+              AND (pc.fecha_fin IS NULL OR pc.fecha_fin < CURRENT_DATE OR pc.congelado_desde IS NOT NULL)
             ORDER BY n.fecha_creacion DESC
             LIMIT $3`,
           [gymId, TIPO_ACCESO_BLOQUEADO, TOPE, TITULO_ACCESO_BLOQUEADO]
@@ -117,6 +118,7 @@ router.get(
                  INNER JOIN miembro mb ON mb.id_miembro = pc.id_miembro
                 WHERE mb.id_gimnasio = $1 AND mb.activo = TRUE
                   AND pc.fecha_fin < CURRENT_DATE
+                  AND pc.congelado_desde IS NULL
                 ORDER BY pc.fecha_fin DESC
                 LIMIT $2`,
               [gymId, TOPE]
@@ -131,6 +133,7 @@ router.get(
                  INNER JOIN miembro mb ON mb.id_miembro = pc.id_miembro
                 WHERE mb.id_gimnasio = $1 AND mb.activo = TRUE
                   AND pc.fecha_fin >= CURRENT_DATE
+                  AND pc.congelado_desde IS NULL
                   AND pc.fecha_fin <= CURRENT_DATE + ($2 || ' days')::interval
                 ORDER BY pc.fecha_fin ASC
                 LIMIT $3`,
@@ -144,6 +147,8 @@ router.get(
              FROM miembro m
              LEFT JOIN checkin c ON c.id_miembro = m.id_miembro
             WHERE m.id_gimnasio = $1 AND m.activo = TRUE
+              AND NOT EXISTS (SELECT 1 FROM ${ULTIMO_PLAN} up
+                               WHERE up.id_miembro = m.id_miembro AND up.congelado_desde IS NOT NULL)
             GROUP BY m.id_miembro, m.nombre, m.telefono, m.codigo_pais_telefono
            HAVING MAX(c.fecha_hora) IS NULL
                OR MAX(c.fecha_hora) < NOW() - ($2 || ' days')::interval
@@ -176,8 +181,9 @@ router.get(
         ...bloqueados.rows.map((r) => ({
           ...armar(r, 'acceso-bloqueado', 'block',
             `${r.nombre} intento ingresar y fue bloqueado`,
-            `${r.dias_vencida === null ? 'Sin plan activo' : 'Membresia vencida'} · ${hace(r.minutos)}`,
-            r.dias_vencida === null ? 'no tienes un plan activo'
+            `${r.congelada ? 'Membresia congelada' : r.dias_vencida === null ? 'Sin plan activo' : 'Membresia vencida'} · ${hace(r.minutos)}`,
+            r.congelada ? 'tu membresia esta congelada'
+              : r.dias_vencida === null ? 'no tienes un plan activo'
               : `tu plan vencio ${r.dias_vencida === 0 ? 'hoy' : `hace ${r.dias_vencida} ${r.dias_vencida === 1 ? 'dia' : 'dias'}`}`),
           id: `acceso-bloqueado-${r.id_notificacion}`,
           idNotificacion: r.id_notificacion,
