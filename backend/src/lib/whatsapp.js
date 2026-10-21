@@ -220,13 +220,22 @@ async function sendWhatsAppQR(telefono, nombre, gymName, qrCodeText, qrBase64) {
  * el telefono es invalido o el envio falla, LANZA un Error: asi el llamador no
  * registra como enviado un mensaje que nunca salio.
  */
+function errorWhatsapp(code, mensaje) {
+    const err = new Error(mensaje);
+    err.code = code;
+    return err;
+}
+
 async function sendWhatsAppText(telefono, texto) {
     if (!ENABLED || !client) {
-        throw new Error('El modulo de WhatsApp esta deshabilitado en este servidor');
+        throw errorWhatsapp('WHATSAPP_DESHABILITADO', 'El modulo de WhatsApp esta deshabilitado en este servidor');
     }
+    // El cliente es perezoso: aqui se inicializa la primera vez que se envia algo
+    // (por ejemplo el job de avisos tras un reinicio), por eso nadie debe
+    // comprobar isWhatsAppReady() ANTES de llamar a esta funcion.
     const ok = await ensureClient();
     if (!ok) {
-        throw new Error('El cliente de WhatsApp no esta listo (falta autenticar el QR o iniciar Chrome)');
+        throw errorWhatsapp('WHATSAPP_NO_LISTO', 'El cliente de WhatsApp no esta listo (falta autenticar el QR o iniciar Chrome)');
     }
     let numeroLimpio = String(telefono || '').replace(/\D/g, '');
     if (numeroLimpio.length === 10) {

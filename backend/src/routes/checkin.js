@@ -12,6 +12,7 @@ const { AppError } = require('../lib/errors');
 const { requireActiveTrial } = require('../lib/trial');
 const { ULTIMO_PLAN } = require('../lib/planes');
 const { registrarAccesoBloqueado } = require('../lib/accesos');
+const { calcularGamificacion } = require('../lib/gamificacion');
 const { z } = require('zod');
 const { formatZodError } = require('../lib/validators');
 
@@ -121,13 +122,34 @@ router.post(
       }
 
       const { rows: mem } = await pool.query(
-        `SELECT tipo_plan, fecha_fin, estado_pago FROM ${ULTIMO_PLAN} pc
+        `SELECT tipo_plan, fecha_fin, estado_pago, congelado_desde FROM ${ULTIMO_PLAN} pc
           WHERE pc.id_miembro = $1`,
         [miembro.id_miembro]
       );
       const m = mem[0];
       const sinMembresia = !m;
+      const membresiaCongelada = !!(m && m.congelado_desde);
       const membresiaVencida = !!(m && m.fecha_fin && new Date(m.fecha_fin) < new Date(new Date().toDateString()));
+
+      // Una membresia congelada no entra, y se le dice que es por eso (no por vencida):
+      // aunque su fecha_fin ya haya pasado, la congelacion corre el vencimiento al descongelar.
+      if (membresiaCongelada) {
+        await registrarAccesoBloqueado(pool, {
+          gymId,
+          idMiembro: miembro.id_miembro,
+          nombre: miembro.nombre,
+          motivo: 'CONGELADA',
+        });
+        return res.status(200).json({
+          message: 'Tu membresía está congelada. Pide en recepción que la reactiven para poder ingresar.',
+          miembro: {
+            id: miembro.id_miembro,
+            nombre: miembro.nombre,
+            documento: miembro.documento,
+            estado: 'CONGELADO',
+          },
+        });
+      }
 
       // --- INICIO DEL BLOQUEO ABSOLUTO ---
       // Si la base de datos detecta fecha vencida o que no tiene plan, cortamos el acceso
@@ -185,10 +207,14 @@ router.post(
         [miembro.id_miembro, gymId, metodo, req.user.id, observacion || null, true]
       );
 
+      // Racha y hitos (RQF-11). No frena el ingreso: si falla, devuelve null.
+      const gamificacion = await calcularGamificacion(pool, { gymId, idMiembro: miembro.id_miembro });
+
       return res.status(201).json({
         message: 'Ingreso registrado.',
         duplicado: false,
         checkin: rows[0],
+        gamificacion,
         miembro: { 
           id: miembro.id_miembro, 
           nombre: miembro.nombre, 

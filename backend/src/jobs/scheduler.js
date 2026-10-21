@@ -25,7 +25,7 @@ const DISABLED = String(process.env.DISABLE_SCHEDULER || '').toLowerCase() === '
 // podria dispararse a horas raras. Forzamos America/Bogota).
 const TZ = 'America/Bogota';
 
-let expiracionTask = null;
+let expiracionTasks = [];
 let started = false;
 
 /**
@@ -40,10 +40,12 @@ function start() {
         return;
     }
 
-    // Avisos de vencimiento: todos los dias a las 9:00 AM hora Colombia.
+    // Avisos de vencimiento: todos los dias a las 9:00 AM y se reintenta a las
+    // 3:00 PM hora Colombia (por si WhatsApp no estaba listo en la primera).
+    // El job es idempotente (yaEnviado), asi que la segunda corrida solo envia
+    // lo que quedo pendiente.
     // La expresion cron es: min hora dia mes diaSemana
-    //   "0 9 * * *"  -> a las 9:00 AM todos los dias
-    expiracionTask = cron.schedule('0 9 * * *', async () => {
+    const correrExpiracion = async () => {
         console.log('[scheduler] Disparando job de avisos de vencimiento...');
         try {
             const summary = await runExpiracionJob();
@@ -56,18 +58,21 @@ function start() {
         } catch (err) {
             console.error('[scheduler] Error en job de vencimiento:', err.message);
         }
-    }, { timezone: TZ });
+    };
+    expiracionTasks = ['0 9 * * *', '0 15 * * *'].map(
+        (expr) => cron.schedule(expr, correrExpiracion, { timezone: TZ })
+    );
 
-    console.log(`[scheduler] Activo. Job de vencimiento programado todos los dias a las 09:00 (${TZ}).`);
+    console.log(`[scheduler] Activo. Job de vencimiento programado a las 09:00 y 15:00 (${TZ}).`);
 }
 
 /**
  * Detiene el scheduler (util para tests).
  */
 function stop() {
-    if (expiracionTask) {
-        expiracionTask.stop();
-        expiracionTask = null;
+    if (expiracionTasks.length) {
+        expiracionTasks.forEach((t) => t.stop());
+        expiracionTasks = [];
         started = false;
         console.log('[scheduler] Detenido.');
     }
