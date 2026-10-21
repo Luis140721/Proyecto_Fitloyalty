@@ -59,18 +59,14 @@ Internet
 ```
 PORT=3001
 NODE_ENV=production
-JWT_SECRET=fitloyalty_prod_jwt_secret_2026_8f3a9b2c7d4e1f5g
+JWT_SECRET=<genera una con: node -e "console.log(require('crypto').randomBytes(48).toString('hex'))">
 JWT_EXPIRES_IN=8h
 FRONTEND_URL=https://fitloyalty-zeta.vercel.app
-<<<<<<< HEAD
-DATABASE_URL=postgresql://neondb_owner:npg_b7ZJzsMgl5ay@ep-restless-mud-axomahp3-pooler.c-4.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require
-=======
 DATABASE_URL=postgresql://USER:PASSWORD@HOST/DATABASE?sslmode=require
->>>>>>> e8b4003970b0a6433993adf9046ad9c5002dc840
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=465
 SMTP_USER=santicossalamanca@gmail.com
-SMTP_PASSWORD=cvyuoeuanojjvefd
+SMTP_PASSWORD=<contraseña de aplicación de Gmail; no la escribas aquí>
 SMTP_FROM="FitLoyalty Soporte" <santicossalamanca@gmail.com>
 ```
 

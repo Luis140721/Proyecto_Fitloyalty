@@ -1,0 +1,50 @@
+# Linea base de cobertura del backend - semana 1 (2026-10-20)
+# Rama: chore/test-semana-01 sobre develop @ 4f88b86
+# Comando (desde backend/): npm test   (jest --coverage; mide lib, middleware, routes y jobs)
+# Umbral fijado en jest.config.js: statements 17, branches 16, functions 21, lines 18 (no puede bajar).
+#
+> fitloyalty-backend@1.0.0 test
+> jest --coverage --ci --verbose=false
+--------------------|---------|----------|---------|---------|-----------------------------------------------------------
+File                | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s                                         
+--------------------|---------|----------|---------|---------|-----------------------------------------------------------
+All files           |   17.16 |    16.88 |   21.69 |   18.08 |                                                           
+ jobs               |       0 |        0 |       0 |       0 |                                                           
+  expiracion.js     |       0 |        0 |       0 |       0 | 23-218                                                    
+  scheduler.js      |       0 |        0 |       0 |       0 | 19-76                                                     
+ lib                |   45.45 |    37.85 |   37.14 |   47.05 |                                                           
+  accesos.js        |     100 |       50 |     100 |     100 | 35                                                        
+  asyncHandler.js   |     100 |      100 |     100 |     100 |                                                           
+  auth-helpers.js   |   96.36 |    83.78 |   85.71 |   95.74 | 190-201                                                   
+  email.js          |       0 |        0 |       0 |       0 | 16-323                                                    
+  errors.js         |     100 |       75 |     100 |     100 | 23                                                        
+  invitations.js    |       0 |      100 |       0 |       0 | 9-19                                                      
+  mensajes.js       |   29.41 |    19.67 |      20 |      35 | 39-61,80-116,156-175                                      
+  planes.js         |     100 |      100 |     100 |     100 |                                                           
+  trial.js          |   52.94 |       35 |      75 |      60 | 20-22,35-41,67,75-76                                      
+  validators.js     |   57.14 |        0 |       0 |      60 | 18-19,26-27,38,46,65,90                                   
+  whatsapp.js       |   46.22 |    41.17 |   41.66 |   47.05 | 50-90,104,120-121,130,134-135,157-162,177-212,255-259,266 
+ middleware         |   69.09 |    44.23 |    62.5 |   70.37 |                                                           
+  auth.js           |      80 |    68.96 |   66.66 |      80 | 11-19,91,109-118                                          
+  errorHandler.js   |      40 |    13.04 |      50 |   42.85 | 18,33-43                                                  
+ routes             |    9.33 |     8.28 |      12 |    9.88 |                                                           
+  admin-contrato.js |       0 |        0 |       0 |       0 | 30-223                                                    
+  admin.js          |       0 |        0 |       0 |       0 | 13-146                                                    
+  asistencia.js     |    87.5 |      100 |     100 |    87.5 | 58-59                                                     
+  auth.js           |       0 |        0 |       0 |       0 | 22-647                                                    
+  billing.js        |       0 |        0 |       0 |       0 | 10-43                                                     
+  checkin.js        |   65.51 |    55.31 |   66.66 |   69.51 | 73,81-110,120,165,203-205,219-236                         
+  cliente.js        |       0 |        0 |       0 |       0 | 28-428                                                    
+  config.js         |       0 |        0 |       0 |       0 | 9-141                                                     
+  dashboard.js      |       0 |        0 |       0 |       0 | 13-437                                                    
+  jobs.js           |       0 |        0 |       0 |       0 | 17-54                                                     
+  miembros.js       |       0 |        0 |       0 |       0 | 19-996                                                    
+  notificaciones.js |   71.42 |     49.2 |      75 |   70.96 | 192-198,207-208,234-235,254-287                           
+  staff.js          |       0 |        0 |       0 |       0 | 17-602                                                    
+  vista.js          |    90.9 |      100 |     100 |   90.47 | 59-60                                                     
+--------------------|---------|----------|---------|---------|-----------------------------------------------------------
+Test Suites: 4 passed, 4 total
+Tests:       67 passed, 67 total
+Snapshots:   0 total
+Time:        2.76 s
+Ran all test suites.

@@ -1,8 +1,8 @@
 import { test, expect } from '@playwright/test';
 
 test('Alta exitosa de un nuevo miembro en FitLoyalty', async ({ page }) => {
-  // 1. Arrange: Navegar a la vista de crear miembro
-  await page.goto('/miembros/nuevo'); // Ajusta la ruta real de tu frontend
+  // 1. Arrange: Navegar a la vista de administración de miembros
+  await page.goto('/admin/miembros');
 
   // 2. Act: Llenar el formulario usando datos únicos
   const emailUnico = `miembro_${Date.now()}@test.com`;
@@ -14,6 +14,6 @@ test('Alta exitosa de un nuevo miembro en FitLoyalty', async ({ page }) => {
   // Clic en el botón de guardar o registrar
   await page.getByRole('button', { name: /guardar|registrar|crear miembro/i }).click();
 
-  // 3. Assert: Verificar que el usuario ve el éxito en pantalla
+  // 3. Assert: Verificar que la persona usuaria ve el éxito en pantalla
   await expect(page.getByText(/exito|registrado correctamente|miembro creado/i)).toBeVisible();
 });

@@ -1,0 +1,74 @@
+# Linea base de cobertura del frontend - semana 1 (2026-10-20)
+# Comando (desde frontend/): npm test   (vitest run --coverage; mide src/**, sin main.jsx)
+# Umbral en vite.config.js: lineas 1, sentencias 1, ramas 10, funciones 6 (no puede bajar).
+#
+
+> fitloyalty-frontend@1.0.0 test
+> vitest run --coverage
+
+The CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.
+
+ RUN  v2.1.9 C:/Users/Santiago/Documents/Estudios/Sena/FitLoyalty/FitLoyalty_/Proyecto_Fitloyalty/frontend
+      Coverage enabled with v8
+
+ ✓ tests/humo.test.js (1 test) 4ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  20:25:51
+   Duration  2.33s (transform 51ms, setup 181ms, collect 144ms, tests 4ms, environment 771ms, prepare 237ms)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |    1.11 |       10 |    6.12 |    1.11 |                   
+ src               |   37.66 |    55.55 |    37.5 |   37.66 |                   
+  App.jsx          |       0 |        0 |       0 |       0 | 1-101             
+  api.js           |   52.17 |     62.5 |   42.85 |   52.17 | ...41-149,157-160 
+ src/components    |       0 |        0 |       0 |       0 |                   
+  AdminLayout.jsx  |       0 |        0 |       0 |       0 | 1-188             
+  AuthPanel.jsx    |       0 |        0 |       0 |       0 | 1-38              
+  BadgeEstado.jsx  |       0 |        0 |       0 |       0 | 1-60              
+  ...verArriba.jsx |       0 |        0 |       0 |       0 | 1-44              
+  CardGlass.jsx    |       0 |        0 |       0 |       0 | 1-95              
+  EmptyState.jsx   |       0 |        0 |       0 |       0 | 1-55              
+  ErrorBanner.jsx  |       0 |        0 |       0 |       0 | 1-134             
+  ...rBoundary.jsx |       0 |        0 |       0 |       0 | 1-69              
+  ...oWhatsapp.jsx |       0 |        0 |       0 |       0 | 1-25              
+  LegalLayout.jsx  |       0 |        0 |       0 |       0 | 1-50              
+  Logo.jsx         |       0 |        0 |       0 |       0 | 1-90              
+  ...icaciones.jsx |       0 |        0 |       0 |       0 | 1-196             
+  MenuPerfil.jsx   |       0 |        0 |       0 |       0 | 1-93              
+  Modal.jsx        |       0 |        0 |       0 |       0 | 1-126             
+  ...ransition.jsx |       0 |        0 |       0 |       0 | 1-44              
+  ...ctedRoute.jsx |       0 |        0 |       0 |       0 | 1-31              
+  Ripple.jsx       |       0 |        0 |       0 |       0 | 1-76              
+  Sidebar.jsx      |       0 |        0 |       0 |       0 | 1-83              
+  UserAvatar.jsx   |       0 |        0 |       0 |       0 | 1-34              
+ src/context       |       0 |        0 |       0 |       0 |                   
+  AuthContext.jsx  |       0 |        0 |       0 |       0 | 1-239             
+  TrialContext.jsx |       0 |        0 |       0 |       0 | 1-41              
+ src/hooks         |       0 |        0 |       0 |       0 |                   
+  ...matedCount.js |       0 |        0 |       0 |       0 | 1-93              
+  useApiErrors.js  |       0 |        0 |       0 |       0 | 1-39              
+ src/pages         |       0 |        0 |       0 |       0 |                   
+  ...nvitePage.jsx |       0 |        0 |       0 |       0 | 1-276             
+  CheckinPage.jsx  |       0 |        0 |       0 |       0 | 1-406             
+  ConfigPage.jsx   |       0 |        0 |       0 |       0 | 1-274             
+  ...boardPage.jsx |       0 |        0 |       0 |       0 | 1-710             
+  ...rdUsuario.jsx |       0 |        0 |       0 |       0 | 1-172             
+  ...uentaPage.jsx |       0 |        0 |       0 |       0 | 1-187             
+  ...swordPage.jsx |       0 |        0 |       0 |       0 | 1-338             
+  LandingPage.jsx  |       0 |        0 |       0 |       0 | 1-375             
+  LoginPage.jsx    |       0 |        0 |       0 |       0 | 1-152             
+  MiembrosPage.jsx |       0 |        0 |       0 |       0 | 1-2359            
+  NotFoundPage.jsx |       0 |        0 |       0 |       0 | 1-93              
+  ...DatosPage.jsx |       0 |        0 |       0 |       0 | 1-152             
+  ...cidadPage.jsx |       0 |        0 |       0 |       0 | 1-156             
+  ...OwnerPage.jsx |       0 |        0 |       0 |       0 | 1-309             
+  RegisterPage.jsx |       0 |        0 |       0 |       0 | 1-161             
+  ...swordPage.jsx |       0 |        0 |       0 |       0 | 1-353             
+  StaffPage.jsx    |       0 |        0 |       0 |       0 | 1-655             
+  TerminosPage.jsx |       0 |        0 |       0 |       0 | 1-162             
+-------------------|---------|----------|---------|---------|-------------------

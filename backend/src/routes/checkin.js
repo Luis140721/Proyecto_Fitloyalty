@@ -2,14 +2,6 @@
  * routes/checkin.js
  *
  * Check-in de miembros (asistencia al gimnasio).
-<<<<<<< HEAD
- *
- *   POST /api/admin/checkin   -> registra una entrada (manual o por codigo QR)
- *   GET  /api/admin/checkin   -> historial reciente del gimnasio
- *
- * Handlers con asyncHandler: cualquier rechazo va al errorHandler central.
-=======
->>>>>>> e8b4003970b0a6433993adf9046ad9c5002dc840
  */
 const express = require('express');
 const crypto  = require('crypto');
@@ -19,32 +11,25 @@ const asyncHandler = require('../lib/asyncHandler');
 const { AppError } = require('../lib/errors');
 const { requireActiveTrial } = require('../lib/trial');
 const { ULTIMO_PLAN } = require('../lib/planes');
+const { registrarAccesoBloqueado } = require('../lib/accesos');
 const { z } = require('zod');
 const { formatZodError } = require('../lib/validators');
 
 const router = express.Router();
 
-<<<<<<< HEAD
-// Clave secreta para descifrar QR (debe ser la misma que en miembros.js)
-const QR_ENCRYPTION_KEY = process.env.QR_ENCRYPTION_KEY || 'FitLoyalty2024SecretKey';
-
-/*
- * Segundos durante los cuales un mismo miembro no vuelve a registrar ingreso.
- * Suficiente para absorber los disparos repetidos del lector y para que nadie
- * marque dos veces por equivocacion, pero corto por si alguien sale y entra.
- */
-const VENTANA_ANTIREBOTE_SEG = Number(process.env.CHECKIN_VENTANA_SEG || 90);
-
-// Función para descifrar el código QR
-=======
 const QR_ENCRYPTION_KEY = process.env.QR_ENCRYPTION_KEY || 'FitLoyalty2024SecretKey';
 const VENTANA_ANTIREBOTE_SEG = Number(process.env.CHECKIN_VENTANA_SEG || 90);
 
->>>>>>> e8b4003970b0a6433993adf9046ad9c5002dc840
+// scryptSync es deliberadamente lento (decenas de ms). Antes se ejecutaba en
+// cada decifrado, y el check-in decifra el QR de CADA miembro del gimnasio:
+// con cientos de miembros eso tardaba segundos (RQNF-01). La clave solo
+// depende de QR_ENCRYPTION_KEY, asi que se deriva una vez.
+const QR_KEY = crypto.scryptSync(QR_ENCRYPTION_KEY, 'salt', 32);
+
 function decryptQrCode(encrypted) {
   try {
     const algorithm = 'aes-256-cbc';
-    const key = crypto.scryptSync(QR_ENCRYPTION_KEY, 'salt', 32);
+    const key = QR_KEY;
     const parts = encrypted.split(':');
     const iv = Buffer.from(parts.shift(), 'hex');
     const encryptedText = parts.join(':');
@@ -53,10 +38,6 @@ function decryptQrCode(encrypted) {
     decrypted += decipher.final('utf8');
     return decrypted;
   } catch (e) {
-<<<<<<< HEAD
-    // Si falla el descifrado, retornar el texto original (para compatibilidad con QRs antiguos)
-=======
->>>>>>> e8b4003970b0a6433993adf9046ad9c5002dc840
     return encrypted;
   }
 }
@@ -88,10 +69,6 @@ router.post(
     let { codigo, documento, metodo, observacion } = parsed.data;
     const gymId = req.user.gymId;
 
-<<<<<<< HEAD
-    // Descifrar el código QR si está cifrado
-=======
->>>>>>> e8b4003970b0a6433993adf9046ad9c5002dc840
     if (codigo) {
       codigo = decryptQrCode(codigo);
     }
@@ -100,12 +77,7 @@ router.post(
       let miembro;
       
       if (codigo) {
-<<<<<<< HEAD
-        // Para búsqueda por código QR, necesitamos comparar con el valor descifrado
-        // Primero intentamos buscar directamente (por si es un código antiguo sin cifrar)
-=======
         // CORRECCIÓN: Se quitó "estado" del SELECT porque no existe en la tabla
->>>>>>> e8b4003970b0a6433993adf9046ad9c5002dc840
         const { rows: directMatch } = await pool.query(
           `SELECT id_miembro, nombre, documento, codigo_qr, qr_imagen FROM miembro 
            WHERE id_gimnasio = $1 AND activo = TRUE AND codigo_qr = $2 LIMIT 1`,
@@ -115,10 +87,6 @@ router.post(
         if (directMatch.length > 0) {
           miembro = directMatch[0];
         } else {
-<<<<<<< HEAD
-          // Si no encontramos con el código original, buscar todos y descifrar para comparar
-=======
->>>>>>> e8b4003970b0a6433993adf9046ad9c5002dc840
           const { rows: allMembers } = await pool.query(
             `SELECT id_miembro, nombre, documento, codigo_qr, qr_imagen FROM miembro 
              WHERE id_gimnasio = $1 AND activo = TRUE`,
@@ -152,15 +120,6 @@ router.post(
         throw new AppError(400, 'codigo o documento requerido', 'VALIDATION_ERROR');
       }
 
-<<<<<<< HEAD
-      /*
-       * Estado del plan. Se lee de `plan_cobro`, que es donde el alta guarda
-       * el plan del miembro; antes se consultaba `membresia`, que nunca se
-       * llena, y por eso TODO ingreso salia marcado como "sin membresia"
-       * aunque la persona estuviera al dia.
-       */
-=======
->>>>>>> e8b4003970b0a6433993adf9046ad9c5002dc840
       const { rows: mem } = await pool.query(
         `SELECT tipo_plan, fecha_fin, estado_pago FROM ${ULTIMO_PLAN} pc
           WHERE pc.id_miembro = $1`,
@@ -168,27 +127,18 @@ router.post(
       );
       const m = mem[0];
       const sinMembresia = !m;
-<<<<<<< HEAD
-      // Se compara por fecha, no por marca de tiempo: un plan que vence hoy
-      // todavia sirve hoy.
-      const membresiaVencida = !!(m && m.fecha_fin && new Date(m.fecha_fin) < new Date(new Date().toDateString()));
-
-      /*
-       * Anti-rebote. El lector de QR dispara varias veces por segundo mientras
-       * el codigo siga delante de la camara, y sin esto cada disparo inserta
-       * una fila. La proteccion va aqui y no solo en el front porque afecta a
-       * cualquier cliente: el formulario manual, otra pestana abierta o un
-       * segundo lector en la puerta.
-       *
-       * Dentro de la ventana no se inserta nada: se devuelve el ingreso que ya
-       * existe, con 200 en vez de 201 para que el front sepa distinguirlos.
-       */
-=======
       const membresiaVencida = !!(m && m.fecha_fin && new Date(m.fecha_fin) < new Date(new Date().toDateString()));
 
       // --- INICIO DEL BLOQUEO ABSOLUTO ---
       // Si la base de datos detecta fecha vencida o que no tiene plan, cortamos el acceso
       if (membresiaVencida || sinMembresia) {
+        // Avisa al administrador por la campana (RQF-06). No frena la respuesta.
+        await registrarAccesoBloqueado(pool, {
+          gymId,
+          idMiembro: miembro.id_miembro,
+          nombre: miembro.nombre,
+          motivo: sinMembresia ? 'SIN_PLAN' : 'VENCIDA',
+        });
         return res.status(200).json({
           miembro: {
             id: miembro.id_miembro,
@@ -200,7 +150,6 @@ router.post(
       }
       // --- FIN DEL BLOQUEO ABSOLUTO ---
 
->>>>>>> e8b4003970b0a6433993adf9046ad9c5002dc840
       const { rows: repetido } = await pool.query(
         `SELECT id_checkin, fecha_hora, metodo
            FROM checkin
@@ -233,23 +182,11 @@ router.post(
         `INSERT INTO checkin (id_miembro, id_gimnasio, metodo, id_usuario, observacion, valido)
          VALUES ($1, $2, $3, $4, $5, $6)
          RETURNING id_checkin, fecha_hora, metodo`,
-<<<<<<< HEAD
-        [miembro.id_miembro, gymId, metodo, req.user.id, observacion || null, !membresiaVencida]
-      );
-
-      return res.status(201).json({
-        message: membresiaVencida
-          ? 'Plan vencido. Ingreso registrado con aviso.'
-          : sinMembresia
-            ? 'Sin plan registrado. Ingreso registrado con aviso.'
-            : 'Ingreso registrado.',
-=======
         [miembro.id_miembro, gymId, metodo, req.user.id, observacion || null, true]
       );
 
       return res.status(201).json({
         message: 'Ingreso registrado.',
->>>>>>> e8b4003970b0a6433993adf9046ad9c5002dc840
         duplicado: false,
         checkin: rows[0],
         miembro: { 
@@ -260,11 +197,7 @@ router.post(
           qr_imagen: miembro.qr_imagen
         },
         membresia: m || null,
-<<<<<<< HEAD
-        advertencia: membresiaVencida ? 'membresia-vencida' : sinMembresia ? 'sin-membresia' : null,
-=======
         advertencia: null,
->>>>>>> e8b4003970b0a6433993adf9046ad9c5002dc840
       });
     } catch (err) {
       if (err instanceof AppError) throw err;
@@ -306,3 +239,4 @@ router.get(
 );
 
 module.exports = router;
+module.exports.decryptQrCode = decryptQrCode; // expuesto para pruebas

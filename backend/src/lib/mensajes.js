@@ -30,6 +30,9 @@ function mensajeParaMiembro(tipo, gym, nombre, dato) {
   const primerNombre = String(nombre || '').split(' ')[0];
   const saludo = `Hola ${primerNombre}, te saludamos de ${gym}.`;
 
+  if (tipo === 'acceso-bloqueado') {
+    return `${saludo} Hoy intentaste ingresar y no pudimos dejarte pasar porque ${dato}. Pasa por recepcion y lo resolvemos para que sigas entrenando.`;
+  }
   if (tipo === 'vencida') {
     return `${saludo} Tu plan vencio ${dato}. Pasa cuando quieras y lo renovamos para que no pierdas el ritmo.`;
   }
@@ -59,8 +62,6 @@ function enPalabras(dias, modo = 'pasado') {
 }
 
 module.exports = { telefonoWhatsapp, mensajeParaMiembro, enPalabras };
-<<<<<<< HEAD
-=======
 
 // ---------------------------------------------------------------------------
 // Plantillas usadas por el job automatico de avisos de vencimiento
@@ -254,4 +255,3 @@ function contratoMembresia({
         `Atte. La administracion de ${G(gymNombre)}`,
     ].join('\n');
 }
->>>>>>> e8b4003970b0a6433993adf9046ad9c5002dc840
