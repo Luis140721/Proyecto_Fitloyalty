@@ -10,24 +10,33 @@ const API_URL = 'http://localhost:3001/api';
 const DATABASE_URL =
   process.env.E2E_DATABASE_URL ?? 'postgres://fitloyalty_test:fitloyalty_test@localhost:5433/fitloyalty_test';
 
-// Guardia: los E2E crean gimnasios y usuarios de verdad. Si la URL apunta a otro
-// host (Neon, Render) o al puerto 5432 (la BD de desarrollo), no se corre nada.
-// El mensaje muestra solo host y puerto, nunca la URL completa con la clave.
+// Guardia con lista permitida: los E2E crean gimnasios y usuarios de verdad, asi
+// que solo se acepta la BD de pruebas local. Cualquier otra URL (la de desarrollo
+// en 5432 o 5434, Neon, Render) se rechaza antes de levantar nada.
+// pg obedece ?host=, ?port= y ?hostaddr= por encima del host y el puerto de la
+// URL, por eso esos parametros tambien se rechazan.
+// El mensaje muestra solo host:puerto/BD, nunca el usuario ni la clave.
 function exigirBdDePruebas(url) {
-  let host;
-  let puerto;
+  let u;
+  let bd;
   try {
-    const u = new URL(url);
-    host = u.hostname;
-    puerto = u.port || '5432';
+    u = new URL(url);
+    bd = decodeURIComponent(u.pathname.replace(/^\//, ''));
   } catch {
     throw new Error('E2E_DATABASE_URL no es una URL valida de PostgreSQL.');
   }
-  if (!['localhost', '127.0.0.1'].includes(host) || puerto === '5432') {
+  const motivos = [];
+  if (!['postgres:', 'postgresql:'].includes(u.protocol)) motivos.push('el protocolo no es postgres:// ni postgresql://');
+  if (!['localhost', '127.0.0.1'].includes(u.hostname)) motivos.push('el host no es 127.0.0.1 ni localhost');
+  if (u.port !== '5433') motivos.push('el puerto no es 5433');
+  if (!bd.endsWith('_test')) motivos.push('el nombre de la BD no termina en _test');
+  const redirigen = [...u.searchParams.keys()].filter((k) => ['host', 'port', 'hostaddr'].includes(k.toLowerCase()));
+  if (redirigen.length > 0) motivos.push(`trae parametros que cambian el destino (${redirigen.join(', ')})`);
+  if (motivos.length > 0) {
     throw new Error(
-      'Los E2E solo corren contra la BD de pruebas local (db-test, puerto 5433). ' +
-        `Recibido: ${host}:${puerto}. Levantala con "npm run db:up" y no apuntes ` +
-        'E2E_DATABASE_URL a la BD de desarrollo ni a produccion.',
+      'Los E2E solo corren contra la BD de pruebas local (db-test, 127.0.0.1:5433, BD terminada en _test). ' +
+        `Recibido: ${u.hostname || '?'}:${u.port || '(sin puerto)'}/${bd || '?'}. Motivo: ${motivos.join('; ')}. ` +
+        'Levantala con "npm run db:up" y no apuntes E2E_DATABASE_URL a otra BD.',
     );
   }
 }
