@@ -1,0 +1,209 @@
+# Cobertura del backend - medicion del 2026-10-20
+#
+# Codigo medido: develop @ 3c35d53 (con los PR #10, #30, #32 y #33), sin cambios locales.
+# Comando (desde backend/, con Jest 29 de backend/node_modules):
+#   npm test -- --coverage
+# En este equipo se agrego --testMatch "**/tests/**/*.test.js" porque la ruta del worktree
+# tiene una carpeta .claude y el glob de Jest la lee mal en Windows; en el CI (Linux) no hace falta.
+# La cobertura mide lo que fija backend/jest.config.js (src/lib, src/middleware, routes/checkin.js
+# y routes/notificaciones.js). RQNF-07 pide el 70 % en los modulos de check-in y alertas.
+# Usado como evidencia de RQNF-07 en docs/avance-requisitos.xlsx (hoja Evidencias, filas de RQNF-07).
+#
+PASS tests/auth-helpers.test.js
+  auth-helpers: mapRol
+    √ mapea nombres de rol al formato del frontend (2 ms)
+    √ mapea ids numéricos de rol
+    √ regresa unknown para entradas nulas o vacías (1 ms)
+    √ regresa snake_case para roles desconocidos
+  auth-helpers: validarEmail
+    √ acepta emails válidos
+    √ rechaza emails inválidos (1 ms)
+  auth-helpers: validarContrasena
+    √ acepta contraseñas válidas (>=6 chars, con dígito, sin espacios)
+    √ rechaza contraseñas muy cortas (1 ms)
+    √ rechaza contraseñas sin dígitos
+    √ rechaza contraseñas con espacios (incluso si tienen dígitos)
+    √ rechaza entradas no-string o vacías
+  auth-helpers: validarTelefonoColombiano
+    √ acepta teléfonos móviles colombianos (10 dígitos empezando con 3)
+    √ rechaza teléfonos que no empiezan con 3
+    √ rechaza teléfonos con longitud incorrecta
+    √ rechaza entradas no-string o vacías (1 ms)
+  auth-helpers: normEmail
+    √ lowercase + trim
+    √ maneja entradas null/undefined/number sin explotar (1 ms)
+  auth-helpers: random6
+    √ devuelve exactamente 6 dígitos numéricos como string (3 ms)
+  auth-helpers: usuarioSeguro + avatarUrl
+    √ nunca expone password_hash (4 ms)
+    √ respeta foto_url cuando viene en la fila
+    √ avatarUrl hace encode del nombre
+  auth-helpers: generarToken + generarResetToken
+    √ generarToken incluye id, name, email, role, gymId y omite password_hash (3 ms)
+    √ generarResetToken lleva purpose=reset y expira
+  RQF-02: vigencia del token del personal
+    √ sin JWT_EXPIRES_IN el token del personal vence a las 8 horas
+    √ JWT_EXPIRES_IN cambia la vigencia (1 ms)
+    √ un número sin unidad en JWT_EXPIRES_IN son segundos, no milisegundos (1 ms)
+    √ expiresIn explícito tiene prioridad sobre JWT_EXPIRES_IN (1 ms)
+    √ pasadas las 8 horas jwt.verify rechaza el token (1 ms)
+    √ el middleware authenticate responde 401 con un token vencido (1 ms)
+    √ el token del miembro (app Flutter) sigue en 30 días aunque cambie JWT_EXPIRES_IN
+    √ una vigencia inválida en JWT_EXPIRES_IN cae en 8 horas en vez de romper el login (1 ms)
+    √ authenticate rechaza (401) un token del personal sin exp, emitido antes de RQF-02
+    √ authenticate deja pasar un token del personal con exp y el del miembro (1 ms)
+    √ RQF-01: un usuario desactivado pierde el acceso aunque su token siga vigente (1 ms)
+    √ RQF-01: un usuario que ya no existe o que pasó a otro gimnasio recibe 401
+    √ RQF-01: el rol sale de la BD, no del token (un admin bajado a recepción deja de ser admin) (1 ms)
+    √ RQF-01: si la base falla, responde 503 por el manejador de errores (1 ms)
+
+PASS tests/acceso-bloqueado.test.js
+  registrarAccesoBloqueado
+    √ crea el aviso con el tipo, el miembro y el motivo (2 ms)
+    √ motivo SIN_PLAN usa su propio texto (1 ms)
+    √ si ya hay un aviso reciente (rowCount 0) devuelve false sin error
+    √ nunca lanza aunque la base falle (1 ms)
+  POST /api/admin/checkin
+    √ membresia vencida: responde VENCIDO, no registra asistencia y avisa (63 ms)
+    √ sin plan: avisa con el motivo SIN_PLAN (7 ms)
+    √ membresia al dia: registra la entrada y NO crea aviso (6 ms)
+    √ si falla el registro del aviso, el check-in igual responde (3 ms)
+  campana: GET /api/admin/notificaciones
+    √ un acceso bloqueado aparece primero y no se repite como vencida (6 ms)
+    √ sin plan: el detalle y el mensaje lo dicen (2 ms)
+    √ la consulta solo trae avisos sin ver, de las ultimas 24 h y del gimnasio del token (1 ms)
+    √ un token de miembro no puede ver la campana (403) (2 ms)
+  POST /api/admin/notificaciones/acceso-bloqueado/:id/leida
+    √ marca como visto y filtra por gimnasio y tipo (3 ms)
+    √ un aviso de otro gimnasio (0 filas) da 404 (3 ms)
+    √ id invalido da 400 y no toca la base (2 ms)
+    √ token de miembro da 403 (1 ms)
+  membresia congelada (RQF-04)
+    √ el check-in pide congelado_desde del plan vigente (2 ms)
+    √ congelada con fecha vigente: niega con estado CONGELADO y el mensaje para la persona (2 ms)
+    √ congelada Y con la fecha ya pasada: dice CONGELADO, no VENCIDO (2 ms)
+    √ descongelada con la fecha vigente: entra normal (201) (2 ms)
+    campana
+      √ las consultas de vencidas, por vencer y en riesgo excluyen a las congeladas (1 ms)
+      √ un acceso bloqueado de una congelada se muestra como "Membresia congelada" (1 ms)
+      √ la consulta de bloqueos incluye a las congeladas aunque no esten vencidas (1 ms)
+  avisos de vencimiento: miembrosPorVencer excluye a las congeladas
+    √ la consulta del job filtra pc.congelado_desde IS NULL (3 ms)
+
+PASS tests/checkin-notificaciones.test.js
+  POST /api/admin/checkin: busqueda del miembro
+    √ por QR que coincide directo: 201 y registra la asistencia (12 ms)
+    √ por QR cifrado: lo descifra y lo encuentra (46 ms)
+    √ QR que no coincide directo: busca entre los QR cifrados del gimnasio (48 ms)
+    √ QR desconocido: 404 (2 ms)
+    √ documento desconocido: 404 (2 ms)
+    √ todas las busquedas filtran por el gimnasio del token (2 ms)
+    √ sin codigo ni documento: 400 y no consulta miembros (2 ms)
+  POST /api/admin/checkin: registro y permisos
+    √ un segundo ingreso dentro de la ventana es duplicado: 200, sin nuevo INSERT (1 ms)
+    √ error de base de datos al registrar: 503 (3 ms)
+    √ un token de miembro (app movil) no puede hacer check-in: 403 (1 ms)
+    √ sin token: 401 (1 ms)
+  GET /api/admin/checkin (historial)
+    √ filtra por gimnasio y limita entre 1 y 200 (3 ms)
+    √ error de base de datos: 503 (1 ms)
+  POST /api/admin/notificaciones/enviado
+    √ deja constancia del envio y de la notificacion: 201 (2 ms)
+    √ el miembro debe ser del gimnasio del token: si no, 404 y no escribe nada (13 ms)
+    √ canal invalido: 400 (2 ms)
+    √ si la base falla al guardar: 503 (2 ms)
+    √ token de miembro: 403 (2 ms)
+
+PASS tests/expiracion.test.js
+  runJob: envio y marcado
+    √ envia y marca como enviado (17 ms)
+    √ no consulta isWhatsAppReady: funciona con un cliente sin inicializar
+    √ aunque isWhatsAppReady diga false igual intenta enviar (el envio lo inicializa)
+    √ si el envio falla no marca como enviado y cuenta el error (1 ms)
+    √ si WhatsApp no esta listo (error del envio) queda pendiente para el reintento (1 ms)
+    √ respeta la ventana de dias del gimnasio
+  runJob: maximo dos avisos por plan
+    √ con 3 dias de aviso salen 2 mensajes en total (al entrar y el dia 0), no 4 (1 ms)
+    √ con 30 dias de aviso tambien son 2, no 31 (1 ms)
+    √ si el servidor estuvo dormido el dia exacto, el aviso sale al dia siguiente (no se pierde)
+    √ el dia del vencimiento envia aunque el aviso anterior ya se haya mandado (1 ms)
+    √ el dia del vencimiento no repite si ya se mando
+    √ avisos ya enviados dia a dia antes del cambio no se reenvian
+  runJob con el modulo real de WhatsApp, sin precalentar (como tras un reinicio)
+    √ el job inicializa WhatsApp por su cuenta y envia el aviso (80 ms)
+    √ si WhatsApp no llega a estar listo, no marca nada y cuenta el error (3 ms)
+
+PASS tests/aislamiento.test.js
+  /api/vista/miembros-activos
+    √ sin token -> 401 (11 ms)
+    √ token de un miembro (app movil) -> 403 y no consulta la base (2 ms)
+    √ staff sin gimnasio -> 403 (1 ms)
+    √ staff: ambas consultas filtran por el gimnasio del token (2 ms)
+    √ otro gimnasio usa su propio id (1 ms)
+  /api/asistencia
+    √ token de un miembro -> 403 (1 ms)
+    √ recepcionista -> 200 filtrando por su gimnasio (1 ms)
+  check-in: decifrado de QR
+    √ descifra un codigo cifrado y devuelve en claro uno que no lo esta
+    √ no vuelve a derivar la clave (scryptSync) en cada decifrado (11 ms)
+
+PASS tests/gamificacion.test.js
+  contarRacha
+    √ sin ingresos no hay racha (1 ms)
+    √ un solo dia es racha de 1
+    √ cuenta los dias seguidos y se corta en el primer hueco
+    √ cruza el cambio de mes y de ano
+  armarMensaje
+    √ con hito nuevo usa el mensaje del gimnasio
+    √ con racha de varios dias lo dice y avisa lo que falta
+    √ el primer dia invita a volver
+  calcularGamificacion
+    √ otorga el hito de racha al llegar a la meta (1 ms)
+    √ otorga el hito de total de asistencias
+    √ sin hitos alcanzados solo informa racha y lo que falta
+    √ si otro check-in ya otorgo el hito (ON CONFLICT) no lo repite
+    √ si la base falla devuelve null y no lanza
+
+PASS tests/contrato.test.js
+  POST /api/admin/miembros/:id/contrato/enviar
+    √ intenta enviar aunque isWhatsAppReady() sea falso (el envio inicializa el cliente) (20 ms)
+    √ si WhatsApp no esta listo: exito=false, guia del QR y cliente_listo=false (3 ms)
+    √ otro error de envio: exito=false con el mensaje del error (2 ms)
+
+PASS tests/whatsapp-text.test.js
+  sendWhatsAppText
+    √ lanza si el modulo esta deshabilitado (10 ms)
+    √ lanza si el cliente no esta listo (2 ms)
+    √ lanza con telefono invalido (1 ms)
+    √ relanza el error de client.sendMessage (1 ms)
+    √ envia al chat con prefijo 57 cuando todo esta bien (2 ms)
+
+--------------------|---------|----------|---------|---------|-----------------------------------------------------------
+File                | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s                                         
+--------------------|---------|----------|---------|---------|-----------------------------------------------------------
+All files           |   67.23 |    54.48 |   61.11 |   67.81 |                                                           
+ lib                |   56.02 |    47.98 |   54.87 |   56.76 |                                                           
+  accesos.js        |     100 |       50 |     100 |     100 | 36                                                        
+  asyncHandler.js   |     100 |      100 |     100 |     100 |                                                           
+  auth-helpers.js   |   96.36 |    83.78 |   85.71 |   95.74 | 190-201                                                   
+  email.js          |       0 |        0 |       0 |       0 | 16-323                                                    
+  errors.js         |     100 |       75 |     100 |     100 | 23                                                        
+  gamificacion.js   |     100 |      100 |     100 |     100 |                                                           
+  invitations.js    |       0 |      100 |       0 |       0 | 9-19                                                      
+  mensajes.js       |   60.78 |    44.26 |      80 |    72.5 | 39-61,80-81                                               
+  planes.js         |     100 |      100 |     100 |     100 |                                                           
+  trial.js          |   52.94 |       35 |      75 |      60 | 20-22,35-41,67,75-76                                      
+  validators.js     |   66.66 |    44.44 |   14.28 |      70 | 26-27,38,46,65,90                                         
+  whatsapp.js       |    47.7 |    41.17 |   46.15 |   48.57 | 50-90,104,120-121,130,134-135,157-162,177-212,264-268,275 
+ middleware         |    70.9 |    46.15 |    62.5 |   70.37 |                                                           
+  auth.js           |      80 |    68.96 |   66.66 |      80 | 11-19,91,109-118                                          
+  errorHandler.js   |   46.66 |    17.39 |      50 |   42.85 | 18,33-43                                                  
+ routes             |   95.09 |    74.57 |   88.88 |   94.66 |                                                           
+  checkin.js        |   97.84 |    92.15 |     100 |   97.72 | 102,121                                                   
+  notificaciones.js |   91.42 |    61.19 |   83.33 |   90.32 | 198-204,213-214,240-241                                   
+--------------------|---------|----------|---------|---------|-----------------------------------------------------------
+Test Suites: 8 passed, 8 total
+Tests:       122 passed, 122 total
+Snapshots:   0 total
+Time:        8.215 s
+Ran all test suites.
