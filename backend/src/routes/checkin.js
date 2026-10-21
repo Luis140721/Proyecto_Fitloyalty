@@ -12,6 +12,7 @@ const { AppError } = require('../lib/errors');
 const { requireActiveTrial } = require('../lib/trial');
 const { ULTIMO_PLAN } = require('../lib/planes');
 const { registrarAccesoBloqueado } = require('../lib/accesos');
+const { calcularGamificacion } = require('../lib/gamificacion');
 const { z } = require('zod');
 const { formatZodError } = require('../lib/validators');
 
@@ -206,10 +207,14 @@ router.post(
         [miembro.id_miembro, gymId, metodo, req.user.id, observacion || null, true]
       );
 
+      // Racha y hitos (RQF-11). No frena el ingreso: si falla, devuelve null.
+      const gamificacion = await calcularGamificacion(pool, { gymId, idMiembro: miembro.id_miembro });
+
       return res.status(201).json({
         message: 'Ingreso registrado.',
         duplicado: false,
         checkin: rows[0],
+        gamificacion,
         miembro: { 
           id: miembro.id_miembro, 
           nombre: miembro.nombre, 
