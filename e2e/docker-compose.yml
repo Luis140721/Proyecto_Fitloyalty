@@ -11,15 +11,18 @@ name: fitloyalty-e2e
 
 services:
   db-test:
-    image: postgres:16-alpine
+    # Version de parche fija para que todos prueben contra el mismo Postgres.
+    image: postgres:16.15-alpine
     # Credenciales SOLO de prueba: no son secretos. La BD es desechable y solo
     # escucha en este equipo; nunca uses estos valores en otro ambiente.
     environment:
       POSTGRES_USER: fitloyalty_test
       POSTGRES_PASSWORD: fitloyalty_test
       POSTGRES_DB: fitloyalty_test
+    # Solo en 127.0.0.1: sin la IP, Docker publica el puerto en todas las
+    # interfaces y la BD quedaria abierta a la red con una clave conocida.
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
     # Datos en memoria: se borran al eliminar el contenedor (npm run db:down).
     tmpfs:
       - /var/lib/postgresql/data

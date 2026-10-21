@@ -7,8 +7,10 @@ const API_URL = 'http://localhost:3001/api';
 
 // BD de pruebas desechable (servicio db-test de e2e/docker-compose.yml). Las
 // credenciales son de prueba, no secretos. Se puede cambiar con E2E_DATABASE_URL.
+// 127.0.0.1 y no localhost: el contenedor solo escucha en IPv4 y en Windows Node
+// puede resolver localhost a ::1.
 const DATABASE_URL =
-  process.env.E2E_DATABASE_URL ?? 'postgres://fitloyalty_test:fitloyalty_test@localhost:5433/fitloyalty_test';
+  process.env.E2E_DATABASE_URL ?? 'postgres://fitloyalty_test:fitloyalty_test@127.0.0.1:5433/fitloyalty_test';
 
 // Guardia con lista permitida: los E2E crean gimnasios y usuarios de verdad, asi
 // que solo se acepta la BD de pruebas local. Cualquier otra URL (la de desarrollo
