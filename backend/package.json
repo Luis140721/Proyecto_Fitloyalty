@@ -5,6 +5,7 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
+    "test": "jest --coverage",
     "dev": "nodemon src/index.js",
     "seed": "node src/db/seed_pg.js",
     "postinstall": "node scripts/postinstall.js"
