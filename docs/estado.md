@@ -24,9 +24,9 @@ Solo se marcó lo que está fusionado en `develop` y revisado por el verificador
 
 **No cambian todavía:** RQF-09 (issue #24), y RQNF-15 y RQNF-09 (PR #28, pendiente del 403).
 
-**Pendiente de seguridad (zona de Santiago).** `Evidencias_Sustentacion/Informe_Pruebas_E2E.md:99` deja en texto plano la contraseña de la recepcionista del gimnasio de ejemplo FitZone. Como producción tiene los gimnasios de ejemplo (issue #24), esa cuenta puede existir allí: hay que cambiarle la contraseña y quitar la línea del documento.
+**Pendiente de seguridad (zona de Santiago).** `docs/sustentacion/evidencias/Informe_Pruebas_E2E.md:99` deja en texto plano la contraseña de la recepcionista del gimnasio de ejemplo FitZone. Como producción tiene los gimnasios de ejemplo (issue #24), esa cuenta puede existir allí: hay que cambiarle la contraseña y quitar la línea del documento.
 
-**Corrección de la nota del 2026-10-18.** `Evidencias_Sustentacion/Santiago/C2_Recuperacion_Clave/README.md:27` nunca tuvo una clave real: en todo su historial fue el marcador `xxxx xxxx xxxx xxxx`, que mi clasificador del 18 no distinguió de una contraseña de aplicación. El PR #31 lo cambió por un marcador más claro. La nota de «Hallazgos fuera de alcance» queda corregida.
+**Corrección de la nota del 2026-10-18.** `docs/sustentacion/evidencias/Santiago/C2_Recuperacion_Clave/README.md:27` nunca tuvo una clave real: en todo su historial fue el marcador `xxxx xxxx xxxx xxxx`, que mi clasificador del 18 no distinguió de una contraseña de aplicación. El PR #31 lo cambió por un marcador más claro. La nota de «Hallazgos fuera de alcance» queda corregida.
 
 ## Actualización del 2026-10-19 (tarea L7)
 
@@ -201,8 +201,8 @@ Ajustes de redacción:
 - **Funcional:** la eliminación de cuenta (`auth.js:480-561`) siempre falla y responde 500 (RQF-22). **Resuelto en el PR #15.**
 - **Seguridad:** el JWT del personal no expira, porque `generarToken` ignora `JWT_EXPIRES_IN` (`backend/src/lib/auth-helpers.js:102-113`). **Resuelto en el PR #18.**
 - **Seguridad:** `/api/asistencia` solo exige `authenticate`, así que un miembro desde la app puede listar los ingresos de su gimnasio (`asistencia.js:21`). **Resuelto en el PR #11.**
-- **Seguridad:** `Evidencias_Sustentacion/Informe_Pruebas_E2E.md:99` («Datos de prueba generados») deja en texto plano la contraseña de la recepcionista del gimnasio de ejemplo FitZone. Como producción tiene los gimnasios de ejemplo (issue #24), esa cuenta puede existir allí. Pendiente para Santiago: cambiar esa contraseña y quitar la línea.
-- **Seguridad (2026-10-18):** `COMO_CORRER.md` tenía en la sección de Render una `JWT_SECRET` y una `SMTP_PASSWORD` reales. Se cambiaron por marcadores, pero siguen en el historial del repositorio público: hay que rotar la `JWT_SECRET` en Render y revocar la contraseña de aplicación de Gmail. Corrección (2026-10-20): `Evidencias_Sustentacion/Santiago/C2_Recuperacion_Clave/README.md:27`, que aquí se citaba como otra contraseña de aplicación, nunca tuvo una clave real: siempre fue el marcador `xxxx xxxx xxxx xxxx`, y el PR #31 lo cambió por uno más claro.
+- **Seguridad:** `docs/sustentacion/evidencias/Informe_Pruebas_E2E.md:99` («Datos de prueba generados») deja en texto plano la contraseña de la recepcionista del gimnasio de ejemplo FitZone. Como producción tiene los gimnasios de ejemplo (issue #24), esa cuenta puede existir allí. Pendiente para Santiago: cambiar esa contraseña y quitar la línea.
+- **Seguridad (2026-10-18):** `docs/guias/COMO_CORRER.md` tenía en la sección de Render una `JWT_SECRET` y una `SMTP_PASSWORD` reales. Se cambiaron por marcadores, pero siguen en el historial del repositorio público: hay que rotar la `JWT_SECRET` en Render y revocar la contraseña de aplicación de Gmail. Corrección (2026-10-20): `docs/sustentacion/evidencias/Santiago/C2_Recuperacion_Clave/README.md:27`, que aquí se citaba como otra contraseña de aplicación, nunca tuvo una clave real: siempre fue el marcador `xxxx xxxx xxxx xxxx`, y el PR #31 lo cambió por uno más claro.
 - **Seguridad:** la clave para cifrar el QR tiene un valor por defecto en el código (`miembros.js:36`, `checkin.js:19`).
 - **Pruebas:** 2 de las 23 pruebas de `backend/tests/auth-helpers.test.js` fallan, y `backend/package.json` no tiene script `test`, así que el CI no las ejecuta.
 - **Rendimiento:** si el QR no coincide directo, `checkin.js:83-101` descifra en memoria los QR de todos los miembros del gimnasio. **Mejorado en el PR #11:** la clave se deriva una sola vez y queda un descifrado AES por miembro.
