@@ -46,13 +46,14 @@ function validarEmail(email) {
 function validarContrasena(password) {
   if (!password || typeof password !== 'string') return false;
   const trimmed = password.trim();
-  return trimmed.length >= 6 && trimmed === password && /\d/.test(password);
+  return trimmed.length >= 6 && !/\s/.test(password) && /\d/.test(password);
 }
 
-/** Teléfono colombiano: 10 dígitos que empiezan con 3 (móvil). */
+/** Teléfono colombiano: 10 dígitos que empiezan con 3 (móvil); admite el prefijo +57. */
 function validarTelefonoColombiano(phone) {
   if (!phone || typeof phone !== 'string') return false;
-  const digits = phone.replace(/\D/g, '');
+  let digits = phone.replace(/\D/g, '');
+  if (digits.length === 12 && digits.startsWith('57')) digits = digits.slice(2);
   return COL_PHONE_DIGITS_RE.test(digits);
 }
 
