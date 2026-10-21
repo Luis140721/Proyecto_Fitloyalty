@@ -21,6 +21,9 @@ const DATABASE_URL =
 function exigirBdDePruebas(url) {
   let u;
   let bd;
+  // new URL recorta los espacios de los extremos y pg no: con ellos, los dos
+  // leerian destinos distintos.
+  if (/\s/.test(url)) throw new Error('E2E_DATABASE_URL no puede tener espacios.');
   try {
     u = new URL(url);
     bd = decodeURIComponent(u.pathname.replace(/^\//, ''));
