@@ -32,7 +32,7 @@ Al arrancar, el backend aplica las migraciones de `backend/migrations`, así que
 
 - Los tests crean gimnasios y usuarios reales: llenarían tu BD de desarrollo de datos de prueba.
 - La BD de pruebas guarda los datos en memoria (`tmpfs`): `npm run db:down` la borra por completo. Sus credenciales son solo de prueba, no secretos.
-- `playwright.config.js` tiene una guardia: si `E2E_DATABASE_URL` apunta a otro host o al puerto 5432 (el de desarrollo), lanza un error antes de levantar nada.
+- `playwright.config.js` tiene una guardia con lista permitida: la URL de la BD (por defecto la de `db-test`, o la que pongas en `E2E_DATABASE_URL`) debe usar `postgres://` o `postgresql://`, el host `127.0.0.1` o `localhost`, exactamente el puerto 5433 y una BD cuyo nombre termine en `_test`, y no puede traer los parámetros `host`, `port` ni `hostaddr` (pg los obedece por encima de la URL). Si algo no cumple, lanza un error antes de levantar nada; el mensaje muestra solo `host:puerto/BD`, nunca la clave.
 - Playwright le pasa al backend sus variables (`DATABASE_URL` de pruebas, `JWT_SECRET` de prueba, el cron y WhatsApp apagados, sin claves de correo). `dotenv` no pisa variables que ya existen, así que `backend/.env` no las cambia.
 
 ## Grabar un flujo nuevo con codegen
