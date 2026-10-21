@@ -18,16 +18,29 @@ const { formatZodError } = require('../lib/validators');
 const router = express.Router();
 
 const configSchema = z.object({
-  plan_mensual_valor: z.number().min(0).optional(),
-  plan_trimestral_valor: z.number().min(0).optional(),
-  plan_semestral_valor: z.number().min(0).optional(),
-  plan_anual_valor: z.number().min(0).optional(),
-  plan_clases_suelta_valor: z.number().min(0).optional(),
-  plan_ilimitado_valor: z.number().min(0).optional(),
+  // PostgreSQL devuelve NUMERIC como texto ("50000.00") y la pantalla lo reenvia
+  // tal cual al guardar; z.coerce acepta tanto numeros como esos textos.
+  plan_mensual_valor: z.coerce.number().min(0).optional(),
+  plan_trimestral_valor: z.coerce.number().min(0).optional(),
+  plan_semestral_valor: z.coerce.number().min(0).optional(),
+  plan_anual_valor: z.coerce.number().min(0).optional(),
+  plan_clases_suelta_valor: z.coerce.number().min(0).optional(),
+  plan_ilimitado_valor: z.coerce.number().min(0).optional(),
   recordatorio_cobro_activo: z.boolean().optional(),
   dias_recordatorio_default: z.number().min(1).max(30).optional(),
   dias_prueba: z.number().min(1).max(90).optional(),
+  // Vive en la tabla gimnasio (migracion 006). 0 desactiva el aviso por WhatsApp.
+  dias_aviso_vencimiento: z.number().int().min(0).max(30).optional(),
 });
+
+// Agrega a la configuracion los dias de aviso de vencimiento del gimnasio.
+async function conDiasAviso(gymId, cfg) {
+  const { rows } = await pool.query(
+    'SELECT dias_aviso_vencimiento FROM gimnasio WHERE id_gimnasio = $1',
+    [gymId]
+  );
+  return { ...cfg, dias_aviso_vencimiento: rows[0] ? rows[0].dias_aviso_vencimiento : 3 };
+}
 
 function parse(schema, payload) {
   const result = schema.safeParse(payload || {});
@@ -60,10 +73,10 @@ router.get(
            RETURNING *`,
           [gymId]
         );
-        return res.json({ config: newConfig[0] });
+        return res.json({ config: await conDiasAviso(gymId, newConfig[0]) });
       }
 
-      return res.json({ config: rows[0] });
+      return res.json({ config: await conDiasAviso(gymId, rows[0]) });
     } catch (err) {
       console.error('[GET /admin/config] Error:', err.message);
       throw new AppError(503, 'No pudimos cargar la configuración. Intenta de nuevo.', 'DB_UNREACHABLE');
@@ -83,7 +96,7 @@ router.put(
     const parsed = parse(configSchema, req.body);
     if (!parsed.ok) throw new AppError(parsed.status, parsed.error, 'VALIDATION_ERROR', { issues: parsed.issues });
     
-    const data = parsed.data;
+    const { dias_aviso_vencimiento: diasAviso, ...data } = parsed.data;
     const gymId = req.user.gymId;
 
     const campos = [];
@@ -94,11 +107,29 @@ router.put(
       campos.push(`${k} = $${params.length}`);
     }
     
-    if (campos.length === 0) throw new AppError(400, 'Nada que actualizar', 'VALIDATION_ERROR');
+    if (campos.length === 0 && diasAviso === undefined) {
+      throw new AppError(400, 'Nada que actualizar', 'VALIDATION_ERROR');
+    }
 
     params.push(gymId);
 
     try {
+      if (diasAviso !== undefined) {
+        await pool.query(
+          'UPDATE gimnasio SET dias_aviso_vencimiento = $1 WHERE id_gimnasio = $2',
+          [diasAviso, gymId]
+        );
+      }
+
+      if (campos.length === 0) {
+        // Solo cambiaron los dias de aviso: devolvemos la configuracion vigente.
+        const { rows: actual } = await pool.query(
+          'SELECT * FROM config_gimnasio WHERE id_gimnasio = $1',
+          [gymId]
+        );
+        return res.json({ message: 'Configuración actualizada.', config: await conDiasAviso(gymId, actual[0] || {}) });
+      }
+
       // Primero verificar si existe la configuración
       const { rows: existing } = await pool.query(
         'SELECT id_config FROM config_gimnasio WHERE id_gimnasio = $1',
@@ -117,7 +148,7 @@ router.put(
            RETURNING *`,
           [gymId, ...valoresInsert]
         );
-        return res.json({ message: 'Configuración creada.', config: newConfig[0] });
+        return res.json({ message: 'Configuración creada.', config: await conDiasAviso(gymId, newConfig[0]) });
       }
 
       // Actualizar configuración existente
@@ -129,7 +160,7 @@ router.put(
         params
       );
 
-      return res.json({ message: 'Configuración actualizada.', config: rows[0] });
+      return res.json({ message: 'Configuración actualizada.', config: await conDiasAviso(gymId, rows[0]) });
     } catch (err) {
       if (err instanceof AppError) throw err;
       console.error('[PUT /admin/config] Error:', err.message);

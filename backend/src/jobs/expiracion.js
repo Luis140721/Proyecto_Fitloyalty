@@ -88,15 +88,22 @@ async function marcarEnviado({ idMiembro, idPlanCobro, diasRestantes }) {
 }
 
 /**
- * Devuelve true si ya le mandamos el aviso a este plan_cobro con estos
- * dias_restantes. Si la tabla no existe, devuelve false (no filtra).
+ * Devuelve true si ya le mandamos el aviso de esta ETAPA a este plan_cobro.
+ * Cada plan recibe como maximo dos avisos:
+ *   - 'aviso': la primera vez que entra en la ventana de dias del gimnasio
+ *     (queda guardado con los dias que faltaban ese dia, > 0);
+ *   - 'hoy':   el dia del vencimiento (dias_restantes = 0).
+ * Asi con N dias de aviso no salen N+1 mensajes, y si el servidor estuvo
+ * dormido el dia exacto el aviso sale al dia siguiente en vez de perderse.
+ * Si la tabla no existe, devuelve false (no filtra).
  */
 async function yaEnviado({ idPlanCobro, diasRestantes }) {
   try {
+    const condicion = diasRestantes === 0 ? 'dias_restantes = 0' : 'dias_restantes > 0';
     const { rows } = await pool.query(
       `SELECT 1 FROM alerta_vencimiento_enviada
-        WHERE id_plan_cobro = $1 AND dias_restantes = $2 LIMIT 1`,
-      [idPlanCobro, diasRestantes]
+        WHERE id_plan_cobro = $1 AND ${condicion} LIMIT 1`,
+      [idPlanCobro]
     );
     return rows.length > 0;
   } catch (e) {
@@ -122,6 +129,7 @@ async function runJob({ dryRun = false, whatsappClient = null } = {}) {
     omitidosDuplicado: 0,
     omitidosGymDesactivado: 0,
     omitidosSinTelefono: 0,
+    errores: 0,
     dryRun,
     detalle: [],
   };
@@ -199,15 +207,18 @@ async function runJob({ dryRun = false, whatsappClient = null } = {}) {
     }
 
     try {
-      // sendWhatsAppQR es la unica funcion publica de whatsapp.js hoy.
-      // Para mandar texto plano necesitamos otra funcion; mientras tanto,
-      // usamos client.sendMessage directamente via la API interna.
-      // Lo mas limpio: anadir `sendWhatsAppText` a whatsapp.js.
+      // NO se comprueba isWhatsAppReady() antes: el cliente es perezoso y solo se
+      // inicializa dentro de sendWhatsAppText, asi que tras un reinicio esa
+      // comprobacion seria siempre falsa y los avisos no saldrian nunca.
+      // sendWhatsAppText lanza si no esta listo o si el envio falla; solo se marca
+      // como enviado cuando el mensaje realmente salio, y lo demas se reintenta
+      // en la siguiente corrida del scheduler.
       await wa.sendWhatsAppText(tel, texto);
       await marcarEnviado({ idMiembro: m.id_miembro, idPlanCobro, diasRestantes });
       summary.enviados += 1;
       summary.detalle.push({ id: m.id_miembro, nombre: m.nombre, tel, diasRestantes, status: 'enviado' });
     } catch (err) {
+      summary.errores += 1;
       summary.detalle.push({ id: m.id_miembro, nombre: m.nombre, tel, diasRestantes, status: 'error', error: err.message });
     }
   }
