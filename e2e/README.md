@@ -3,6 +3,7 @@
 Prueban la app completa desde el navegador. `npm test` levanta el backend real (puerto 3001) y el frontend (puerto 5173); la base de datos es una BD de pruebas desechable en Docker (puerto 5433).
 
 - `tests/login.spec.js`: inicio de sesión. Simula el API con `page.route`.
+- `tests/register-gym.spec.js`: registro de gimnasio. Usa el backend real y la BD de pruebas.
 
 ## Requisitos
 
