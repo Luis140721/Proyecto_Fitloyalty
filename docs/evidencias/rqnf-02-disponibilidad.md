@@ -26,23 +26,21 @@ El endpoint `/api/healthz` verifica que la API responda; no comprueba la
 conexión a PostgreSQL. Por ello, este porcentaje representa disponibilidad de
 la API, no disponibilidad de todos sus servicios dependientes.
 
-## Configuración del monitor externo
+## Monitor programado
 
-- Proveedor recomendado: [UptimeRobot](https://uptimerobot.com/), cuyo plan
-  gratuito anuncia comprobaciones cada 5 minutos y monitores HTTP y de
-  palabras clave. La página de precios indica que las notificaciones no están
-  disponibles en ese plan; confirmar las condiciones vigentes al configurarlo.
-- Tipo: comprobación HTTP/HTTPS `GET`.
-- URL: `https://fitloyalty-api.onrender.com/api/healthz`.
-- Intervalo: 5 minutos.
-- Timeout: 30 segundos.
-- Condición de éxito: HTTP `200`; si el proveedor admite validación de
-  contenido, exigir también `"status":"ok"`.
-- Registrar alertas, comprobaciones y el intervalo del reporte.
+El workflow [availability-monitor.yml](../../.github/workflows/availability-monitor.yml)
+consulta el endpoint con `GET` cada 5 minutos y también admite ejecución
+manual. La comprobación se considera exitosa solo si recibe HTTP `200` y el
+cuerpo contiene `"status":"ok"`; los timeouts, errores HTTP y respuestas sin
+ese estado hacen fallar la ejecución y quedan visibles en el historial de
+GitHub Actions. No requiere secretos ni permisos de escritura del repositorio.
 
-**Estado de configuración:** proveedor recomendado, pero el monitor sigue
-pendiente de activar en una cuenta externa. No se documentan credenciales ni
-se supone acceso a una cuenta.
+**Estado:** implementado en la rama `docs/rqnf-02-disponibilidad`. GitHub solo
+ejecuta los eventos `schedule` desde la rama predeterminada, así que el sondeo
+periódico empezará después de integrar este workflow en `develop`. La hora del
+cron es UTC; las ejecuciones programadas pueden retrasarse por carga de GitHub.
+El historial de ejecuciones de Actions es la fuente para recopilar los datos
+del período; una ejecución manual debe excluirse del cálculo.
 
 ## Comprobación manual inicial
 
@@ -92,32 +90,28 @@ No se identificó un defecto que corregir en el handler de salud.
 
 ### Mitigación
 
-- Para un servicio gratuito, activar un monitor externo sobre
-  `/api/healthz` con intervalo de 5 minutos. Esto genera tráfico regular y
-  reduce la probabilidad de que Render suspenda el servicio por inactividad.
-- Para evitar la suspensión sin depender de sondeos, cambiar el servicio a un
-  plan de pago que no tenga suspensión por inactividad.
-- El monitor debe registrar los `503` y timeouts como fallos; un monitor no
-  garantiza disponibilidad durante despliegues, reinicios o incidentes.
-
-La mitigación no está activa todavía: requiere acceso autorizado al panel de
-un proveedor de monitoreo o que el dueño del servicio cambie su plan.
+Una vez integrado, el sondeo periódico genera tráfico regular y reduce la
+probabilidad de que Render suspenda el servicio gratuito por inactividad. El
+workflow registra los `503`, otros errores HTTP y timeouts como ejecuciones
+fallidas, pero no garantiza disponibilidad durante despliegues, reinicios o
+incidentes. GitHub Actions no ofrece por sí mismo notificaciones externas
+configuradas por este workflow.
 
 ## Reporte del período
 
 | Período | Comprobaciones | Exitosas | Fallidas | Disponibilidad |
 |---|---:|---:|---:|---:|
-| Pendiente de seleccionar/obtener desde el monitor externo | — | — | — | No calculable |
+| Pendiente de integración y recopilación de datos de Actions | — | — | — | No calculable |
 
-No hay datos históricos del monitor externo disponibles en este repositorio.
-No se infiere disponibilidad para el tiempo anterior a la activación del
-monitor.
+Todavía no hay historial del monitor programado. No se infiere disponibilidad
+para el tiempo anterior a su primera ejecución programada.
 
 ## Pendiente para completar D3
 
-1. Activar el monitor externo con la configuración anterior.
-2. Confirmar la fecha/hora en que comenzó a recopilar datos.
-3. Al cierre del período acordado, copiar desde el proveedor el intervalo,
-   número de comprobaciones exitosas y totales, fallos/incidentes y porcentaje.
-4. Actualizar la tabla con el reporte verificable o adjuntar un enlace/captura
-   exportada del proveedor.
+1. Integrar el workflow en `develop` para habilitar el cron.
+2. Confirmar la primera ejecución programada exitosa y la hora de inicio del
+   período de medición.
+3. Al cierre del período acordado, contar las ejecuciones programadas
+   exitosas y fallidas en GitHub Actions y calcular el porcentaje con la
+   fórmula de esta evidencia; excluir ejecuciones manuales.
+4. Actualizar la tabla con el período y los conteos verificables del historial.
