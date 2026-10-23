@@ -18,6 +18,7 @@
 
 const cron = require('node-cron');
 const { runJob: runExpiracionJob } = require('./expiracion');
+const { runJob: runAbandonoJob } = require('./abandono');
 
 const DISABLED = String(process.env.DISABLE_SCHEDULER || '').toLowerCase() === 'true';
 
@@ -26,6 +27,7 @@ const DISABLED = String(process.env.DISABLE_SCHEDULER || '').toLowerCase() === '
 const TZ = 'America/Bogota';
 
 let expiracionTasks = [];
+let abandonoTask = null;
 let started = false;
 
 /**
@@ -63,7 +65,20 @@ function start() {
         (expr) => cron.schedule(expr, correrExpiracion, { timezone: TZ })
     );
 
-    console.log(`[scheduler] Activo. Job de vencimiento programado a las 09:00 y 15:00 (${TZ}).`);
+    // Alertas de abandono (RQF-08): una vez al dia, antes de los avisos de las
+    // 9:00. El job es idempotente, asi que si el servicio estuvo dormido la
+    // corrida de la manana siguiente se pone al dia sola.
+    abandonoTask = cron.schedule('0 8 * * *', async () => {
+        console.log('[scheduler] Disparando job de alertas de abandono...');
+        try {
+            const resumen = await runAbandonoJob();
+            console.log('[scheduler] Job de abandono OK:', JSON.stringify(resumen));
+        } catch (err) {
+            console.error('[scheduler] Error en job de abandono:', err.message);
+        }
+    }, { timezone: TZ });
+
+    console.log(`[scheduler] Activo. Vencimiento a las 09:00 y 15:00, abandono a las 08:00 (${TZ}).`);
 }
 
 /**
@@ -73,6 +88,8 @@ function stop() {
     if (expiracionTasks.length) {
         expiracionTasks.forEach((t) => t.stop());
         expiracionTasks = [];
+        if (abandonoTask) abandonoTask.stop();
+        abandonoTask = null;
         started = false;
         console.log('[scheduler] Detenido.');
     }
