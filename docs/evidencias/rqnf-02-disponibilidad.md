@@ -53,6 +53,18 @@ se supone acceso a una cuenta.
 Esta fue una solicitud manual puntual. **No es un sondeo periódico ni permite
 calcular un porcentaje de disponibilidad.**
 
+### Sondeo manual posterior
+
+El 2026-10-22, una solicitud de comprobación recibió HTTP `503`. Una solicitud
+posterior al mismo endpoint respondió HTTP `200`:
+`{"status":"ok","uptime":455.581668157}`. La hora exacta de cada solicitud no
+quedó registrada.
+
+Estas solicitudes fueron puntuales, no son comprobaciones programadas. El
+`503` se conserva como una respuesta observada, pero sin datos horarios del
+proveedor no se puede determinar la duración del incidente ni calcular la
+disponibilidad del período.
+
 ## Reporte del período
 
 | Período | Comprobaciones | Exitosas | Fallidas | Disponibilidad |
