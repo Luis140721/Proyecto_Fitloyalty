@@ -31,15 +31,59 @@ const configSchema = z.object({
   dias_prueba: z.number().min(1).max(90).optional(),
   // Vive en la tabla gimnasio (migracion 006). 0 desactiva el aviso por WhatsApp.
   dias_aviso_vencimiento: z.number().int().min(0).max(30).optional(),
+  // Dias sin venir para la alerta amarilla y la roja (RQF-08). Viven en
+  // configuracion_gimnasio; la roja siempre es mayor que la amarilla.
+  umbral_alerta_amarilla: z.number().int().min(1).max(365).optional(),
+  umbral_alerta_roja: z.number().int().min(2).max(365).optional(),
 });
 
-// Agrega a la configuracion los dias de aviso de vencimiento del gimnasio.
+const UMBRALES_POR_DEFECTO = { umbral_alerta_amarilla: 7, umbral_alerta_roja: 15 };
+
+// Agrega a la configuracion los dias de aviso de vencimiento del gimnasio y los
+// umbrales de las alertas de abandono.
 async function conDiasAviso(gymId, cfg) {
+  const [{ rows }, { rows: umbrales }] = await Promise.all([
+    pool.query('SELECT dias_aviso_vencimiento FROM gimnasio WHERE id_gimnasio = $1', [gymId]),
+    pool.query(
+      'SELECT umbral_alerta_amarilla, umbral_alerta_roja FROM configuracion_gimnasio WHERE id_gimnasio = $1',
+      [gymId]
+    ),
+  ]);
+  return {
+    ...cfg,
+    dias_aviso_vencimiento: rows[0] ? rows[0].dias_aviso_vencimiento : 3,
+    ...UMBRALES_POR_DEFECTO,
+    ...(umbrales[0] || {}),
+  };
+}
+
+// Guarda los umbrales de abandono; devuelve un mensaje si no son coherentes.
+async function guardarUmbrales(gymId, userId, { umbral_alerta_amarilla: amarilla, umbral_alerta_roja: roja }) {
   const { rows } = await pool.query(
-    'SELECT dias_aviso_vencimiento FROM gimnasio WHERE id_gimnasio = $1',
+    'SELECT umbral_alerta_amarilla, umbral_alerta_roja FROM configuracion_gimnasio WHERE id_gimnasio = $1',
     [gymId]
   );
-  return { ...cfg, dias_aviso_vencimiento: rows[0] ? rows[0].dias_aviso_vencimiento : 3 };
+  const actual = { ...UMBRALES_POR_DEFECTO, ...(rows[0] || {}) };
+  const nueva = amarilla ?? actual.umbral_alerta_amarilla;
+  const nuevaRoja = roja ?? actual.umbral_alerta_roja;
+  if (nuevaRoja <= nueva) {
+    throw new AppError(400, 'La alerta roja debe ser mayor que la amarilla.', 'VALIDATION_ERROR');
+  }
+  if (rows.length === 0) {
+    await pool.query(
+      `INSERT INTO configuracion_gimnasio (id_gimnasio, umbral_alerta_amarilla, umbral_alerta_roja, actualizado_por)
+       VALUES ($1, $2, $3, $4)`,
+      [gymId, nueva, nuevaRoja, userId]
+    );
+  } else {
+    await pool.query(
+      `UPDATE configuracion_gimnasio
+          SET umbral_alerta_amarilla = $2, umbral_alerta_roja = $3,
+              actualizado_por = $4, fecha_actualizacion = CURRENT_TIMESTAMP
+        WHERE id_gimnasio = $1`,
+      [gymId, nueva, nuevaRoja, userId]
+    );
+  }
 }
 
 function parse(schema, payload) {
@@ -96,7 +140,13 @@ router.put(
     const parsed = parse(configSchema, req.body);
     if (!parsed.ok) throw new AppError(parsed.status, parsed.error, 'VALIDATION_ERROR', { issues: parsed.issues });
     
-    const { dias_aviso_vencimiento: diasAviso, ...data } = parsed.data;
+    const {
+      dias_aviso_vencimiento: diasAviso,
+      umbral_alerta_amarilla: umbralAmarilla,
+      umbral_alerta_roja: umbralRoja,
+      ...data
+    } = parsed.data;
+    const hayUmbrales = umbralAmarilla !== undefined || umbralRoja !== undefined;
     const gymId = req.user.gymId;
 
     const campos = [];
@@ -107,13 +157,21 @@ router.put(
       campos.push(`${k} = $${params.length}`);
     }
     
-    if (campos.length === 0 && diasAviso === undefined) {
+    if (campos.length === 0 && diasAviso === undefined && !hayUmbrales) {
       throw new AppError(400, 'Nada que actualizar', 'VALIDATION_ERROR');
     }
 
     params.push(gymId);
 
     try {
+      // Primero lo que puede rechazar la peticion, para no guardar a medias.
+      if (hayUmbrales) {
+        await guardarUmbrales(gymId, req.user.id, {
+          umbral_alerta_amarilla: umbralAmarilla,
+          umbral_alerta_roja: umbralRoja,
+        });
+      }
+
       if (diasAviso !== undefined) {
         await pool.query(
           'UPDATE gimnasio SET dias_aviso_vencimiento = $1 WHERE id_gimnasio = $2',
@@ -122,7 +180,7 @@ router.put(
       }
 
       if (campos.length === 0) {
-        // Solo cambiaron los dias de aviso: devolvemos la configuracion vigente.
+        // Solo cambiaron datos de otras tablas: devolvemos la configuracion vigente.
         const { rows: actual } = await pool.query(
           'SELECT * FROM config_gimnasio WHERE id_gimnasio = $1',
           [gymId]
