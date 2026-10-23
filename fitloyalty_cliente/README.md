@@ -28,6 +28,7 @@ Igual que el `Store_Pro_Ss` de la profe para que el codigo sea consistente:
 - JWT guardado en `flutter_secure_storage`
 - Estado global con `provider` + `ChangeNotifier`
 - Variables de entorno con `flutter_dotenv` (`assets/.env`)
+- `assets/.env` incluye valores locales predeterminados; cambia `API_URL` para apuntar a otro backend.
 - Estructura por capas: `config/` → `models/` → `services/` → `providers/` → `screens/` + `widgets/` + `theme/`
 
 ---

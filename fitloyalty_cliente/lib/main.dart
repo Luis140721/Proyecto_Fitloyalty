@@ -32,11 +32,13 @@ import 'cliente/theme/app_theme.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // Forzamos barra de estado clara porque el tema es dark.
-  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-    statusBarColor: Colors.transparent,
-    statusBarIconBrightness: Brightness.light,
-  ));
-  await dotenv.load(fileName: 'assets/.env');
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.light,
+    ),
+  );
+  await dotenv.load(fileName: 'assets/.env', isOptional: true);
 
   // Cargar las tablas de localizacion para que DateFormat('EEEE d MMM', 'es_CO')
   // no lance LocaleDataException. Tambien forzamos es_CO como locale global
