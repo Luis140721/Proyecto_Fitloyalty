@@ -263,17 +263,16 @@ describe('membresia congelada (RQF-04)', () => {
       });
     };
 
-    test('las consultas de vencidas, por vencer y en riesgo excluyen a las congeladas', async () => {
+    // Las congeladas tampoco aparecen "en riesgo": el motor de abandono (RQF-08)
+    // no las evalua y cierra su alerta; esa regla se prueba en abandono.test.js.
+    test('las consultas de vencidas y por vencer excluyen a las congeladas', async () => {
       prepararCampana([]);
       await call('GET', '/api/admin/notificaciones', RECEP);
       const sqls = mockQuery.mock.calls.map(([s]) => s);
       const vencidas = sqls.find((s) => /pc\.fecha_fin < CURRENT_DATE\s+AND/.test(s) && !/FROM notificacion n/.test(s));
       const porVencer = sqls.find((s) => /pc\.fecha_fin >= CURRENT_DATE/.test(s));
-      const riesgo = sqls.find((s) => /HAVING MAX\(c\.fecha_hora\)/.test(s));
       expect(vencidas).toMatch(/pc\.congelado_desde IS NULL/);
       expect(porVencer).toMatch(/pc\.congelado_desde IS NULL/);
-      expect(riesgo).toMatch(/up\.congelado_desde IS NOT NULL/); // NOT EXISTS (plan congelado)
-      expect(riesgo).toMatch(/NOT EXISTS/);
     });
 
     test('un acceso bloqueado de una congelada se muestra como "Membresia congelada"', async () => {

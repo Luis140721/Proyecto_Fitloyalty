@@ -15,6 +15,8 @@ export default function ConfigPage() {
     recordatorio_cobro_activo: true,
     dias_recordatorio_default: 7,
     dias_aviso_vencimiento: 3,
+    umbral_alerta_amarilla: 7,
+    umbral_alerta_roja: 15,
     dias_prueba: 7,
   });
   const [loading, setLoading] = useState(false);
@@ -40,6 +42,10 @@ export default function ConfigPage() {
     e.preventDefault();
     setError('');
     setSuccess('');
+    if (Number(config.umbral_alerta_roja) <= Number(config.umbral_alerta_amarilla)) {
+      setError('La alerta roja debe ser mayor que la amarilla.');
+      return;
+    }
     setSaving(true);
 
     try {
@@ -240,6 +246,38 @@ export default function ConfigPage() {
                 }}
                 min="0"
                 max="30"
+              />
+            </label>
+          </div>
+
+          <header className="chart-card__head" style={{ marginTop: 32, paddingTop: 16, borderTop: '1px solid var(--border-subtle)' }}>
+            <div>
+              <h3>Alertas de abandono</h3>
+              <p>Cada día se revisa cuánto lleva cada miembro sin venir y se avisa en la campana.</p>
+            </div>
+          </header>
+
+          <div className="auth-form-row">
+            <label className="field">
+              <span className="field-label">Alerta amarilla (días sin venir)</span>
+              <input
+                className="field-input"
+                type="number"
+                value={config.umbral_alerta_amarilla ?? 7}
+                onChange={(e) => setConfig({ ...config, umbral_alerta_amarilla: parseInt(e.target.value, 10) || 1 })}
+                min="1"
+                max="365"
+              />
+            </label>
+            <label className="field">
+              <span className="field-label">Alerta roja (días sin venir)</span>
+              <input
+                className="field-input"
+                type="number"
+                value={config.umbral_alerta_roja ?? 15}
+                onChange={(e) => setConfig({ ...config, umbral_alerta_roja: parseInt(e.target.value, 10) || 2 })}
+                min="2"
+                max="365"
               />
             </label>
           </div>

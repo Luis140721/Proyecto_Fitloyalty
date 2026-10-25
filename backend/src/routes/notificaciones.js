@@ -18,9 +18,13 @@
  *   config_gimnasio.recordatorio_cobro_activo      apaga los avisos de cobro
  *   config_gimnasio.dias_recordatorio_default      con cuantos dias de
  *                                                  anticipacion avisar
- *   configuracion_gimnasio.umbral_alerta_amarilla  dias sin venir para
- *                                                  considerar a alguien
- *                                                  en riesgo
+ *   configuracion_gimnasio.umbral_alerta_amarilla  dias sin venir para la
+ *                                                  alerta amarilla
+ *   configuracion_gimnasio.umbral_alerta_roja      dias sin venir para la
+ *                                                  alerta roja
+ *
+ * Los avisos "en riesgo" ya no se calculan aqui: salen de las alertas
+ * PENDIENTE que deja el motor diario (jobs/abandono.js, RQF-08).
  */
 const express = require('express');
 const pool = require('../db/db');
@@ -36,7 +40,7 @@ const { formatZodError } = require('../lib/validators');
 const router = express.Router();
 
 // Valores por defecto si el gimnasio todavia no ha tocado su configuracion.
-const POR_DEFECTO = { diasAviso: 7, diasRiesgo: 15 };
+const POR_DEFECTO = { diasAviso: 7, diasRiesgo: 7, diasRiesgoAlto: 15 };
 
 // Tope de avisos por categoria: la campana es un resumen, no un listado.
 const TOPE = 5;
@@ -50,7 +54,7 @@ async function leerUmbrales(gymId) {
       [gymId]
     ),
     pool.query(
-      `SELECT umbral_alerta_amarilla, dias_aviso_vencimiento
+      `SELECT umbral_alerta_amarilla, umbral_alerta_roja, dias_aviso_vencimiento
          FROM configuracion_gimnasio WHERE id_gimnasio = $1`,
       [gymId]
     ),
@@ -65,6 +69,7 @@ async function leerUmbrales(gymId) {
     // tabla, que no tiene pantalla propia.
     diasAviso: Number(c.dias_recordatorio_default) || Number(a.dias_aviso_vencimiento) || POR_DEFECTO.diasAviso,
     diasRiesgo: Number(a.umbral_alerta_amarilla) || POR_DEFECTO.diasRiesgo,
+    diasRiesgoAlto: Number(a.umbral_alerta_roja) || POR_DEFECTO.diasRiesgoAlto,
   };
 }
 
@@ -141,20 +146,17 @@ router.get(
             )
           : vacio,
 
+        // Alertas de abandono que dejo el motor diario (jobs/abandono.js): las
+        // rojas primero, y dentro de cada nivel quien lleva mas dias.
         pool.query(
-          `SELECT m.id_miembro, m.nombre, m.telefono, m.codigo_pais_telefono,
-                  (CURRENT_DATE - MAX(c.fecha_hora)::date)::int AS dias
-             FROM miembro m
-             LEFT JOIN checkin c ON c.id_miembro = m.id_miembro
-            WHERE m.id_gimnasio = $1 AND m.activo = TRUE
-              AND NOT EXISTS (SELECT 1 FROM ${ULTIMO_PLAN} up
-                               WHERE up.id_miembro = m.id_miembro AND up.congelado_desde IS NOT NULL)
-            GROUP BY m.id_miembro, m.nombre, m.telefono, m.codigo_pais_telefono
-           HAVING MAX(c.fecha_hora) IS NULL
-               OR MAX(c.fecha_hora) < NOW() - ($2 || ' days')::interval
-            ORDER BY dias DESC NULLS FIRST
-            LIMIT $3`,
-          [gymId, umbrales.diasRiesgo, TOPE]
+          `SELECT a.id_alerta, a.nivel, a.dias_inactivo AS dias,
+                  m.id_miembro, m.nombre, m.telefono, m.codigo_pais_telefono
+             FROM alerta_abandono a
+             INNER JOIN miembro m ON m.id_miembro = a.id_miembro AND m.id_gimnasio = a.id_gimnasio
+            WHERE a.id_gimnasio = $1 AND a.estado = 'PENDIENTE' AND m.activo = TRUE
+            ORDER BY (a.nivel = 'ROJA') DESC, a.dias_inactivo DESC
+            LIMIT $2`,
+          [gymId, TOPE]
         ),
       ]);
 
@@ -200,12 +202,14 @@ router.get(
             r.dias === 0 ? 'Vence hoy' : `En ${r.dias} ${r.dias === 1 ? 'dia' : 'dias'}`,
             r.dias === 0 ? 'hoy' : `en ${r.dias} ${r.dias === 1 ? 'dia' : 'dias'}`)
         ),
-        ...enRiesgo.rows.map((r) =>
-          armar(r, 'riesgo', 'trending_down',
-            `${r.nombre} lleva tiempo sin venir`,
-            r.dias === null ? 'Nunca ha registrado ingreso' : `${r.dias} dias sin ingresar`,
-            r.dias === null ? 'un buen tiempo' : `${r.dias} dias`)
-        ),
+        ...enRiesgo.rows.map((r) => ({
+          ...armar(r, 'riesgo', 'trending_down',
+            r.nivel === 'ROJA' ? `Alerta roja: ${r.nombre} dejo de venir` : `${r.nombre} lleva tiempo sin venir`,
+            `${r.dias} ${r.dias === 1 ? 'dia' : 'dias'} sin ingresar`,
+            `${r.dias} dias`),
+          id: `riesgo-${r.id_miembro}`,
+          nivel: r.nivel,
+        })),
       ];
 
       return res.json({ total: avisos.length, avisos, umbrales });
