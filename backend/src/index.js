@@ -21,6 +21,7 @@ const pool    = require('./db/db');
 const { applyMigrations } = require('./db/migrate');
 const { notFound, errorHandler } = require('./middleware/errorHandler');
 const asyncHandler = require('./lib/asyncHandler');
+const { AppError } = require('./lib/errors');
 
 const authRoutes     = require('./routes/auth');
 const staffRoutes    = require('./routes/staff');
@@ -53,7 +54,7 @@ app.use(cors({
     if (allowedOrigins.includes(origin)) {
       return cb(null, true);
     }
-    return cb(new Error('Bloqueado por CORS: Origen no permitido por FRONTEND_URL.'));
+    return cb(new AppError(403, 'Origen no permitido', 'CORS_BLOCKED'));
   },
   credentials: true,
 }));
