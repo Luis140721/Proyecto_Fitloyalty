@@ -29,6 +29,7 @@ const asyncHandler = require('../lib/asyncHandler');
 const { AppError } = require('../lib/errors');
 const { ULTIMO_PLAN } = require('../lib/planes');
 const { telefonoWhatsapp, mensajeParaMiembro } = require('../lib/mensajes');
+const { TIPO_ACCESO_BLOQUEADO, TITULO_ACCESO_BLOQUEADO } = require('../lib/accesos');
 const { z } = require('zod');
 const { formatZodError } = require('../lib/validators');
 
@@ -90,7 +91,25 @@ router.get(
       // inactividad no, porque son de retencion y no de plata.
       const vacio = { rows: [] };
 
-      const [vencidas, porVencer, enRiesgo] = await Promise.all([
+      const [bloqueados, vencidas, porVencer, enRiesgo] = await Promise.all([
+        // Intentos de ingreso bloqueados de las ultimas 24 h que nadie ha marcado
+        // como vistos. Si el miembro ya renovo, el aviso deja de aplicar solo.
+        pool.query(
+          `SELECT n.id_notificacion, mb.id_miembro, mb.nombre, mb.telefono, mb.codigo_pais_telefono,
+                  GREATEST(0, EXTRACT(EPOCH FROM (NOW() - n.fecha_creacion)) / 60)::int AS minutos,
+                  (CURRENT_DATE - pc.fecha_fin)::int AS dias_vencida,
+                  (pc.congelado_desde IS NOT NULL) AS congelada
+             FROM notificacion n
+             INNER JOIN miembro mb ON mb.id_miembro = n.id_miembro AND mb.id_gimnasio = n.id_gimnasio
+             LEFT JOIN ${ULTIMO_PLAN} pc ON pc.id_miembro = mb.id_miembro
+            WHERE n.id_gimnasio = $1 AND n.tipo = $2 AND n.titulo = $4 AND n.leida = FALSE
+              AND n.fecha_creacion > NOW() - INTERVAL '24 hours'
+              AND (pc.fecha_fin IS NULL OR pc.fecha_fin < CURRENT_DATE OR pc.congelado_desde IS NOT NULL)
+            ORDER BY n.fecha_creacion DESC
+            LIMIT $3`,
+          [gymId, TIPO_ACCESO_BLOQUEADO, TOPE, TITULO_ACCESO_BLOQUEADO]
+        ),
+
         umbrales.recordatoriosActivos
           ? pool.query(
               `SELECT mb.id_miembro, mb.nombre, mb.telefono, mb.codigo_pais_telefono,
@@ -99,6 +118,7 @@ router.get(
                  INNER JOIN miembro mb ON mb.id_miembro = pc.id_miembro
                 WHERE mb.id_gimnasio = $1 AND mb.activo = TRUE
                   AND pc.fecha_fin < CURRENT_DATE
+                  AND pc.congelado_desde IS NULL
                 ORDER BY pc.fecha_fin DESC
                 LIMIT $2`,
               [gymId, TOPE]
@@ -113,6 +133,7 @@ router.get(
                  INNER JOIN miembro mb ON mb.id_miembro = pc.id_miembro
                 WHERE mb.id_gimnasio = $1 AND mb.activo = TRUE
                   AND pc.fecha_fin >= CURRENT_DATE
+                  AND pc.congelado_desde IS NULL
                   AND pc.fecha_fin <= CURRENT_DATE + ($2 || ' days')::interval
                 ORDER BY pc.fecha_fin ASC
                 LIMIT $3`,
@@ -126,6 +147,8 @@ router.get(
              FROM miembro m
              LEFT JOIN checkin c ON c.id_miembro = m.id_miembro
             WHERE m.id_gimnasio = $1 AND m.activo = TRUE
+              AND NOT EXISTS (SELECT 1 FROM ${ULTIMO_PLAN} up
+                               WHERE up.id_miembro = m.id_miembro AND up.congelado_desde IS NOT NULL)
             GROUP BY m.id_miembro, m.nombre, m.telefono, m.codigo_pais_telefono
            HAVING MAX(c.fecha_hora) IS NULL
                OR MAX(c.fecha_hora) < NOW() - ($2 || ' days')::interval
@@ -147,8 +170,25 @@ router.get(
         mensaje: mensajeParaMiembro(tipo, nombreGym, fila.nombre, textoMensaje),
       });
 
+      // Quien ya aparece como acceso bloqueado no se repite como "vencida".
+      const conBloqueo = new Set(bloqueados.rows.map((r) => r.id_miembro));
+
+      const hace = (min) => (min < 1 ? 'hace menos de un minuto'
+        : min < 60 ? `hace ${min} min`
+        : `hace ${Math.floor(min / 60)} h`);
+
       const avisos = [
-        ...vencidas.rows.map((r) =>
+        ...bloqueados.rows.map((r) => ({
+          ...armar(r, 'acceso-bloqueado', 'block',
+            `${r.nombre} intento ingresar y fue bloqueado`,
+            `${r.congelada ? 'Membresia congelada' : r.dias_vencida === null ? 'Sin plan activo' : 'Membresia vencida'} · ${hace(r.minutos)}`,
+            r.congelada ? 'tu membresia esta congelada'
+              : r.dias_vencida === null ? 'no tienes un plan activo'
+              : `tu plan vencio ${r.dias_vencida === 0 ? 'hoy' : `hace ${r.dias_vencida} ${r.dias_vencida === 1 ? 'dia' : 'dias'}`}`),
+          id: `acceso-bloqueado-${r.id_notificacion}`,
+          idNotificacion: r.id_notificacion,
+        })),
+        ...vencidas.rows.filter((r) => !conBloqueo.has(r.id_miembro)).map((r) =>
           armar(r, 'vencida', 'event_busy',
             `La membresia de ${r.nombre} vencio`,
             r.dias === 0 ? 'Vencio hoy' : `Hace ${r.dias} ${r.dias === 1 ? 'dia' : 'dias'}`,
@@ -172,6 +212,33 @@ router.get(
     } catch (err) {
       console.error('[GET /admin/notificaciones] Error:', err.message);
       throw new AppError(503, 'No pudimos cargar los avisos. Intenta de nuevo.', 'DB_UNREACHABLE');
+    }
+  })
+);
+
+// ---------------------------------------------------------------------------
+// POST /api/admin/notificaciones/acceso-bloqueado/:id/leida
+// ---------------------------------------------------------------------------
+router.post(
+  '/admin/notificaciones/acceso-bloqueado/:id/leida',
+  authenticate,
+  authorize('admin', 'receptionist'),
+  asyncHandler(async (req, res) => {
+    const id = Number.parseInt(req.params.id, 10);
+    if (!Number.isInteger(id) || id <= 0) throw new AppError(400, 'Id invalido', 'VALIDATION_ERROR');
+
+    try {
+      const { rowCount } = await pool.query(
+        `UPDATE notificacion SET leida = TRUE
+          WHERE id_notificacion = $1 AND id_gimnasio = $2 AND tipo = $3 AND titulo = $4`,
+        [id, req.user.gymId, TIPO_ACCESO_BLOQUEADO, TITULO_ACCESO_BLOQUEADO]
+      );
+      if (rowCount === 0) throw new AppError(404, 'Aviso no encontrado.', 'NOT_FOUND');
+      return res.json({ message: 'Aviso marcado como visto.' });
+    } catch (err) {
+      if (err instanceof AppError) throw err;
+      console.error('[POST /admin/notificaciones/acceso-bloqueado/:id/leida] Error:', err.message);
+      throw new AppError(503, 'No pudimos marcar el aviso. Intenta de nuevo.', 'DB_UNREACHABLE');
     }
   })
 );
@@ -214,10 +281,10 @@ router.post(
       );
 
       await pool.query(
-        `INSERT INTO notificacion (id_gimnasio, id_usuario, tipo, titulo, mensaje, leido)
+        `INSERT INTO notificacion (id_gimnasio, id_usuario, tipo, titulo, mensaje, leida)
          VALUES ($1, $2, $3, $4, $5, TRUE)`,
-        [gymId, req.user.id, tipo || 'RECORDATORIO', 'Recordatorio enviado',
-         `Se contacto a ${existe[0].nombre} por ${canal}.`]
+        [gymId, req.user.id, 'SISTEMA', 'Recordatorio enviado',
+         `Se contacto a ${existe[0].nombre} por ${canal}${tipo ? ` (${tipo})` : ''}.`]
       );
 
       return res.status(201).json({ message: 'Envio registrado.' });

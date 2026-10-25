@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../api';
 import PageTransition from '../components/PageTransition';
 import Ripple from '../components/Ripple';
+import HitosConfig from '../components/HitosConfig';
 
 export default function ConfigPage() {
   const [config, setConfig] = useState({
@@ -13,6 +14,7 @@ export default function ConfigPage() {
     plan_ilimitado_valor: 0,
     recordatorio_cobro_activo: true,
     dias_recordatorio_default: 7,
+    dias_aviso_vencimiento: 3,
     dias_prueba: 7,
   });
   const [loading, setLoading] = useState(false);
@@ -226,6 +228,20 @@ export default function ConfigPage() {
                 disabled={!config.recordatorio_cobro_activo}
               />
             </label>
+            <label className="field">
+              <span className="field-label">Aviso de vencimiento por WhatsApp (días antes, 0 = desactivado)</span>
+              <input
+                className="field-input"
+                type="number"
+                value={config.dias_aviso_vencimiento ?? 3}
+                onChange={(e) => {
+                  const n = parseInt(e.target.value, 10);
+                  setConfig({ ...config, dias_aviso_vencimiento: Number.isNaN(n) ? 0 : Math.min(30, Math.max(0, n)) });
+                }}
+                min="0"
+                max="30"
+              />
+            </label>
           </div>
 
           <header className="chart-card__head" style={{ marginTop: 32, paddingTop: 16, borderTop: '1px solid var(--border-subtle)' }}>
@@ -269,6 +285,8 @@ export default function ConfigPage() {
           </div>
         </form>
       </section>
+
+      <HitosConfig />
     </PageTransition>
   );
 }

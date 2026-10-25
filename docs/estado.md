@@ -1,20 +1,44 @@
 # Estado: avance real de requisitos
 
-- **Fecha:** 2026-10-19 (actualizaciones tras las fusiones en `develop` del 18 y del 19; la medición inicial fue el 2026-10-16)
-- **Rama:** `docs/avance-2026-10-19` (PR hacia `develop`). La del 18 fue `docs/avance-2026-10-18` (PR #20) y la medición inicial se hizo en `docs/avance-requisitos` (PR #6, ya en `main`).
-- **Código verificado:** `develop` @ `dcda269` para los requisitos de las actualizaciones (secciones siguientes); el resto, `main` @ `54b19fa`. El PR #5 (`8acab31`) solo agregó `CONTRIBUTING.md` y el check de nombre de rama al CI (sin cambios en el código de la app); se fusionó en esta rama y es la base de la evidencia del CI.
+- **Fecha:** 2026-10-20 (actualizaciones tras las fusiones en `develop` del 18, el 19 y el 20; la medición inicial fue el 2026-10-16)
+- **Rama:** `docs/avance-2026-10-20` (PR hacia `develop`). Las anteriores fueron `docs/avance-2026-10-18` (PR #20), `docs/avance-2026-10-19` (PR #25) y `docs/avance-2026-10-19-b` (PR #29); la medición inicial se hizo en `docs/avance-requisitos` (PR #6, ya en `main`).
+- **Código verificado:** `develop` @ `3c35d53` para los requisitos de las actualizaciones (secciones siguientes); el resto, `main` @ `54b19fa`. El PR #5 (`8acab31`) solo agregó `CONTRIBUTING.md` y el check de nombre de rama al CI (sin cambios en el código de la app); se fusionó en esta rama y es la base de la evidencia del CI.
 - **Base de la documentación:** por decisión de Luis, los archivos de Santiago del PR #4 (`docs/borrador-matriz-requisitos` @ `00cdcdb`), verificados y corregidos aquí.
 - **Copias de seguridad:** los originales de `Documentación/` están en `54b19fa` y los archivos de Santiago sin corregir en el commit `5db4e2a` de esta rama (o en `00cdcdb`). Ejemplo: `git show 00cdcdb:docs/avance-requisitos.xlsx > copia.xlsx`.
 - **Responsable de esta tarea:** agente ejecutor (Claude de Luis). Solo documentación y Excel; el reparto de las implementaciones está en `docs/plan-trabajo.md`.
+
+## Actualización del 2026-10-20 (tarea L7)
+
+Solo se marcó lo que está fusionado en `develop` y revisado por el verificador (`47dde34`, secciones 33 y 34).
+
+| Req. | Antes | Ahora | PR | Evidencia y motivo |
+|---|---|---|---|---|
+| RQF-14 | Parcial | **Implementado** | #10 y #30 | El job avisa a las 9:00, con reintento a las 15:00 (`scheduler.js:62-63`), sin las congeladas (`expiracion.js:62`), una vez al entrar en la ventana y otra el día 0 (`:101-103`, `:156-168`), y solo marca el aviso si el envío no falla (`:217-218`). Los días de aviso se configuran por gimnasio (`config.js:33`, `ConfigPage.jsx:236-239`). Verificador, secciones 33.1 y 33.2. |
+| RQF-13 | Parcial | **Implementado** | #10 | Ya no se pregunta `isWhatsAppReady()` antes de enviar: `sendWhatsAppText` inicia el cliente y, si no queda listo, lanza `WHATSAPP_NO_LISTO` (`whatsapp.js:229-238`); el intento queda registrado con `exito = false` y la guía del QR (`admin-contrato.js:105-116`, `:145`). Sección 33.1. |
+| RQF-04 | Parcial | **Implementado** | #30 | El check-in niega el ingreso de una membresía congelada con estado `CONGELADO`, sin registrar asistencia (`checkin.js:125-149`), y el job de avisos la excluye (`expiracion.js:62`). Sección 33.2. Observaciones: congelar entre las 19:00 y las 24:00 de Colombia toma el día siguiente (`CURRENT_DATE` en UTC), y renovar estando congelada conserva `congelado_desde`. |
+| RQF-11 | Pendiente | **Implementado** | #32 | La racha se calcula en hora de Colombia en cada check-in correcto (`lib/gamificacion.js:54`, `checkin.js:211-217`), los hitos se otorgan sin repetirse y la pantalla muestra el mensaje (`CheckinPage.jsx:393-402`); el administrador configura los hitos (`config.js:190-280`, `HitosConfig`). 12 pruebas. Sección 33.3. Menores: «Te faltan 1» sin decir si son días o visitas; con dos hitos a la vez solo se muestra el mensaje del primero; `PUT /admin/hitos/:id` con un id no numérico da 503. |
+| RQNF-07 | Parcial | **Implementado** | #33 | Scripts `test` y `test:cov` (`backend/package.json:8-9`); 122 de 122 pruebas; cobertura de líneas de 97,72 % en `checkin.js` y 90,32 % en `notificaciones.js` (`docs/evidencias/cobertura-backend-2026-10-20.txt`, medido sobre `develop` @ `3c35d53`). Sección 34. Observación: `npm test` en el CI queda para la parte 2. |
+| RQF-02 | Implementado | **Implementado** | #30 | Se cierra la observación del kiosco: `CheckinPage.jsx` llama a `marcarActividad()` después de cada check-in correcto (`:170`, `:225`). |
+
+**Limitación de despliegue de RQF-13 y RQF-14 (decisión de Luis).** Render (`render.yaml`, entorno node) y la imagen Docker (`Dockerfile:13`, `:29`, `PUPPETEER_SKIP_DOWNLOAD=true`, sin chromium) no tienen Chrome. El envío automático por WhatsApp solo funciona en un equipo con Chrome, con el QR escaneado y `ENABLE_WHATSAPP` activo. Si se exigiera en el entorno desplegado, los dos seguirían en Parcial y el avance sería 77,0 %.
+
+**No cambian todavía:** RQF-09 (issue #24), y RQNF-15 y RQNF-09 (PR #28, pendiente del 403).
+
+**Pendiente de seguridad (zona de Santiago).** `docs/sustentacion/evidencias/Informe_Pruebas_E2E.md:99` deja en texto plano la contraseña de la recepcionista del gimnasio de ejemplo FitZone. Como producción tiene los gimnasios de ejemplo (issue #24), esa cuenta puede existir allí: hay que cambiarle la contraseña y quitar la línea del documento.
+
+**Corrección de la nota del 2026-10-18.** `docs/sustentacion/evidencias/Santiago/C2_Recuperacion_Clave/README.md:27` nunca tuvo una clave real: en todo su historial fue el marcador `xxxx xxxx xxxx xxxx`, que mi clasificador del 18 no distinguió de una contraseña de aplicación. El PR #31 lo cambió por un marcador más claro. La nota de «Hallazgos fuera de alcance» queda corregida.
 
 ## Actualización del 2026-10-19 (tarea L7)
 
 | Req. | Antes | Ahora | Fuente | Evidencia y motivo |
 |---|---|---|---|---|
 | RQF-09 | Implementado | **Parcial** | Issue #24 | Santiago confirmó contra una copia de la base real que `POST /api/admin/notificaciones/enviado` no guarda nada: `envio_mensaje` no tiene `canal` (usa `id_canal`, con FK a `canal_comunicacion`, y exige `mensaje_copiado` NOT NULL; también tiene `enviado_por`), y `canal_comunicacion` solo tiene filas para los 3 gimnasios de ejemplo. El endpoint responde 503 y el frontend oculta el error (`MiembrosPage.jsx:847-849`, `MenuNotificaciones.jsx:95-98`). Así, el registro de la fecha y el estado de cada envío no funciona con el esquema real. El insert en `notificacion` (`leido`/`leida` y `tipo`) lo corrige el PR #23. Falta decidir cómo se crea el canal WhatsApp de cada gimnasio, qué va en `mensaje_copiado` y si `enviado_por` es el usuario del token. |
-| RQNF-10 | Parcial | **Parcial** | Issue #24 | La diferencia de `envio_mensaje` y `notificacion` con producción, que el verificador había encontrado en la sección 15, quedó confirmada contra la copia de la base real. |
+| RQNF-10 | Parcial | **Implementado** | Issue #24 y PR #27 | El issue #24 confirmó contra la copia de la base real la diferencia de `envio_mensaje` y `notificacion` con producción que el verificador había encontrado en la sección 15. La migración 014 (PR #27, tarea L1 de Luis) reconstruye esas dos tablas con el DDL de `ConsultasDB` sin perder filas, y el `pg_dump -s` de las dos tablas y sus secuencias sale idéntico al de producción (verificador `54b3cce`, secciones 29.1 y 31). Observaciones: todavía difieren 13 tablas que el código no usa; hay prefijos repetidos (004 y 005) y `backend/src/db/migrations/001_invitacion_staff.sql` no se aplica. |
+| RQF-06 | Parcial | **Implementado** | PR #23 | El check-in bloquea la membresía vencida o sin plan sin contar asistencia (`checkin.js:123-147`) y el intento queda en la campana del administrador, sin repetirse en 10 minutos (`lib/accesos.js:20`, `:33-52`; `notificaciones.js:74-109`, `:168-182`), con «Visto» y refresco cada 30 s (verificador, secciones 27.1, 29.2 y 31). Observaciones: un congelado con el plan vigente todavía entra (la parte de RQF-04 que le falta a Santiago) y la deduplicación es de 10 minutos. |
 
-**No cambian todavía:** RQF-06 (PR #23, en revisión) y RQF-14 (PR #10, con cambios pendientes).
+**No cambian todavía:** RQF-14 (PR #10, con cambios pendientes), y RQNF-15 y RQNF-09 (PR #28, pendiente del 403).
+
+**Paso previo a la release del miércoles:** correr la 014 en una copia de producción dentro de `BEGIN; … ROLLBACK;` y confirmar que imprime dos veces «sin cambios» (una por `notificacion` y otra por `envio_mensaje`), como recomienda el verificador en las secciones 29.1 y 31.
 
 ## Actualización del 2026-10-18 (tarea L7)
 
@@ -45,16 +69,16 @@ Solo se marcó lo que está fusionado en `develop` y revisado por el verificador
 
 | Alcance | RF | RNF | Global |
 |---|---:|---:|---:|
-| **Final (RQF-01..22, RQNF-01..15)** | 72,7 % (16 puntos de 22) | 63,3 % (9,5 puntos de 15) | **68,9 % (25,5 puntos de 37)** |
-| Solo original del docx (RQF-01..12, RQNF-01..08) | 58,3 % (7 puntos de 12) | 56,3 % (4,5 puntos de 8) | 57,5 % (11,5 puntos de 20) |
+| **Final (RQF-01..22, RQNF-01..15)** | 86,4 % (19 puntos de 22) | 70,0 % (10,5 puntos de 15) | **79,7 % (29,5 puntos de 37)** |
+| Solo original del docx (RQF-01..12, RQNF-01..08) | 75,0 % (9 puntos de 12) | 62,5 % (5 puntos de 8) | 70,0 % (14 puntos de 20) |
 
-Fórmula: (implementados + 0,5 × parciales) / total; los puntos son esa suma. El 2026-10-16 el avance era 62,2 % (23/37, la cifra conciliada con el verificador); RQF-22 suma 1 punto, y RQNF-05, RQF-07, RQF-02 y RQF-01 medio cada uno; el 2026-10-19 RQF-09 resta medio (issue #24). **No llega al 80 %: faltan 4,1 puntos** (el 80 % de 37 son 29,6); ver la hoja «Trabajo pendiente». El PR #4 decía 80,5 % porque daba por implementados requisitos que el código no respalda y contaba aparte funciones que repetían otras (ver «Correcciones»).
+Fórmula: (implementados + 0,5 × parciales) / total; los puntos son esa suma. El 2026-10-16 el avance era 62,2 % (23/37, la cifra conciliada con el verificador); RQF-22 suma 1 punto, y RQNF-05, RQF-07, RQF-02 y RQF-01 medio cada uno; el 2026-10-19 RQF-09 resta medio (issue #24) y RQNF-10 y RQF-06 suman medio cada uno; el 2026-10-20 RQF-11 suma 1 punto y RQF-14, RQF-13, RQF-04 y RQNF-07 medio cada uno. **No llega al 80 % por 0,1 punto** (el 80 % de 37 son 29,6); ver la hoja «Trabajo pendiente». El PR #4 decía 80,5 % porque daba por implementados requisitos que el código no respalda y contaba aparte funciones que repetían otras (ver «Correcciones»).
 
 **Decisión de Luis aplicada (2026-10-16):** se retiraron RQF-23 (repetía RQF-08), RQF-24 (repetía RQF-05) y RQF-25 (repetía RQF-03 y es un defecto de seguridad), y RQF-26 (editar el perfil) se fusionó en RQF-15. La numeración queda consecutiva, sin renumerar. Con los cuatro, el avance habría sido 63,4 % (26 puntos de 41).
 
 **Ruta más corta al 80 %** (hoja «Trabajo pendiente»):
-- Ocho arreglos o pruebas de esfuerzo bajo: CORS, envío del contrato tras un reinicio, avisos de WhatsApp, registro de cada envío (RQF-09), límites de intentos, prueba de usabilidad y de navegadores, y aviso de acceso bloqueado → **81,1 %**, por encima de la meta.
-- Después, medir el check-in con unos 200 miembros (RQNF-01) → 83,8 %. La búsqueda del QR ya se corrigió en el PR #11.
+- Un solo arreglo de esfuerzo bajo, rechazar en CORS los orígenes que no estén en `FRONTEND_URL` (RQNF-15, PR #28) → **82,4 %**, por encima de la meta.
+- Después: el registro de cada envío (RQF-09) → 83,8 %, los límites de intentos (RQNF-09, también en el #28) → 85,1 %, y las pruebas de usabilidad y de navegadores (RQNF-04 y RQNF-06) → 87,8 %.
 
 ## Qué se hizo
 
@@ -177,8 +201,8 @@ Ajustes de redacción:
 - **Funcional:** la eliminación de cuenta (`auth.js:480-561`) siempre falla y responde 500 (RQF-22). **Resuelto en el PR #15.**
 - **Seguridad:** el JWT del personal no expira, porque `generarToken` ignora `JWT_EXPIRES_IN` (`backend/src/lib/auth-helpers.js:102-113`). **Resuelto en el PR #18.**
 - **Seguridad:** `/api/asistencia` solo exige `authenticate`, así que un miembro desde la app puede listar los ingresos de su gimnasio (`asistencia.js:21`). **Resuelto en el PR #11.**
-- **Seguridad:** `Evidencias_Sustentacion/Informe_Pruebas_E2E.md` («Datos de prueba generados») deja una contraseña de un usuario de prueba en texto plano. Conviene cambiarla y quitarla del documento.
-- **Seguridad (2026-10-18):** `COMO_CORRER.md` tenía en la sección de Render una `JWT_SECRET` y una `SMTP_PASSWORD` reales. Se cambiaron por marcadores, pero siguen en el historial del repositorio público: hay que rotar la `JWT_SECRET` en Render y revocar la contraseña de aplicación de Gmail. `Evidencias_Sustentacion/Santiago/C2_Recuperacion_Clave/README.md:27` tiene otra contraseña de aplicación de Gmail; ese archivo es de Santiago y no se tocó.
+- **Seguridad:** `docs/sustentacion/evidencias/Informe_Pruebas_E2E.md:99` («Datos de prueba generados») deja en texto plano la contraseña de la recepcionista del gimnasio de ejemplo FitZone. Como producción tiene los gimnasios de ejemplo (issue #24), esa cuenta puede existir allí. Pendiente para Santiago: cambiar esa contraseña y quitar la línea.
+- **Seguridad (2026-10-18):** `docs/guias/COMO_CORRER.md` tenía en la sección de Render una `JWT_SECRET` y una `SMTP_PASSWORD` reales. Se cambiaron por marcadores, pero siguen en el historial del repositorio público: hay que rotar la `JWT_SECRET` en Render y revocar la contraseña de aplicación de Gmail. Corrección (2026-10-20): `docs/sustentacion/evidencias/Santiago/C2_Recuperacion_Clave/README.md:27`, que aquí se citaba como otra contraseña de aplicación, nunca tuvo una clave real: siempre fue el marcador `xxxx xxxx xxxx xxxx`, y el PR #31 lo cambió por uno más claro.
 - **Seguridad:** la clave para cifrar el QR tiene un valor por defecto en el código (`miembros.js:36`, `checkin.js:19`).
 - **Pruebas:** 2 de las 23 pruebas de `backend/tests/auth-helpers.test.js` fallan, y `backend/package.json` no tiene script `test`, así que el CI no las ejecuta.
 - **Rendimiento:** si el QR no coincide directo, `checkin.js:83-101` descifra en memoria los QR de todos los miembros del gimnasio. **Mejorado en el PR #11:** la clave se deriva una sola vez y queda un descifrado AES por miembro.
@@ -190,7 +214,7 @@ Ajustes de redacción:
 ## Cómo verificar
 
 - **Porcentajes:** `docs/avance-requisitos.xlsx` → Resumen. Todo son fórmulas sobre las hojas RF y RNF.
-- **Evidencias:** hoja Evidencias, con la ruta del archivo y la línea en el commit `54b19fa`; las filas fechadas el 2026-10-18 citan `develop` @ `1ddcb24` o, las de RQF-01, RQF-02, RQF-04, RQF-07 y RQF-22, `develop` @ `f3d323c` o `bdf987b`; las del 2026-10-19 (RQF-09 y RQNF-10), `develop` @ `dcda269` y el issue #24.
+- **Evidencias:** hoja Evidencias, con la ruta del archivo y la línea en el commit `54b19fa`; las filas fechadas el 2026-10-18 citan `develop` @ `1ddcb24` o, las de RQF-01, RQF-02, RQF-04, RQF-07 y RQF-22, `develop` @ `f3d323c` o `bdf987b`; las del 2026-10-19, `develop` @ `dcda269` (RQF-09, con el issue #24) o `66186d7` (RQNF-10 y RQF-06).
 - **Documento:** `docs/Proyecto FitLoyalty - requisitos actualizados.docx`, tablas 5 y 6.
 - **Cobertura:** `docs/evidencias/cobertura-backend-2026-10-16.txt`.
 - **CI:** pestaña Actions del repositorio (ejecución exitosa en `main` 8acab31).
