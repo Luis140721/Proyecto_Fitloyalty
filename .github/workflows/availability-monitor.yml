@@ -1,14 +1,63 @@
 name: Monitor de disponibilidad API
 
+# El título de cada corrida dice si cuenta para RQNF-02: solo cuentan las de
+# «Medición de disponibilidad» (programadas, dentro del horario operativo).
+run-name: >-
+  ${{ github.event.schedule == '50 9 * * *' && 'Calentamiento (no cuenta)'
+  || github.event_name == 'workflow_dispatch' && 'Comprobación manual (no cuenta)'
+  || 'Medición de disponibilidad' }}
+
 on:
   schedule:
-    - cron: "*/5 * * * *"
+    # Medición: cada 5 minutos en el horario operativo del gimnasio (RQNF-02:
+    # lunes a domingo, 5:00 a 22:00 de Colombia, UTC-5 sin horario de verano),
+    # es decir de 5:02 a 21:57. El cron va en UTC y evita el minuto 0, cuando
+    # GitHub retrasa o descarta más corridas programadas.
+    - cron: "2-59/5 10-23,0-2 * * *"
+    # Calentamiento: 4:50 de Colombia. Despierta el servicio gratuito de Render
+    # antes de la primera medición; no cuenta para la disponibilidad.
+    - cron: "50 9 * * *"
   workflow_dispatch:
 
 permissions: {}
 
 jobs:
+  calentamiento:
+    name: Calentamiento (no cuenta)
+    if: github.event.schedule == '50 9 * * *'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Despertar la API antes del horario operativo
+        shell: bash
+        run: |
+          set -uo pipefail
+          # El arranque en frío de Render tarda alrededor de un minuto: se
+          # reintenta y la corrida termina en verde aunque no responda, con un
+          # aviso, porque no es una medición.
+          for intento in 1 2 3 4 5 6; do
+            status_code="$(curl --silent --output /dev/null --write-out '%{http_code}' \
+              --max-time 60 'https://fitloyalty-api.onrender.com/api/healthz' || true)"
+            if [ "$status_code" = "200" ]; then
+              echo "Calentamiento (no cuenta): la API respondió HTTP 200 en el intento $intento."
+              exit 0
+            fi
+            if [ -z "$status_code" ] || [ "$status_code" = "000" ]; then
+              status_code="sin respuesta"
+            else
+              status_code="HTTP $status_code"
+            fi
+            echo "Calentamiento (no cuenta): intento $intento, $status_code."
+            if [ "$intento" -lt 6 ]; then
+              sleep 20
+            fi
+          done
+          echo "::warning::Calentamiento (no cuenta): la API no respondió HTTP 200 tras 6 intentos."
+          exit 0
+
   comprobar-api:
+    name: Comprobar API
+    if: github.event.schedule != '50 9 * * *'
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
