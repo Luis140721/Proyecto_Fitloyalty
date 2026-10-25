@@ -37,10 +37,14 @@ sesión y se comprobó que aparecieran el encabezado “Bienvenido de vuelta” 
 el campo de correo. El formulario quedó dentro del ancho de la ventana, sin
 desbordamiento horizontal. Las capturas miden 1503 × 768 píxeles.
 
-**Diferencia visual menor.** A ese ancho, la página de inicio de sesión no
-ocupa toda la ventana: a la derecha queda una franja vacía de unos 137 px,
-blanca en Firefox y oscura en Chrome y Edge. No tapa el formulario ni afecta
-la navegación, pero es una diferencia de presentación entre navegadores.
+**Detalle de diseño en pantallas anchas.** A ese ancho, la página de inicio de
+sesión no ocupa toda la ventana: el contenido termina en x = 1365 en los tres
+navegadores y a la derecha queda una franja vacía de 137 px. No es una
+diferencia de compatibilidad, porque sale igual en los tres: la página mide
+1366 px de ancho. En Chrome y Edge la franja es oscura; en la captura de
+Firefox es transparente (alfa 0) y se ve blanca por el fondo del visor, así
+que probablemente sea un efecto de la herramienta de captura y conviene
+confirmarlo a ojo en Firefox. No tapa el formulario ni afecta la navegación.
 
 ## Versiones
 
@@ -52,11 +56,12 @@ anterior queda cubierta por el código que genera el build:
   (`frontend/package.json`: `vite` `^5.3.1`) usa su objetivo por defecto,
   `modules`: Chrome 87, Firefox 78 y Edge 88 (y Safari 14).
 - Las dos últimas versiones mayores (Chrome 154 y 155, Firefox 156 y 157,
-  Edge 154 y 155) están muy por encima de ese mínimo, así que el JavaScript y
-  el CSS generados no usan nada que esas versiones no soporten.
+  Edge 154 y 155) están muy por encima de ese mínimo, así que la sintaxis de
+  JavaScript que genera el build les sirve.
 
-Esto justifica la compatibilidad de la versión anterior, pero no reemplaza
-probarla.
+`build.target` solo baja la sintaxis: no agrega polyfills de APIs ni garantiza
+las propiedades CSS. Con versiones tan recientes no importa, pero esto apoya la
+compatibilidad de la versión anterior y no reemplaza probarla.
 
 ## Limitaciones
 
@@ -84,4 +89,5 @@ sesión. Para pasar a **Implementado** falta:
    sesión, dashboard, alta y edición de un miembro, check-in (manual y por QR)
    y configuración.
 3. Guardar una captura por pantalla y navegador, sin datos personales.
-4. Anotar si la franja de la derecha sigue apareciendo en las demás pantallas.
+4. Confirmar a ojo en Firefox el color de la franja de la derecha y anotar si
+   aparece en las demás pantallas.
