@@ -78,15 +78,27 @@ disponibilidad», y contar las corridas exitosas y fallidas del período. Con la
 CLI de GitHub, por ejemplo:
 
 ```text
-gh run list --workflow availability-monitor.yml --event schedule --limit 2000 \
-  --json displayTitle,conclusion,createdAt
+gh run list --workflow availability-monitor.yml --event schedule --limit 7000 \
+  --json databaseId,displayTitle,conclusion,attempt,createdAt
 ```
 
-y quedarse con `displayTitle` igual a «Medición de disponibilidad».
+y aplicar estas reglas:
 
-**Estado:** implementado en la rama `docs/rqnf-02-disponibilidad`. GitHub solo
-ejecuta los eventos `schedule` desde la rama predeterminada, así que el sondeo
-periódico empezará después de integrar este workflow en `develop`.
+1. Quedarse con `displayTitle` igual a «Medición de disponibilidad».
+2. **Contar solo el primer intento.** Volver a ejecutar una medición que
+   falló («Re-run jobs») conserva su evento y su título, y `gh run list`
+   devuelve la conclusión del último intento, así que un fallo podría pasar
+   por éxito. Las corridas con `attempt` igual a 1 se cuentan tal cual; para
+   las que tengan `attempt` mayor que 1 se toma la conclusión del intento 1
+   (`gh api repos/Luis140721/Proyecto_Fitloyalty/actions/runs/<databaseId>/attempts/1 --jq .conclusion`).
+   Lo mejor es no volver a ejecutar las mediciones.
+3. **Toda conclusión distinta de `success` cuenta como fallo** (`failure`,
+   `cancelled`, `timed_out` y las demás).
+4. `--limit 7000` alcanza para 30 días: son unas 6.150 corridas (204
+   mediciones y un calentamiento por día), más las manuales.
+
+**Estado:** integrado en `develop` el 2026-10-25 (PR #42), que es la rama
+predeterminada del repositorio, así que el sondeo programado empezó ese día.
 
 **Consumo de horas de Render.** El plan gratuito da 750 horas de instancia al
 mes por workspace y suspende el servicio tras 15 minutos sin tráfico. Con este
@@ -157,10 +169,15 @@ configuradas por este workflow.
 
 | Período | Comprobaciones | Exitosas | Fallidas | Disponibilidad |
 |---|---:|---:|---:|---:|
-| Pendiente de integración y recopilación de datos de Actions | — | — | — | No calculable |
+| Desde el 2026-10-25 (integración del PR #42), sin datos aún | — | — | — | No calculable |
 
 Todavía no hay historial del monitor programado. No se infiere disponibilidad
 para el tiempo anterior a su primera ejecución programada.
+
+**Calendario.** El primer día operativo completo es el lunes 26 de octubre:
+esa noche, después de la medición de las 21:57, RQNF-02 puede pasar a Parcial.
+La primera semana completa, de lunes a domingo, cierra el domingo 1 de
+noviembre: esa noche puede pasar a Implementado si da 99 % o más.
 
 ## Criterio de estado de RQNF-02
 
@@ -172,10 +189,13 @@ para el tiempo anterior a su primera ejecución programada.
 
 ## Pendiente para completar D3
 
-1. Integrar el workflow en `develop` para habilitar el cron.
+1. ~~Integrar el workflow en `develop` para habilitar el cron.~~ Hecho el
+   2026-10-25 (PR #42).
 2. Confirmar la primera medición programada y la hora de inicio del período.
 3. Al cierre del período, contar las corridas «Medición de disponibilidad»
    exitosas y fallidas en GitHub Actions y calcular el porcentaje con la
-   fórmula de esta evidencia, sin las corridas manuales ni el calentamiento.
+   fórmula y las reglas de «Cómo contar» (solo el primer intento; toda
+   conclusión distinta de `success` es fallo), sin las corridas manuales ni el
+   calentamiento.
 4. Actualizar la tabla con el período, el número real de corridas y los
    conteos verificables del historial.
