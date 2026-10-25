@@ -1,11 +1,38 @@
 # Estado: avance real de requisitos
 
-- **Fecha:** 2026-10-20 (actualizaciones tras las fusiones en `develop` del 18, el 19 y el 20; la medición inicial fue el 2026-10-16)
-- **Rama:** `docs/avance-2026-10-20` (PR hacia `develop`). Las anteriores fueron `docs/avance-2026-10-18` (PR #20), `docs/avance-2026-10-19` (PR #25) y `docs/avance-2026-10-19-b` (PR #29); la medición inicial se hizo en `docs/avance-requisitos` (PR #6, ya en `main`).
-- **Código verificado:** `develop` @ `3c35d53` para los requisitos de las actualizaciones (secciones siguientes); el resto, `main` @ `54b19fa`. El PR #5 (`8acab31`) solo agregó `CONTRIBUTING.md` y el check de nombre de rama al CI (sin cambios en el código de la app); se fusionó en esta rama y es la base de la evidencia del CI.
+- **Fecha:** 2026-10-25 (actualizaciones tras las fusiones en `develop` del 18, el 19, el 20 y el 25; la medición inicial fue el 2026-10-16)
+- **Rama:** `docs/avance-2026-10-25` (PR hacia `develop`). Las anteriores fueron `docs/avance-2026-10-18` (PR #20), `docs/avance-2026-10-19` (PR #25), `docs/avance-2026-10-19-b` (PR #29) y `docs/avance-2026-10-20` (PR #35); la medición inicial se hizo en `docs/avance-requisitos` (PR #6, ya en `main`).
+- **Código verificado:** `develop` @ `21e7e9c` para los requisitos de las actualizaciones (secciones siguientes); el resto, `main` @ `54b19fa`. El PR #5 (`8acab31`) solo agregó `CONTRIBUTING.md` y el check de nombre de rama al CI (sin cambios en el código de la app); se fusionó en esta rama y es la base de la evidencia del CI.
 - **Base de la documentación:** por decisión de Luis, los archivos de Santiago del PR #4 (`docs/borrador-matriz-requisitos` @ `00cdcdb`), verificados y corregidos aquí.
 - **Copias de seguridad:** los originales de `Documentación/` están en `54b19fa` y los archivos de Santiago sin corregir en el commit `5db4e2a` de esta rama (o en `00cdcdb`). Ejemplo: `git show 00cdcdb:docs/avance-requisitos.xlsx > copia.xlsx`.
 - **Responsable de esta tarea:** agente ejecutor (Claude de Luis). Solo documentación y Excel; el reparto de las implementaciones está en `docs/plan-trabajo.md`.
+
+## Actualización del 2026-10-25 (tarea L7)
+
+Solo se marcó lo que está fusionado en `develop` y revisado por el verificador (`61df91a`, secciones 36 y 37).
+
+| Req. | Antes | Ahora | PR | Evidencia y motivo |
+|---|---|---|---|---|
+| RQF-08 | Parcial | **Implementado** | #39 | Decisión de Luis. Motor diario a las 8:00 (`jobs/abandono.js:97`, `scheduler.js:71`) que clasifica en Amarilla (7 días) y Roja (15) con umbrales por gimnasio (`config.js:36-60`), deja una alerta por miembro en `alerta_abandono` y la campana las lista (`notificaciones.js:149-207`); migración 012 y 28 pruebas. Sección 36.1. |
+| RQNF-01 | Pendiente | **Implementado** | #40 | Medición con 200 miembros (`backend/scripts/medir-checkin.js`): peor caso de 15 ms y p95 de 13 ms frente al límite de 2 s; el verificador lo reprodujo con p95 de 6 a 8 ms (`docs/evidencias/rqnf-01-checkin.md`). Mide solo el backend, no el lector HID. Sección 36.2. |
+| RQNF-15 | Pendiente | **Implementado** | #28 | CORS responde 403 `CORS_BLOCKED` a los orígenes que no están en `FRONTEND_URL` (`index.js:57`), con 9 pruebas. Regla: no poner previews en `FRONTEND_URL`, porque `buildAcceptUrl` (`staff.js:66-67`) arma el enlace de invitación con esa variable. Sección 37.1. |
+| RQNF-09 | Parcial | **Implementado** | #28 | Tres limitadores nuevos, de 5 intentos cada 15 minutos: `verify-reset-code`, `reset-password` y `DELETE /api/auth/account` (`index.js:76-91`, `:99-101`). Sección 37.1. |
+| RQNF-07 | Implementado | **Implementado** | #41 | Se cierra la observación «sin `npm test` en el CI»: el paso «Pruebas» corre 214 pruebas en cada PR (`.github/workflows/ci.yml:47-48`). Sección 36.3. |
+| RQNF-02 | Pendiente | **Pendiente** | #42 | El monitor está activo desde hoy (cada 5 minutos de 5:02 a 21:57), pero todavía no hay historial. Calendario abajo. Sección 37.2. |
+| RQNF-06 | Parcial | **Parcial** | #43 | Portada y login probados en Chrome, Firefox y Edge con capturas, sin backend. Falta repetirlo con el backend en las pantallas principales (Daniel, D4). Sección 37.3. |
+
+**También:**
+- **RQF-13 y RQF-14:** el monitor mantiene despierto a Render de 4:50 a unas 22:12, lo que ayuda a que corran los crons de avisos (9:00 y 15:00) y el de abandono (8:00). La limitación de Chrome sigue igual.
+- **RQF-22:** el #28 agrega el límite de intentos que faltaba en `DELETE /api/auth/account` (`index.js:86`, `:101`); se cierra esa observación. RQF-17 también gana los límites de `verify-reset-code` y `reset-password`.
+- **Evidencia de RQNF-02:** se corrigió la receta de conteo en `docs/evidencias/rqnf-02-disponibilidad.md`: contar solo el primer intento de cada medición (un re-run conserva el evento y el título), toda conclusión distinta de `success` es un fallo y `--limit 7000` para 30 días.
+
+**Calendario de RQNF-02.** El primer día operativo completo es el **lunes 26**: esa noche, después de la medición de las 21:57, puede pasar a **Parcial** (89,2 %). La primera semana completa cierra el **domingo 1/11**: como pronto esa noche puede pasar a **Implementado** si da 99 % o más (90,5 %). Si da menos de 99 %, queda en Parcial.
+
+**Pendientes de seguimiento (no cambian el estado):**
+- **Santiago, dos arreglos del #39 (RQF-08):** que la campana filtre a los congelados y a quienes ya volvieron (hoy muestra lo que dejó el job, hasta el día siguiente), y correr el job de abandono al arrancar el servidor, por si Render duerme a las 8:00.
+- **Seguridad (Santiago):** `docs/sustentacion/evidencias/Informe_Pruebas_E2E.md:99` deja en texto plano la contraseña de la recepcionista del gimnasio de ejemplo FitZone; hay que cambiarla y quitar la línea.
+- **Menores:** hay tres cálculos distintos de «en riesgo» (dashboard, Miembros y job); los días de abandono se cuentan en UTC; `DELETE /api/admin/miembros/:id/permanent` falla con 503 para quien tiene check-ins o una alerta; `jest.config.js` no mide `src/jobs/abandono.js` y no hay `coverageThreshold`; la guarda de `medir-checkin.js` no revisa el parámetro `host` de la URL; y la franja de la derecha de RQNF-06 hay que confirmarla a ojo en Firefox.
+- **El bootcamp de testing (#38) es un frente aparte:** no cambia ningún estado de esta matriz.
 
 ## Actualización del 2026-10-20 (tarea L7)
 
@@ -62,23 +89,23 @@ Solo se marcó lo que está fusionado en `develop` y revisado por el verificador
 **Sin cambio hasta que se fusione:** RQF-14 (PR #10, el verificador pidió cambios).
 
 **Riesgos anotados, sin cambio de estado:**
-- **RQF-22:** solo el dueño, con su contraseña (PR #21). Falta el límite de intentos en `DELETE /api/auth/account`: con un token robado del dueño se puede probar su contraseña sin freno. Es una línea en `index.js`, antes de la `:81` (zona de Daniel).
+- **RQF-22:** solo el dueño, con su contraseña (PR #21). El límite de intentos en `DELETE /api/auth/account` que faltaba llegó con el PR #28 (2026-10-25).
 - **RQF-09:** confirmado el 2026-10-19 (issue #24): pasó a Parcial, ver la actualización del 2026-10-19.
 
 ## Resultado
 
 | Alcance | RF | RNF | Global |
 |---|---:|---:|---:|
-| **Final (RQF-01..22, RQNF-01..15)** | 86,4 % (19 puntos de 22) | 70,0 % (10,5 puntos de 15) | **79,7 % (29,5 puntos de 37)** |
-| Solo original del docx (RQF-01..12, RQNF-01..08) | 75,0 % (9 puntos de 12) | 62,5 % (5 puntos de 8) | 70,0 % (14 puntos de 20) |
+| **Final (RQF-01..22, RQNF-01..15)** | 88,6 % (19,5 puntos de 22) | 86,7 % (13 puntos de 15) | **87,8 % (32,5 puntos de 37)** |
+| Solo original del docx (RQF-01..12, RQNF-01..08) | 79,2 % (9,5 puntos de 12) | 75,0 % (6 puntos de 8) | 77,5 % (15,5 puntos de 20) |
 
-Fórmula: (implementados + 0,5 × parciales) / total; los puntos son esa suma. El 2026-10-16 el avance era 62,2 % (23/37, la cifra conciliada con el verificador); RQF-22 suma 1 punto, y RQNF-05, RQF-07, RQF-02 y RQF-01 medio cada uno; el 2026-10-19 RQF-09 resta medio (issue #24) y RQNF-10 y RQF-06 suman medio cada uno; el 2026-10-20 RQF-11 suma 1 punto y RQF-14, RQF-13, RQF-04 y RQNF-07 medio cada uno. **No llega al 80 % por 0,1 punto** (el 80 % de 37 son 29,6); ver la hoja «Trabajo pendiente». El PR #4 decía 80,5 % porque daba por implementados requisitos que el código no respalda y contaba aparte funciones que repetían otras (ver «Correcciones»).
+Fórmula: (implementados + 0,5 × parciales) / total; los puntos son esa suma. El 2026-10-16 el avance era 62,2 % (23/37, la cifra conciliada con el verificador); RQF-22 suma 1 punto, y RQNF-05, RQF-07, RQF-02 y RQF-01 medio cada uno; el 2026-10-19 RQF-09 resta medio (issue #24) y RQNF-10 y RQF-06 suman medio cada uno; el 2026-10-20 RQF-11 suma 1 punto y RQF-14, RQF-13, RQF-04 y RQNF-07 medio cada uno; el 2026-10-25 RQNF-01 y RQNF-15 suman 1 punto cada uno y RQF-08 y RQNF-09 medio cada uno. **La meta del 80 % está superada; para el 90 % (33,3 puntos) faltan 0,8** (el 80 % de 37 son 29,6); ver la hoja «Trabajo pendiente». El PR #4 decía 80,5 % porque daba por implementados requisitos que el código no respalda y contaba aparte funciones que repetían otras (ver «Correcciones»).
 
 **Decisión de Luis aplicada (2026-10-16):** se retiraron RQF-23 (repetía RQF-08), RQF-24 (repetía RQF-05) y RQF-25 (repetía RQF-03 y es un defecto de seguridad), y RQF-26 (editar el perfil) se fusionó en RQF-15. La numeración queda consecutiva, sin renumerar. Con los cuatro, el avance habría sido 63,4 % (26 puntos de 41).
 
-**Ruta más corta al 80 %** (hoja «Trabajo pendiente»):
-- Un solo arreglo de esfuerzo bajo, rechazar en CORS los orígenes que no estén en `FRONTEND_URL` (RQNF-15, PR #28) → **82,4 %**, por encima de la meta.
-- Después: el registro de cada envío (RQF-09) → 83,8 %, los límites de intentos (RQNF-09, también en el #28) → 85,1 %, y las pruebas de usabilidad y de navegadores (RQNF-04 y RQNF-06) → 87,8 %.
+**Ruta para pasar del 90 %** (hoja «Trabajo pendiente»; la meta del 80 % ya está superada):
+- Sin esperar al monitor: el registro de cada envío (RQF-09, issue #24) → 89,2 % y la prueba de usabilidad (RQNF-04, Daniel, D5) → **90,5 %**; después, la prueba de navegadores con el backend (RQNF-06, Daniel, D4) → 91,9 %.
+- RQNF-02 suma solo con el tiempo: Parcial el lunes 26 en la noche y, si da 99 % o más, Implementado como pronto el domingo 1/11.
 
 ## Qué se hizo
 
