@@ -137,7 +137,7 @@ const createSchema = z.object({
  * opcionales.
  */
 const vacioANull = (schema) =>
-  schema.optional().or(z.literal('').transform(() => null)).nullable();
+  z.literal('').transform(() => null).or(schema.optional()).nullable();
 
 const updateSchema = z.object({
   nombre:    z.string().min(2).optional(),

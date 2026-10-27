@@ -57,6 +57,7 @@ frontend/.vite.err.log
 # --- Capturas de playwright / browser (NO subir)
 *.png
 **/*.png
+!docs/evidencias/capturas/rqnf-06/*.png
 .fitloyalty-*.png
 .fitloyalty-*.jpg
 kinetic-*.png
@@ -111,4 +112,3 @@ backend/.wwebjs_cache/
 # --- Archivos de bloqueo de Office / LibreOffice (se crean al abrir un documento)
 ~$*
 .~lock.*#
-
