@@ -39,9 +39,18 @@ Por ello, no se atribuyen resultados a P1–P3 ni se inventan tiempos,
 interacciones, solicitudes de ayuda o confirmaciones del método guardado.
 Tampoco se modificó ni se borró ningún registro de participantes.
 
-**Entorno utilizado:** ninguno confirmado para las sesiones. El protocolo
-requiere una instancia aislada de prueba y datos sintéticos antes de empezar;
-no autoriza usar producción.
+**Sesiones observadas:** ninguna; el entorno preparado no se usó con
+participantes.
+
+**Preparación local:** existe la base aislada
+`fitloyalty_d5_test_20261026`, con migraciones 002–014, una cuenta
+administradora sintética y el miembro de prueba `79123456` con plan vigente.
+El backend y el frontend respondieron localmente; el scheduler y WhatsApp se
+mantuvieron deshabilitados. Esta base usa el servicio PostgreSQL local, no un
+contenedor Docker. Al revisar este estado, Docker no estaba disponible en el
+equipo, por lo que la preparación solicitada con Docker sigue pendiente y no
+se deben iniciar las sesiones hasta dejar listo ese entorno aislado. No se
+usó producción.
 
 ## Objetivo y criterio
 
@@ -56,8 +65,8 @@ se hayan guardado sus resultados. No se asignan resultados anticipadamente.
 
 ## Preparación
 
-1. Usar un entorno de prueba aislado, no producción, y una cuenta de
-   administrador temporal.
+1. Usar PostgreSQL en Docker local, aislado y nunca en producción, y una
+   cuenta de administrador temporal. Deshabilitar scheduler y WhatsApp.
 2. Dejar abierta la pantalla Check-in y preparar un miembro de prueba activo
    con un documento sintético. No usar información personal real.
 3. Comprobar antes de cada sesión que no exista ya un check-in de prueba que
