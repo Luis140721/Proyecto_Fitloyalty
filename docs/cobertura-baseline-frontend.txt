@@ -1,28 +1,25 @@
-# Linea base de cobertura del frontend - semana 1 (2026-10-20)
+# Linea base de cobertura del frontend - semana 1 (2026-10-26)
+# Rama: chore/test-semana-01 con develop @ 7e3ede9 fusionado
 # Comando (desde frontend/): npm test   (vitest run --coverage; mide src/**, sin main.jsx)
-# Umbral en vite.config.js: lineas 1, sentencias 1, ramas 10, funciones 6 (no puede bajar).
+# Umbral en vite.config.js: lineas 1, sentencias 1, ramas 9, funciones 6 (no puede bajar).
 #
-
-> fitloyalty-frontend@1.0.0 test
-> vitest run --coverage
-
 The CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.
 
  RUN  v2.1.9 C:/Users/Santiago/Documents/Estudios/Sena/FitLoyalty/FitLoyalty_/Proyecto_Fitloyalty/frontend
       Coverage enabled with v8
 
- ✓ tests/humo.test.js (1 test) 4ms
+ ✓ tests/humo.test.js (1 test) 2ms
 
  Test Files  1 passed (1)
       Tests  1 passed (1)
-   Start at  20:25:51
-   Duration  2.33s (transform 51ms, setup 181ms, collect 144ms, tests 4ms, environment 771ms, prepare 237ms)
+   Start at  23:22:50
+   Duration  2.23s (transform 48ms, setup 155ms, collect 144ms, tests 2ms, environment 731ms, prepare 182ms)
 
  % Coverage report from v8
 -------------------|---------|----------|---------|---------|-------------------
 File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
 -------------------|---------|----------|---------|---------|-------------------
-All files          |    1.11 |       10 |    6.12 |    1.11 |                   
+All files          |    1.09 |      9.8 |       6 |    1.09 |                   
  src               |   37.66 |    55.55 |    37.5 |   37.66 |                   
   App.jsx          |       0 |        0 |       0 |       0 | 1-101             
   api.js           |   52.17 |     62.5 |   42.85 |   52.17 | ...41-149,157-160 
@@ -35,6 +32,7 @@ All files          |    1.11 |       10 |    6.12 |    1.11 |
   EmptyState.jsx   |       0 |        0 |       0 |       0 | 1-55              
   ErrorBanner.jsx  |       0 |        0 |       0 |       0 | 1-134             
   ...rBoundary.jsx |       0 |        0 |       0 |       0 | 1-69              
+  HitosConfig.jsx  |       0 |        0 |       0 |       0 | 1-123             
   ...oWhatsapp.jsx |       0 |        0 |       0 |       0 | 1-25              
   LegalLayout.jsx  |       0 |        0 |       0 |       0 | 1-50              
   Logo.jsx         |       0 |        0 |       0 |       0 | 1-90              
@@ -54,8 +52,8 @@ All files          |    1.11 |       10 |    6.12 |    1.11 |
   useApiErrors.js  |       0 |        0 |       0 |       0 | 1-39              
  src/pages         |       0 |        0 |       0 |       0 |                   
   ...nvitePage.jsx |       0 |        0 |       0 |       0 | 1-276             
-  CheckinPage.jsx  |       0 |        0 |       0 |       0 | 1-406             
-  ConfigPage.jsx   |       0 |        0 |       0 |       0 | 1-274             
+  CheckinPage.jsx  |       0 |        0 |       0 |       0 | 1-436             
+  ConfigPage.jsx   |       0 |        0 |       0 |       0 | 1-330             
   ...boardPage.jsx |       0 |        0 |       0 |       0 | 1-710             
   ...rdUsuario.jsx |       0 |        0 |       0 |       0 | 1-172             
   ...uentaPage.jsx |       0 |        0 |       0 |       0 | 1-187             

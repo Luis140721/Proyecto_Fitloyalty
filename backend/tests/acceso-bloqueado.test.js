@@ -201,3 +201,106 @@ describe('POST /api/admin/notificaciones/acceso-bloqueado/:id/leida', () => {
     expect((await call('POST', '/api/admin/notificaciones/acceso-bloqueado/99/leida', MIEMBRO)).status).toBe(403);
   });
 });
+
+describe('membresia congelada (RQF-04)', () => {
+  const ayer = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  const manana = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+
+  const prepararCheckin = (plan) => {
+    mockQuery.mockImplementation(async (sql) => {
+      if (/FROM gimnasio/i.test(sql)) return { rows: [{ id_gimnasio: 7, activo: true, trial_ends_at: null }] };
+      if (/FROM miembro/i.test(sql)) return { rows: [{ id_miembro: 12, nombre: 'Ana', documento: '123', codigo_qr: 'x', qr_imagen: null }] };
+      if (/DISTINCT ON/i.test(sql)) return { rows: [plan] };
+      if (/INSERT INTO notificacion/i.test(sql)) return { rowCount: 1 };
+      if (/FROM checkin/i.test(sql)) return { rows: [] };
+      if (/INSERT INTO checkin/i.test(sql)) return { rows: [{ id_checkin: 1, fecha_hora: new Date(), metodo: 'MANUAL' }] };
+      throw new Error('consulta inesperada: ' + sql.slice(0, 50));
+    });
+  };
+  const checkin = () => call('POST', '/api/admin/checkin', RECEP, { documento: '123', metodo: 'MANUAL' });
+
+  test('el check-in pide congelado_desde del plan vigente', async () => {
+    prepararCheckin({ tipo_plan: 'MENSUAL', fecha_fin: manana, estado_pago: 'PAGADO', congelado_desde: null });
+    await checkin();
+    const [sql] = mockQuery.mock.calls.find(([s]) => /DISTINCT ON/i.test(s));
+    expect(sql).toMatch(/congelado_desde/);
+  });
+
+  test('congelada con fecha vigente: niega con estado CONGELADO y el mensaje para la persona', async () => {
+    prepararCheckin({ tipo_plan: 'MENSUAL', fecha_fin: manana, estado_pago: 'PAGADO', congelado_desde: '2026-10-10' });
+    const r = await checkin();
+    expect(r.status).toBe(200);
+    expect(r.body.miembro.estado).toBe('CONGELADO');
+    expect(r.body.message).toBe('Tu membresía está congelada. Pide en recepción que la reactiven para poder ingresar.');
+    expect(mockQuery.mock.calls.some(([s]) => /INSERT INTO checkin/i.test(s))).toBe(false);
+    expect(insertsNotificacion()).toHaveLength(1);
+    expect(insertsNotificacion()[0][1][4]).toMatch(/congelada/);
+  });
+
+  test('congelada Y con la fecha ya pasada: dice CONGELADO, no VENCIDO', async () => {
+    prepararCheckin({ tipo_plan: 'MENSUAL', fecha_fin: ayer, estado_pago: 'PAGADO', congelado_desde: '2026-10-10' });
+    const r = await checkin();
+    expect(r.body.miembro.estado).toBe('CONGELADO');
+    expect(insertsNotificacion()[0][1][4]).toMatch(/congelada/);
+    expect(insertsNotificacion()[0][1][4]).not.toMatch(/vencida/);
+  });
+
+  test('descongelada con la fecha vigente: entra normal (201)', async () => {
+    prepararCheckin({ tipo_plan: 'MENSUAL', fecha_fin: manana, estado_pago: 'PAGADO', congelado_desde: null });
+    const r = await checkin();
+    expect(r.status).toBe(201);
+    expect(insertsNotificacion()).toHaveLength(0);
+  });
+
+  describe('campana', () => {
+    const base = { id_notificacion: 99, id_miembro: 12, nombre: 'Ana Gomez', telefono: '3001234567', codigo_pais_telefono: null, minutos: 2, dias_vencida: -5, congelada: true };
+    const prepararCampana = (bloqueados) => {
+      mockQuery.mockImplementation(async (sql) => {
+        if (/recordatorio_cobro_activo/.test(sql) || /umbral_alerta_amarilla/.test(sql)) return { rows: [] };
+        if (/SELECT nombre FROM gimnasio/.test(sql)) return { rows: [{ nombre: 'Gym Demo' }] };
+        if (/FROM notificacion n/.test(sql)) return { rows: bloqueados };
+        return { rows: [] };
+      });
+    };
+
+    // Las congeladas tampoco aparecen "en riesgo": el motor de abandono (RQF-08)
+    // no las evalua y cierra su alerta; esa regla se prueba en abandono.test.js.
+    test('las consultas de vencidas y por vencer excluyen a las congeladas', async () => {
+      prepararCampana([]);
+      await call('GET', '/api/admin/notificaciones', RECEP);
+      const sqls = mockQuery.mock.calls.map(([s]) => s);
+      const vencidas = sqls.find((s) => /pc\.fecha_fin < CURRENT_DATE\s+AND/.test(s) && !/FROM notificacion n/.test(s));
+      const porVencer = sqls.find((s) => /pc\.fecha_fin >= CURRENT_DATE/.test(s));
+      expect(vencidas).toMatch(/pc\.congelado_desde IS NULL/);
+      expect(porVencer).toMatch(/pc\.congelado_desde IS NULL/);
+    });
+
+    test('un acceso bloqueado de una congelada se muestra como "Membresia congelada"', async () => {
+      prepararCampana([base]);
+      const r = await call('GET', '/api/admin/notificaciones', RECEP);
+      const a = r.body.avisos[0];
+      expect(a.tipo).toBe('acceso-bloqueado');
+      expect(a.detalle).toMatch(/Membresia congelada/);
+      expect(a.mensaje).toMatch(/tu membresia esta congelada/);
+      expect(a.mensaje).not.toMatch(/vencio/);
+    });
+
+    test('la consulta de bloqueos incluye a las congeladas aunque no esten vencidas', async () => {
+      prepararCampana([]);
+      await call('GET', '/api/admin/notificaciones', RECEP);
+      const [sql] = mockQuery.mock.calls.find(([s]) => /FROM notificacion n/.test(s));
+      expect(sql).toMatch(/pc\.congelado_desde IS NOT NULL/);
+    });
+  });
+});
+
+describe('avisos de vencimiento: miembrosPorVencer excluye a las congeladas', () => {
+  test('la consulta del job filtra pc.congelado_desde IS NULL', async () => {
+    const { miembrosPorVencer } = require('../src/jobs/expiracion');
+    mockQuery.mockResolvedValue({ rows: [] });
+    await miembrosPorVencer(7);
+    const [sql] = mockQuery.mock.calls[0];
+    expect(sql).toMatch(/congelado_desde/);
+    expect(sql).toMatch(/pc\.congelado_desde IS NULL/);
+  });
+});

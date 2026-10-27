@@ -49,7 +49,7 @@ function validarContrasena(password) {
   return trimmed.length >= 6 && !/\s/.test(password) && /\d/.test(password);
 }
 
-/** Teléfono colombiano: 10 dígitos que empiezan con 3 (móvil); admite el prefijo +57. */
+/** Teléfono colombiano: 10 dígitos que empiezan con 3 (móvil), con o sin el indicativo 57. */
 function validarTelefonoColombiano(phone) {
   if (!phone || typeof phone !== 'string') return false;
   let digits = phone.replace(/\D/g, '');
