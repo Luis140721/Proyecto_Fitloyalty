@@ -7,7 +7,41 @@
 **Rama:** `docs/rqnf-04-usabilidad`
 
 **Fecha de preparación:** 2026-10-26
-**Estado:** Protocolo preparado; falta ejecutar con tres participantes reales.
+
+**Estado:** Protocolo y revisión del flujo preparados; las tres sesiones con
+participantes aún no se han ejecutado.
+
+## Trabajo realizado
+
+- Se revisó el criterio de RQNF-04 y D5 en la matriz de requisitos y en el
+  plan de trabajo: tres personas sin formación técnica, check-in manual y
+  máximo de dos interacciones.
+- Se inspeccionó el flujo de la pantalla en
+  `frontend/src/pages/CheckinPage.jsx`. La interfaz tiene una entrada de QR
+  con botón «Registrar» y, debajo, una entrada separada «O por documento»
+  (`:341-363`). El formulario envía el documento si no hay un código QR.
+- Se preparó el guion neutral, el uso de datos sintéticos, la hoja anónima
+  para P1–P3, el conteo de interacciones y tiempo, y la limpieza entre
+  sesiones.
+- Se definió no registrar nombres, contactos, imágenes, audio o video, y no
+  realizar la prueba en producción.
+
+Esta inspección confirma qué flujo se debe observar; no demuestra que una
+persona pueda completarlo en dos interacciones ni sustituye las sesiones.
+La posición separada del campo de documento respecto al campo QR y al botón
+es un aspecto que se debe observar sin orientar a los participantes.
+
+## Ejecución de sesiones
+
+Se confirmó la disponibilidad de tres voluntarios, pero no se recibieron
+mediciones observadas de las sesiones ni evidencia de que se hayan ejecutado.
+Por ello, no se atribuyen resultados a P1–P3 ni se inventan tiempos,
+interacciones, solicitudes de ayuda o confirmaciones del método guardado.
+Tampoco se modificó ni se borró ningún registro de participantes.
+
+**Entorno utilizado:** ninguno confirmado para las sesiones. El protocolo
+requiere una instancia aislada de prueba y datos sintéticos antes de empezar;
+no autoriza usar producción.
 
 ## Objetivo y criterio
 
@@ -64,8 +98,8 @@ estado de la aplicación con datos sintéticos.
 
 ## Resultados
 
-**Pendientes.** Esta tabla se completa después de observar a cada participante;
-no representa una sesión ejecutada.
+**Pendientes de ejecución.** Las filas son marcadores para las sesiones
+futuras; no representan sesiones ejecutadas.
 
 | Código | Sin formación técnica (sí/no) | Completó (sí/no) | Interacciones | Tiempo (s) | Ayuda solicitada | Método registrado | Observaciones |
 |---|---|---|---:|---:|---|---|---|
@@ -75,14 +109,16 @@ no representa una sesión ejecutada.
 
 ### Cálculo y decisión
 
-- Participantes que completaron: pendiente de ejecutar.
+- Participantes que completaron: 0 observados; faltan las tres sesiones.
 - Interacciones por participante: pendiente de ejecutar.
 - Tiempo por participante y mediana: pendiente de ejecutar.
 - Ayuda y dificultades observadas: pendiente de ejecutar.
 - Método guardado como MANUAL en las tres sesiones: pendiente de ejecutar.
 
-**Veredicto provisional:** No evaluado; aún no hay sesiones observadas. RQNF-04
-permanece Parcial hasta completar las tres sesiones y analizar los resultados.
+**Veredicto:** Preparación completada; validación con usuarios no ejecutada.
+No se puede determinar si se alcanza el máximo de dos interacciones. RQNF-04
+permanece Parcial hasta observar a los tres participantes, completar esta
+tabla y analizar sus resultados.
 
 ## Incidencias a observar
 
