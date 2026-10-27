@@ -161,3 +161,91 @@ describe('POST /api/auth/reset-password con resetToken', () => {
     expect(llamadas(/UPDATE sesion/)).toHaveLength(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+describe('POST /api/auth/login', () => {
+  const bcrypt = require('bcryptjs');
+  const HASH = bcrypt.hashSync('clave123', 4);
+  const entrar = (body) => request(app).post('/api/auth/login').send(body);
+  const fila = (extra = {}) => ({
+    id_usuario: 7, nombre: 'Ana', email: 'ana@gym.co', password_hash: HASH, id_gimnasio: 3,
+    activo: true, gym_activo: true, trial_ends_at: null, gym_nombre: 'FitGym', gym_logo: null,
+    rol_nombre: 'ADMINISTRADOR', ...extra,
+  });
+  const conUsuario = (u) => mockQuery.mockResolvedValue({ rows: u ? [u] : [] });
+
+  test('con la clave correcta devuelve el token y el gimnasio, sin el hash', async () => {
+    conUsuario(fila());
+
+    const r = await entrar({ email: 'ANA@gym.co', password: 'clave123' });
+
+    expect(r.status).toBe(200);
+    expect(jwt.verify(r.body.token, process.env.JWT_SECRET)).toMatchObject({ id: 7, gymId: 3 });
+    expect(r.body.gym).toMatchObject({ id: 3, name: 'FitGym' });
+    expect(JSON.stringify(r.body)).not.toContain(HASH);
+    expect(mockQuery.mock.calls[0][1]).toEqual(['ana@gym.co']);
+  });
+
+  test('correo inexistente y clave incorrecta dan el mismo 401', async () => {
+    conUsuario(null);
+    const sinUsuario = await entrar({ email: 'nadie@gym.co', password: 'clave123' });
+    conUsuario(fila());
+    const malaClave = await entrar({ email: 'ana@gym.co', password: 'clave124' });
+
+    expect(sinUsuario.status).toBe(401);
+    expect(malaClave.status).toBe(401);
+    expect(sinUsuario.body).toEqual(malaClave.body);
+  });
+
+  test('cuenta desactivada: 403 solo si la clave es correcta, para no revelar el correo', async () => {
+    conUsuario(fila({ activo: false }));
+    const buenaClave = await entrar({ email: 'ana@gym.co', password: 'clave123' });
+    const malaClave = await entrar({ email: 'ana@gym.co', password: 'otra456' });
+
+    expect(buenaClave.status).toBe(403);
+    expect(buenaClave.body.code).toBe('ACCOUNT_DISABLED');
+    expect(malaClave.status).toBe(401);
+  });
+
+  test('si la base no responde devuelve 503 y no 500', async () => {
+    mockQuery.mockRejectedValue(new Error('connect ECONNREFUSED'));
+
+    const r = await entrar({ email: 'ana@gym.co', password: 'clave123' });
+
+    expect(r.status).toBe(503);
+    expect(r.body.code).toBe('DB_UNREACHABLE');
+  });
+});
+
+// ---------------------------------------------------------------------------
+describe('POST /api/auth/forgot-password', () => {
+  const pedir = (email) => request(app).post('/api/auth/forgot-password').send({ email });
+
+  test('correo inexistente: misma respuesta generica y no se envia nada', async () => {
+    simularBd({ usuario: null });
+
+    const r = await pedir('nadie@gym.co');
+
+    expect(r.status).toBe(200);
+    expect(r.body).toEqual({
+      message: 'Si el correo esta registrado, te enviamos un codigo para recuperar tu contrasena.',
+      resendAfterSeconds: 60,
+    });
+    expect(mockSendRecoveryCode).not.toHaveBeenCalled();
+  });
+
+  test('guarda un codigo de 6 digitos que vence en 15 minutos y lo envia al correo', async () => {
+    simularBd();
+    mockSendRecoveryCode.mockResolvedValue({ delivered: true });
+
+    const r = await pedir('ana@gym.co');
+
+    expect(r.status).toBe(200);
+    expect(r.body.devCode).toBeUndefined();
+    const [[, [idUsuario, code, vence]]] = llamadas(/INSERT INTO password_reset/);
+    expect(idUsuario).toBe(7);
+    expect(code).toMatch(/^\d{6}$/);
+    expect(vence.getTime() - AHORA.getTime()).toBe(15 * 60_000);
+    expect(mockSendRecoveryCode).toHaveBeenCalledWith(expect.objectContaining({ to: 'ana@gym.co', code, expiresMinutes: 15 }));
+  });
+});
