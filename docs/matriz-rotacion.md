@@ -15,11 +15,11 @@ Reglas:
 
 Propuesta pendiente de acuerdo del grupo; ver [plan-pruebas-bootcamp.md](plan-pruebas-bootcamp.md). Según el bootcamp, en la semana 1 todos hacen E2E y en la 3 todos hacen Front. Cada integrante debe tener commits de test propios en la capa de cada semana.
 
-| Integrante (usuario GitHub) | S1 | S2 | S3 | S4 |
-|---|---|---|---|---|
-| Luis (@Luis140721) | E2E: registro de gimnasio ([#38](https://github.com/Luis140721/Proyecto_Fitloyalty/pull/38)) | E2E (CI): CI con umbral y pnpm ([#61](https://github.com/Luis140721/Proyecto_Fitloyalty/pull/61)); unitarias de `email.js` y de la validación del registro ([#59](https://github.com/Luis140721/Proyecto_Fitloyalty/pull/59)) | Front: `RegisterOwnerPage` ([#60](https://github.com/Luis140721/Proyecto_Fitloyalty/pull/60)) | Front: contrato del API que consume el front, `MiembrosPage` y `AcceptInvitePage` ([#57](https://github.com/Luis140721/Proyecto_Fitloyalty/pull/57)) |
-| Santiago (@Salamank06) | E2E: inicio de sesión ([#48](https://github.com/Luis140721/Proyecto_Fitloyalty/pull/48)) | API: reglas de login y recuperación de clave ([#49](https://github.com/Luis140721/Proyecto_Fitloyalty/pull/49)) | Front: `LoginPage` ([#50](https://github.com/Luis140721/Proyecto_Fitloyalty/pull/50)) | E2E: seguridad y contrato de errores del API ([#51](https://github.com/Luis140721/Proyecto_Fitloyalty/pull/51)) |
-| Daniel (@dftv3429-eng) | E2E: alta de miembro (pendiente) | Front (pendiente) | Front (pendiente; el backend ya pasa del 40 %) | API (pendiente) |
+| Integrante (usuario GitHub) | S1 | S2 | S3 | S4 | S5 | S6 |
+|---|---|---|---|---|---|---|
+| Luis (@Luis140721) | E2E: registro de gimnasio ([#38](https://github.com/Luis140721/Proyecto_Fitloyalty/pull/38)) | E2E (CI): CI con umbral y pnpm ([#61](https://github.com/Luis140721/Proyecto_Fitloyalty/pull/61)); unitarias de `email.js` y de la validación del registro ([#59](https://github.com/Luis140721/Proyecto_Fitloyalty/pull/59)) | Front: `RegisterOwnerPage` ([#60](https://github.com/Luis140721/Proyecto_Fitloyalty/pull/60)) | Front: contrato del API que consume el front, `MiembrosPage` y `AcceptInvitePage` ([#57](https://github.com/Luis140721/Proyecto_Fitloyalty/pull/57)) | API: dobles sobre una dependencia externa del backend (en curso) | BD: integración con la BD de pruebas (en curso) |
+| Santiago (@Salamank06) | E2E: inicio de sesión ([#48](https://github.com/Luis140721/Proyecto_Fitloyalty/pull/48)) | API: reglas de login y recuperación de clave ([#49](https://github.com/Luis140721/Proyecto_Fitloyalty/pull/49)) | Front: `LoginPage` ([#50](https://github.com/Luis140721/Proyecto_Fitloyalty/pull/50)) | E2E: seguridad y contrato de errores del API ([#51](https://github.com/Luis140721/Proyecto_Fitloyalty/pull/51)) | | |
+| Daniel (@dftv3429-eng) | E2E: alta de miembro (pendiente) | Front (pendiente) | Front (pendiente; el backend ya pasa del 40 %) | API (pendiente) | | |
 
 ## Cobertura semanal
 
@@ -47,3 +47,5 @@ El vocero escribe su respuesta **antes** de que el instructor llegue a la mesa; 
 | S2 | | | | |
 | S3 | | | | |
 | S4 | | | | |
+| S5 | | | | |
+| S6 | | | | |
