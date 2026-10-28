@@ -157,8 +157,10 @@ afterEach(() => {
 
 describe('POST /api/admin/staff/invite: the invitation email', () => {
   test('should send one email with the invitee, the inviter, the gym, the role and the link when the data is valid', async () => {
-    // Doble: spy en sendStaffInvite. Verifica comportamiento (con que se llamo),
-    // porque el correo es el efecto hacia afuera que le importa a la persona invitada.
+    // Doble: mock de sendStaffInvite (stub que responde un envio exitoso + spy con
+    // expectativas). Verifica comportamiento (con que se llamo), porque el correo es
+    // el efecto hacia afuera que le importa a la persona invitada, y el estado de la
+    // respuesta que depende de lo que contesto el stub (emailDelivered).
     // Arrange: la BD falsa ya tiene el gimnasio 7 y su admin
 
     // Act
@@ -255,12 +257,19 @@ describe('POST /api/admin/staff/invite: the invitation email', () => {
     expect(lista.body.invitations).toEqual([expect.objectContaining({ email: 'ana@gym.co', pendiente: true })]);
   });
 
-  test('should still create the invitation and log the error when the mailer throws', async () => {
-    // Dobles: stub de sendStaffInvite que lanza (pasa si el SDK de Brevo falla al
-    // crearse: getClient queda fuera del try de sendViaBrevo) y spy en
-    // console.error para verificar el registro sin ensuciar la salida del test.
+  test.each([
+    // Hoy email.js atrapa los errores de Brevo y no lanza (ese es el test anterior).
+    // Este stub prueba el contrato de la interfaz: si otra implementacion lanza,
+    // la invitacion igual se crea.
+    ['the mailer throws', () => mockSendStaffInvite.mockRejectedValue(new Error('proveedor caido')), 'proveedor caido'],
+    // Caso real: la consulta del nombre del gimnasio esta dentro del mismo try.
+    ['reading the gym name fails', () => { mockBd.fallaCon = /SELECT nombre FROM gimnasio/; }, 'conexion perdida'],
+  ])('should still create the invitation and log the error when %s', async (_caso, prepararFalla, mensaje) => {
+    // Dobles: stub que falla (el de sendStaffInvite o el fake de la BD en esa
+    // consulta) y spy en console.error para verificar el registro sin ensuciar
+    // la salida del test. Verifica estado: la respuesta y la invitacion guardada.
     // Arrange
-    mockSendStaffInvite.mockRejectedValue(new Error('sdk sin red'));
+    prepararFalla();
 
     // Act
     const r = await invitar(ANA);
@@ -270,7 +279,7 @@ describe('POST /api/admin/staff/invite: the invitation email', () => {
     expect(r.body.emailDelivered).toBe(false);
     expect(r.body.devAcceptToken).toEqual(expect.any(String));
     expect(mockBd.invitaciones).toHaveLength(1);
-    expect(console.error).toHaveBeenCalledWith('[POST /admin/staff/invite] Error enviando mail (no bloqueante):', 'sdk sin red');
+    expect(console.error).toHaveBeenCalledWith('[POST /admin/staff/invite] Error enviando mail (no bloqueante):', mensaje);
   });
 });
 
