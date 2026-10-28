@@ -143,6 +143,32 @@ describe('RegisterOwnerPage', () => {
     expect(screen.queryByText(/Ruta actual/)).not.toBeInTheDocument();
   });
 
+  it('should remove the old banner when the person fixes the email and sends again', async () => {
+    // Arrange: el primer envío choca con un correo existente y el segundo queda esperando
+    let responder;
+    mockRegister
+      .mockImplementationOnce(() => Promise.reject({ status: 409, code: 'USER_EMAIL_TAKEN', message: 'Ya existe un usuario con ese correo.', details: null, isNetwork: false }))
+      .mockImplementationOnce(() => new Promise((resolve) => { responder = resolve; }));
+    const { user } = abrirRegistro();
+    await llenarFormulario(user);
+    await user.click(botonCrear());
+    expect(await screen.findByText('Ya existe una cuenta con ese correo.')).toBeInTheDocument();
+
+    // Act
+    await user.clear(campos.ownerEmail());
+    await user.type(campos.ownerEmail(), 'otra@gym.co');
+    await user.click(botonCrear());
+
+    // Assert: mientras se crea ya no queda el banner del intento anterior
+    expect(screen.getByRole('button', { name: /Creando\.\.\./ })).toBeDisabled();
+    expect(screen.queryByText('Ya existe una cuenta con ese correo.')).not.toBeInTheDocument();
+    expect(campos.ownerEmail()).not.toHaveAttribute('aria-invalid');
+    expect(mockRegister).toHaveBeenLastCalledWith(expect.objectContaining({ ownerEmail: 'otra@gym.co' }));
+
+    responder({ id: 1, role: 'admin' });
+    expect(await screen.findByText('Ruta actual: /admin/dashboard')).toBeInTheDocument();
+  });
+
   it('should map the API validation issues to their fields when the API answers 400', async () => {
     // Arrange
     const issues = [{ path: ['gymName'], message: 'El nombre del gimnasio es muy largo' }];
