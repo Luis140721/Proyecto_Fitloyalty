@@ -166,18 +166,18 @@ describe('email transport: sender, recipient and content', () => {
   });
 
   test.each([
-    ['there is a QR image', 'data:image/png;base64,AAA', true],
-    ['there is no QR image', null, false],
-  ])('should include the img tag only when %s', async (_caso, qrImageUrl, conImagen) => {
+    ['there is a QR image', 'data:image/png;base64,AAA', ['<img src="data:image/png;base64,AAA"']],
+    ['there is no QR image', null, []],
+  ])('should include the img tag only when %s', async (_caso, qrImageUrl, imagenes) => {
     // Arrange
     const email = cargarEmail();
 
     // Act
     await email.sendMemberQR({ to: 'a@gym.co', memberName: 'Leo', gymName: 'Gym', qrCode: 'QR-77', qrImageUrl });
 
-    // Assert
+    // Assert: todas las <img> del correo; sin imagen no debe quedar ni un <img src="null">
     const { htmlContent } = payloadEnviado();
-    expect(htmlContent.includes('<img src="data:image/png;base64,AAA"')).toBe(conImagen);
+    expect(htmlContent.match(/<img src="[^"]*"/g) ?? []).toEqual(imagenes);
     expect(htmlContent).toContain('QR-77');
   });
 });
