@@ -37,6 +37,7 @@ main          ← lo estable: lo que se despliega y se entrega
 - **Sincroniza con `develop` todos los días.** La mayoría de los conflictos grandes vienen de pasar días sin traer lo de los demás.
 - Una rama = una tarea. Si el PR crece demasiado, divídelo. La rama se borra al fusionar.
 - No trabajes sobre ramas viejas. Si necesitas algo de una, saca una rama nueva desde `develop`.
+- **Las dependencias se instalan con pnpm 12.15.0, nunca con npm.** Cada carpeta (raíz, `backend/`, `frontend/`, `e2e/`) tiene su `pnpm-lock.yaml`: instala con `pnpm install` dentro de la carpeta, agrega paquetes con versión exacta (`pnpm add paquete@X.Y.Z`) y sube el `pnpm-lock.yaml` que cambió. El CI usa `pnpm install --frozen-lockfile` y falla si el lockfile no coincide con el `package.json`.
 
 ---
 
@@ -134,6 +135,7 @@ Ya están en el `.gitignore`, pero revisa `git status` antes de cada commit:
 
 - `.env` y cualquier archivo con claves o contraseñas. Usa `.env.example` para documentar variables nuevas.
 - `node_modules/`
+- `package-lock.json`: aparece si alguien corre `npm install`; el proyecto usa `pnpm-lock.yaml`.
 - Cachés y sesiones de WhatsApp: `backend/.wwebjs_auth/`, `backend/.wwebjs_cache/`
 - Builds (`dist/`, `build/`, `.dart_tool/`) y archivos temporales de Office (`~$*.docx`)
 
