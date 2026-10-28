@@ -316,6 +316,23 @@ describe('accept link: the clock and the invitation state', () => {
     expect(segunda.body.code).toBe('INVITE_ALREADY_ACCEPTED');
   });
 
+  test('should say the invitation was already used when the link is opened after creating the account', async () => {
+    // Dobles: fake de la BD (la invitacion queda aceptada) y spy en sendStaffInvite
+    // solo para leer el enlace. Verifica estado: lo que ve la persona si vuelve a
+    // abrir el correo. Lo agregue porque el mutante que quita este chequeo en la
+    // vista previa quedaba vivo.
+    // Arrange
+    await invitar(ANA);
+    await aceptar(tokenDelCorreo());
+
+    // Act
+    const r = await verInvitacion(tokenDelCorreo());
+
+    // Assert
+    expect(r.status).toBe(410);
+    expect(r.body.code).toBe('INVITE_ALREADY_ACCEPTED');
+  });
+
   test('should stop the emailed link from working when the admin revokes the invitation', async () => {
     // Dobles: fake de la BD (la revocacion queda guardada) y spy en sendStaffInvite
     // solo para leer el enlace. Verifica estado: el enlace ya no abre ni crea la cuenta.
