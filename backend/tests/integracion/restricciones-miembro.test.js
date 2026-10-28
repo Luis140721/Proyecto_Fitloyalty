@@ -14,8 +14,51 @@ const {
   MARCA, unico, documentoUnico, crearGimnasio, crearUsuario, crearMiembro, errorDe, usarTransaccionPorTest,
 } = require('./datos');
 
-/** Texto de exactamente n caracteres que empieza con la marca de la corrida. */
-const deLargo = (n, inicio = `${MARCA} `) => inicio.padEnd(n, 'x');
+const TABLAS = ['gimnasio', 'usuario', 'miembro'];
+
+// Lo que dicen las migraciones de estas tres tablas. Los tests de abajo
+// recorren estas listas, y el primero las compara con la BD migrada: si una
+// migracion agrega o quita una columna obligatoria, un largo o una restriccion,
+// falla hasta que se actualice aqui (y con eso, hasta que tenga su test).
+
+// Columnas NOT NULL, menos los id SERIAL. Las que tienen valor por defecto
+// tambien rechazan un NULL explicito.
+const NO_NULOS = [
+  ['gimnasio', 'nombre'], ['gimnasio', 'telefono'], ['gimnasio', 'activo'], ['gimnasio', 'fecha_registro'],
+  ['gimnasio', 'plan_activo'], ['gimnasio', 'dias_aviso_vencimiento'],
+  ['usuario', 'id_gimnasio'], ['usuario', 'nombre'], ['usuario', 'email'], ['usuario', 'password_hash'],
+  ['usuario', 'rol'], ['usuario', 'activo'], ['usuario', 'debe_cambiar_clave'], ['usuario', 'fecha_creacion'],
+  ['miembro', 'id_gimnasio'], ['miembro', 'nombre'], ['miembro', 'documento'], ['miembro', 'codigo_qr'],
+  ['miembro', 'activo'], ['miembro', 'fecha_registro'], ['miembro', 'app_acceso'],
+];
+
+// Columnas VARCHAR(n). Hallazgos: con uno mas, POST /api/auth/signup respondia
+// 500 en gimnasio.nombre, gimnasio.email, usuario.nombre y usuario.email
+// (corregido en lib/validators.js, con su test unitario en
+// signup-longitudes.test.js), y POST /api/admin/miembros responde 500
+// DB_UNREACHABLE en miembro.nombre y miembro.documento (sin corregir).
+const LARGOS = [
+  ['gimnasio', 'nombre', 100], ['gimnasio', 'nit', 20], ['gimnasio', 'direccion', 200], ['gimnasio', 'telefono', 20],
+  ['gimnasio', 'email', 150], ['gimnasio', 'plan_activo', 20],
+  ['usuario', 'nombre', 100], ['usuario', 'email', 150], ['usuario', 'rol', 30],
+  ['miembro', 'nombre', 100], ['miembro', 'documento', 20], ['miembro', 'telefono', 20], ['miembro', 'email', 150],
+  ['miembro', 'codigo_qr', 100], ['miembro', 'tipo_documento', 10], ['miembro', 'genero', 20],
+  ['miembro', 'codigo_pais_telefono', 5], ['miembro', 'ciudad', 100], ['miembro', 'contacto_emergencia', 100],
+  ['miembro', 'telefono_emergencia', 20], ['miembro', 'objetivo', 50], ['miembro', 'nivel_experiencia', 30],
+];
+
+// UNIQUE, llaves foraneas y CHECK de las tres tablas, cada una con su test abajo.
+const RESTRICCIONES = [
+  'gimnasio_id_dueno_fkey', 'gimnasio_nit_key',
+  'miembro_id_gimnasio_fkey',
+  'usuario_email_key', 'usuario_id_gimnasio_fkey', 'usuario_id_rol_fkey',
+];
+
+/**
+ * Texto de n caracteres. Desde 14 empieza con un valor unico de la corrida,
+ * para las columnas UNIQUE (nit y email); los mas cortos solo repiten x.
+ */
+const deLargo = (n) => (n >= 14 ? documentoUnico().padEnd(n, 'x') : 'x'.repeat(n));
 
 describeConBd('restricciones de gimnasio, usuario y miembro', () => {
   let pool;
@@ -36,26 +79,77 @@ describeConBd('restricciones de gimnasio, usuario y miembro', () => {
     return fila[columna];
   }
 
+  /** Una fila con lo minimo que la tabla exige, lista para insertar. */
+  async function filaValida(tabla) {
+    if (tabla === 'gimnasio') return { nombre: unico('Gimnasio'), telefono: '3001234567' };
+    const gym = await crearGimnasio(tx.cliente);
+    if (tabla === 'usuario') {
+      return { id_gimnasio: gym.id_gimnasio, nombre: 'Dueña', email: `${unico('u')}@fitloyalty.test`, password_hash: 'no-es-un-hash' };
+    }
+    return { id_gimnasio: gym.id_gimnasio, nombre: 'Miembro', documento: documentoUnico(), codigo_qr: unico('QR') };
+  }
+
+  function insertar(tabla, fila) {
+    const columnas = Object.keys(fila);
+    return [
+      `INSERT INTO ${tabla} (${columnas.join(', ')}) VALUES (${columnas.map((_, i) => `$${i + 1}`).join(', ')}) RETURNING *`,
+      Object.values(fila),
+    ];
+  }
+
+  test('las listas de este archivo son las de la BD migrada', async () => {
+    const { rows: columnas } = await tx.cliente.query(
+      `SELECT table_name AS tabla, column_name AS columna, is_nullable, column_default, character_maximum_length AS largo
+         FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = ANY($1)`,
+      [TABLAS],
+    );
+    const { rows: restricciones } = await tx.cliente.query(
+      `SELECT conname FROM pg_constraint
+        WHERE conrelid::regclass::text = ANY($1) AND contype IN ('u', 'f', 'c')`,
+      [TABLAS],
+    );
+    const ordenar = (lista) => [...lista].sort();
+
+    const noNulos = columnas
+      .filter((c) => c.is_nullable === 'NO' && !String(c.column_default).startsWith('nextval('))
+      .map((c) => `${c.tabla}.${c.columna}`);
+    const largos = columnas.filter((c) => c.largo !== null).map((c) => `${c.tabla}.${c.columna}:${c.largo}`);
+
+    expect(ordenar(noNulos)).toEqual(ordenar(NO_NULOS.map(([t, c]) => `${t}.${c}`)));
+    expect(ordenar(largos)).toEqual(ordenar(LARGOS.map(([t, c, n]) => `${t}.${c}:${n}`)));
+    expect(ordenar(restricciones.map((r) => r.conname))).toEqual(ordenar(RESTRICCIONES));
+  });
+
+  test.each(NO_NULOS)('%s.%s es obligatorio (NOT NULL)', async (tabla, columna) => {
+    const fila = { ...(await filaValida(tabla)), [columna]: null };
+
+    const err = await errorDe(tx.cliente, ...insertar(tabla, fila));
+
+    expect(err).toMatchObject({ code: '23502', column: columna });
+  });
+
+  test.each(LARGOS)('%s.%s admite %i caracteres y rechaza uno mas (VARCHAR)', async (tabla, columna, maximo) => {
+    const { rows } = await tx.cliente.query(...insertar(tabla, { ...(await filaValida(tabla)), [columna]: deLargo(maximo) }));
+
+    const err = await errorDe(tx.cliente, ...insertar(tabla, { ...(await filaValida(tabla)), [columna]: deLargo(maximo + 1) }));
+
+    expect(rows[0][columna]).toHaveLength(maximo);
+    expect(err).toMatchObject({ code: '22001' });
+  });
+
+  // PostgreSQL cuenta caracteres, no unidades UTF-16: un emoji ocupa uno. Por
+  // eso lib/validators.js mide con [...texto].length y no con .length.
+  test('un nombre de 99 letras y un emoji cabe en VARCHAR(100)', async () => {
+    const nombre = `${MARCA} `.padEnd(99, 'x') + '💪';
+
+    const gym = await crearGimnasio(tx.cliente, { nombre });
+
+    expect(nombre.length).toBe(101);
+    expect(gym.nombre).toBe(nombre);
+  });
+
   describe('gimnasio', () => {
-    test.each(['nombre', 'telefono'])('%s es obligatorio (NOT NULL)', async (columna) => {
-      const fila = { nombre: unico('Gimnasio'), telefono: '3001234567', [columna]: null };
-
-      const err = await errorDe(tx.cliente, 'INSERT INTO gimnasio (nombre, telefono) VALUES ($1, $2)', [fila.nombre, fila.telefono]);
-
-      expect(err).toMatchObject({ code: '23502', column: columna });
-    });
-
-    // POST /api/auth/signup no lo validaba y respondia 500 (hallazgo corregido en
-    // lib/validators.js; el test unitario del limite esta en signup-longitudes.test.js).
-    test('nombre admite 100 caracteres y rechaza 101 (VARCHAR(100))', async () => {
-      const gym = await crearGimnasio(tx.cliente, { nombre: deLargo(100) });
-
-      const err = await errorDe(tx.cliente, 'INSERT INTO gimnasio (nombre, telefono) VALUES ($1, $2)', [deLargo(101), '3001234567']);
-
-      expect(gym.nombre).toHaveLength(100);
-      expect(err.code).toBe('22001');
-    });
-
     test('el NIT no se repite, pero varios gimnasios pueden no tenerlo (UNIQUE admite NULL)', async () => {
       const nit = documentoUnico();
       await crearGimnasio(tx.cliente, { nit });
@@ -84,38 +178,6 @@ describeConBd('restricciones de gimnasio, usuario y miembro', () => {
   });
 
   describe('usuario', () => {
-    test.each(['nombre', 'email', 'password_hash'])('%s es obligatorio (NOT NULL)', async (columna) => {
-      const gym = await crearGimnasio(tx.cliente);
-      const fila = { nombre: 'Dueña', email: `${unico('u')}@fitloyalty.test`, password_hash: 'no-es-un-hash', [columna]: null };
-
-      const err = await errorDe(
-        tx.cliente,
-        'INSERT INTO usuario (id_gimnasio, nombre, email, password_hash) VALUES ($1, $2, $3, $4)',
-        [gym.id_gimnasio, fila.nombre, fila.email, fila.password_hash],
-      );
-
-      expect(err).toMatchObject({ code: '23502', column: columna });
-    });
-
-    // Mismo hallazgo que gimnasio.nombre: el registro respondia 500 con 101
-    // caracteres en el nombre del dueño o 151 en el correo.
-    test.each([
-      ['nombre', 100, (n) => deLargo(n)],
-      ['email', 150, (n) => deLargo(n - '@fitloyalty.test'.length, unico('u')) + '@fitloyalty.test'],
-    ])('%s admite %i caracteres y rechaza uno mas', async (columna, maximo, valorDe) => {
-      const gym = await crearGimnasio(tx.cliente);
-      const justo = await crearUsuario(tx.cliente, gym.id_gimnasio, { [columna]: valorDe(maximo) });
-
-      const err = await errorDe(
-        tx.cliente,
-        `INSERT INTO usuario (id_gimnasio, nombre, email, password_hash) VALUES ($1, $2, $3, 'no-es-un-hash')`,
-        [gym.id_gimnasio, ...(columna === 'nombre' ? [valorDe(maximo + 1), `${unico('u')}@fitloyalty.test`] : ['Dueña', valorDe(maximo + 1)])],
-      );
-
-      expect(justo[columna]).toHaveLength(maximo);
-      expect(err.code).toBe('22001');
-    });
-
     test('el email no se repite entre gimnasios (UNIQUE)', async () => {
       const email = `${unico('u')}@fitloyalty.test`;
       const gymA = await crearGimnasio(tx.cliente);
@@ -163,35 +225,25 @@ describeConBd('restricciones de gimnasio, usuario y miembro', () => {
       expect(err).toMatchObject({ code: '23503', constraint: 'usuario_id_gimnasio_fkey' });
       expect(rows).toHaveLength(0);
     });
+
+    test('id_rol solo acepta un rol que existe, y un rol con usuarios no se puede borrar (FK sin CASCADE)', async () => {
+      const gym = await crearGimnasio(tx.cliente);
+      const crearRol = async () => (await tx.cliente.query('INSERT INTO rol (nombre) VALUES ($1) RETURNING id_rol', [unico('ROL')])).rows[0];
+      const rolBorrado = await idBorrado('rol', 'id_rol', await crearRol());
+      const rolEnUso = await crearRol();
+      const usuario = await crearUsuario(tx.cliente, gym.id_gimnasio);
+      await tx.cliente.query('UPDATE usuario SET id_rol = $1 WHERE id_usuario = $2', [rolEnUso.id_rol, usuario.id_usuario]);
+
+      const errInsertar = await errorDe(tx.cliente, 'UPDATE usuario SET id_rol = $1 WHERE id_usuario = $2', [rolBorrado, usuario.id_usuario]);
+      const errBorrar = await errorDe(tx.cliente, 'DELETE FROM rol WHERE id_rol = $1', [rolEnUso.id_rol]);
+
+      expect(errInsertar).toMatchObject({ code: '23503', constraint: 'usuario_id_rol_fkey' });
+      expect(errBorrar).toMatchObject({ code: '23503', constraint: 'usuario_id_rol_fkey' });
+    });
   });
 
   describe('miembro', () => {
     const INSERTAR = 'INSERT INTO miembro (id_gimnasio, nombre, documento, codigo_qr) VALUES ($1, $2, $3, $4)';
-
-    test.each(['nombre', 'documento', 'codigo_qr'])('%s es obligatorio (NOT NULL)', async (columna) => {
-      const gym = await crearGimnasio(tx.cliente);
-      const fila = { nombre: 'Miembro', documento: documentoUnico(), codigo_qr: unico('QR'), [columna]: null };
-
-      const err = await errorDe(tx.cliente, INSERTAR, [gym.id_gimnasio, fila.nombre, fila.documento, fila.codigo_qr]);
-
-      expect(err).toMatchObject({ code: '23502', column: columna });
-    });
-
-    // Hallazgo sin corregir: POST /api/admin/miembros no limita nombre ni
-    // documento y con uno mas responde 500 DB_UNREACHABLE.
-    test.each([
-      ['nombre', 100],
-      ['documento', 20],
-    ])('%s admite %i caracteres y rechaza uno mas', async (columna, maximo) => {
-      const gym = await crearGimnasio(tx.cliente);
-      const justo = await crearMiembro(tx.cliente, gym.id_gimnasio, { [columna]: deLargo(maximo, documentoUnico()) });
-      const fila = { nombre: 'Miembro', documento: documentoUnico(), [columna]: deLargo(maximo + 1, documentoUnico()) };
-
-      const err = await errorDe(tx.cliente, INSERTAR, [gym.id_gimnasio, fila.nombre, fila.documento, unico('QR')]);
-
-      expect(justo[columna]).toHaveLength(maximo);
-      expect(err.code).toBe('22001');
-    });
 
     // Lo que la BD NO impide: no hay UNIQUE (id_gimnasio, documento). El unico
     // freno es el SELECT previo de POST /admin/miembros, y dos altas a la vez con
