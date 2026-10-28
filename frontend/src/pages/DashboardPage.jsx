@@ -349,8 +349,10 @@ export default function DashboardPage() {
   const ingresosRef    = useAnimatedCount(data?.ingresosMes  ?? 0, { duration: 900 });
   const qrsRef         = useAnimatedCount(data?.qrsActivos   ?? data?.totalMiembros ?? 0, { duration: 900 });
 
-  // trial?.estado viene de TrialContext; lo dejamos tal cual el codigo previo.
-  const trialEsTrial = trial?.estado === 'trial';
+  // TrialContext guarda en `status` el reason de GET /api/billing/trial-status
+  // (lib/trial.js) y en `daysLeft` los dias que quedan. En los 3 ultimos dias el
+  // aviso urgente lo muestra AdminLayout; aqui no se repite.
+  const trialEsTrial = trial?.status === 'trial-activo' && !(trial.daysLeft <= 3);
 
   return (
     <PageTransition>
@@ -403,7 +405,7 @@ export default function DashboardPage() {
           </div>
           <div className="trial-banner__text">
             <strong>Estás en período de prueba</strong>
-            <span>Te quedan {trial?.diasRestantes ?? 14} días. Activa tu plan para no perder datos.</span>
+            <span>Te quedan {trial.daysLeft ?? 14} días. Activa tu plan para no perder datos.</span>
           </div>
           <button type="button" className="btn btn-primary" onClick={handleActivatePlan}>
             Activar plan
