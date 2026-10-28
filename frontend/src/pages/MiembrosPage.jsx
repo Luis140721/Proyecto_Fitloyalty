@@ -100,6 +100,18 @@ function aFecha(texto) {
   return Number.isNaN(f.getTime()) ? null : f;
 }
 
+/**
+ * Fecha de una columna date que manda el API. pg la entrega como la medianoche
+ * del servidor (UTC en Render: "2026-10-01T00:00:00.000Z"), y new Date() la
+ * pasaria a la hora local: en Colombia, el 30/09 a las 7 p. m. Se toma solo
+ * la fecha del texto, como ya se hace con fecha_nacimiento. Si el texto no
+ * empieza por AAAA-MM-DD, queda el new Date() de antes.
+ */
+function fechaDelApi(valor) {
+  if (!valor) return null;
+  return aFecha(String(valor).slice(0, 10)) || new Date(valor);
+}
+
 /** Convierte Date a "DD/MM/YYYY". */
 function fechaATexto(fecha) {
   if (!fecha) return '';
@@ -716,8 +728,8 @@ export default function MiembrosPage() {
       const p = data.plan;
       setPlanForm({
         tipo_plan: p?.tipo_plan || 'MENSUAL',
-        fecha_inicio: p?.fecha_inicio ? fechaATexto(new Date(p.fecha_inicio)) : hoyEnTexto(),
-        fecha_fin: p?.fecha_fin ? fechaATexto(new Date(p.fecha_fin)) : '',
+        fecha_inicio: p?.fecha_inicio ? fechaATexto(fechaDelApi(p.fecha_inicio)) : hoyEnTexto(),
+        fecha_fin: p?.fecha_fin ? fechaATexto(fechaDelApi(p.fecha_fin)) : '',
         valor_total: p?.valor_total != null ? String(Math.round(Number(p.valor_total))) : '',
         valor_pagado: p?.valor_pagado != null ? String(Math.round(Number(p.valor_pagado))) : '0',
         metodo_pago: p?.metodo_pago || 'EFECTIVO',
@@ -1911,7 +1923,7 @@ export default function MiembrosPage() {
                   {planForm.congelado_desde ? (
                     <p style={{ fontSize: 13, marginBottom: 10 }}>
                       <span className="material-symbols-outlined icon" aria-hidden="true" style={{ verticalAlign: 'middle', marginRight: 6 }}>ac_unit</span>
-                      Congelada desde el {new Date(planForm.congelado_desde).toLocaleDateString('es-CO')}
+                      Congelada desde el {fechaDelApi(planForm.congelado_desde).toLocaleDateString('es-CO')}
                       {` (${planForm.dias_congelado} ${planForm.dias_congelado === 1 ? 'día' : 'días'}).`}
                       {' '}Al descongelarla, el vencimiento se correrá esos días.
                     </p>
@@ -1955,9 +1967,9 @@ export default function MiembrosPage() {
                     <ul style={{ marginTop: 12, fontSize: 12, color: 'var(--on-surface-variant)', paddingLeft: 18 }}>
                       {congelaciones.map((c) => (
                         <li key={c.id_congelacion}>
-                          {new Date(c.fecha_inicio).toLocaleDateString('es-CO')}
+                          {fechaDelApi(c.fecha_inicio).toLocaleDateString('es-CO')}
                           {c.fecha_fin
-                            ? ` → ${new Date(c.fecha_fin).toLocaleDateString('es-CO')} (${c.dias} ${c.dias === 1 ? 'día' : 'días'})`
+                            ? ` → ${fechaDelApi(c.fecha_fin).toLocaleDateString('es-CO')} (${c.dias} ${c.dias === 1 ? 'día' : 'días'})`
                             : ' → sigue congelada'}
                           {c.motivo ? ` · ${c.motivo}` : ''}
                           {c.congelada_por ? ` · congeló ${c.congelada_por}` : ''}
