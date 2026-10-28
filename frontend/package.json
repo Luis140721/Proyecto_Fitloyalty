@@ -2,6 +2,7 @@
   "name": "fitloyalty-frontend",
   "version": "1.0.0",
   "description": "FitLoyalty CRM - Frontend",
+  "packageManager": "pnpm@12.15.0",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
