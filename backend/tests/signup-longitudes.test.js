@@ -33,6 +33,13 @@ describe('signupSchema: lo que no cabe en la BD se rechaza antes', () => {
     expect(errorCon({ [campo]: 'x'.repeat(101) })).toBe(`El nombre del ${quien} no puede tener más de 100 caracteres`);
   });
 
+  // PostgreSQL cuenta caracteres: 99 letras y un emoji son 100, aunque en
+  // JavaScript .length diga 101.
+  test('el nombre se mide en caracteres, como PostgreSQL: un emoji cuenta uno', () => {
+    expect(errorCon({ gymName: `${'x'.repeat(99)}💪` })).toBeNull();
+    expect(errorCon({ ownerName: `${'x'.repeat(100)}💪` })).toBe('El nombre del propietario no puede tener más de 100 caracteres');
+  });
+
   test('el nombre se mide sin los espacios de los extremos, porque se guarda recortado', () => {
     expect(errorCon({ gymName: `  ${'x'.repeat(100)}  ` })).toBeNull();
   });
