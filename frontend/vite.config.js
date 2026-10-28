@@ -14,7 +14,7 @@ export default defineConfig({
       // Arranque: solo monta React en el DOM, no tiene logica de negocio.
       exclude: ['src/main.jsx'],
       // Semana 1: linea base medida el 2026-10-26 sobre develop @ 7e3ede9 (docs/cobertura-baseline-frontend.txt). No puede bajar.
-      thresholds: { lines: 1, branches: 9, functions: 6, statements: 1 },
+      thresholds: { lines: 99, branches: 99, functions: 99, statements: 99 },
     },
   },
 })
