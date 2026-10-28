@@ -330,3 +330,133 @@ describe('accept link: the clock and the invitation state', () => {
     expect(mockBd.usuarios).toHaveLength(1);
   });
 });
+
+describe('accept and revoke: when the link cannot be used', () => {
+  const TOKEN_INEXISTENTE = 'x'.repeat(43);
+
+  test.each([
+    ['the token is too short', { token: 'corto', password: 'clave123' }],
+    ['the password is too short', { token: TOKEN_INEXISTENTE, password: '123' }],
+  ])('should answer 400 without creating the account when %s', async (_caso, cuerpo) => {
+    // Doble: fake de la BD. Verifica estado: no aparece ningun usuario nuevo.
+    // Arrange: solo existe el admin del gimnasio
+
+    // Act
+    const r = await request(app).post('/api/auth/accept-invite').send(cuerpo);
+
+    // Assert
+    expect(r.status).toBe(400);
+    expect(r.body.code).toBe('VALIDATION_ERROR');
+    expect(mockBd.usuarios).toHaveLength(1);
+  });
+
+  test('should answer 404 INVITE_NOT_FOUND without creating the account when the token does not exist', async () => {
+    // Doble: fake de la BD sin ninguna invitacion. Verifica estado.
+    // Arrange: la BD falsa no tiene invitaciones
+
+    // Act
+    const r = await aceptar(TOKEN_INEXISTENTE);
+
+    // Assert
+    expect(r.status).toBe(404);
+    expect(r.body.code).toBe('INVITE_NOT_FOUND');
+    expect(mockBd.usuarios).toHaveLength(1);
+  });
+
+  test('should not create the account when the link is used 1 ms after the 7 days', async () => {
+    // Doble: stub del reloj, un milisegundo despues del limite, sobre el POST que
+    // crea la cuenta (la vista previa tiene su propio chequeo). El spy en
+    // sendStaffInvite entrega el enlace.
+    // Arrange
+    await invitar(ANA);
+    jest.setSystemTime(AHORA.getTime() + 7 * UN_DIA + 1);
+
+    // Act
+    const r = await aceptar(tokenDelCorreo());
+
+    // Assert
+    expect(r.status).toBe(410);
+    expect(r.body.code).toBe('INVITE_EXPIRED');
+    expect(mockBd.usuarios).toHaveLength(1);
+  });
+
+  test('should answer 409 USER_EMAIL_TAKEN without a duplicate when the email got an account before accepting', async () => {
+    // Doble: fake de la BD donde el correo invitado ya tiene cuenta en el
+    // gimnasio. Verifica estado: sigue habiendo una sola cuenta con ese correo.
+    // Arrange
+    await invitar(ANA);
+    mockBd.usuarios.push({ id_usuario: 2, id_gimnasio: 7, nombre: 'Ana', email: 'ana@gym.co', id_rol: 2, activo: true });
+
+    // Act
+    const r = await aceptar(tokenDelCorreo());
+
+    // Assert
+    expect(r.status).toBe(409);
+    expect(r.body.code).toBe('USER_EMAIL_TAKEN');
+    expect(mockBd.usuarios.filter((u) => u.email === 'ana@gym.co')).toHaveLength(1);
+  });
+
+  test('should create an admin account and fill the legacy rol column when the invitation is for an administrator on Neon', async () => {
+    // Doble: fake de la BD con la columna legacy `rol` (NOT NULL en Neon; sin ella
+    // el INSERT fallaba y nadie podia aceptar). Verifica estado: el usuario creado.
+    // Arrange
+    mockBd.esquema.has_rol_column = true;
+    await invitar({ ...ANA, rol: 'ADMINISTRADOR' });
+
+    // Act
+    const r = await aceptar(tokenDelCorreo());
+
+    // Assert
+    expect(r.status).toBe(201);
+    expect(r.body.user.role).toBe('admin');
+    expect(mockBd.usuarios.find((u) => u.email === 'ana@gym.co')).toMatchObject({ id_rol: 1, rol: 'ADMINISTRADOR' });
+  });
+
+  test('should answer 503 and keep the invitation pending when saving the account fails', async () => {
+    // Dobles: fake de la BD que falla al crear el usuario y spy en console.error.
+    // Verifica estado: la invitacion no queda aceptada, asi el enlace sirve para
+    // reintentar.
+    // Arrange
+    await invitar(ANA);
+    mockBd.fallaCon = /INSERT INTO usuario/;
+
+    // Act
+    const r = await aceptar(tokenDelCorreo());
+
+    // Assert
+    expect(r.status).toBe(503);
+    expect(r.body.code).toBe('DB_UNREACHABLE');
+    expect(mockBd.invitaciones[0].fecha_aceptacion).toBeNull();
+    expect(console.error).toHaveBeenCalledWith('[POST /auth/accept-invite] Error:', 'conexion perdida', expect.any(String));
+  });
+
+  test('should answer 400 when the invitation id to revoke is not a number', async () => {
+    // Doble: fake de la BD. Verifica estado: la invitacion sigue pendiente.
+    // Arrange
+    await invitar(ANA);
+
+    // Act
+    const r = await request(app).post('/api/admin/staff/invitations/abc/revoke').set('Authorization', `Bearer ${tokenAdmin}`);
+
+    // Assert
+    expect(r.status).toBe(400);
+    expect(r.body.code).toBe('VALIDATION_ERROR');
+    expect(mockBd.invitaciones[0].fecha_revocado).toBeNull();
+  });
+
+  test('should answer 404 INVITE_NOT_FOUND when revoking an invitation that was already accepted', async () => {
+    // Dobles: fake de la BD y spy en sendStaffInvite para leer el enlace. Verifica
+    // estado: la invitacion sigue aceptada y no aparece como revocada.
+    // Arrange
+    const invitacion = await invitar(ANA);
+    await aceptar(tokenDelCorreo());
+
+    // Act
+    const r = await request(app).post(`/api/admin/staff/invitations/${invitacion.body.invitation.id_invitacion}/revoke`).set('Authorization', `Bearer ${tokenAdmin}`);
+
+    // Assert
+    expect(r.status).toBe(404);
+    expect(r.body.code).toBe('INVITE_NOT_FOUND');
+    expect(mockBd.invitaciones[0]).toMatchObject({ fecha_aceptacion: AHORA, fecha_revocado: null });
+  });
+});
