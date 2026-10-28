@@ -2,92 +2,89 @@
 
 **Responsable:** Daniel
 
-**Rama:** `docs/rqnf-06-navegadores`
+**Rama:** `docs/rqnf-06-d4-completado`
 
-**Base de código:** `develop` en `2698c2e` (`2026-10-20`)
+**Base de código:** `develop` (`7e3ede9`)
 
-**Fecha de ejecución:** 2026-10-22
+**Fecha de ejecución:** 2026-10-26
 
 ## Requisito
-
-Texto de RQNF-06 en la matriz y en el documento de requisitos:
 
 > El sistema debe funcionar correctamente en los navegadores Chrome, Firefox y
 > Edge en sus dos últimas versiones mayores, sin requerir instalación de
 > software adicional en el cliente.
 
-## Alcance
+## Alcance ejecutado
 
-Se inició localmente el frontend de `develop` y se comprobó en navegador real
-el recorrido desde la página pública hasta el formulario de inicio de sesión.
-El alcance de esta ejecución es la carga de la interfaz, la navegación y el
-ajuste visual del formulario en escritorio. No se enviaron credenciales ni se
-validó la autenticación.
+Se inició el frontend y el backend local contra la base aislada
+`fitloyalty_d5_test_20261026`, con cuenta y datos sintéticos. En los tres
+navegadores se recorrieron login, dashboard, listado y edición de miembros,
+check-in manual y por código QR, configuración y formulario de alta. Para
+evitar tareas programadas y envíos externos, se deshabilitaron el scheduler y
+WhatsApp. No se usó producción.
 
-## Criterios y resultados
+Firefox se probó en la versión 157.0.1. Se guardó la edición del miembro de
+prueba, se verificó en la base que los check-in quedaran registrados con los
+métodos `MANUAL` y `QR`, y luego se eliminaron esos registros sintéticos. La
+configuración se guardó y la interfaz mostró confirmación. Las capturas
+actualizadas se tomaron y verificaron a **1366 × 768**.
 
-| Navegador | Versión | Portada y acceso a login | Encabezado y campo de correo | Sin desbordamiento horizontal | Errores JavaScript | Captura |
-|---|---|---|---|---|---|---|
-| Chrome | 155.0.8059.85 | Pasa | Pasa | Pasa (1503 px) | Ninguno | [chrome-login.png](./capturas/chrome-login.png) |
-| Firefox | 157.0 | Pasa | Pasa | Pasa (1503 px) | Ninguno | [firefox-login.png](./capturas/firefox-login.png) |
-| Edge | 155.0.4283.62 | Pasa | Pasa | Pasa (1503 px) | Ninguno | [edge-login.png](./capturas/edge-login.png) |
+## Resultados
 
-En los tres navegadores se abrió `/`, se seleccionó el enlace de inicio de
-sesión y se comprobó que aparecieran el encabezado “Bienvenido de vuelta” y
-el campo de correo. El formulario quedó dentro del ancho de la ventana, sin
-desbordamiento horizontal. Las capturas miden 1503 × 768 píxeles.
+| Navegador | Versión | Login / dashboard | Miembros / edición | Check-in manual y QR | Configuración | Sin overflow horizontal | JS/API en recorrido autenticado |
+|---|---|---|---|---|---|---|---|
+| Chrome | 155.0.8059.85 | Pasa | Pasa | Pasa | Pasa | Pasa (1366 px) | Sin errores |
+| Edge | 155.0.4283.62 | Pasa | Pasa | Pasa | Pasa | Pasa (1366 px) | Sin errores |
+| Firefox | 157.0.1 | Pasa | Pasa | Pasa; métodos `MANUAL` y `QR` verificados en PostgreSQL local | Pasa; guardado confirmado | Pasa visualmente en las capturas (1366 px) | Flujos API confirmados; consola JS no instrumentada |
 
-**Detalle de diseño en pantallas anchas.** A ese ancho, la página de inicio de
-sesión no ocupa toda la ventana: el contenido termina en x = 1365 en los tres
-navegadores y a la derecha queda una franja vacía de 137 px. No es una
-diferencia de compatibilidad, porque sale igual en los tres: la página mide
-1366 px de ancho. En Chrome y Edge la franja es oscura; en la captura de
-Firefox es transparente (alfa 0) y se ve blanca por el fondo del visor, así
-que probablemente sea un efecto de la herramienta de captura y conviene
-confirmarlo a ojo en Firefox. No tapa el formulario ni afecta la navegación.
+El alta se envió desde la interfaz y confirmó creación en Chrome durante una
+prueba diagnóstica aislada. En la corrida comparativa, el alta se capturó en
+los tres navegadores, pero solo se envió en Chrome. Para probar el resto de
+los flujos, los registros temporales se prepararon con datos sintéticos; se
+actualizó un miembro desde la interfaz y se verificó el registro por
+documento y por código QR. El modo QR se validó pegando un código de prueba;
+no se verificó el uso de una cámara física.
 
-## Versiones
+La app puede consultar `trial-status` antes del login y recibir un `401`
+esperado mientras no hay sesión. No se observaron errores bloqueantes durante
+los recorridos autenticados de Firefox; en ese navegador se verificaron las
+escrituras de edición y check-in en la base local. No se recopiló su consola
+JavaScript. Los check-in sintéticos se eliminaron al finalizar; la base de
+pruebas y su cuenta sintética se conservaron para la sesión D5 local.
 
-El requisito pide las dos últimas versiones mayores de cada navegador. Esta
-ejecución probó solo la última de cada uno (la tabla de arriba). La versión
-anterior queda cubierta por el código que genera el build:
+### Regresión encontrada y corregida
 
-- `frontend/vite.config.js` no fija `build.target`, así que Vite 5
-  (`frontend/package.json`: `vite` `^5.3.1`) usa su objetivo por defecto,
-  `modules`: Chrome 87, Firefox 78 y Edge 88 (y Safari 14).
-- Las dos últimas versiones mayores (Chrome 154 y 155, Firefox 156 y 157,
-  Edge 154 y 155) están muy por encima de ese mínimo, así que la sintaxis de
-  JavaScript que genera el build les sirve.
+Al guardar la edición, el formulario enviaba `fecha_nacimiento: ""`. La
+validación del backend preservaba esa cadena y PostgreSQL rechazaba el valor
+para una columna `date`. Se ajustó `vacioANull` para convertir la cadena vacía
+a `null` antes de aplicar la alternativa opcional del esquema, y se agregó
+una prueba de regresión en `backend/tests/miembros-update.test.js`. La prueba
+focal pasó.
 
-`build.target` solo baja la sintaxis: no agrega polyfills de APIs ni garantiza
-las propiedades CSS. Con versiones tan recientes no importa, pero esto apoya la
-compatibilidad de la versión anterior y no reemplaza probarla.
+## Capturas
 
-## Limitaciones
+Las capturas son evidencia de los recorridos indicados arriba; la ausencia de
+una captura de una pantalla en un navegador significa que ese flujo no se
+verificó allí.
 
-- El backend local no estaba iniciado. Las consultas del frontend a
-  `http://localhost:3001/api/billing/trial-status` fallaron por conexión
-  rechazada. Por tanto, estas capturas no demuestran el funcionamiento de la
-  API, la sesión, el inicio de sesión ni el backend de producción.
-- La prueba es un recorrido automatizado de interfaz en Chrome, Firefox y
-  Edge sobre el código de `develop`; no reemplaza pruebas manuales de todos
-  los formularios ni una aprobación de release.
-- No se usaron cuentas ni datos de usuarios.
+| Navegador | Evidencia a 1366 × 768 |
+|---|---|
+| Chrome | [Portada](./capturas/rqnf-06/chrome-home.png) · [Login](./capturas/rqnf-06/chrome-login.png) · [Dashboard](./capturas/rqnf-06/chrome-dashboard.png) · [Miembros](./capturas/rqnf-06/chrome-miembros.png) · [Edición](./capturas/rqnf-06/chrome-edicion-miembro.png) · [Check-in manual](./capturas/rqnf-06/chrome-checkin-manual.png) · [Check-in QR](./capturas/rqnf-06/chrome-checkin-qr.png) · [Configuración](./capturas/rqnf-06/chrome-configuracion.png) · [Alta](./capturas/rqnf-06/chrome-alta-miembro.png) |
+| Edge | [Portada](./capturas/rqnf-06/edge-home.png) · [Login](./capturas/rqnf-06/edge-login.png) · [Dashboard](./capturas/rqnf-06/edge-dashboard.png) · [Miembros](./capturas/rqnf-06/edge-miembros.png) · [Edición](./capturas/rqnf-06/edge-edicion-miembro.png) · [Check-in manual](./capturas/rqnf-06/edge-checkin-manual.png) · [Check-in QR](./capturas/rqnf-06/edge-checkin-qr.png) · [Configuración](./capturas/rqnf-06/edge-configuracion.png) · [Alta](./capturas/rqnf-06/edge-alta-miembro.png) |
+| Firefox | [Portada](./capturas/rqnf-06/firefox-home.png) · [Login](./capturas/rqnf-06/firefox-login.png) · [Dashboard](./capturas/rqnf-06/firefox-dashboard.png) · [Miembros](./capturas/rqnf-06/firefox-miembros.png) · [Edición](./capturas/rqnf-06/firefox-edicion-miembro.png) · [Check-in manual](./capturas/rqnf-06/firefox-checkin-manual.png) · [Check-in QR](./capturas/rqnf-06/firefox-checkin-qr.png) · [Configuración](./capturas/rqnf-06/firefox-configuracion.png) · [Alta](./capturas/rqnf-06/firefox-alta-miembro.png) |
+
+## Limitaciones pendientes
+
+- Se probó una sola versión mayor por navegador. El requisito pide las dos
+  últimas; por tanto, también falta probar la versión mayor anterior de cada
+  navegador. El objetivo de compilación de Vite no reemplaza esas pruebas
+  reales.
+- El check-in QR se hizo con un código pegado en el formulario; no se probó
+  cámara física.
 
 ## Veredicto
 
-**Parcial: verificación visual y de navegación completada en los tres
-navegadores; integración con backend y autenticación no verificadas.**
-
-La matriz pide una lista de verificación de las **pantallas principales** con
-capturas, y esta ejecución solo cubre la portada y el formulario de inicio de
-sesión. Para pasar a **Implementado** falta:
-
-1. Repetir la prueba con el backend en marcha (local o el despliegue de
-   prueba), con una cuenta de prueba.
-2. Recorrer en Chrome, Firefox y Edge las pantallas principales: inicio de
-   sesión, dashboard, alta y edición de un miembro, check-in (manual y por QR)
-   y configuración.
-3. Guardar una captura por pantalla y navegador, sin datos personales.
-4. Confirmar a ojo en Firefox el color de la franja de la derecha y anotar si
-   aparece en las demás pantallas.
+**Parcial.** Los flujos principales se completaron en Chrome 155, Edge 155 y
+Firefox 157.0.1 a 1366 × 768. No se probaron las versiones mayores anteriores
+de los navegadores ni la cámara física para el QR. No marcar RQNF-06 como
+Implementado hasta resolver esas limitaciones.
