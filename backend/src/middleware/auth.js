@@ -44,7 +44,7 @@ function establecerBusquedaPersonal(fn) {
 async function authenticate(req, res, next) {
   const authHeader = req.headers['authorization'];
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Token requerido' });
+    return res.status(401).json({ error: 'Token requerido', code: 'AUTH_REQUIRED' });
   }
 
   const token = authHeader.split(' ')[1];
@@ -53,7 +53,7 @@ async function authenticate(req, res, next) {
   try {
     payload = jwt.verify(token, process.env.JWT_SECRET);
   } catch (err) {
-    return res.status(401).json({ error: 'Token inválido o expirado' });
+    return res.status(401).json({ error: 'Token inválido o expirado', code: 'TOKEN_INVALID' });
   }
   // Los tokens del personal emitidos antes de RQF-02 no traen `exp` y
   // jwt.verify los aceptaria para siempre. Se rechazan para obligar a iniciar
@@ -88,12 +88,11 @@ async function authenticate(req, res, next) {
 function authorize(...roles) {
   return (req, res, next) => {
     if (!req.user) {
-      return res.status(401).json({ error: 'No autenticado' });
+      return res.status(401).json({ error: 'No autenticado', code: 'AUTH_REQUIRED' });
     }
+    // Sin nombrar los roles: son identificadores internos que no le sirven a quien llama.
     if (!roles.includes(req.user.role)) {
-      return res.status(403).json({
-        error: `Acceso denegado. Rol requerido: ${roles.join(' o ')}`,
-      });
+      return res.status(403).json({ error: 'No tienes permiso para esta acción.', code: 'FORBIDDEN' });
     }
     next();
   };
@@ -107,7 +106,7 @@ function authorize(...roles) {
  */
 function requireClient(req, res, next) {
   if (!req.user) {
-    return res.status(401).json({ error: 'No autenticado' });
+    return res.status(401).json({ error: 'No autenticado', code: 'AUTH_REQUIRED' });
   }
   if (req.user.role !== 'cliente' || !req.user.idMiembro) {
     return res.status(403).json({
