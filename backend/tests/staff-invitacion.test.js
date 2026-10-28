@@ -139,6 +139,7 @@ afterAll(() => establecerBusquedaPersonal(null));
 beforeEach(() => {
   // Copia del entorno: el enlace no depende de tu .env.
   process.env = { ...ENV_ORIGINAL, JWT_SECRET: 'secreto-de-pruebas', FRONTEND_URL: 'https://app.test/' };
+  delete process.env.PUBLIC_FRONTEND_URL;
   // Solo se finge la fecha: los timers reales siguen para que supertest funcione.
   jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate', 'setTimeout', 'setInterval', 'clearTimeout', 'clearInterval', 'queueMicrotask'] });
   jest.setSystemTime(AHORA);
@@ -183,18 +184,34 @@ describe('POST /api/admin/staff/invite: the invitation email', () => {
     expect(r.body).not.toHaveProperty('devAcceptToken');
   });
 
-  test('should build the email link with the first origin when FRONTEND_URL lists several', async () => {
+  test.each([
+    { caso: 'PUBLIC_FRONTEND_URL is set, even if FRONTEND_URL starts with localhost', base: 'https://app.test',
+      entorno: { PUBLIC_FRONTEND_URL: 'https://app.test', FRONTEND_URL: 'http://localhost:5173,https://admin.app.test' } },
+    { caso: 'PUBLIC_FRONTEND_URL has spaces and a trailing slash', base: 'https://app.test',
+      entorno: { PUBLIC_FRONTEND_URL: ' https://app.test/ ', FRONTEND_URL: 'https://admin.app.test' } },
+    { caso: 'FRONTEND_URL lists several origins', base: 'https://app.test',
+      entorno: { FRONTEND_URL: 'https://app.test, https://admin.app.test' } },
+    { caso: 'FRONTEND_URL starts with an empty origin', base: 'https://app.test',
+      entorno: { FRONTEND_URL: ',https://app.test' } },
+    { caso: 'the first origin of FRONTEND_URL has spaces around it', base: 'https://app.test',
+      entorno: { FRONTEND_URL: '  https://app.test ,https://admin.app.test' } },
+    { caso: 'neither variable is set', base: 'http://localhost:5173',
+      entorno: { FRONTEND_URL: undefined } },
+  ])('should put the email link on $base when $caso', async ({ base, entorno }) => {
     // Doble: spy en sendStaffInvite. Verifica comportamiento: el enlace que recibe
     // la persona. FRONTEND_URL es la lista de origenes de CORS separada por comas
     // (index.js); entera dentro del enlace lo rompia.
     // Arrange
-    process.env.FRONTEND_URL = 'https://app.test, https://admin.app.test';
+    for (const [nombre, valor] of Object.entries(entorno)) {
+      if (valor === undefined) delete process.env[nombre];
+      else process.env[nombre] = valor;
+    }
 
     // Act
     await invitar(ANA);
 
     // Assert
-    expect(enlaceDelCorreo()).toMatch(/^https:\/\/app\.test\/accept-invite\?token=[\w-]{43}$/);
+    expect(enlaceDelCorreo()).toMatch(new RegExp(`^${base.replace(/\./g, '\\.')}/accept-invite\\?token=[\\w-]{43}$`));
   });
 
   test('should send a link that opens the invitation it just created', async () => {
