@@ -47,6 +47,11 @@ export default function Modal({
 }) {
   const dialogRef = useRef(null);
   const lastFocusRef = useRef(null);
+  // Las paginas pasan un onClose nuevo en cada render. Si el efecto dependiera
+  // de el, cada tecla lo reiniciaria: devolveria el foco y a los 32 ms lo
+  // llevaria al boton Cerrar, y la siguiente tecla se perderia.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   // Bloquea scroll del body + atrapa foco mientras el modal esta abierto.
   useEffect(() => {
@@ -71,7 +76,7 @@ export default function Modal({
 
     // Cierra con Escape.
     const onKey = (e) => {
-      if (e.key === 'Escape') onClose && onClose();
+      if (e.key === 'Escape') onCloseRef.current?.();
     };
     window.addEventListener('keydown', onKey);
 
@@ -84,7 +89,7 @@ export default function Modal({
         try { lastFocusRef.current.focus(); } catch (_) { /* noop */ }
       }
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 
