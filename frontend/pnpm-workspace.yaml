@@ -1,0 +1,12 @@
+# Ajustes de pnpm para el frontend. Sin `packages`: el frontend es un proyecto
+# aparte con su propio pnpm-lock.yaml, porque Docker (contexto ./frontend) y
+# Vercel lo instalan desde esta carpeta.
+#
+# pnpm no corre los scripts de instalacion de las dependencias salvo los que se
+# permiten aqui; si aparece uno sin decidir, `pnpm install` falla
+# (ERR_PNPM_IGNORED_BUILDS).
+allowBuilds:
+  # Comprueba el binario de esbuild que usa Vite, igual que con npm.
+  esbuild: true
+  # Solo se instala en macOS y ya trae fsevents.node compilado.
+  fsevents: false

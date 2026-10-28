@@ -2,11 +2,12 @@
   "name": "fitloyalty",
   "version": "1.0.0",
   "description": "FitLoyalty CRM - Gimnasios de barrio",
+  "packageManager": "pnpm@12.15.0",
   "scripts": {
-    "install:all": "npm install --prefix backend && npm install --prefix frontend",
-    "seed": "npm run seed --prefix backend",
-    "dev": "concurrently --names \"API,WEB\" --prefix-colors \"yellow,cyan\" \"npm run dev --prefix backend\" \"npm run dev --prefix frontend\"",
-    "start": "concurrently --names \"API,WEB\" --prefix-colors \"yellow,cyan\" \"npm start --prefix backend\" \"npm run dev --prefix frontend\""
+    "install:all": "pnpm install && pnpm --dir backend install && pnpm --dir frontend install",
+    "seed": "pnpm --dir backend run seed",
+    "dev": "concurrently --names \"API,WEB\" --prefix-colors \"yellow,cyan\" \"pnpm --dir backend run dev\" \"pnpm --dir frontend run dev\"",
+    "start": "concurrently --names \"API,WEB\" --prefix-colors \"yellow,cyan\" \"pnpm --dir backend start\" \"pnpm --dir frontend run dev\""
   },
   "devDependencies": {
     "concurrently": "^9.2.1"

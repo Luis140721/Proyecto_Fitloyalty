@@ -1,7 +1,8 @@
 # 🏋️ FitLoyalty — Cómo correr el proyecto en local
 
 ## Requisitos previos
-- Node.js 18+ instalado
+- Node.js 22 o superior instalado (el CI y las imágenes de Docker usan 24)
+- pnpm 12.15.0 (`npm install -g pnpm@12.15.0`). El proyecto ya no usa npm para instalar: `npm install` crearía un `package-lock.json` que no va al repo.
 - PostgreSQL instalado y corriendo (configura la conexión en `backend/.env`)
 - **Una sola terminal** (todo se maneja desde la raíz)
 
@@ -11,13 +12,13 @@
 
 ```bash
 # 1. Instalar dependencias de todo el proyecto
-npm run install:all
+pnpm run install:all
 
 # 2. Crear la base de datos y usuarios de prueba (solo la primera vez)
-npm run seed
+pnpm run seed
 
 # 3. Correr backend + frontend al mismo tiempo
-npm run dev
+pnpm run dev
 ```
 
 Abre **http://localhost:5173** en tu navegador. ¡Listo!

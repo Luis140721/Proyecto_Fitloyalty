@@ -4,8 +4,8 @@
 # levanta el backend completo y exige JWT_SECRET en un .env. Este solo levanta
 # Postgres, en el puerto 5433, para no chocar con la BD de desarrollo (5432).
 #
-#   npm run db:up     # crea el contenedor y espera a que acepte conexiones
-#   npm run db:down   # destruye el contenedor y su red (y con ellos, todos los datos)
+#   pnpm run db:up     # crea el contenedor y espera a que acepte conexiones
+#   pnpm run db:down   # destruye el contenedor y su red (y con ellos, todos los datos)
 
 name: fitloyalty-e2e
 
@@ -23,7 +23,7 @@ services:
     # interfaces y la BD quedaria abierta a la red con una clave conocida.
     ports:
       - "127.0.0.1:5433:5432"
-    # Datos en memoria: se borran al eliminar el contenedor (npm run db:down).
+    # Datos en memoria: se borran al eliminar el contenedor (pnpm run db:down).
     tmpfs:
       - /var/lib/postgresql/data
     healthcheck:

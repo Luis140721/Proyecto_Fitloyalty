@@ -84,12 +84,12 @@ docker compose exec db psql -U fitloyalty -d fitloyalty
 
 ## Arranque sin Docker
 
-Requiere **Node 18+** y **PostgreSQL** corriendo en local con una base `fitloyalty` creada.
+Requiere **Node 22 o superior** (el CI y las imágenes de Docker usan 24), **pnpm 12.15.0** (`npm install -g pnpm@12.15.0`) y **PostgreSQL** corriendo en local con una base `fitloyalty` creada.
 
 ```bash
-npm run install:all                      # instala raíz + backend + frontend
+pnpm run install:all                     # instala raíz + backend + frontend
 cp backend/.env.example backend/.env     # ajusta DB_USER, DB_PASSWORD, JWT_SECRET
-npm run dev                              # levanta API y web en una sola terminal
+pnpm run dev                             # levanta API y web en una sola terminal
 ```
 
 Frontend en http://localhost:5173 y API en http://localhost:3001.
@@ -144,7 +144,7 @@ Ninguno de los dos archivos `.env` se versiona — están cubiertos por `.gitign
 | Variable         | Obligatoria | Por defecto | Descripción |
 |------------------|:-----------:|-------------|-------------|
 | `VITE_API_BASE`  | no          | vacío       | Déjalo vacío para usar rutas relativas y el proxy de nginx |
-| `VITE_INACTIVIDAD_MIN` | no    | `30`        | Minutos sin actividad (mouse, teclado, toque o scroll) antes de cerrar la sesión del panel. Se lee al compilar (`npm run build`, Vercel); el build de Docker no la recibe y usa 30 |
+| `VITE_INACTIVIDAD_MIN` | no    | `30`        | Minutos sin actividad (mouse, teclado, toque o scroll) antes de cerrar la sesión del panel. Se lee al compilar (`pnpm run build`, Vercel); el build de Docker no la recibe y usa 30 |
 | `FRONTEND_PORT`  | no          | `5173`      | Puerto publicado del frontend |
 
 ---
@@ -167,7 +167,7 @@ se crea sin periodo de prueba (acceso ilimitado).
 También puedes registrarte desde la interfaz en `/register-owner`, que crea el
 gimnasio y su administrador con 7 días de prueba.
 
-> `npm run seed` (`seed_pg.js`) **no crea usuarios**: solo actualiza contraseñas y
+> `pnpm run seed` (`seed_pg.js`) **no crea usuarios**: solo actualiza contraseñas y
 > fotos de una lista fija de correos que ya deben existir en la base. Sobre una base
 > vacía no hace nada. Usa `seed_dev.js`.
 
@@ -366,7 +366,7 @@ Otro proceso ocupa el 3001 o el 5173. Búscalo y ciérralo:
 ```bash
 netstat -ano | findstr "5173"
 ```
-Suele ser un `npm run dev` anterior que quedó vivo. Ojo: un servidor Vite escuchando
+Suele ser un `pnpm run dev` anterior que quedó vivo. Ojo: un servidor Vite escuchando
 solo en `::1` (IPv6) **tapa al contenedor** sin dar error de puerto, porque
 `localhost` resuelve IPv6 primero. Si la app responde pero se comporta raro,
 comprueba quién contesta — debe decir `Server: nginx`:

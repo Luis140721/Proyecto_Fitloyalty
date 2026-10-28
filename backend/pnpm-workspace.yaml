@@ -1,0 +1,13 @@
+# Ajustes de pnpm para el backend. Sin `packages`: el backend es un proyecto
+# aparte con su propio pnpm-lock.yaml, porque Docker (contexto ./backend) y
+# Render lo instalan desde esta carpeta.
+#
+# pnpm no corre los scripts de instalacion de las dependencias salvo los que se
+# permiten aqui; si aparece uno sin decidir, `pnpm install` falla
+# (ERR_PNPM_IGNORED_BUILDS).
+allowBuilds:
+  # Descarga Chrome para WhatsApp (whatsapp-web.js), igual que con npm. En Docker
+  # y en el CI no baja nada porque definen PUPPETEER_SKIP_DOWNLOAD=true.
+  puppeteer: true
+  # Solo se instala en macOS y ya trae fsevents.node compilado.
+  fsevents: false

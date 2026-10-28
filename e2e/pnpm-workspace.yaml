@@ -1,0 +1,9 @@
+# Ajustes de pnpm para los E2E. Sin `packages`: e2e es un proyecto aparte con su
+# propio pnpm-lock.yaml.
+#
+# pnpm no corre los scripts de instalacion de las dependencias salvo los que se
+# permiten aqui; si aparece uno sin decidir, `pnpm install` falla
+# (ERR_PNPM_IGNORED_BUILDS).
+allowBuilds:
+  # Solo se instala en macOS y ya trae fsevents.node compilado.
+  fsevents: false

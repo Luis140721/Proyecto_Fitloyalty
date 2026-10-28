@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-// Estos tests usan el backend real y la BD de pruebas (npm run db:up): no simulan el API.
+// Estos tests usan el backend real y la BD de pruebas (pnpm run db:up): no simulan el API.
 const API = 'http://localhost:3001/api';
 
 test('should open the dashboard of the new gym when the owner signs up with valid data', async ({ page }) => {

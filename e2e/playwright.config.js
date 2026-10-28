@@ -41,7 +41,7 @@ function exigirBdDePruebas(url) {
     throw new Error(
       'Los E2E solo corren contra la BD de pruebas local (db-test, 127.0.0.1:5433, BD terminada en _test). ' +
         `Recibido: ${u.hostname || '?'}:${u.port || '(sin puerto)'}/${bd || '?'}. Motivo: ${motivos.join('; ')}. ` +
-        'Levantala con "npm run db:up" y no apuntes E2E_DATABASE_URL a otra BD.',
+        'Levantala con "pnpm run db:up" y no apuntes E2E_DATABASE_URL a otra BD.',
     );
   }
 }
@@ -86,7 +86,9 @@ export default defineConfig({
       },
     },
     {
-      command: `npm run dev --prefix ../frontend -- --port ${FRONT_PORT} --strictPort`,
+      // Sin `--`: pnpm le pasa a Vite los argumentos tal cual, y con `--` Vite
+      // ignoraria el puerto.
+      command: `pnpm --dir ../frontend run dev --port ${FRONT_PORT} --strictPort`,
       url: FRONT_URL,
       // Tampoco se reutiliza un front ya abierto: podria estar apuntando a otro API.
       reuseExistingServer: false,
