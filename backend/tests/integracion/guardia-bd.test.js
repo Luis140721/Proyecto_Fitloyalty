@@ -48,6 +48,10 @@ const ATAQUES = [
   ['%23 en el valor de sslmode', `${VALIDA}?sslmode=disable%23`, 'debe tener la forma'],
   ['%23 en el nombre de la BD', 'postgres://u:c@127.0.0.1:5433/fitloyalty%23_test', 'debe tener la forma'],
   ['&sslmode= en la clave y @ en la ruta (llevaba la E2E a 5436)', ATAQUE_CLAVE, 'debe tener la forma'],
+  // Cada mitad del ataque por separado: la forma cierra las dos.
+  ['&sslmode= en la clave, con una ruta normal', 'postgres://fitloyalty_test:fitloyalty_test&sslmode=x@127.0.0.1:5433/fitloyalty_test', 'debe tener la forma'],
+  ['una @ y un & en la ruta, con una clave normal', 'postgres://u:c@127.0.0.1:5433/a&@127.0.0.1:5436/decoy_test', 'debe tener la forma'],
+  ['un % en la clave', 'postgres://u:c%40x@127.0.0.1:5433/fitloyalty_test', 'debe tener la forma'],
   ['un caracter de control al inicio y un % mal formado (pg leia base:5432)', '\x01postgres://u:c%zz@127.0.0.1:5433/fitloyalty_test', 'debe tener la forma'],
   ['una @ ancha en el usuario', 'postgres://u＠x:c@127.0.0.1:5433/fitloyalty_test', 'debe tener la forma'],
   ['una @ ancha en el host', 'postgres://u:c@127.0.0.1＠ep-x.neon.tech:5433/fitloyalty_test', 'debe tener la forma'],
