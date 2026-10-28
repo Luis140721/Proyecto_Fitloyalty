@@ -37,19 +37,23 @@ jobs:
       PUPPETEER_SKIP_DOWNLOAD: "true"
     steps:
       - uses: actions/checkout@v7.0.1
+      # Instala la version de pnpm que fija "packageManager" en backend/package.json.
+      - uses: pnpm/action-setup@v6.1.0
+        with:
+          package_json_file: backend/package.json
       - uses: actions/setup-node@v7.1.0
         with:
           node-version: 24
-          cache: npm
-          cache-dependency-path: backend/package-lock.json
-      - run: npm ci
+          cache: pnpm
+          cache-dependency-path: backend/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
       - name: Comprobar sintaxis de src/
         run: find src -name '*.js' -print0 | xargs -0 -n1 node --check
       # Las pruebas simulan la base de datos y los envios (WhatsApp, correo): no
-      # necesitan servicios ni secretos. RQNF-07. `npm test` mide la cobertura y
+      # necesitan servicios ni secretos. RQNF-07. `pnpm test` mide la cobertura y
       # falla si baja del coverageThreshold de jest.config.js.
       - name: Pruebas con cobertura y umbral
-        run: npm test
+        run: pnpm test
       # El reporte de cobertura queda descargable desde la pestaña Actions.
       - uses: actions/upload-artifact@v7.0.2
         if: always()
@@ -65,17 +69,20 @@ jobs:
         working-directory: frontend
     steps:
       - uses: actions/checkout@v7.0.1
+      - uses: pnpm/action-setup@v6.1.0
+        with:
+          package_json_file: frontend/package.json
       - uses: actions/setup-node@v7.1.0
         with:
           node-version: 24
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-      - run: npm ci
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
       # Antes del build: si la cobertura baja de los thresholds de vite.config.js,
       # el job falla sin gastar tiempo en compilar.
       - name: Pruebas con cobertura y umbral
-        run: npm test
-      - run: npm run build
+        run: pnpm test
+      - run: pnpm run build
       - uses: actions/upload-artifact@v7.0.2
         if: always()
         with:
