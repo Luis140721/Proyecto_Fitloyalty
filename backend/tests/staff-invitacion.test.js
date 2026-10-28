@@ -181,6 +181,20 @@ describe('POST /api/admin/staff/invite: the invitation email', () => {
     expect(r.body).not.toHaveProperty('devAcceptToken');
   });
 
+  test('should build the email link with the first origin when FRONTEND_URL lists several', async () => {
+    // Doble: spy en sendStaffInvite. Verifica comportamiento: el enlace que recibe
+    // la persona. FRONTEND_URL es la lista de origenes de CORS separada por comas
+    // (index.js); entera dentro del enlace lo rompia.
+    // Arrange
+    process.env.FRONTEND_URL = 'https://app.test, https://admin.app.test';
+
+    // Act
+    await invitar(ANA);
+
+    // Assert
+    expect(enlaceDelCorreo()).toMatch(/^https:\/\/app\.test\/accept-invite\?token=[\w-]{43}$/);
+  });
+
   test('should send a link that opens the invitation it just created', async () => {
     // Dobles: spy en sendStaffInvite para leer el enlace que recibio la persona,
     // y fake de la BD que guarda la invitacion. Verifica estado: lo que muestra

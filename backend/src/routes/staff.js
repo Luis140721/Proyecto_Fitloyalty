@@ -63,8 +63,10 @@ function parse(schema, payload) {
   return { ok: true, data: result.data };
 }
 
+// FRONTEND_URL es la lista de origenes de CORS separada por comas (index.js).
+// El enlace del correo usa el primero; la lista entera rompia el enlace.
 function buildAcceptUrl(token) {
-  const base = process.env.FRONTEND_URL || 'http://localhost:5173';
+  const base = (process.env.FRONTEND_URL || 'http://localhost:5173').split(',')[0].trim();
   return `${base.replace(/\/$/, '')}/accept-invite?token=${encodeURIComponent(token)}`;
 }
 
