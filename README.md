@@ -303,6 +303,35 @@ que consume `GET /api/vista/miembros-activos`.
 > docker compose exec -T db psql -U fitloyalty -d fitloyalty < ConsultasDB/Query_Inicial_Crear_Tablas.sql
 > ```
 
+### Pruebas de integración (BD real)
+
+Los tests de `backend/tests/integracion/` corren contra PostgreSQL de verdad, en la BD de
+pruebas desechable `db-test` de `e2e/docker-compose.yml`: la misma de los E2E, en
+`127.0.0.1:5433`, BD `fitloyalty_test`, con los datos en memoria. El esquema lo crean las
+migraciones de `backend/migrations`, con la misma función que aplica el backend al arrancar.
+Desde la raíz:
+
+```bash
+docker compose -f e2e/docker-compose.yml up -d --wait db-test
+TEST_DATABASE_URL=postgres://fitloyalty_test:fitloyalty_test@127.0.0.1:5433/fitloyalty_test npm --prefix backend run test:integracion
+docker compose -f e2e/docker-compose.yml down -v
+```
+
+En PowerShell, el segundo comando es
+`$env:TEST_DATABASE_URL='postgres://fitloyalty_test:fitloyalty_test@127.0.0.1:5433/fitloyalty_test'; npm --prefix backend run test:integracion; Remove-Item Env:TEST_DATABASE_URL`
+(el `Remove-Item` evita que la variable siga definida en la terminal).
+
+- Sin `TEST_DATABASE_URL`, `npm test` y el CI los muestran como *skipped*: la BD llega al CI en la semana 8.
+- La variable es `TEST_DATABASE_URL` y no `DATABASE_URL`, porque `backend/.env` trae la de
+  desarrollo y `dotenv` la cargaría.
+- Dos revisiones, las dos antes de abrir una conexión:
+  - Al cargar los tests, la guardia de `e2e/guardia-bd.cjs`, la misma de los E2E, exige la forma
+    exacta `postgres://usuario:clave@127.0.0.1:5433/nombre_test`, con `?sslmode=` como único
+    parámetro. El usuario, la clave y la BD solo pueden llevar letras, números y `. _ ~ -`. El
+    host es `127.0.0.1` y nunca `localhost`, que en Windows puede resolver a `::1`.
+  - Antes de migrar, se revisan el host, el puerto y la BD que `pg` va a usar de verdad con el
+    pool de la app ya construido. Si no son los de la BD de pruebas, los tests fallan sin conectarse.
+
 ---
 
 ## Correo transaccional (Brevo)

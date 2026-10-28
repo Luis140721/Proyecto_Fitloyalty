@@ -1,4 +1,5 @@
-# BD de pruebas para los E2E (Playwright).
+# BD de pruebas para los E2E (Playwright) y para los tests de integracion del
+# backend (backend/tests/integracion; comandos en el README de la raiz).
 #
 # Es un archivo aparte del docker-compose.yml de la raiz a proposito: aquel
 # levanta el backend completo y exige JWT_SECRET en un .env. Este solo levanta
