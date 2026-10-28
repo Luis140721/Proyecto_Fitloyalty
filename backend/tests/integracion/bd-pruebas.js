@@ -13,19 +13,23 @@
  *   - Sin TEST_DATABASE_URL, describeConBd se salta: el CI no tiene BD hasta
  *     la semana 8 y la cobertura se mide sin ella.
  *   - Con una URL que no es la BD de pruebas local, el archivo de test falla
- *     antes de conectarse (guardia-bd.js).
+ *     al cargar este modulo, antes de conectarse (e2e/guardia-bd.cjs, la misma
+ *     guardia de los E2E).
+ *   - Antes de la primera consulta se revisa ademas el destino que pg va a
+ *     usar de verdad con las opciones del pool ya construido.
  *
  * Cada archivo de integracion requiere este modulo ANTES que cualquier cosa de
  * src/: aqui se fija DATABASE_URL para que el pool de la app (src/db/db.js)
  * apunte a la BD de pruebas. dotenv no pisa variables ya definidas, asi que
  * backend/.env ya no puede cambiarla.
  */
-const { exigirBdDePruebas } = require('./guardia-bd');
+const ConnectionParameters = require('pg/lib/connection-parameters');
+const { exigirBdDePruebas, motivosDelDestino } = require('../../../e2e/guardia-bd.cjs');
 
 const URL_PRUEBAS = process.env.TEST_DATABASE_URL;
 
 if (URL_PRUEBAS) {
-  exigirBdDePruebas(URL_PRUEBAS);
+  exigirBdDePruebas(URL_PRUEBAS, 'TEST_DATABASE_URL');
   process.env.DATABASE_URL = URL_PRUEBAS;
   process.env.DB_SSL = 'false'; // el contenedor no tiene SSL
 }
@@ -39,6 +43,23 @@ const describeConBd = URL_PRUEBAS ? describe : describe.skip;
 const CANDADO_MIGRACIONES = 20261028;
 
 /**
+ * Falla si las opciones de un pool de pg no llevan a la BD de pruebas.
+ * ConnectionParameters es lo que usa pg.Client para leer connectionString, sus
+ * parametros y las variables PG*, asi que esto es el destino real despues de
+ * lo que haga src/db/db.js con la URL. No abre ninguna conexion.
+ */
+function exigirDestinoDePruebas(opciones) {
+  const destino = new ConnectionParameters(opciones);
+  const motivos = motivosDelDestino(destino);
+  if (motivos.length > 0) {
+    throw new Error(
+      `El pool de la app se conectaria a ${destino.host}:${destino.port}/${destino.database}, que no es la BD de pruebas. ` +
+        `Motivo: ${motivos.join('; ')}. No se abrio ninguna conexion.`,
+    );
+  }
+}
+
+/**
  * Devuelve el pool de la app conectado a la BD de pruebas, con el esquema
  * creado por las mismas migraciones que aplica el backend al arrancar
  * (applyMigrations de src/db/migrate.js). Quien lo pide lo cierra con
@@ -47,8 +68,15 @@ const CANDADO_MIGRACIONES = 20261028;
 async function prepararBdDePruebas() {
   const pool = require('../../src/db/db');
 
-  // Segunda red: aunque algo hubiera cargado db.js antes con otra URL, nunca se
-  // migra ni se escribe en una BD cuyo nombre no termina en _test.
+  // La red que importa: lo que pg va a usar de verdad, no lo que dice la URL.
+  try {
+    exigirDestinoDePruebas(pool.options);
+  } catch (err) {
+    await pool.end();
+    throw err;
+  }
+
+  // Otra red mas: nunca se migra ni se escribe en una BD cuyo nombre no termina en _test.
   const { rows } = await pool.query('SELECT current_database() AS bd');
   if (!rows[0].bd.endsWith('_test')) {
     await pool.end();
@@ -74,4 +102,4 @@ async function prepararBdDePruebas() {
   return pool;
 }
 
-module.exports = { describeConBd, prepararBdDePruebas };
+module.exports = { describeConBd, prepararBdDePruebas, exigirDestinoDePruebas };

@@ -318,12 +318,18 @@ docker compose -f e2e/docker-compose.yml down -v
 ```
 
 En PowerShell, el segundo comando es
-`$env:TEST_DATABASE_URL='postgres://fitloyalty_test:fitloyalty_test@127.0.0.1:5433/fitloyalty_test'; npm --prefix backend run test:integracion`.
+`$env:TEST_DATABASE_URL='postgres://fitloyalty_test:fitloyalty_test@127.0.0.1:5433/fitloyalty_test'; npm --prefix backend run test:integracion; Remove-Item Env:TEST_DATABASE_URL`
+(el `Remove-Item` evita que la variable siga definida en la terminal).
 
 - Sin `TEST_DATABASE_URL`, `npm test` y el CI los muestran como *skipped*: la BD llega al CI en la semana 8.
 - La variable es `TEST_DATABASE_URL` y no `DATABASE_URL`, porque `backend/.env` trae la de
-  desarrollo y `dotenv` la cargaría. Solo se acepta `127.0.0.1` o `localhost`, el puerto
-  `5433` y una BD terminada en `_test`; cualquier otra URL falla antes de conectarse.
+  desarrollo y `dotenv` la cargaría.
+- Dos revisiones, las dos antes de abrir una conexión:
+  - Al cargar los tests, la guardia de `e2e/guardia-bd.cjs`, la misma de los E2E, rechaza la
+    URL que no use `127.0.0.1` o `localhost`, el puerto `5433` y una BD terminada en `_test`,
+    o que traiga `#`, espacios o un parámetro distinto de `sslmode`.
+  - Antes de migrar, se revisan el host, el puerto y la BD que `pg` va a usar de verdad con el
+    pool de la app ya construido. Si no son los de la BD de pruebas, los tests fallan sin conectarse.
 
 ---
 
