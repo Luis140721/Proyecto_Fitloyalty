@@ -13,46 +13,68 @@
  * clave.
  */
 
-// Unico parametro admitido en la URL. pg copia todos los parametros a su
-// configuracion, y ?host= y ?port= mandan sobre el host y el puerto de la URL.
-const PARAMETROS_PERMITIDOS = ['sslmode'];
+// Forma exacta admitida, comprobada sobre la cadena tal cual y antes de
+// parsearla:
+//   - usuario y clave solo con letras, numeros y . _ ~ - (nada de @ & % ? # / :
+//     de mas, espacios ni caracteres de control);
+//   - host 127.0.0.1, sin localhost: en Windows localhost puede resolver a ::1,
+//     y ahi puede escuchar otro proceso;
+//   - puerto 5433;
+//   - BD de letras, numeros y _, terminada en _test;
+//   - como mucho ?sslmode=...
+// new URL y pg no leen igual todas las URL. src/db/db.js, ademas, borra
+// sslmode con una expresion sobre la cadena entera, y con una "&sslmode=" en la
+// clave y una @ en la ruta cambiaba el host y el puerto. Con esta forma, new
+// URL, db.js y pg leen el mismo destino.
+const FORMA = /^postgres(?:ql)?:\/\/[A-Za-z0-9._~-]+(?::[A-Za-z0-9._~-]*)?@127\.0\.0\.1:5433\/[A-Za-z0-9_]+_test(?:\?sslmode=[a-z-]+)?$/;
+const FORMA_LEGIBLE = 'postgres://usuario:clave@127.0.0.1:5433/nombre_test (solo se admite ?sslmode=)';
 
 /** Motivos por los que un destino { host, port, database } no es la BD de pruebas. */
 function motivosDelDestino({ host, port, database }) {
   const motivos = [];
-  if (!['localhost', '127.0.0.1'].includes(host)) motivos.push('el host no es 127.0.0.1 ni localhost');
+  if (host !== '127.0.0.1') motivos.push('el host no es 127.0.0.1');
   if (String(port) !== '5433') motivos.push('el puerto no es 5433');
   if (!String(database ?? '').endsWith('_test')) motivos.push('el nombre de la BD no termina en _test');
   return motivos;
 }
 
-function exigirBdDePruebas(url, variable) {
-  // new URL recorta los espacios de los extremos y pg no.
-  if (/\s/.test(url)) throw new Error(`${variable} no puede tener espacios.`);
-  // Lo que va despues de # es fragmento para new URL, que no lo revisa, pero no
-  // para pg: src/db/db.js, al quitar sslmode, convierte "?sslmode=x#&port=5436"
-  // en "?&port=5436".
-  if (url.includes('#')) throw new Error(`${variable} no puede tener #.`);
+/**
+ * Lo que se le puede decir a quien escribio la URL, sin mostrar el usuario ni
+ * la clave. Solo sirve para el mensaje: la decision la toma FORMA.
+ */
+function diagnostico(url) {
   let u;
-  let bd;
   try {
     u = new URL(url);
-    bd = decodeURIComponent(u.pathname.replace(/^\//, ''));
   } catch {
-    throw new Error(`${variable} no es una URL valida de PostgreSQL.`);
+    return { recibido: 'algo que no es una URL', motivos: ['no es una URL valida de PostgreSQL'] };
   }
+  const bd = u.pathname.replace(/^\//, '');
   const motivos = [];
   if (!['postgres:', 'postgresql:'].includes(u.protocol)) motivos.push('el protocolo no es postgres:// ni postgresql://');
   motivos.push(...motivosDelDestino({ host: u.hostname, port: u.port, database: bd }));
-  const otros = [...u.searchParams.keys()].filter((k) => !PARAMETROS_PERMITIDOS.includes(k));
-  if (otros.length > 0) motivos.push(`trae parametros no permitidos (${otros.join(', ')}); solo se admite sslmode`);
-  if (motivos.length > 0) {
-    throw new Error(
-      `${variable} debe apuntar a la BD de pruebas local (db-test, 127.0.0.1:5433, BD terminada en _test). ` +
-        `Recibido: ${u.hostname || '?'}:${u.port || '(sin puerto)'}/${bd || '?'}. Motivo: ${motivos.join('; ')}. ` +
-        `Levantala con "docker compose -f e2e/docker-compose.yml up -d --wait db-test" (desde la raiz) y no apuntes ${variable} a otra BD.`,
-    );
+  const otros = [...u.searchParams.keys()].filter((k) => k !== 'sslmode');
+  if (otros.length > 0) motivos.push(`trae parametros no permitidos (${otros.join(', ')})`);
+  if (motivos.length === 0) {
+    motivos.push('trae caracteres fuera de la forma permitida en el usuario, la clave, la BD o sslmode');
   }
+  return { recibido: `${u.hostname || '?'}:${u.port || '(sin puerto)'}/${bd || '?'}`, motivos };
+}
+
+function exigirBdDePruebas(url, variable) {
+  // Dos casos con su propio mensaje; FORMA tambien los rechaza.
+  if (/\s/.test(url)) throw new Error(`${variable} no puede tener espacios.`);
+  // Lo que va despues de # es fragmento para new URL, que no lo revisa, pero no
+  // para pg: db.js, al quitar sslmode, convertia "?sslmode=x#&port=5436" en
+  // "?&port=5436".
+  if (url.includes('#')) throw new Error(`${variable} no puede tener #.`);
+  if (FORMA.test(url)) return;
+  const { recibido, motivos } = diagnostico(url);
+  throw new Error(
+    `${variable} debe tener la forma ${FORMA_LEGIBLE}: la BD de pruebas local, db-test. ` +
+      `Recibido: ${recibido}. Motivo: ${motivos.join('; ')}. ` +
+      `Levantala con "docker compose -f e2e/docker-compose.yml up -d --wait db-test" (desde la raiz) y no apuntes ${variable} a otra BD.`,
+  );
 }
 
 module.exports = { exigirBdDePruebas, motivosDelDestino };
