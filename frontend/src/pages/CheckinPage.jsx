@@ -272,7 +272,7 @@ export default function CheckinPage() {
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
           <button className="btn btn-ghost" onClick={loadRecent}>
-            <span className="material-symbols-outlined icon">refresh</span>
+            <span className="material-symbols-outlined icon" aria-hidden="true">refresh</span>
             Actualizar
           </button>
         </div>
@@ -280,7 +280,7 @@ export default function CheckinPage() {
 
       {error && (
         <div className="alert alert-error anim-scale-in" role="alert" style={{ marginBottom: 24 }}>
-          <span className="material-symbols-outlined icon">error</span>
+          <span className="material-symbols-outlined icon" aria-hidden="true">error</span>
           <span>{error}</span>
         </div>
       )}
@@ -294,9 +294,11 @@ export default function CheckinPage() {
                 <p>Apunta el lector al QR del miembro o pega el código abajo.</p>
               </div>
               <div style={{ display: 'flex', gap: 6 }}>
+                {/* Sin label visible: aria-label le da nombre al lector de pantalla. */}
                 <select
                   value={metodo}
                   onChange={(e) => setMetodo(e.target.value)}
+                  aria-label="Método de ingreso"
                   className="field-input"
                   style={{ width: 160, padding: '8px 12px', fontSize: 13 }}
                 >
@@ -316,7 +318,7 @@ export default function CheckinPage() {
                   <i className="left" /><i className="right" />
                   <span className="checkin-frame__scan" />
                   <div className="checkin-frame__qr">
-                    <span className="material-symbols-outlined anim-spin-slow">qr_code_2</span>
+                    <span className="material-symbols-outlined anim-spin-slow" aria-hidden="true">qr_code_2</span>
                   </div>
                 </>
               ) : (
@@ -340,14 +342,14 @@ export default function CheckinPage() {
                 className={`btn ${cameraEnabled ? 'btn-danger' : 'btn-secondary'}`}
                 onClick={toggleCamera}
               >
-                <span className="material-symbols-outlined icon">{cameraEnabled ? 'videocam_off' : 'videocam'}</span>
+                <span className="material-symbols-outlined icon" aria-hidden="true">{cameraEnabled ? 'videocam_off' : 'videocam'}</span>
                 {cameraEnabled ? 'Desactivar cámara' : 'Activar cámara'}
               </button>
             </div>
 
             {scannerError && (
               <div className="alert alert-error" style={{ marginTop: 12 }}>
-                <span className="material-symbols-outlined icon">error</span>
+                <span className="material-symbols-outlined icon" aria-hidden="true">error</span>
                 <span>{scannerError}</span>
               </div>
             )}
@@ -358,11 +360,12 @@ export default function CheckinPage() {
                 value={codigo}
                 onChange={(e) => setCodigo(e.target.value)}
                 onKeyDown={onScan}
+                aria-label="Código QR"
                 placeholder="Escanea o pega el código QR aquí"
                 autoFocus
               />
               <button type="submit" className="btn btn-primary ripple-host" onClick={registrarRipple} disabled={submitting}>
-                <span className="material-symbols-outlined icon">login</span>
+                <span className="material-symbols-outlined icon" aria-hidden="true">login</span>
                 {submitting ? 'Validando...' : 'Registrar'}
               </button>
             </form>
@@ -381,7 +384,7 @@ export default function CheckinPage() {
               </label>
               <div style={{ display: 'flex', alignItems: 'flex-end' }}>
                 <button type="button" className="btn btn-secondary btn-block" onClick={() => { setCodigo(''); setDocumento(''); setFeedback(null); setError(''); }}>
-                  <span className="material-symbols-outlined icon">cleaning_services</span>
+                  <span className="material-symbols-outlined icon" aria-hidden="true">cleaning_services</span>
                   Limpiar
                 </button>
               </div>
@@ -395,7 +398,7 @@ export default function CheckinPage() {
               role="status"
               style={{ marginTop: 18 }}
             >
-              <span className="material-symbols-outlined icon">
+              <span className="material-symbols-outlined icon" aria-hidden="true">
                 {feedback.type === 'error' ? 'block' : feedback.type === 'warning' ? 'warning' : 'check_circle'}
               </span>
               <span style={{ lineHeight: 1.5 }}>
