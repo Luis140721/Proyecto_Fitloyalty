@@ -85,14 +85,14 @@ describe('validateRegisterOwnerForm', () => {
   });
 
   it.each([
-    ['empty', '', 'Escribe tu correo.'],
-    ['only spaces', '   ', 'Escribe tu correo.'],
-    ['without a domain', 'ana@gym', 'Este correo no tiene un formato válido.'],
-    ['with a 1-letter extension', 'ana@gym.c', 'Este correo no tiene un formato válido.'],
-    ['with a space inside', 'ana perez@gym.co', 'Este correo no tiene un formato válido.'],
-    ['with a 2-letter extension', 'ana@gym.co', undefined],
-    ['valid with spaces around', '  ana@gym.co  ', undefined],
-  ])('should validate the owner email when it is %s', (_caso, ownerEmail, mensaje) => {
+    ['is empty', '', 'Escribe tu correo.'],
+    ['has only spaces', '   ', 'Escribe tu correo.'],
+    ['has no domain', 'ana@gym', 'Este correo no tiene un formato válido.'],
+    ['has a 1-letter extension', 'ana@gym.c', 'Este correo no tiene un formato válido.'],
+    ['has a space inside', 'ana perez@gym.co', 'Este correo no tiene un formato válido.'],
+    ['has a 2-letter extension', 'ana@gym.co', undefined],
+    ['is valid with spaces around', '  ana@gym.co  ', undefined],
+  ])('should validate the owner email when it %s', (_caso, ownerEmail, mensaje) => {
     // Arrange
     const form = formValido({ ownerEmail });
 
@@ -120,7 +120,7 @@ describe('validateRegisterOwnerForm', () => {
   });
 
   it.each([
-    ['empty', '', 'Crea una contraseña.'],
+    ['no characters', '', 'Crea una contraseña.'],
     ['2 characters', 'a1', 'Te faltan 4 caracteres (mínimo 6).'],
     ['5 characters', 'abc12', 'Te faltan 1 caracteres (mínimo 6).'],
     ['6 characters without a number', 'abcdef', 'Debe incluir al menos un número.'],
@@ -144,6 +144,7 @@ describe('passwordStrength', () => {
     ['5 lowercase letters', 0, 'abcde'],
     ['5 symbols', 1, '!!!!!'],
     ['6 lowercase letters', 1, 'abcdef'],
+    ['6 numbers only', 1, '123456'],
     ['6 characters with letters and numbers', 2, 'abc123'],
     ['9 characters with letters and numbers', 2, 'abcdefgh1'],
     ['10 characters with letters and numbers', 3, 'abcdefghi1'],
