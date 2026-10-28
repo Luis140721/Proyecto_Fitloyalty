@@ -6,8 +6,10 @@
  *
  * El API, useAuth y qrcode se simulan con vi.mock. Las fechas del plan llegan
  * como las manda el backend en Render: una columna date de PostgreSQL que pg
- * convierte en la medianoche UTC (2026-10-01T00:00:00.000Z). El archivo corre
- * con la hora de Colombia, como el navegador de recepcion.
+ * convierte en la medianoche UTC (2026-10-01T00:00:00.000Z). La pagina las lee
+ * con fechaDia y formatearFechaDia (src/fechas.js, del #63). El archivo corre
+ * con la hora de Colombia, como el navegador de recepcion: en UTC, como el CI,
+ * el defecto no se veria.
  */
 import { describe, expect, test, vi, beforeAll, beforeEach, afterEach, afterAll } from 'vitest';
 import { screen, within, waitFor } from '@testing-library/react';
@@ -52,7 +54,7 @@ const EDITABLES = [
   'nivel_experiencia', 'observaciones',
 ];
 
-let plan;
+let plan, congelaciones;
 
 /** Doble del GET: configuracion, lista, ficha completa y plan de Ana. */
 function apiQueResponde() {
@@ -60,7 +62,7 @@ function apiQueResponde() {
     if (url === '/admin/config') return { data: { config: { plan_mensual_valor: '90000.00', plan_trimestral_valor: '240000.00' } } };
     if (url === '/admin/miembros') return { data: { miembros: [ANA, CARLOS] } };
     if (url === '/admin/miembros/1') return { data: { miembro: ANA_COMPLETA } };
-    if (url === '/admin/miembros/1/plan') return { data: { plan, congelaciones: [] } };
+    if (url === '/admin/miembros/1/plan') return { data: { plan, congelaciones } };
     throw new Error(`GET no simulado en el test: ${url}`);
   });
 }
@@ -89,6 +91,7 @@ afterAll(() => {
 
 beforeEach(() => {
   plan = { ...PLAN };
+  congelaciones = [];
   mockGet = apiQueResponde();
   mockPost = vi.fn(async () => ({ data: {} }));
   mockPut = vi.fn(async () => ({ data: {} }));
@@ -158,6 +161,11 @@ describe('MiembrosPage: la ficha del miembro', () => {
 });
 
 describe('MiembrosPage: el plan y el cobro', () => {
+  test('should run in the time zone where new Date() moves the API date one day back', () => {
+    // Control: si la zona no quedo fijada, los tests de fechas no probarian nada
+    expect(new Date(PLAN.fecha_inicio).toLocaleDateString('es-CO')).toBe('30/9/2026');
+  });
+
   test('should show and save the plan dates of the API without moving them one day in Colombia', async () => {
     // Arrange
     const { user } = await abrirFichaDeAna();
@@ -263,9 +271,15 @@ describe('MiembrosPage: congelar la membresia', () => {
   test('should unfreeze without asking when the membership is frozen', async () => {
     // Arrange
     plan = { ...PLAN, congelado_desde: '2026-10-20T00:00:00.000Z', dias_congelado: 8 };
+    congelaciones = [
+      { id_congelacion: 3, fecha_inicio: '2026-08-01T00:00:00.000Z', fecha_fin: '2026-08-15T00:00:00.000Z', dias: 14, motivo: 'Incapacidad' },
+      { id_congelacion: 4, fecha_inicio: '2026-10-20T00:00:00.000Z', fecha_fin: null, dias: null, motivo: 'Viaje' },
+    ];
     vi.spyOn(window, 'confirm');
     const { user } = await abrirFichaDeAna();
     expect(within(ficha()).getByText(/Congelada desde el 20\/10\/2026 \(8 días\)/)).toBeInTheDocument();
+    expect(within(ficha()).getByText('1/8/2026 → 15/8/2026 (14 días) · Incapacidad')).toBeInTheDocument();
+    expect(within(ficha()).getByText('20/10/2026 → sigue congelada · Viaje')).toBeInTheDocument();
 
     // Act
     await user.click(within(ficha()).getByRole('button', { name: 'Descongelar membresía' }));
