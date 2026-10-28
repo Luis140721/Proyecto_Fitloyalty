@@ -5,13 +5,17 @@ WORKDIR /app
 # Necesario para compilar bcryptjs si en algun momento pasamos a bcrypt nativo
 RUN apk add --no-cache python3 make g++
 
-COPY package.json package-lock.json* ./
-# scripts/ va antes del install: npm corre el postinstall durante `npm install`
+# pnpm con la misma version exacta de "packageManager" en package.json.
+RUN npm install -g pnpm@12.15.0 --no-audit --no-fund
+
+# pnpm-workspace.yaml trae allowBuilds: sin el, pnpm falla al encontrar el
+# script de instalacion de puppeteer sin decidir.
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+# scripts/ va antes del install: pnpm corre el postinstall durante `pnpm install`
 # y si el archivo todavia no esta, el build falla con "Cannot find module".
 COPY scripts ./scripts
-# Si falla lockf strict, npm ci --no-audit --no-fund --prefer-offline
 ENV PUPPETEER_SKIP_DOWNLOAD=true
-RUN npm install --no-audit --no-fund
+RUN pnpm install --frozen-lockfile
 
 # Etapa runtime: solo deps de produccion + codigo. Imagen pequena y reproducible.
 FROM node:24-alpine AS runtime
@@ -21,13 +25,20 @@ ENV NODE_ENV=production \
     PORT=3001 \
     NPM_CONFIG_LOGLEVEL=warn
 
-COPY package.json package-lock.json* ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY scripts ./scripts
 # Esta imagen no usa el envio automatico por WhatsApp, asi que el postinstall
 # se salta la descarga de Chrome (~330 MB) y la imagen no se infla. Para
 # probarlo aqui: quita esta linea y pon ENABLE_WHATSAPP=true en el compose.
 ENV PUPPETEER_SKIP_DOWNLOAD=true
-RUN npm install --omit=dev --no-audit --no-fund && npm cache clean --force
+# pnpm solo hace falta para instalar (el contenedor arranca con node): se
+# instala, se usa y se quita en la misma capa, junto con su almacen y su cache,
+# y asi la imagen no carga ~100 MB de pnpm ni una segunda copia de los paquetes.
+RUN npm install -g pnpm@12.15.0 --no-audit --no-fund \
+ && pnpm install --frozen-lockfile --prod --store-dir /tmp/pnpm-store \
+ && npm uninstall -g pnpm \
+ && rm -rf /tmp/pnpm-store* /root/.cache/pnpm /root/.local/share/pnpm /root/.local/state/pnpm \
+ && npm cache clean --force
 
 # Codigo fuente y migraciones. NO copiamos node_modules (ya esta arriba).
 COPY src ./src
