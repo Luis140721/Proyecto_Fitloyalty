@@ -325,9 +325,10 @@ En PowerShell, el segundo comando es
 - La variable es `TEST_DATABASE_URL` y no `DATABASE_URL`, porque `backend/.env` trae la de
   desarrollo y `dotenv` la cargaría.
 - Dos revisiones, las dos antes de abrir una conexión:
-  - Al cargar los tests, la guardia de `e2e/guardia-bd.cjs`, la misma de los E2E, rechaza la
-    URL que no use `127.0.0.1` o `localhost`, el puerto `5433` y una BD terminada en `_test`,
-    o que traiga `#`, espacios o un parámetro distinto de `sslmode`.
+  - Al cargar los tests, la guardia de `e2e/guardia-bd.cjs`, la misma de los E2E, exige la forma
+    exacta `postgres://usuario:clave@127.0.0.1:5433/nombre_test`, con `?sslmode=` como único
+    parámetro. El usuario, la clave y la BD solo pueden llevar letras, números y `. _ ~ -`. El
+    host es `127.0.0.1` y nunca `localhost`, que en Windows puede resolver a `::1`.
   - Antes de migrar, se revisan el host, el puerto y la BD que `pg` va a usar de verdad con el
     pool de la app ya construido. Si no son los de la BD de pruebas, los tests fallan sin conectarse.
 
