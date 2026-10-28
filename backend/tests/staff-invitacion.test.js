@@ -214,7 +214,7 @@ describe('POST /api/admin/staff/invite: the invitation email', () => {
     expect(enlaceDelCorreo()).toMatch(new RegExp(`^${base.replace(/\./g, '\\.')}/accept-invite\\?token=[\\w-]{43}$`));
   });
 
-  test('should send a link that opens the invitation it just created', async () => {
+  test('should open the invitation it just created when the person follows the emailed link', async () => {
     // Dobles: spy en sendStaffInvite para leer el enlace que recibio la persona,
     // y fake de la BD que guarda la invitacion. Verifica estado: lo que muestra
     // la invitacion al abrir ese enlace (si el token del correo no fuera el
@@ -301,7 +301,7 @@ describe('POST /api/admin/staff/invite: the invitation email', () => {
 });
 
 describe('accept link: the clock and the invitation state', () => {
-  test('should make the invitation expire exactly 7 days after it is sent', async () => {
+  test('should set the expiration exactly 7 days later when the invitation is sent', async () => {
     // Doble: stub del reloj (jest.setSystemTime fija "ahora"), asi la fecha esperada
     // no depende del dia en que corras el test. Verifica estado: la fecha que
     // queda guardada en el fake de la BD y la que devuelve la respuesta.
@@ -316,26 +316,38 @@ describe('accept link: the clock and the invitation state', () => {
     expect(r.body.invitation.fecha_expiracion).toBe(vence.toISOString());
   });
 
-  test.each([
-    { momento: 'at the last millisecond of the 7 days', despues: 0, status: 200 },
-    { momento: '1 ms after the 7 days', despues: 1, status: 410 },
-  ])('should answer $status when the link is opened $momento', async ({ despues, status }) => {
+  test('should still open the invitation when the link is opened at the last millisecond of the 7 days', async () => {
     // Doble: stub del reloj. Muevo "ahora" hasta el limite de la vigencia; la
     // comparacion es estricta (<), asi que el ultimo milisegundo aun vale.
     // El spy en sendStaffInvite solo entrega el enlace.
     // Arrange
     await invitar(ANA);
-    jest.setSystemTime(AHORA.getTime() + 7 * UN_DIA + despues);
+    jest.setSystemTime(AHORA.getTime() + 7 * UN_DIA);
 
     // Act
     const r = await verInvitacion(tokenDelCorreo());
 
     // Assert
-    expect(r.status).toBe(status);
-    if (status === 410) expect(r.body.code).toBe('INVITE_EXPIRED');
+    expect(r.status).toBe(200);
+    expect(r.body.email).toBe('ana@gym.co');
   });
 
-  test('should create the account only once with the link from the email', async () => {
+  test('should answer 410 INVITE_EXPIRED when the link is opened 1 ms after the 7 days', async () => {
+    // Doble: stub del reloj, un milisegundo despues del limite. El spy en
+    // sendStaffInvite solo entrega el enlace.
+    // Arrange
+    await invitar(ANA);
+    jest.setSystemTime(AHORA.getTime() + 7 * UN_DIA + 1);
+
+    // Act
+    const r = await verInvitacion(tokenDelCorreo());
+
+    // Assert
+    expect(r.status).toBe(410);
+    expect(r.body.code).toBe('INVITE_EXPIRED');
+  });
+
+  test('should create the account only once when the emailed link is used twice', async () => {
     // Dobles: spy en sendStaffInvite (de ahi sale el enlace) y fake de la BD, que
     // guarda el usuario y marca la invitacion. Verifica estado: el usuario creado
     // y que el segundo uso del mismo enlace ya no crea otro.
