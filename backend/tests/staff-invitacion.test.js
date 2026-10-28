@@ -14,7 +14,8 @@
  *
  * Dobles de este archivo (el tipo de cada test va en un comentario):
  *  - sendStaffInvite: spy, stub o ambos segun el test.
- *  - BD: fake en memoria con las tablas gimnasio, usuario e invitacion_staff.
+ *  - BD: fake en memoria con las tablas gimnasio, usuario e invitacion_staff
+ *    (tests/staff-bd-falsa.js, compartido con staff-personal.test.js).
  *  - Reloj: stub con jest.setSystemTime (solo se finge la fecha).
  *  - Lectura del personal en authenticate: stub con establecerBusquedaPersonal.
  * Sin red, sin BD real y sin depender de la fecha del dia.
@@ -34,6 +35,7 @@ jest.mock('../src/lib/email', () => ({ sendStaffInvite: (...a) => mockSendStaffI
 const staffRouter = require('../src/routes/staff');
 const { errorHandler } = require('../src/middleware/errorHandler');
 const { establecerBusquedaPersonal } = require('../src/middleware/auth');
+const { crearBdFalsa } = require('./staff-bd-falsa');
 
 const app = express();
 app.use(express.json());
@@ -44,84 +46,6 @@ const ENV_ORIGINAL = process.env;
 const AHORA = new Date('2026-10-28T15:00:00.000Z');
 const UN_DIA = 24 * 60 * 60 * 1000;
 const ANA = { email: 'Ana@Gym.co', nombre: 'Ana Perez', rol: 'RECEPCIONISTA' };
-
-/**
- * BD falsa (fake): guarda en memoria las filas de gimnasio, usuario e
- * invitacion_staff y responde cada consulta de la ruta como lo haria
- * PostgreSQL con esos datos. Una consulta que no conoce lanza error, asi un
- * cambio en el SQL no pasa en silencio. Con `fallaCon` simulas la BD caida en
- * una consulta.
- */
-function crearBdFalsa() {
-  const bd = {
-    gimnasios: [{ id_gimnasio: 7, nombre: 'Gym Demo', activo: true, trial_ends_at: null }],
-    usuarios: [{ id_usuario: 1, id_gimnasio: 7, nombre: 'Luis Admin', email: 'luis@gym.co', id_rol: 1 }],
-    invitaciones: [],
-    fallaCon: null,
-  };
-  const vigente = (i) => !i.fecha_aceptacion && !i.fecha_revocado && i.fecha_expiracion > new Date();
-  const delGimnasio = (id) => bd.gimnasios.filter((g) => g.id_gimnasio === id);
-
-  async function query(sql, params = []) {
-    if (bd.fallaCon && bd.fallaCon.test(sql)) throw new Error('conexion perdida');
-    if (/^\s*(BEGIN|COMMIT|ROLLBACK)\s*$/.test(sql)) return { rows: [] };
-    if (/information_schema/.test(sql)) {
-      return { rows: [{ rol_exists: false, roles_exists: false, has_fecha_creacion: true, has_ultimo_acceso: false, has_rol_column: false }] };
-    }
-    if (/SELECT id_gimnasio, activo, trial_ends_at FROM gimnasio/.test(sql)) return { rows: delGimnasio(params[0]) };
-    if (/SELECT nombre FROM gimnasio/.test(sql)) return { rows: delGimnasio(params[0]).map(({ nombre }) => ({ nombre })) };
-    if (/SELECT id_usuario FROM usuario WHERE LOWER\(email\) = \$1 AND id_gimnasio = \$2/.test(sql)) {
-      const [email, gym] = params;
-      return { rows: bd.usuarios.filter((u) => u.email.toLowerCase() === email && u.id_gimnasio === gym).map(({ id_usuario }) => ({ id_usuario })) };
-    }
-    if (/SELECT id_invitacion FROM invitacion_staff/.test(sql)) {
-      const [email, gym] = params;
-      return { rows: bd.invitaciones.filter((i) => i.email === email && i.id_gimnasio === gym && vigente(i)).map(({ id_invitacion }) => ({ id_invitacion })) };
-    }
-    if (/INSERT INTO invitacion_staff/.test(sql)) {
-      const [id_gimnasio, email, nombre, rol_asignado, token_hash, id_usuario_creador, fecha_expiracion] = params;
-      const inv = {
-        id_invitacion: bd.invitaciones.length + 1, id_gimnasio, email, nombre, rol_asignado, token_hash,
-        id_usuario_creador, fecha_creacion: new Date(), fecha_expiracion, fecha_aceptacion: null, fecha_revocado: null,
-      };
-      bd.invitaciones.push(inv);
-      return { rows: [{ id_invitacion: inv.id_invitacion, email, nombre, rol_asignado, fecha_creacion: inv.fecha_creacion, fecha_expiracion }] };
-    }
-    if (/FROM invitacion_staff\s+WHERE id_gimnasio = \$1\s+ORDER BY/.test(sql)) {
-      return { rows: bd.invitaciones.filter((i) => i.id_gimnasio === params[0]).map((i) => ({ ...i, pendiente: vigente(i) })) };
-    }
-    if (/UPDATE invitacion_staff\s+SET fecha_revocado/.test(sql)) {
-      const inv = bd.invitaciones.find((i) => i.id_invitacion === params[0] && i.id_gimnasio === params[1] && !i.fecha_aceptacion && !i.fecha_revocado);
-      if (!inv) return { rows: [] };
-      inv.fecha_revocado = new Date();
-      return { rows: [{ id_invitacion: inv.id_invitacion, fecha_revocado: inv.fecha_revocado }] };
-    }
-    if (/FROM invitacion_staff i\s+INNER JOIN gimnasio g/.test(sql)) {
-      const inv = bd.invitaciones.find((i) => i.token_hash === params[0]);
-      return { rows: inv ? [{ ...inv, gym_nombre: delGimnasio(inv.id_gimnasio)[0].nombre }] : [] };
-    }
-    if (/FROM invitacion_staff\s+WHERE token_hash = \$1\s+FOR UPDATE/.test(sql)) {
-      return { rows: bd.invitaciones.filter((i) => i.token_hash === params[0]) };
-    }
-    if (/INSERT INTO usuario/.test(sql)) {
-      const columnas = sql.match(/INSERT INTO usuario \(([^)]+)\)/)[1].split(',').map((c) => c.trim());
-      const usuario = { id_usuario: bd.usuarios.length + 1 };
-      columnas.forEach((c, n) => { usuario[c] = params[n]; });
-      bd.usuarios.push(usuario);
-      const { id_usuario, nombre, email, id_gimnasio, id_rol } = usuario;
-      return { rows: [{ id_usuario, nombre, email, id_gimnasio, id_rol }] };
-    }
-    if (/UPDATE invitacion_staff\s+SET fecha_aceptacion/.test(sql)) {
-      bd.invitaciones.find((i) => i.id_invitacion === params[1]).fecha_aceptacion = new Date();
-      return { rows: [] };
-    }
-    throw new Error('Consulta inesperada: ' + sql.trim().slice(0, 60));
-  }
-
-  bd.query = query;
-  bd.connect = async () => ({ query, release: () => {} });
-  return bd;
-}
 
 let tokenAdmin;
 const invitar = (datos) => request(app).post('/api/admin/staff/invite').set('Authorization', `Bearer ${tokenAdmin}`).send(datos);
