@@ -35,6 +35,7 @@ import { useAuth } from '../context/AuthContext';
 import { useTrial } from '../context/TrialContext';
 import { useApiError } from '../components/ErrorBanner';
 import { api } from '../api';
+import { formatearFechaDia } from '../fechas';
 import EmptyState from '../components/EmptyState';
 import PageTransition from '../components/PageTransition';
 import useAnimatedCount from '../hooks/useAnimatedCount';
@@ -641,7 +642,7 @@ export default function DashboardPage() {
                           </div>
                         </td>
                         <td>{r.plan}</td>
-                        <td>{new Date(r.fecha_fin).toLocaleDateString('es-CO')}</td>
+                        <td>{formatearFechaDia(r.fecha_fin)}</td>
                         <td>
                           <span className={`chip chip-status ${r.dias_restantes <= 3 ? 'chip-status--warning' : 'chip-status--active'}`}>
                             {r.dias_restantes} días
