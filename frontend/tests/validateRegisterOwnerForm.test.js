@@ -70,6 +70,8 @@ describe('validateRegisterOwnerForm', () => {
     ['9 digits with dashes', '300-123-456', 'Debe tener 10 dígitos (escribiste 9).'],
     ['11 digits', '30012345678', 'Debe tener 10 dígitos (escribiste 11).'],
     ['10 digits starting with 2', '2001234567', 'Un celular colombiano empieza por 3.'],
+    ['10 digits starting with 4', '4001234567', 'Un celular colombiano empieza por 3.'],
+    ['10 digits starting with 9', '9001234567', 'Un celular colombiano empieza por 3.'],
     ['10 digits starting with 3', '3001234567', undefined],
     ['10 digits with spaces', '300 123 4567', undefined],
     ['10 digits with dashes and parentheses', '(300) 123-45-67', undefined],
