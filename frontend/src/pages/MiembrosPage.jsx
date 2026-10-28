@@ -1681,7 +1681,7 @@ export default function MiembrosPage() {
                 <footer className="miembro-card__actions">
                   <button
                     className="btn btn-ghost btn-sm"
-                    onClick={() => onDelete(m)}
+                    onClick={() => askDeactivate(m)}
                     aria-label={`Desactivar a ${m.nombre}`}
                   >
                     <span className="material-symbols-outlined icon">person_remove</span>
