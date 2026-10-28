@@ -171,7 +171,9 @@ export default function CheckinPage() {
       setCodigo('');
       await loadRecent();
     } catch (err) {
-      const errorMsg = err.response?.status === 404
+      // El interceptor de api.js ya normalizo el error: el status viene en
+      // err.status (buildError), no en err.response.
+      const errorMsg = err.status === 404
         ? 'Usuario no encontrado. Verifica que el QR sea correcto.'
         : err.message || 'No se pudo registrar el check-in.';
       setError(errorMsg);
