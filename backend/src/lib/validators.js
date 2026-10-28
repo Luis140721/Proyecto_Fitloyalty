@@ -59,12 +59,33 @@ const registerStaffSchema = z.object({
   gymId: z.coerce.number().int().positive().optional(),
 });
 
+// Largo de las columnas donde el registro guarda estos datos: gimnasio.nombre y
+// usuario.nombre son VARCHAR(100); gimnasio.email y usuario.email, VARCHAR(150).
+// Sin estas reglas un valor mas largo llegaba a la BD y el API respondia 500.
+const MAX_NOMBRE = 100;
+const MAX_EMAIL = 150;
+
+/** Nombre requerido que cabe en su columna. Se mide recortado, como lo guarda auth.js. */
+function nombreRegistro(campo) {
+  return z
+    .string({ required_error: `El nombre del ${campo} es requerido` })
+    .min(1, `El nombre del ${campo} es requerido`)
+    .refine((v) => v.trim().length <= MAX_NOMBRE, {
+      message: `El nombre del ${campo} no puede tener más de ${MAX_NOMBRE} caracteres`,
+    });
+}
+
+/** Email que cabe en su columna. Se mide ya normalizado, como se guarda. */
+const emailRegistroSchema = emailSchema.refine((v) => v.length <= MAX_EMAIL, {
+  message: `El email no puede tener más de ${MAX_EMAIL} caracteres`,
+});
+
 const signupSchema = z.object({
-  gymName:  z.string({ required_error: 'El nombre del gimnasio es requerido' }).min(1, 'El nombre del gimnasio es requerido'),
+  gymName:  nombreRegistro('gimnasio'),
   gymPhone: phoneCoSchema,
-  gymEmail: emailSchema.optional().or(z.literal('').transform(() => undefined)),
-  ownerName: z.string({ required_error: 'El nombre del propietario es requerido' }).min(1, 'El nombre del propietario es requerido'),
-  ownerEmail: emailSchema,
+  gymEmail: emailRegistroSchema.optional().or(z.literal('').transform(() => undefined)),
+  ownerName: nombreRegistro('propietario'),
+  ownerEmail: emailRegistroSchema,
   password: passwordSchema,
 });
 
