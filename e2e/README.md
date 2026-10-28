@@ -8,7 +8,6 @@ Prueban la app completa desde el navegador. `npm test` levanta el backend real (
 ## Requisitos
 
 - Node.js 22 o superior (el CI usa 24), con npm.
-  > No agregues `"type": "module"` a `e2e/package.json` mientras Playwright siga en 1.49.1: con Node 24 se queda colgado al cargar la configuración, sin mostrar ningún error.
 - Docker Desktop (o Docker Engine) corriendo.
 - Dependencias del backend y del frontend instaladas (`npm install` en `backend/` y en `frontend/`). En el backend puedes saltarte la descarga de Chrome, que solo usa WhatsApp: `PUPPETEER_SKIP_DOWNLOAD=true npm install`.
 
