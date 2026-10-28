@@ -15,7 +15,7 @@ import { screen, within, waitFor } from '@testing-library/react';
 import MiembrosPage from '../src/pages/MiembrosPage';
 import { renderWithProviders } from './renderWithProviders';
 
-// Un vi.fn nuevo por test en vez de mockReset (ver LoginPage.test.jsx).
+// Un vi.fn nuevo por test, como en LoginPage.test.jsx.
 let mockGet, mockPost, mockPut, mockDelete;
 vi.mock('../src/api', () => ({
   api: {
@@ -137,6 +137,17 @@ describe('MiembrosPage: la lista', () => {
     await waitFor(() => expect(screen.queryByRole('row', { name: /Carlos Ruiz/ })).not.toBeInTheDocument());
     expect(filaDe('Ana Pérez')).toBeInTheDocument();
     expect(mockGet).toHaveBeenLastCalledWith('/admin/miembros', { params: { q: 'ana', pageSize: 100, includeInactive: false } });
+  });
+
+  test('should start with the search from the URL when a notification opens the page with ?q=', async () => {
+    // Act: los avisos de la campana llevan a /admin/miembros?q=<nombre>
+    renderWithProviders(<MiembrosPage />, { route: '/admin/miembros?q=carlos' });
+
+    // Assert
+    expect(await screen.findByRole('row', { name: /Carlos Ruiz/ })).toBeInTheDocument();
+    expect(screen.queryByRole('row', { name: /Ana Pérez/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Buscar miembros' })).toHaveValue('carlos');
+    expect(mockGet).toHaveBeenCalledWith('/admin/miembros', { params: { q: 'carlos', pageSize: 100, includeInactive: false } });
   });
 
   test('should show only the expired members when the Vencido filter is chosen', async () => {

@@ -4,15 +4,14 @@
  * contrato-front.test.js fija ese contrato: gym, rol, email, expiresAt).
  *
  * El API y useAuth se simulan con vi.mock. El token viaja en la query
- * (?token=), por eso este archivo arma su propio MemoryRouter en vez de
- * renderWithProviders, que usa la ruta tambien como patron.
+ * (?token=), que renderWithProviders deja en la URL.
  */
 import { describe, expect, test, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { screen, waitFor } from '@testing-library/react';
 import AcceptInvitePage from '../src/pages/AcceptInvitePage';
+import { renderWithProviders } from './renderWithProviders';
 
-// Un vi.fn nuevo por test en vez de mockReset (ver LoginPage.test.jsx).
+// Un vi.fn nuevo por test, como en LoginPage.test.jsx.
 let mockGet;
 vi.mock('../src/api', () => ({ api: { get: (...a) => mockGet(...a) } }));
 vi.mock('../src/context/AuthContext', () => ({ useAuth: () => ({ acceptInvite: vi.fn() }) }));
@@ -20,11 +19,7 @@ vi.mock('../src/context/AuthContext', () => ({ useAuth: () => ({ acceptInvite: v
 // Respuesta real del endpoint para una invitacion vigente de recepcion.
 const INVITACION = { email: 'ana@gym.co', nombre: 'Ana', rol: 'RECEPCIONISTA', gym: 'Gimnasio Central', expiresAt: '2026-10-29T15:00:00.000Z' };
 
-const abrirInvitacion = () => render(
-  <MemoryRouter initialEntries={['/accept-invite?token=token-de-prueba']}>
-    <AcceptInvitePage />
-  </MemoryRouter>,
-);
+const abrirInvitacion = () => renderWithProviders(<AcceptInvitePage />, { route: '/accept-invite?token=token-de-prueba' });
 
 beforeEach(() => { mockGet = vi.fn(async () => ({ data: INVITACION })); });
 
