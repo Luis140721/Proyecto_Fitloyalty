@@ -225,12 +225,12 @@ export default function CheckinPage() {
       // --- FIN BLOQUEO ---
 
       // El antirrebote del backend (duplicado) es un aviso, como en la camara.
-      const fbType = data.duplicado ? 'warning' : data.advertencia ? 'warning' : 'success';
+      const fbType = (data.duplicado || data.advertencia) ? 'warning' : 'success';
       setFeedback({
         type: fbType,
         msg: data.message,
         miembro: data.miembro,
-        advertencia: data.duplicado ? 'ya-registrado' : data.advertencia,
+        advertencia: data.advertencia,
         gamificacion: data.gamificacion,
       });
       setFrameFlash({ type: fbType, key: Date.now() });
