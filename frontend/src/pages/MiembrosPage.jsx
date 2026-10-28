@@ -764,9 +764,10 @@ export default function MiembrosPage() {
         `/admin/miembros/${editing.id_miembro}/${accion}`,
         accion === 'congelar' ? { motivo: motivoCongelar.trim() } : {}
       );
-      setPlanMsg(data.message || (accion === 'congelar' ? 'Membresía congelada.' : 'Membresía descongelada.'));
       setMotivoCongelar('');
+      // El aviso va despues de recargar: cargarPlan limpia planMsg al empezar.
       await cargarPlan(editing.id_miembro);
+      setPlanMsg(data.message || (accion === 'congelar' ? 'Membresía congelada.' : 'Membresía descongelada.'));
       await load(q, filtro === 'desactivados');
     } catch (err) {
       setPlanError(err.message || 'No pudimos cambiar el congelamiento.');
@@ -824,8 +825,8 @@ export default function MiembrosPage() {
         referencia_pago: planForm.referencia_pago || '',
         proxima_fecha_cobro: convertToISODate(calcularProximaFechaCobro(planForm.fecha_fin)),
       });
-      setPlanMsg('Plan actualizado.');
       await cargarPlan(editing.id_miembro);
+      setPlanMsg('Plan actualizado.');
       await load(q, filtro === 'desactivados');
     } catch (err) {
       setPlanError(err.message || 'No pudimos guardar el plan.');
