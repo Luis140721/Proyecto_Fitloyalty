@@ -84,7 +84,7 @@ docker compose exec db psql -U fitloyalty -d fitloyalty
 
 ## Arranque sin Docker
 
-Requiere **Node 18+**, **pnpm 12.15.0** (`npm install -g pnpm@12.15.0`) y **PostgreSQL** corriendo en local con una base `fitloyalty` creada.
+Requiere **Node 22 o superior** (el CI y las imágenes de Docker usan 24), **pnpm 12.15.0** (`npm install -g pnpm@12.15.0`) y **PostgreSQL** corriendo en local con una base `fitloyalty` creada.
 
 ```bash
 pnpm run install:all                     # instala raíz + backend + frontend
