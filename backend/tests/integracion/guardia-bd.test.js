@@ -3,6 +3,8 @@
  * las redes de tests/integracion/bd-pruebas.js. No se conecta a nada: corre
  * siempre, tambien en el CI sin BD.
  */
+const fs = require('fs');
+const path = require('path');
 const { exigirBdDePruebas } = require('../../../e2e/guardia-bd.cjs');
 
 const VALIDA = 'postgres://fitloyalty_test:fitloyalty_test@127.0.0.1:5433/fitloyalty_test';
@@ -51,6 +53,16 @@ describe('exigirBdDePruebas', () => {
 
   test('rechaza lo que no es una URL', () => {
     expect(() => exigir('fitloyalty_test')).toThrow('no es una URL valida');
+  });
+
+  // Los casos de arriba valen tambien para E2E_DATABASE_URL: la config de los
+  // E2E no tiene una copia de la regla, usa este mismo modulo.
+  test('la config de los E2E usa esta misma guardia con E2E_DATABASE_URL', () => {
+    const config = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'e2e', 'playwright.config.js'), 'utf8');
+
+    expect(config).toContain("import { exigirBdDePruebas } from './guardia-bd.cjs';");
+    expect(config).toContain("exigirBdDePruebas(DATABASE_URL, 'E2E_DATABASE_URL');");
+    expect(config).not.toMatch(/function\s+exigirBdDePruebas/);
   });
 
   test('el mensaje nombra la variable y el destino, pero no el usuario ni la clave', () => {
