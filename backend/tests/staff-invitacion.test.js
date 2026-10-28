@@ -1,0 +1,462 @@
+/**
+ * Bootcamp semana 5 (capa API, Luis): dobles de prueba sobre la invitacion
+ * del personal (RQF-01, routes/staff.js).
+ *
+ * La dependencia externa es el correo. La ruta no usa el SDK de Brevo: llama a
+ * sendStaffInvite de lib/email.js, que es nuestra interfaz propia sobre Brevo.
+ * Por eso se reemplaza ese modulo y no la libreria. Se prueba que:
+ *  - el correo sale una vez y con los datos correctos (a quien, quien invita,
+ *    gimnasio, rol y un enlace que de verdad abre la invitacion);
+ *  - no sale cuando la invitacion no se crea;
+ *  - la invitacion se crea igual si el correo falla, y el admin recibe el
+ *    enlace para compartirlo a mano.
+ * Tambien el reloj: la invitacion vence a los 7 dias exactos.
+ *
+ * Dobles de este archivo (el tipo de cada test va en un comentario):
+ *  - sendStaffInvite: spy, stub o ambos segun el test.
+ *  - BD: fake en memoria con las tablas gimnasio, usuario e invitacion_staff
+ *    (tests/staff-bd-falsa.js, compartido con staff-personal.test.js).
+ *  - Reloj: stub con jest.setSystemTime (solo se finge la fecha).
+ *  - Lectura del personal en authenticate: stub con establecerBusquedaPersonal.
+ * Sin red, sin BD real y sin depender de la fecha del dia.
+ */
+const express = require('express');
+const request = require('supertest');
+const jwt = require('jsonwebtoken');
+
+let mockBd;
+jest.mock('../src/db/db', () => ({
+  query: (...a) => mockBd.query(...a),
+  connect: (...a) => mockBd.connect(...a),
+}));
+let mockSendStaffInvite;
+jest.mock('../src/lib/email', () => ({ sendStaffInvite: (...a) => mockSendStaffInvite(...a) }));
+
+const staffRouter = require('../src/routes/staff');
+const { errorHandler } = require('../src/middleware/errorHandler');
+const { establecerBusquedaPersonal } = require('../src/middleware/auth');
+const { crearBdFalsa } = require('./staff-bd-falsa');
+
+const app = express();
+app.use(express.json());
+app.use('/api', staffRouter);
+app.use(errorHandler);
+
+const ENV_ORIGINAL = process.env;
+const AHORA = new Date('2026-10-28T15:00:00.000Z');
+const UN_DIA = 24 * 60 * 60 * 1000;
+const ANA = { email: 'Ana@Gym.co', nombre: 'Ana Perez', rol: 'RECEPCIONISTA' };
+
+let tokenAdmin;
+const invitar = (datos) => request(app).post('/api/admin/staff/invite').set('Authorization', `Bearer ${tokenAdmin}`).send(datos);
+const verInvitacion = (token) => request(app).get(`/api/auth/accept-invite/${token}`);
+const aceptar = (token) => request(app).post('/api/auth/accept-invite').send({ token, password: 'clave123' });
+// El enlace que recibio la persona en el unico correo del test, y su token.
+const enlaceDelCorreo = () => mockSendStaffInvite.mock.calls[0][0].acceptUrl;
+const tokenDelCorreo = () => new URL(enlaceDelCorreo()).searchParams.get('token');
+
+beforeAll(() => {
+  establecerBusquedaPersonal((p) => ({ activo: true, id_gimnasio: p.gymId, rol_nombre: p.role === 'admin' ? 'ADMINISTRADOR' : 'RECEPCIONISTA' }));
+});
+afterAll(() => establecerBusquedaPersonal(null));
+
+beforeEach(() => {
+  // Copia del entorno: el enlace no depende de tu .env.
+  process.env = { ...ENV_ORIGINAL, JWT_SECRET: 'secreto-de-pruebas', FRONTEND_URL: 'https://app.test/' };
+  delete process.env.PUBLIC_FRONTEND_URL;
+  // Solo se finge la fecha: los timers reales siguen para que supertest funcione.
+  jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate', 'setTimeout', 'setInterval', 'clearTimeout', 'clearInterval', 'queueMicrotask'] });
+  jest.setSystemTime(AHORA);
+  tokenAdmin = jwt.sign({ id: 1, name: 'Luis Admin', email: 'luis@gym.co', role: 'admin', gymId: 7 }, 'secreto-de-pruebas', { expiresIn: '1h' });
+  mockBd = crearBdFalsa();
+  // Por defecto el correo sale bien, con la misma forma que devuelve email.js.
+  mockSendStaffInvite = jest.fn().mockResolvedValue({ delivered: true, id: 'msg-1' });
+  jest.spyOn(console, 'error').mockImplementation(() => {});
+});
+
+afterEach(() => {
+  process.env = ENV_ORIGINAL;
+  jest.useRealTimers();
+  jest.restoreAllMocks();
+});
+
+describe('POST /api/admin/staff/invite: the invitation email', () => {
+  test('should send one email with the invitee, the inviter, the gym, the role and the link when the data is valid', async () => {
+    // Doble: mock de sendStaffInvite (stub que responde un envio exitoso + spy con
+    // expectativas). Verifica comportamiento (con que se llamo), porque el correo es
+    // el efecto hacia afuera que le importa a la persona invitada, y el estado de la
+    // respuesta que depende de lo que contesto el stub (emailDelivered).
+    // Arrange: la BD falsa ya tiene el gimnasio 7 y su admin
+
+    // Act
+    const r = await invitar(ANA);
+
+    // Assert
+    expect(r.status).toBe(201);
+    expect(mockSendStaffInvite).toHaveBeenCalledTimes(1);
+    expect(mockSendStaffInvite).toHaveBeenCalledWith({
+      to: 'ana@gym.co',
+      invitedName: 'Ana Perez',
+      invitedBy: 'Luis Admin',
+      gymName: 'Gym Demo',
+      role: 'RECEPCIONISTA',
+      acceptUrl: r.body.acceptUrl,
+      expiresDays: 7,
+    });
+    expect(enlaceDelCorreo()).toMatch(/^https:\/\/app\.test\/accept-invite\?token=[\w-]{43}$/);
+    expect(r.body.emailDelivered).toBe(true);
+    expect(r.body).not.toHaveProperty('devAcceptToken');
+  });
+
+  test.each([
+    { caso: 'PUBLIC_FRONTEND_URL is set, even if FRONTEND_URL starts with localhost', base: 'https://app.test',
+      entorno: { PUBLIC_FRONTEND_URL: 'https://app.test', FRONTEND_URL: 'http://localhost:5173,https://admin.app.test' } },
+    { caso: 'PUBLIC_FRONTEND_URL has spaces and a trailing slash', base: 'https://app.test',
+      entorno: { PUBLIC_FRONTEND_URL: ' https://app.test/ ', FRONTEND_URL: 'https://admin.app.test' } },
+    { caso: 'FRONTEND_URL lists several origins', base: 'https://app.test',
+      entorno: { FRONTEND_URL: 'https://app.test, https://admin.app.test' } },
+    { caso: 'FRONTEND_URL starts with an empty origin', base: 'https://app.test',
+      entorno: { FRONTEND_URL: ',https://app.test' } },
+    { caso: 'the first origin of FRONTEND_URL has spaces around it', base: 'https://app.test',
+      entorno: { FRONTEND_URL: '  https://app.test ,https://admin.app.test' } },
+    { caso: 'neither variable is set', base: 'http://localhost:5173',
+      entorno: { FRONTEND_URL: undefined } },
+  ])('should put the email link on $base when $caso', async ({ base, entorno }) => {
+    // Doble: spy en sendStaffInvite. Verifica comportamiento: el enlace que recibe
+    // la persona. FRONTEND_URL es la lista de origenes de CORS separada por comas
+    // (index.js); entera dentro del enlace lo rompia.
+    // Arrange
+    for (const [nombre, valor] of Object.entries(entorno)) {
+      if (valor === undefined) delete process.env[nombre];
+      else process.env[nombre] = valor;
+    }
+
+    // Act
+    await invitar(ANA);
+
+    // Assert
+    expect(enlaceDelCorreo()).toMatch(new RegExp(`^${base.replace(/\./g, '\\.')}/accept-invite\\?token=[\\w-]{43}$`));
+  });
+
+  test('should open the invitation it just created when the person follows the emailed link', async () => {
+    // Dobles: spy en sendStaffInvite para leer el enlace que recibio la persona,
+    // y fake de la BD que guarda la invitacion. Verifica estado: lo que muestra
+    // la invitacion al abrir ese enlace (si el token del correo no fuera el
+    // guardado, nadie podria unirse al equipo).
+    // Arrange
+    await invitar(ANA);
+
+    // Act
+    const r = await verInvitacion(tokenDelCorreo());
+
+    // Assert
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({ email: 'ana@gym.co', nombre: 'Ana Perez', rol: 'RECEPCIONISTA', gym: 'Gym Demo' });
+  });
+
+  test.each([
+    ['the email already belongs to a user of the gym', (bd) => bd.usuarios.push({ id_usuario: 2, id_gimnasio: 7, nombre: 'Ana', email: 'ana@gym.co', id_rol: 2 }), ANA, 409, 'USER_EMAIL_TAKEN'],
+    ['the email already has an active invitation', (bd) => bd.invitaciones.push({
+      id_invitacion: 1, id_gimnasio: 7, email: 'ana@gym.co', nombre: 'Ana', rol_asignado: 'RECEPCIONISTA', token_hash: 'h',
+      fecha_creacion: AHORA, fecha_expiracion: new Date(AHORA.getTime() + UN_DIA), fecha_aceptacion: null, fecha_revocado: null,
+    }), ANA, 409, 'INVITE_DUPLICATED'],
+    ['the email is not valid', () => {}, { ...ANA, email: 'ana-gym.co' }, 400, 'VALIDATION_ERROR'],
+    ['the invitation cannot be saved', (bd) => { bd.fallaCon = /INSERT INTO invitacion_staff/; }, ANA, 503, 'DB_UNREACHABLE'],
+    ['the gym trial has ended', (bd) => { bd.gimnasios[0].trial_ends_at = new Date(AHORA.getTime() - 1); }, ANA, 402, 'TRIAL_EXPIRED'],
+  ])('should not send any email when %s', async (_caso, prepararBd, datos, status, code) => {
+    // Doble: spy en sendStaffInvite con not.toHaveBeenCalled. Un correo de mas le
+    // llega a una persona real y no se puede deshacer. El fake de la BD prepara el caso.
+    // Arrange
+    prepararBd(mockBd);
+    const invitacionesAntes = mockBd.invitaciones.length;
+
+    // Act
+    const r = await invitar(datos);
+
+    // Assert
+    expect(r.status).toBe(status);
+    expect(r.body.code).toBe(code);
+    expect(mockSendStaffInvite).not.toHaveBeenCalled();
+    expect(mockBd.invitaciones).toHaveLength(invitacionesAntes);
+  });
+
+  test('should keep the invitation and return the link to share by hand when the mail provider rejects the email', async () => {
+    // Doble: stub de sendStaffInvite que responde { delivered: false, reason: 'api-error' },
+    // lo mismo que devuelve email.js cuando Brevo rechaza el envio (no lanza).
+    // Verifica estado: la respuesta y la lista de invitaciones del admin.
+    // Arrange
+    mockSendStaffInvite.mockResolvedValue({ delivered: false, reason: 'api-error', error: 'Unauthorized' });
+
+    // Act
+    const r = await invitar(ANA);
+    const lista = await request(app).get('/api/admin/staff/invitations').set('Authorization', `Bearer ${tokenAdmin}`);
+
+    // Assert
+    expect(r.status).toBe(201);
+    expect(r.body.emailDelivered).toBe(false);
+    expect(r.body.acceptUrl).toBe(`https://app.test/accept-invite?token=${r.body.devAcceptToken}`);
+    expect(lista.body.invitations).toEqual([expect.objectContaining({ email: 'ana@gym.co', pendiente: true })]);
+  });
+
+  test.each([
+    // Hoy email.js atrapa los errores de Brevo y no lanza (ese es el test anterior).
+    // Este stub prueba el contrato de la interfaz: si otra implementacion lanza,
+    // la invitacion igual se crea.
+    ['the mailer throws', () => mockSendStaffInvite.mockRejectedValue(new Error('proveedor caido')), 'proveedor caido'],
+    // Caso real: la consulta del nombre del gimnasio esta dentro del mismo try.
+    ['reading the gym name fails', () => { mockBd.fallaCon = /SELECT nombre FROM gimnasio/; }, 'conexion perdida'],
+  ])('should still create the invitation and log the error when %s', async (_caso, prepararFalla, mensaje) => {
+    // Dobles: stub que falla (el de sendStaffInvite o el fake de la BD en esa
+    // consulta) y spy en console.error para verificar el registro sin ensuciar
+    // la salida del test. Verifica estado: la respuesta y la invitacion guardada.
+    // Arrange
+    prepararFalla();
+
+    // Act
+    const r = await invitar(ANA);
+
+    // Assert
+    expect(r.status).toBe(201);
+    expect(r.body.emailDelivered).toBe(false);
+    expect(r.body.devAcceptToken).toEqual(expect.any(String));
+    expect(mockBd.invitaciones).toHaveLength(1);
+    expect(console.error).toHaveBeenCalledWith('[POST /admin/staff/invite] Error enviando mail (no bloqueante):', mensaje);
+  });
+});
+
+describe('accept link: the clock and the invitation state', () => {
+  test('should set the expiration exactly 7 days later when the invitation is sent', async () => {
+    // Doble: stub del reloj (jest.setSystemTime fija "ahora"), asi la fecha esperada
+    // no depende del dia en que corras el test. Verifica estado: la fecha que
+    // queda guardada en el fake de la BD y la que devuelve la respuesta.
+    // Arrange
+    const vence = new Date(AHORA.getTime() + 7 * UN_DIA);
+
+    // Act
+    const r = await invitar(ANA);
+
+    // Assert
+    expect(mockBd.invitaciones[0].fecha_expiracion).toEqual(vence);
+    expect(r.body.invitation.fecha_expiracion).toBe(vence.toISOString());
+  });
+
+  test('should still open the invitation when the link is opened at the last millisecond of the 7 days', async () => {
+    // Doble: stub del reloj. Muevo "ahora" hasta el limite de la vigencia; la
+    // comparacion es estricta (<), asi que el ultimo milisegundo aun vale.
+    // El spy en sendStaffInvite solo entrega el enlace.
+    // Arrange
+    await invitar(ANA);
+    jest.setSystemTime(AHORA.getTime() + 7 * UN_DIA);
+
+    // Act
+    const r = await verInvitacion(tokenDelCorreo());
+
+    // Assert
+    expect(r.status).toBe(200);
+    expect(r.body.email).toBe('ana@gym.co');
+  });
+
+  test('should answer 410 INVITE_EXPIRED when the link is opened 1 ms after the 7 days', async () => {
+    // Doble: stub del reloj, un milisegundo despues del limite. El spy en
+    // sendStaffInvite solo entrega el enlace.
+    // Arrange
+    await invitar(ANA);
+    jest.setSystemTime(AHORA.getTime() + 7 * UN_DIA + 1);
+
+    // Act
+    const r = await verInvitacion(tokenDelCorreo());
+
+    // Assert
+    expect(r.status).toBe(410);
+    expect(r.body.code).toBe('INVITE_EXPIRED');
+  });
+
+  test('should create the account only once when the emailed link is used twice', async () => {
+    // Dobles: spy en sendStaffInvite (de ahi sale el enlace) y fake de la BD, que
+    // guarda el usuario y marca la invitacion. Verifica estado: el usuario creado
+    // y que el segundo uso del mismo enlace ya no crea otro.
+    // Arrange
+    await invitar(ANA);
+    const token = tokenDelCorreo();
+
+    // Act
+    const primera = await aceptar(token);
+    const segunda = await aceptar(token);
+
+    // Assert
+    expect(primera.status).toBe(201);
+    expect(primera.body.user).toMatchObject({ name: 'Ana Perez', email: 'ana@gym.co', role: 'receptionist', gymId: 7 });
+    expect(mockBd.usuarios.filter((u) => u.email === 'ana@gym.co')).toEqual([expect.objectContaining({ id_rol: 2, id_gimnasio: 7 })]);
+    expect(mockBd.invitaciones[0].fecha_aceptacion).toEqual(AHORA);
+    expect(segunda.status).toBe(410);
+    expect(segunda.body.code).toBe('INVITE_ALREADY_ACCEPTED');
+  });
+
+  test('should say the invitation was already used when the link is opened after creating the account', async () => {
+    // Dobles: fake de la BD (la invitacion queda aceptada) y spy en sendStaffInvite
+    // solo para leer el enlace. Verifica estado: lo que ve la persona si vuelve a
+    // abrir el correo. Lo agregue porque el mutante que quita este chequeo en la
+    // vista previa quedaba vivo.
+    // Arrange
+    await invitar(ANA);
+    await aceptar(tokenDelCorreo());
+
+    // Act
+    const r = await verInvitacion(tokenDelCorreo());
+
+    // Assert
+    expect(r.status).toBe(410);
+    expect(r.body.code).toBe('INVITE_ALREADY_ACCEPTED');
+  });
+
+  test('should stop the emailed link from working when the admin revokes the invitation', async () => {
+    // Dobles: fake de la BD (la revocacion queda guardada) y spy en sendStaffInvite
+    // solo para leer el enlace. Verifica estado: el enlace ya no abre ni crea la cuenta.
+    // Arrange
+    const invitacion = await invitar(ANA);
+    const id = invitacion.body.invitation.id_invitacion;
+
+    // Act
+    const revocar = await request(app).post(`/api/admin/staff/invitations/${id}/revoke`).set('Authorization', `Bearer ${tokenAdmin}`);
+    const vista = await verInvitacion(tokenDelCorreo());
+    const cuenta = await aceptar(tokenDelCorreo());
+
+    // Assert
+    expect(revocar.status).toBe(200);
+    expect(vista.status).toBe(410);
+    expect(vista.body.code).toBe('INVITE_REVOKED');
+    expect(cuenta.status).toBe(410);
+    expect(cuenta.body.code).toBe('INVITE_REVOKED');
+    expect(mockBd.usuarios).toHaveLength(1);
+  });
+});
+
+describe('accept and revoke: when the link cannot be used', () => {
+  const TOKEN_INEXISTENTE = 'x'.repeat(43);
+
+  test.each([
+    ['the token is too short', { token: 'corto', password: 'clave123' }],
+    ['the password is too short', { token: TOKEN_INEXISTENTE, password: '123' }],
+  ])('should answer 400 without creating the account when %s', async (_caso, cuerpo) => {
+    // Doble: fake de la BD. Verifica estado: no aparece ningun usuario nuevo.
+    // Arrange: solo existe el admin del gimnasio
+
+    // Act
+    const r = await request(app).post('/api/auth/accept-invite').send(cuerpo);
+
+    // Assert
+    expect(r.status).toBe(400);
+    expect(r.body.code).toBe('VALIDATION_ERROR');
+    expect(mockBd.usuarios).toHaveLength(1);
+  });
+
+  test('should answer 404 INVITE_NOT_FOUND without creating the account when the token does not exist', async () => {
+    // Doble: fake de la BD sin ninguna invitacion. Verifica estado.
+    // Arrange: la BD falsa no tiene invitaciones
+
+    // Act
+    const r = await aceptar(TOKEN_INEXISTENTE);
+
+    // Assert
+    expect(r.status).toBe(404);
+    expect(r.body.code).toBe('INVITE_NOT_FOUND');
+    expect(mockBd.usuarios).toHaveLength(1);
+  });
+
+  test('should not create the account when the link is used 1 ms after the 7 days', async () => {
+    // Doble: stub del reloj, un milisegundo despues del limite, sobre el POST que
+    // crea la cuenta (la vista previa tiene su propio chequeo). El spy en
+    // sendStaffInvite entrega el enlace.
+    // Arrange
+    await invitar(ANA);
+    jest.setSystemTime(AHORA.getTime() + 7 * UN_DIA + 1);
+
+    // Act
+    const r = await aceptar(tokenDelCorreo());
+
+    // Assert
+    expect(r.status).toBe(410);
+    expect(r.body.code).toBe('INVITE_EXPIRED');
+    expect(mockBd.usuarios).toHaveLength(1);
+  });
+
+  test('should answer 409 USER_EMAIL_TAKEN without a duplicate when the email got an account before accepting', async () => {
+    // Doble: fake de la BD donde el correo invitado ya tiene cuenta en el
+    // gimnasio. Verifica estado: sigue habiendo una sola cuenta con ese correo.
+    // Arrange
+    await invitar(ANA);
+    mockBd.usuarios.push({ id_usuario: 2, id_gimnasio: 7, nombre: 'Ana', email: 'ana@gym.co', id_rol: 2, activo: true });
+
+    // Act
+    const r = await aceptar(tokenDelCorreo());
+
+    // Assert
+    expect(r.status).toBe(409);
+    expect(r.body.code).toBe('USER_EMAIL_TAKEN');
+    expect(mockBd.usuarios.filter((u) => u.email === 'ana@gym.co')).toHaveLength(1);
+  });
+
+  test('should create an admin account and fill the legacy rol column when the invitation is for an administrator on Neon', async () => {
+    // Doble: fake de la BD con la columna legacy `rol` (NOT NULL en Neon; sin ella
+    // el INSERT fallaba y nadie podia aceptar). Verifica estado: el usuario creado.
+    // Arrange
+    mockBd.esquema.has_rol_column = true;
+    await invitar({ ...ANA, rol: 'ADMINISTRADOR' });
+
+    // Act
+    const r = await aceptar(tokenDelCorreo());
+
+    // Assert
+    expect(r.status).toBe(201);
+    expect(r.body.user.role).toBe('admin');
+    expect(mockBd.usuarios.find((u) => u.email === 'ana@gym.co')).toMatchObject({ id_rol: 1, rol: 'ADMINISTRADOR' });
+  });
+
+  test('should answer 503 and keep the invitation pending when saving the account fails', async () => {
+    // Dobles: fake de la BD que falla al crear el usuario y spy en console.error.
+    // Verifica estado: la invitacion no queda aceptada, asi el enlace sirve para
+    // reintentar.
+    // Arrange
+    await invitar(ANA);
+    mockBd.fallaCon = /INSERT INTO usuario/;
+
+    // Act
+    const r = await aceptar(tokenDelCorreo());
+
+    // Assert
+    expect(r.status).toBe(503);
+    expect(r.body.code).toBe('DB_UNREACHABLE');
+    expect(mockBd.invitaciones[0].fecha_aceptacion).toBeNull();
+    expect(console.error).toHaveBeenCalledWith('[POST /auth/accept-invite] Error:', 'conexion perdida', expect.any(String));
+  });
+
+  test('should answer 400 when the invitation id to revoke is not a number', async () => {
+    // Doble: fake de la BD. Verifica estado: la invitacion sigue pendiente.
+    // Arrange
+    await invitar(ANA);
+
+    // Act
+    const r = await request(app).post('/api/admin/staff/invitations/abc/revoke').set('Authorization', `Bearer ${tokenAdmin}`);
+
+    // Assert
+    expect(r.status).toBe(400);
+    expect(r.body.code).toBe('VALIDATION_ERROR');
+    expect(mockBd.invitaciones[0].fecha_revocado).toBeNull();
+  });
+
+  test('should answer 404 INVITE_NOT_FOUND when revoking an invitation that was already accepted', async () => {
+    // Dobles: fake de la BD y spy en sendStaffInvite para leer el enlace. Verifica
+    // estado: la invitacion sigue aceptada y no aparece como revocada.
+    // Arrange
+    const invitacion = await invitar(ANA);
+    await aceptar(tokenDelCorreo());
+
+    // Act
+    const r = await request(app).post(`/api/admin/staff/invitations/${invitacion.body.invitation.id_invitacion}/revoke`).set('Authorization', `Bearer ${tokenAdmin}`);
+
+    // Assert
+    expect(r.status).toBe(404);
+    expect(r.body.code).toBe('INVITE_NOT_FOUND');
+    expect(mockBd.invitaciones[0]).toMatchObject({ fecha_aceptacion: AHORA, fecha_revocado: null });
+  });
+});
