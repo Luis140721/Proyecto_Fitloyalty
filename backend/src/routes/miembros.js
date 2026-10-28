@@ -10,6 +10,8 @@
  *   PUT    /api/admin/miembros/:id    -> actualiza nombre/telefono/email/activo
  *   DELETE /api/admin/miembros/:id    -> soft-delete (activo = false)
  *   GET    /api/admin/miembros/lookup -> busqueda por codigo_qr/documento (para checkin)
+ *   POST   /api/admin/miembros/:id/congelar    -> congela la membresia vigente (RQF-04)
+ *   POST   /api/admin/miembros/:id/descongelar -> la descongela y corre el vencimiento
  *
  * Handlers async con asyncHandler para que cualquier rechazo llegue al
  * errorHandler central con respuesta consistente.
@@ -35,10 +37,16 @@ const router = express.Router();
 // Clave secreta para cifrar QR (en producción debería estar en variables de entorno)
 const QR_ENCRYPTION_KEY = process.env.QR_ENCRYPTION_KEY || 'FitLoyalty2024SecretKey';
 
+// scryptSync es deliberadamente lento y la clave solo depende de
+// QR_ENCRYPTION_KEY: se deriva una vez al cargar el modulo, igual que en
+// checkin.js. Es la misma clave de antes, asi que los QR ya cifrados siguen
+// descifrando igual.
+const QR_KEY = crypto.scryptSync(QR_ENCRYPTION_KEY, 'salt', 32);
+
 // Función para cifrar el código QR
 function encryptQrCode(qrCode) {
   const algorithm = 'aes-256-cbc';
-  const key = crypto.scryptSync(QR_ENCRYPTION_KEY, 'salt', 32);
+  const key = QR_KEY;
   const iv = crypto.randomBytes(16);
   const cipher = crypto.createCipheriv(algorithm, key, iv);
   let encrypted = cipher.update(qrCode, 'utf8', 'hex');
@@ -50,7 +58,7 @@ function encryptQrCode(qrCode) {
 function decryptQrCode(encrypted) {
   try {
     const algorithm = 'aes-256-cbc';
-    const key = crypto.scryptSync(QR_ENCRYPTION_KEY, 'salt', 32);
+    const key = QR_KEY;
     const parts = encrypted.split(':');
     const iv = Buffer.from(parts.shift(), 'hex');
     const encryptedText = parts.join(':');
@@ -129,7 +137,7 @@ const createSchema = z.object({
  * opcionales.
  */
 const vacioANull = (schema) =>
-  schema.optional().or(z.literal('').transform(() => null)).nullable();
+  z.literal('').transform(() => null).or(schema.optional()).nullable();
 
 const updateSchema = z.object({
   nombre:    z.string().min(2).optional(),
@@ -272,9 +280,12 @@ router.get(
       const { rows } = await pool.query(
         `SELECT m.id_miembro, m.nombre, m.documento, m.telefono, m.email,
                 m.codigo_qr, m.activo, m.fecha_registro,
-                pc.tipo_plan, pc.fecha_fin, pc.estado_pago,
-                (pc.fecha_fin IS NOT NULL AND pc.fecha_fin < CURRENT_DATE) AS vencido,
-                (pc.fecha_fin IS NOT NULL
+                pc.tipo_plan, pc.fecha_fin, pc.estado_pago, pc.congelado_desde,
+                -- Una membresia congelada no se cuenta como vencida ni por vencer:
+                -- su vencimiento se corre al descongelarla (RQF-04).
+                (pc.congelado_desde IS NOT NULL) AS congelada,
+                (pc.congelado_desde IS NULL AND pc.fecha_fin IS NOT NULL AND pc.fecha_fin < CURRENT_DATE) AS vencido,
+                (pc.congelado_desde IS NULL AND pc.fecha_fin IS NOT NULL
                   AND pc.fecha_fin >= CURRENT_DATE
                   AND pc.fecha_fin <= CURRENT_DATE + ($${params.length + 1} || ' days')::interval) AS "vencePronto",
                 (ult.ultima IS NULL
@@ -286,7 +297,7 @@ router.get(
                 m.codigo_pais_telefono
            FROM miembro m
            LEFT JOIN LATERAL (
-             SELECT p.tipo_plan, p.fecha_fin, p.estado_pago
+             SELECT p.tipo_plan, p.fecha_fin, p.estado_pago, p.congelado_desde
                FROM plan_cobro p
               WHERE p.id_miembro = m.id_miembro AND p.activo = TRUE
               ORDER BY p.fecha_fin DESC NULLS LAST, p.id_plan_cobro DESC
@@ -313,7 +324,9 @@ router.get(
       const nombreGym = gimnasio[0]?.nombre || 'tu gimnasio';
 
       const miembros = rows.map((m) => {
-        const motivo = m.vencido ? 'vencida' : m.vencePronto ? 'por-vencer' : m.enRiesgo ? 'riesgo' : null;
+        // Con la membresia congelada no se sugiere mensaje: no viene a proposito.
+        const motivo = m.congelada ? null
+          : m.vencido ? 'vencida' : m.vencePronto ? 'por-vencer' : m.enRiesgo ? 'riesgo' : null;
         if (!motivo) return { ...m, whatsapp: null };
 
         const dato = motivo === 'vencida'    ? enPalabras(m.dias_vencido, 'pasado')
@@ -739,7 +752,8 @@ router.get(
     const { rows } = await pool.query(
       `SELECT pc.id_plan_cobro, pc.tipo_plan, pc.fecha_inicio, pc.fecha_fin,
               pc.valor_total, pc.valor_pagado, pc.metodo_pago, pc.referencia_pago,
-              pc.estado_pago, pc.proxima_fecha_cobro
+              pc.estado_pago, pc.proxima_fecha_cobro, pc.congelado_desde,
+              (CURRENT_DATE - pc.congelado_desde)::int AS dias_congelado
          FROM plan_cobro pc
          INNER JOIN miembro m ON m.id_miembro = pc.id_miembro
         WHERE pc.id_miembro = $1 AND m.id_gimnasio = $2 AND pc.activo = TRUE
@@ -747,7 +761,165 @@ router.get(
         LIMIT 1`,
       [req.params.id, req.user.gymId]
     );
-    return res.json({ plan: rows[0] || null });
+    // Ultimos congelamientos del miembro (HU-39: fecha y responsable de cada uno).
+    const { rows: congelaciones } = await pool.query(
+      `SELECT cp.id_congelacion, cp.fecha_inicio, cp.fecha_fin, cp.dias, cp.motivo,
+              uc.nombre AS congelada_por, ud.nombre AS descongelada_por
+         FROM congelacion_plan cp
+         LEFT JOIN usuario uc ON uc.id_usuario = cp.congelada_por
+         LEFT JOIN usuario ud ON ud.id_usuario = cp.descongelada_por
+        WHERE cp.id_miembro = $1 AND cp.id_gimnasio = $2
+        ORDER BY cp.creada_en DESC
+        LIMIT 5`,
+      [req.params.id, req.user.gymId]
+    );
+    return res.json({ plan: rows[0] || null, congelaciones });
+  })
+);
+
+// ---------------------------------------------------------------------------
+// POST /api/admin/miembros/:id/congelar     -> congela la membresia vigente
+// POST /api/admin/miembros/:id/descongelar  -> la descongela y corre el vencimiento
+// ---------------------------------------------------------------------------
+// Solo el administrador. Mientras esta congelada, la membresia no cuenta como
+// vencida ni por vencer; al descongelarla, fecha_fin (y la proxima fecha de
+// cobro, si hay) se corren tantos dias como estuvo congelada (RQF-04, HU-39).
+
+const congelarSchema = z.object({
+  motivo: z.string().trim().max(200).optional().or(z.literal('')),
+  fecha_inicio: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Usa el formato AAAA-MM-DD').optional().or(z.literal('')),
+});
+
+/** Bloquea y devuelve el plan vigente del miembro dentro de una transaccion. */
+async function planVigenteParaActualizar(client, idMiembro, gymId) {
+  const { rows } = await client.query(
+    `SELECT pc.id_plan_cobro, pc.fecha_inicio, pc.fecha_fin, pc.congelado_desde
+       FROM plan_cobro pc
+       INNER JOIN miembro m ON m.id_miembro = pc.id_miembro
+      WHERE pc.id_miembro = $1 AND m.id_gimnasio = $2 AND pc.activo = TRUE
+      ORDER BY pc.fecha_fin DESC NULLS LAST, pc.id_plan_cobro DESC
+      LIMIT 1
+      FOR UPDATE OF pc`,
+    [idMiembro, gymId]
+  );
+  if (rows.length === 0) throw new AppError(404, 'Este miembro no tiene un plan vigente para congelar.', 'PLAN_NOT_FOUND');
+  return rows[0];
+}
+
+router.post(
+  '/admin/miembros/:id/congelar',
+  authenticate,
+  authorize('admin'),
+  requireActiveTrial(pool),
+  asyncHandler(async (req, res) => {
+    const parsed = parse(congelarSchema, req.body);
+    if (!parsed.ok) throw new AppError(parsed.status, parsed.error, 'VALIDATION_ERROR', { issues: parsed.issues });
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isFinite(id)) throw new AppError(400, 'Id invalido', 'VALIDATION_ERROR');
+    const { motivo, fecha_inicio: fechaPedida } = parsed.data;
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const plan = await planVigenteParaActualizar(client, id, req.user.gymId);
+      if (plan.congelado_desde) throw new AppError(409, 'La membresía ya está congelada.', 'ALREADY_FROZEN');
+
+      // La fecha de inicio es hoy, salvo que se indique otra: no puede ser futura,
+      // ni anterior al inicio del plan, ni posterior a su vencimiento.
+      // Las fechas del plan se leen de la fila (no se pasan desde JS) para no
+      // depender de la zona horaria del servidor de Node.
+      const { rows: f } = await client.query(
+        `SELECT COALESCE($1::date, CURRENT_DATE) AS inicio,
+                COALESCE($1::date, CURRENT_DATE) > CURRENT_DATE AS futura,
+                COALESCE($1::date, CURRENT_DATE) < pc.fecha_inicio AS antes_del_plan,
+                COALESCE($1::date, CURRENT_DATE) > pc.fecha_fin AS vencida
+           FROM plan_cobro pc WHERE pc.id_plan_cobro = $2`,
+        [fechaPedida || null, plan.id_plan_cobro]
+      );
+      if (f[0].futura) throw new AppError(400, 'La fecha de inicio del congelamiento no puede ser futura.', 'VALIDATION_ERROR');
+      if (f[0].antes_del_plan) throw new AppError(400, 'La fecha de inicio no puede ser anterior al inicio del plan.', 'VALIDATION_ERROR');
+      if (f[0].vencida) throw new AppError(409, 'La membresía ya estaba vencida en esa fecha: renuévala en lugar de congelarla.', 'PLAN_EXPIRED');
+
+      await client.query(
+        `UPDATE plan_cobro
+            SET congelado_desde = $1, actualizado_por = $2, fecha_actualizacion = NOW()
+          WHERE id_plan_cobro = $3`,
+        [f[0].inicio, req.user.id, plan.id_plan_cobro]
+      );
+      const { rows: cong } = await client.query(
+        `INSERT INTO congelacion_plan (id_plan_cobro, id_miembro, id_gimnasio, fecha_inicio, motivo, congelada_por)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING id_congelacion, fecha_inicio, motivo`,
+        [plan.id_plan_cobro, id, req.user.gymId, f[0].inicio, motivo || null, req.user.id]
+      );
+      await client.query('COMMIT');
+      return res.json({ message: 'Membresía congelada.', congelacion: cong[0] });
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => {});
+      if (err instanceof AppError) throw err;
+      console.error('[POST /admin/miembros/:id/congelar] Error:', err.message);
+      throw new AppError(503, 'No pudimos congelar la membresía. Intenta de nuevo.', 'DB_UNREACHABLE');
+    } finally {
+      client.release();
+    }
+  })
+);
+
+router.post(
+  '/admin/miembros/:id/descongelar',
+  authenticate,
+  authorize('admin'),
+  requireActiveTrial(pool),
+  asyncHandler(async (req, res) => {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isFinite(id)) throw new AppError(400, 'Id invalido', 'VALIDATION_ERROR');
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const plan = await planVigenteParaActualizar(client, id, req.user.gymId);
+      if (!plan.congelado_desde) throw new AppError(409, 'La membresía no está congelada.', 'NOT_FROZEN');
+
+      // Dias congelada = de congelado_desde a hoy. Se corren el vencimiento y la
+      // proxima fecha de cobro (si existe) esos mismos dias.
+      const { rows: d } = await client.query(
+        'SELECT GREATEST(CURRENT_DATE - congelado_desde, 0)::int AS dias FROM plan_cobro WHERE id_plan_cobro = $1',
+        [plan.id_plan_cobro]
+      );
+      const dias = d[0].dias;
+      const { rows: upd } = await client.query(
+        `UPDATE plan_cobro
+            SET fecha_fin = fecha_fin + $1::int,
+                proxima_fecha_cobro = proxima_fecha_cobro + $1::int,
+                congelado_desde = NULL,
+                actualizado_por = $2, fecha_actualizacion = NOW()
+          WHERE id_plan_cobro = $3
+        RETURNING fecha_fin, proxima_fecha_cobro`,
+        [dias, req.user.id, plan.id_plan_cobro]
+      );
+      await client.query(
+        `UPDATE congelacion_plan
+            SET fecha_fin = CURRENT_DATE, dias = $1, descongelada_por = $2
+          WHERE id_plan_cobro = $3 AND fecha_fin IS NULL`,
+        [dias, req.user.id, plan.id_plan_cobro]
+      );
+      await client.query('COMMIT');
+      return res.json({
+        message: dias > 0
+          ? `Membresía descongelada. El vencimiento se corrió ${dias} ${dias === 1 ? 'día' : 'días'}.`
+          : 'Membresía descongelada. No pasó ningún día, el vencimiento no cambia.',
+        dias,
+        fecha_fin: upd[0].fecha_fin,
+        proxima_fecha_cobro: upd[0].proxima_fecha_cobro,
+      });
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => {});
+      if (err instanceof AppError) throw err;
+      console.error('[POST /admin/miembros/:id/descongelar] Error:', err.message);
+      throw new AppError(503, 'No pudimos descongelar la membresía. Intenta de nuevo.', 'DB_UNREACHABLE');
+    } finally {
+      client.release();
+    }
   })
 );
 

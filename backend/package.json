@@ -5,8 +5,11 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
+    "test": "jest",
+    "test:cov": "jest --coverage",
     "dev": "nodemon src/index.js",
     "seed": "node src/db/seed_pg.js",
+    "medir:checkin": "node scripts/medir-checkin.js",
     "postinstall": "node scripts/postinstall.js"
   },
   "dependencies": {

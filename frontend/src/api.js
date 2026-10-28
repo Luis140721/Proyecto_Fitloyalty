@@ -98,10 +98,55 @@ function buildError(error) {
   };
 }
 
+/**
+ * Sesion expirada (RQF-02). Si una peticion que llevaba el token vigente
+ * vuelve con 401, ese token ya no sirve (vencio o el usuario ya no existe):
+ * se borra y se avisa a AuthContext con un evento para que limpie el estado
+ * y ProtectedRoute mande al login. Login, registro, recuperacion e
+ * invitacion responden 401 por credenciales malas aunque viajen con un token
+ * valido (el interceptor de arriba lo pega a todo), asi que no cuentan.
+ * Si el token cambio mientras la peticion iba (otro login en otra pestana),
+ * no se toca el nuevo.
+ */
+export const SESION_EXPIRADA = 'fitloyalty:sesion-expirada';
+const RUTAS_PUBLICAS_AUTH = /^\/?auth\/(login|signup|forgot-password|verify-reset-code|reset-password|accept-invite)/;
+
+function avisarSiSesionExpirada(error) {
+  if (!error.response || error.response.status !== 401) return;
+  if (RUTAS_PUBLICAS_AUTH.test((error.config && error.config.url) || '')) return;
+  const headers = (error.config && error.config.headers) || {};
+  const enviado = headers.Authorization || headers.authorization;
+  const token = getToken();
+  if (!enviado || !token || enviado !== `Bearer ${token}`) return;
+  clearToken();
+  // El codigo dice por que (ACCOUNT_DISABLED, TOKEN_SIN_VENCIMIENTO...) para el aviso.
+  const code = (error.response.data && error.response.data.code) || null;
+  try { window.dispatchEvent(new CustomEvent(SESION_EXPIRADA, { detail: { code } })); } catch (_) {}
+}
+
 api.interceptors.response.use(
   (response) => response,
-  (error) => Promise.reject(buildError(error))
+  (error) => {
+    avisarSiSesionExpirada(error);
+    return Promise.reject(buildError(error));
+  }
 );
+
+/**
+ * Momento (ms desde epoch) en que vence el JWT guardado, leido de su `exp`.
+ * Devuelve null si no hay token o si no trae `exp`. Solo decodifica: la
+ * firma la valida el backend.
+ */
+export function tokenVenceEn(token = getToken()) {
+  if (!token) return null;
+  try {
+    const parte = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    const { exp } = JSON.parse(atob(parte));
+    return typeof exp === 'number' ? exp * 1000 : null;
+  } catch (_) {
+    return null;
+  }
+}
 
 /**
  * Helper para mostrar mensajes de error sin volver a escribir los mismos
