@@ -182,8 +182,8 @@ describe('DashboardPage: la carga', () => {
   test('should show the empty messages when nothing expires, nobody came today and there are no entries', async () => {
     // Arrange
     dashboard = { ...DASHBOARD, proximos: [], recientes: [] };
-    HORAS.vacio = horasPico('hoy');
-    mockGet = vi.fn(async (url) => ({ data: url === '/admin/dashboard' ? dashboard : HORAS.vacio }));
+    const sinEntradas = horasPico('hoy');
+    mockGet = vi.fn(async (url) => ({ data: url === '/admin/dashboard' ? dashboard : sinEntradas }));
 
     // Act
     abrirDashboard();
@@ -194,7 +194,6 @@ describe('DashboardPage: la carga', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Aún no hay check-ins hoy');
     expect(resumenHorasPico()).toHaveTextContent('Todavía no hay entradas en este periodo.');
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
-    delete HORAS.vacio;
   });
 });
 
@@ -218,8 +217,8 @@ describe('DashboardPage: las horas pico', () => {
 
   test('should close the peak range at 00:00 when the peak hour is 23:00', async () => {
     // Arrange
-    HORAS.noche = horasPico('hoy', { 22: 1, 23: 5 }, { hora: 23, total: 5 });
-    mockGet = vi.fn(async (url) => ({ data: url === '/admin/dashboard' ? DASHBOARD : HORAS.noche }));
+    const deNoche = horasPico('hoy', { 22: 1, 23: 5 }, { hora: 23, total: 5 });
+    mockGet = vi.fn(async (url) => ({ data: url === '/admin/dashboard' ? DASHBOARD : deNoche }));
 
     // Act
     abrirDashboard();
@@ -227,7 +226,6 @@ describe('DashboardPage: las horas pico', () => {
 
     // Assert
     expect(resumenHorasPico()).toHaveTextContent('La hora con más entradas es de 23:00 a 00:00 (5 de 6 entradas, hoy).');
-    delete HORAS.noche;
   });
 
   test('should keep the last chosen period when the answer of an older one arrives later', async () => {
