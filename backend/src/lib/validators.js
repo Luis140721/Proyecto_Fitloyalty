@@ -65,18 +65,22 @@ const registerStaffSchema = z.object({
 const MAX_NOMBRE = 100;
 const MAX_EMAIL = 150;
 
+// PostgreSQL mide VARCHAR(n) en caracteres; .length cuenta unidades UTF-16 y un
+// emoji vale 2. [...texto] recorre caracteres.
+const largoEnCaracteres = (texto) => [...texto].length;
+
 /** Nombre requerido que cabe en su columna. Se mide recortado, como lo guarda auth.js. */
 function nombreRegistro(campo) {
   return z
     .string({ required_error: `El nombre del ${campo} es requerido` })
     .min(1, `El nombre del ${campo} es requerido`)
-    .refine((v) => v.trim().length <= MAX_NOMBRE, {
+    .refine((v) => largoEnCaracteres(v.trim()) <= MAX_NOMBRE, {
       message: `El nombre del ${campo} no puede tener más de ${MAX_NOMBRE} caracteres`,
     });
 }
 
 /** Email que cabe en su columna. Se mide ya normalizado, como se guarda. */
-const emailRegistroSchema = emailSchema.refine((v) => v.length <= MAX_EMAIL, {
+const emailRegistroSchema = emailSchema.refine((v) => largoEnCaracteres(v) <= MAX_EMAIL, {
   message: `El email no puede tener más de ${MAX_EMAIL} caracteres`,
 });
 
