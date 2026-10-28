@@ -2,17 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import AuthPanel from '../components/AuthPanel';
-
-const PHONE_RE = /^[3]\d{9}$/;
-
-function strengthScore(pwd) {
-  let s = 0;
-  if (pwd.length >= 6) s++;
-  if (pwd.length >= 10) s++;
-  if (/[A-Z]/.test(pwd) || /[^A-Za-z0-9]/.test(pwd)) s++;
-  if (/\d/.test(pwd) && /[A-Za-z]/.test(pwd)) s++;
-  return Math.min(s, 4);
-}
+import { passwordStrength, validateRegisterOwnerForm } from '../lib/validateRegisterOwnerForm';
 
 /** Mensaje de error bajo un campo. No renderiza nada si no hay error. */
 function FieldMsg({ id, msg }) {
@@ -48,42 +38,14 @@ export default function RegisterOwnerPage() {
     setForm((f) => ({ ...f, [name]: value }));
     setFieldErrors((fe) => (fe[name] ? { ...fe, [name]: undefined } : fe));
   };
-  const score = strengthScore(form.password);
-
-  const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-
-  // Valida todo el formulario de una pasada y devuelve un mensaje por campo,
-  // en vez de detenerse en el primer problema.
-  const validate = () => {
-    const e = {};
-    if (!form.gymName.trim()) e.gymName = 'Escribe el nombre de tu gimnasio.';
-
-    const phoneDigits = form.gymPhone.replace(/\D/g, '');
-    if (!phoneDigits) e.gymPhone = 'Escribe el teléfono del gimnasio.';
-    else if (phoneDigits.length !== 10) e.gymPhone = `Debe tener 10 dígitos (escribiste ${phoneDigits.length}).`;
-    else if (!PHONE_RE.test(phoneDigits)) e.gymPhone = 'Un celular colombiano empieza por 3.';
-
-    if (form.gymEmail.trim() && !EMAIL_RE.test(form.gymEmail.trim())) {
-      e.gymEmail = 'Este correo no tiene un formato válido.';
-    }
-
-    if (!form.ownerName.trim()) e.ownerName = 'Escribe tu nombre.';
-
-    if (!form.ownerEmail.trim()) e.ownerEmail = 'Escribe tu correo.';
-    else if (!EMAIL_RE.test(form.ownerEmail.trim())) e.ownerEmail = 'Este correo no tiene un formato válido.';
-
-    if (!form.password) e.password = 'Crea una contraseña.';
-    else if (form.password.length < 6) e.password = `Te faltan ${6 - form.password.length} caracteres (mínimo 6).`;
-    else if (!/\d/.test(form.password)) e.password = 'Debe incluir al menos un número.';
-
-    return e;
-  };
+  const score = passwordStrength(form.password);
 
   const onSubmit = async (e) => {
     e.preventDefault();
     setError('');
 
-    const found = validate();
+    // Las reglas viven en lib/validateRegisterOwnerForm.js (funcion pura, con sus tests).
+    const found = validateRegisterOwnerForm(form);
     setFieldErrors(found);
     if (Object.keys(found).length > 0) {
       // Lleva el foco al primer campo con problema.
