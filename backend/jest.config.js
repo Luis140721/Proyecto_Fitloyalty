@@ -18,11 +18,9 @@ module.exports = {
     'src/routes/**/*.js',
     'src/jobs/**/*.js',
   ],
-  // Semana 1: linea base medida el 2026-10-20 (docs/cobertura-baseline-backend.txt).
-  // Es el piso: nunca puede bajar (regla de trinquete del bootcamp). Todavia no
-  // se exige el 30% de la semana 2; solo evita retroceder.
+  // Semana 3: piso de cobertura del 40%.
   coverageThreshold: {
-    global: { statements: 17, branches: 16, functions: 21, lines: 18 },
+    global: { statements: 40, branches: 40, functions: 40, lines: 40 },
   },
   // Evita que Jest intente transformar código nativo (bcrypt, pg) sin
   // necesidad. Cuando agreguemos tests sobre rutas reales, podemos cambiar

@@ -13,8 +13,8 @@ export default defineConfig({
       include: ['src/**/*.{js,jsx}'],
       // Arranque: solo monta React en el DOM, no tiene logica de negocio.
       exclude: ['src/main.jsx'],
-      // Semana 1: linea base (docs/cobertura-baseline-frontend.txt). No puede bajar.
-      thresholds: { lines: 1, branches: 10, functions: 6, statements: 1 },
+      // Semana 3: piso de cobertura del 40%.
+      thresholds: { lines: 40, branches: 40, functions: 40, statements: 40 },
     },
   },
 })

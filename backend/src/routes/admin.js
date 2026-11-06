@@ -12,11 +12,15 @@
  */
 const express = require('express');
 const bcrypt = require('bcryptjs');
+const { z } = require('zod');
 const asyncHandler = require('../lib/asyncHandler');
 
 const router = express.Router();
 
 function requireAdminToken(req, res, next) {
+  if (process.env.NODE_ENV !== 'development') {
+    return res.status(403).json({ error: 'Esta ruta solo está disponible en desarrollo.' });
+  }
   const token = req.get('X-Admin-Token');
   const expected = process.env.ADMIN_TOKEN;
   if (!expected) {
@@ -27,6 +31,16 @@ function requireAdminToken(req, res, next) {
   }
   next();
 }
+
+const seedSupremoSchema = z.object({
+  gymName: z.string().trim().min(1).max(120).optional(),
+  ownerName: z.string().trim().min(1).max(120).optional(),
+}).strict();
+
+const seedSupremoConfigSchema = z.object({
+  email: z.string().trim().email(),
+  password: z.string().min(12),
+});
 
 async function ensureRole(client, name) {
   const { rows } = await client.query(
@@ -44,14 +58,31 @@ async function ensureRole(client, name) {
 // POST /api/admin/seed-supremo
 // Crea o resetea una cuenta admin sin suscripcion (trial_ends_at = NULL).
 //
-// Body opcional: { email, password, gymName, ownerName }
-// Default: { email: santicosalamanca@gmail.com, password: SantiagoSupremo2026!,
-//           gymName: FitLoyalty Supremo, ownerName: Santiago Salamanca }
+// Solo desarrollo. El correo y la clave deben venir de SEED_ADMIN_EMAIL y
+// SEED_ADMIN_PASSWORD; el body solo puede personalizar nombres no sensibles.
 router.post('/seed-supremo', requireAdminToken, asyncHandler(async (req, res) => {
-  const email = (req.body?.email || 'santicosalamanca@gmail.com').toLowerCase().trim();
-  const password = req.body?.password || 'SantiagoSupremo2026!';
-  const gymName = req.body?.gymName || 'FitLoyalty Supremo';
-  const ownerName = req.body?.ownerName || 'Santiago Salamanca';
+  const config = seedSupremoConfigSchema.safeParse({
+    email: process.env.SEED_ADMIN_EMAIL,
+    password: process.env.SEED_ADMIN_PASSWORD,
+  });
+  if (!config.success) {
+    return res.status(503).json({
+      error: 'SEED_ADMIN_EMAIL y SEED_ADMIN_PASSWORD deben estar configurados correctamente.',
+      code: 'SEED_CONFIG_MISSING',
+    });
+  }
+  const input = seedSupremoSchema.safeParse(req.body || {});
+  if (!input.success) {
+    return res.status(400).json({
+      error: 'Datos inválidos para crear la cuenta semilla.',
+      code: 'VALIDATION_ERROR',
+    });
+  }
+
+  const email = config.data.email.toLowerCase();
+  const password = config.data.password;
+  const gymName = input.data.gymName || 'FitLoyalty Supremo';
+  const ownerName = input.data.ownerName || 'Administrador de desarrollo';
 
   const pool = require('../db/db');
   const client = await pool.connect();
@@ -125,7 +156,7 @@ router.post('/seed-supremo', requireAdminToken, asyncHandler(async (req, res) =>
     return res.json({
       ok: true,
       message: created ? 'Cuenta suprema creada.' : 'Cuenta suprema actualizada.',
-      credentials: { email, password, gymName, ownerName },
+      account: { email, gymName, ownerName },
       ids: { id_usuario: userId, id_gimnasio: gymId, id_rol: adminRol },
       trial_ends_at: null,
       plan: 'ilimitado',
@@ -135,8 +166,7 @@ router.post('/seed-supremo', requireAdminToken, asyncHandler(async (req, res) =>
     console.error('[POST /admin/seed-supremo] Error:', err.code, err.message);
     return res.status(500).json({
       error: 'Error al crear/actualizar cuenta suprema.',
-      code: err.code,
-      detail: err.message,
+      code: 'SEED_FAILED',
     });
   } finally {
     client.release();

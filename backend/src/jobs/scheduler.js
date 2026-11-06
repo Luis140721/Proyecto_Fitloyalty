@@ -68,9 +68,11 @@ function stop() {
     if (expiracionTask) {
         expiracionTask.stop();
         expiracionTask = null;
-        started = false;
+    }
+    if (started) {
         console.log('[scheduler] Detenido.');
     }
+    started = false;
 }
 
 module.exports = { start, stop, isStarted: () => started };

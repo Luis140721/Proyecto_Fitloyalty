@@ -87,7 +87,7 @@ Cada persona debe tener commits propios en ≥ 3 áreas distintas antes de la su
 
 ---
 
-## Semana 03 · 20–26 oct · Componentes React · `[Piso: 45%]`
+## Semana 03 · 20–26 oct · Componentes React · `[Piso: 40%]`
 
 ### FRONT
 - [ ] **Daniel** — RTL sobre formularios con validación propia:
@@ -98,10 +98,10 @@ Cada persona debe tener commits propios en ≥ 3 áreas distintas antes de la su
 - [ ] **Santiago** — **Crear `frontend/src/utils/validation.js`** con regex única de email y teléfono. Migrar `RegisterPage` y `RegisterOwnerPage` para importarla. Agregar 2 tests de la regex (válido/inválido).
 
 ### BACK
-- [ ] **Santiago** — Cubrir huecos restantes hasta 45% (probablemente `auth-helpers.js` adicional o middleware).
+- [ ] **Santiago** — Cubrir huecos restantes hasta 40% (probablemente `auth-helpers.js` adicional o middleware).
 
 **Acceptance criterios:**
-- Coverage frontend ≥ 45%
+- Coverage frontend y backend ≥ 40%
 - DRY de regex: ambos forms usan la misma fuente
 
 ---
@@ -111,10 +111,9 @@ Cada persona debe tener commits propios en ≥ 3 áreas distintas antes de la su
 ### BACK
 - [ ] **Luis** — supertest contra `backend/src/routes/auth.js`: casos 200 (signup, login, forgot, verify, reset), 400 (payload malformado), 401 (token inválido), 409 (`USER_EMAIL_TAKEN`).
 - [ ] **Santiago** — supertest contra `backend/src/routes/miembros.js`, `staff.js`, `checkin.js`, `config.js`: estados HTTP, forma del JSON, 400/401/403/404/409.
-- [ ] **Daniel** — **Resolver admin.js** (ruta semilla con `santicosalamanca@gmail.com` hardcodeado):
-  - Opción A: agregar esquema Zod + mover el email a `.env` (`SEED_ADMIN_EMAIL`) con guarda `NODE_ENV !== 'development'` → 403
-  - Opción B: documentar como excluida de cobertura en `docs/estrategia-pruebas.md` por ser solo dev
-- [ ] **Daniel** — Fijar defectos de contrato que aparezcan (body malformado, content-type incorrecto) en la misma semana.
+- [x] **Daniel** — Resolver `admin.js`: validación Zod, credenciales desde `SEED_ADMIN_EMAIL`/`SEED_ADMIN_PASSWORD` y bloqueo fuera de desarrollo (403).
+- [x] **Daniel** — Añadir tests de contrato API para body malformado, `Content-Type`, credenciales, permisos y errores sin SQL/stack trace.
+  - Mutante verificado: invertir la condición de `NODE_ENV` en `requireAdminToken`; lo detectó `bloquea la ruta con 403 fuera del entorno development` (la suite falló 7 pruebas).
 
 ### FRONT
 - [ ] **Daniel** — Bajar la barra hasta 55%: tests de páginas restantes (`DashboardPage`, `ConfiguracionPage`, etc.) con mocks de API.

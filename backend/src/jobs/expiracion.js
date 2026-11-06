@@ -132,7 +132,8 @@ async function runJob({ dryRun = false, whatsappClient = null } = {}) {
     `SELECT COALESCE(MAX(dias_aviso_vencimiento), 3) AS max_dias
        FROM gimnasio WHERE activo = TRUE`
   );
-  const maxDias = Math.min(parseInt(cfgRows.rows[0].max_dias || 3, 10) || 3, 30);
+  const parsedMaxDias = parseInt(cfgRows.rows[0].max_dias ?? 3, 10);
+  const maxDias = Math.min(Number.isFinite(parsedMaxDias) ? parsedMaxDias : 3, 30);
   if (maxDias <= 0) {
     summary.motivo = 'Todos los gimnasios tienen dias_aviso_vencimiento = 0 (desactivado)';
     return summary;

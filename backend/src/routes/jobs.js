@@ -45,7 +45,8 @@ router.get(
             `SELECT COALESCE(MAX(dias_aviso_vencimiento), 3) AS max_dias
                FROM gimnasio WHERE activo = TRUE`
         );
-        const dias = Math.min(parseInt(cfg.rows[0].max_dias || 3, 10) || 3, 30);
+        const parsedDias = parseInt(cfg.rows[0].max_dias ?? 3, 10);
+        const dias = Math.min(Number.isFinite(parsedDias) ? parsedDias : 3, 30);
         const candidatos = await miembrosPorVencer(dias);
         res.json({ dias, total: candidatos.length, candidatos });
     })

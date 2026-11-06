@@ -1,3 +1,4 @@
+podrias por faavor hacer la d3
 import { expect, test } from '@playwright/test';
 
 const API = 'http://localhost:3001/api';

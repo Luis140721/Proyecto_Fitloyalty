@@ -12,8 +12,8 @@ export default function ResetPasswordPage() {
   const [codeDigits, setCodeDigits] = useState(Array(6).fill(''));
   const [password, setPassword] = useState('');
   const [confirm, setConfirm]   = useState('');
-  const [resetToken, setResetToken] = useState('');
-  const [step, setStep]         = useState('verify');
+  const [resetToken, setResetToken] = useState(location.state?.resetToken || '');
+  const [step, setStep]         = useState(location.state?.resetToken ? 'reset' : 'verify');
   const [error, setError]       = useState('');
   const [message, setMessage]   = useState('');
   const [loading, setLoading]   = useState(false);
