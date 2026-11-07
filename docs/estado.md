@@ -1,11 +1,24 @@
 # Estado: avance real de requisitos
 
-- **Fecha:** 2026-10-25 (actualizaciones tras las fusiones en `develop` del 18, el 19, el 20 y el 25; la medición inicial fue el 2026-10-16)
-- **Rama:** `docs/avance-2026-10-25` (PR hacia `develop`). Las anteriores fueron `docs/avance-2026-10-18` (PR #20), `docs/avance-2026-10-19` (PR #25), `docs/avance-2026-10-19-b` (PR #29) y `docs/avance-2026-10-20` (PR #35); la medición inicial se hizo en `docs/avance-requisitos` (PR #6, ya en `main`).
-- **Código verificado:** `develop` @ `21e7e9c` para los requisitos de las actualizaciones (secciones siguientes); el resto, `main` @ `54b19fa`. El PR #5 (`8acab31`) solo agregó `CONTRIBUTING.md` y el check de nombre de rama al CI (sin cambios en el código de la app); se fusionó en esta rama y es la base de la evidencia del CI.
+- **Fecha:** 2026-11-06 (actualizaciones tras las fusiones en `develop` del 18, el 19, el 20, el 25 y el 27; la medición inicial fue el 2026-10-16)
+- **Rama:** `docs/avance-2026-11-06` (PR hacia `develop`). Las anteriores fueron `docs/avance-2026-10-18` (PR #20), `docs/avance-2026-10-19` (PR #25), `docs/avance-2026-10-19-b` (PR #29), `docs/avance-2026-10-20` (PR #35) y `docs/avance-2026-10-25` (PR #44); la medición inicial se hizo en `docs/avance-requisitos` (PR #6, ya en `main`).
+- **Código verificado:** `develop` @ `a9f7ce1` para los requisitos de las actualizaciones (secciones siguientes); el resto, `main` @ `54b19fa`. El PR #5 (`8acab31`) solo agregó `CONTRIBUTING.md` y el check de nombre de rama al CI (sin cambios en el código de la app); se fusionó en esta rama y es la base de la evidencia del CI.
 - **Base de la documentación:** por decisión de Luis, los archivos de Santiago del PR #4 (`docs/borrador-matriz-requisitos` @ `00cdcdb`), verificados y corregidos aquí.
 - **Copias de seguridad:** los originales de `Documentación/` están en `54b19fa` y los archivos de Santiago sin corregir en el commit `5db4e2a` de esta rama (o en `00cdcdb`). Ejemplo: `git show 00cdcdb:docs/avance-requisitos.xlsx > copia.xlsx`.
 - **Responsable de esta tarea:** agente ejecutor (Claude de Luis). Solo documentación y Excel; el reparto de las implementaciones está en `docs/plan-trabajo.md`.
+
+## Actualización del 2026-11-06
+
+**No cambia ningún estado: el avance sigue en 87,8 % (32,5/37).** Se corrigen datos vencidos y se registra lo fusionado el 27 de octubre (`develop` @ `a9f7ce1`).
+
+- **RQNF-02 sigue Pendiente y el monitor de GitHub no sirve como evidencia.** Del 2026-10-26 al 2026-11-05 corrió 43 de 2.244 mediciones (1,9 %) y 9 salieron bien. Ningún día tuvo el horario completo. Los fallos revisados son timeouts de 30 s: pasan horas entre corridas y Render se duerme. El calendario del 26/10 y el 1/11 queda sin efecto; falta un monitor externo. Conteo y diagnóstico en `docs/evidencias/rqnf-02-disponibilidad.md`.
+- **RQF-08, RQF-13 y RQF-14:** se quita la frase de que el monitor mantiene despierto a Render. No cambia su estado, pero los crons de las 8:00, las 9:00 y las 15:00 solo corren si el servicio está despierto.
+- **PR #55 (RQF-03):** arreglo de Daniel. Editar un miembro con la fecha de nacimiento vacía ya no da 503: la cadena vacía se guarda como NULL (`miembros.js:139-140`). Suma una prueba de regresión.
+- **PR #56 (RQF-05 y RQNF-04):** el ingreso por documento se guarda como MANUAL aunque el selector esté en QR (`CheckinPage.jsx:196-200`), y Enter en ese campo registra (`:252-254`, `:377`).
+- **RQNF-04 sigue Parcial:** el protocolo está en el PR #53 (borrador), pero las sesiones con participantes no se han hecho.
+- **RQNF-06 sigue Parcial:** el PR #52 repite la prueba con el backend en los tres navegadores y sigue sin fusionar. El verificador lo aprobó con observaciones: faltan el dashboard en Chrome y Edge, que salió a medio cargar, y la versión mayor anterior de cada navegador.
+- **Release 1 (PR #45):** sigue sin aprobación y `main` sigue en el PR #8, así que nada de lo fusionado en `develop` desde el 16 de octubre ha llegado a `main`.
+- **Citas de líneas:** se actualizaron en el Excel, el docx y la matriz las de `CheckinPage.jsx` que corrió el #56. También se corrigen dos que ya estaban viejas: las de la fila de RQNF-04 y `auth.js:337-346`, que ahora es `auth.js:355-362`.
 
 ## Actualización del 2026-10-25 (tarea L7)
 
@@ -22,13 +35,13 @@ Solo se marcó lo que está fusionado en `develop` y revisado por el verificador
 | RQNF-06 | Parcial | **Parcial** | #43 | Portada y login probados en Chrome, Firefox y Edge con capturas, sin backend. Falta repetirlo con el backend en las pantallas principales (Daniel, D4). Sección 37.3. |
 
 **También:**
-- **RQF-13 y RQF-14:** el monitor mantiene despierto a Render de 4:50 a unas 22:12, lo que ayuda a que corran los crons de avisos (9:00 y 15:00) y el de abandono (8:00). La limitación de Chrome sigue igual.
+- **RQF-13 y RQF-14:** el monitor mantiene despierto a Render de 4:50 a unas 22:12, lo que ayuda a que corran los crons de avisos (9:00 y 15:00) y el de abandono (8:00). La limitación de Chrome sigue igual. **Corrección del 2026-11-06:** en la práctica no lo mantiene despierto.
 - **RQF-22:** el #28 agrega el límite de intentos que faltaba en `DELETE /api/auth/account` (`index.js:86`, `:101`); se cierra esa observación. RQF-17 también gana los límites de `verify-reset-code` y `reset-password`.
 - **Evidencia de RQNF-02:** se corrigió la receta de conteo en `docs/evidencias/rqnf-02-disponibilidad.md`. Se consulta día por día con `--created AAAA-MM-DD` (205 corridas programadas por fecha UTC), porque con un filtro la API de GitHub devuelve como máximo 1.000 corridas por búsqueda y una sola consulta con un `--limit` grande se corta sin avisar. Cada medición se cuenta en su fecha de Colombia (un día operativo ocupa dos fechas UTC), solo el primer intento (un re-run conserva el evento y el título), toda conclusión distinta de `success` es un fallo y la semana se arma sumando los siete días.
 - **Citas de líneas:** se actualizaron en el Excel, el docx y la matriz las citas que corrieron los PR #19, #28, #39 y #41 (`auth.js`, `index.js`, `config.js`, `notificaciones.js`, `jobs.js`, `scheduler.js`, `ConfigPage.jsx` y `ci.yml`), verificadas en `develop` @ `21e7e9c`. RQNF-11 ya no dice que el CI no corre pruebas y RQF-17 incluye los límites del #28. También se auditaron las citas de la fase 1 que venían de `main` @ `54b19fa`: cambian RQF-03 y RQF-21 (`miembros.js`, `MiembrosPage.jsx`), RQF-05 (`checkin.js`, `CheckinPage.jsx`), RQF-15 (`auth-helpers.js`) y RQF-18 (`dashboard.js`, `DashboardPage.jsx`), y RQF-06, citado el 19; RQF-12 queda igual porque `cliente.js` no cambió.
 - **Meta del Excel:** por decisión de Luis, `Resumen!C40` pasa del 80 % al 90 %. «Puntos que faltan» queda en 0,3 (RF), 0,5 (RNF) y 0,8 (total); los gráficos no cambian. La del 80 % pedida para la entrega ya está superada.
 
-**Calendario de RQNF-02.** El primer día operativo completo es el **lunes 26**: esa noche, después de la medición de las 21:57, puede pasar a **Parcial** (89,2 %). La primera semana completa cierra el **domingo 1/11**: como pronto esa noche puede pasar a **Implementado** si da 99 % o más (90,5 %). Si da menos de 99 %, queda en Parcial.
+**Calendario de RQNF-02 (sin efecto; ver la actualización del 2026-11-06).** El primer día operativo completo es el **lunes 26**: esa noche, después de la medición de las 21:57, puede pasar a **Parcial** (89,2 %). La primera semana completa cierra el **domingo 1/11**: como pronto esa noche puede pasar a **Implementado** si da 99 % o más (90,5 %). Si da menos de 99 %, queda en Parcial.
 
 **Pendientes de seguimiento (no cambian el estado):**
 - **Santiago, dos arreglos del #39 (RQF-08):** que la campana filtre a los congelados y a quienes ya volvieron (hoy muestra lo que dejó el job, hasta el día siguiente), y correr el job de abandono al arrancar el servidor, por si Render duerme a las 8:00.
@@ -45,7 +58,7 @@ Solo se marcó lo que está fusionado en `develop` y revisado por el verificador
 | RQF-14 | Parcial | **Implementado** | #10 y #30 | El job avisa a las 9:00, con reintento a las 15:00 (`scheduler.js:62-63`), sin las congeladas (`expiracion.js:62`), una vez al entrar en la ventana y otra el día 0 (`:101-103`, `:156-168`), y solo marca el aviso si el envío no falla (`:217-218`). Los días de aviso se configuran por gimnasio (`config.js:33`, `ConfigPage.jsx:236-239`). Verificador, secciones 33.1 y 33.2. |
 | RQF-13 | Parcial | **Implementado** | #10 | Ya no se pregunta `isWhatsAppReady()` antes de enviar: `sendWhatsAppText` inicia el cliente y, si no queda listo, lanza `WHATSAPP_NO_LISTO` (`whatsapp.js:229-238`); el intento queda registrado con `exito = false` y la guía del QR (`admin-contrato.js:105-116`, `:145`). Sección 33.1. |
 | RQF-04 | Parcial | **Implementado** | #30 | El check-in niega el ingreso de una membresía congelada con estado `CONGELADO`, sin registrar asistencia (`checkin.js:125-149`), y el job de avisos la excluye (`expiracion.js:62`). Sección 33.2. Observaciones: congelar entre las 19:00 y las 24:00 de Colombia toma el día siguiente (`CURRENT_DATE` en UTC), y renovar estando congelada conserva `congelado_desde`. |
-| RQF-11 | Pendiente | **Implementado** | #32 | La racha se calcula en hora de Colombia en cada check-in correcto (`lib/gamificacion.js:54`, `checkin.js:211-217`), los hitos se otorgan sin repetirse y la pantalla muestra el mensaje (`CheckinPage.jsx:393-402`); el administrador configura los hitos (`config.js:190-280`, `HitosConfig`). 12 pruebas. Sección 33.3. Menores: «Te faltan 1» sin decir si son días o visitas; con dos hitos a la vez solo se muestra el mensaje del primero; `PUT /admin/hitos/:id` con un id no numérico da 503. |
+| RQF-11 | Pendiente | **Implementado** | #32 | La racha se calcula en hora de Colombia en cada check-in correcto (`lib/gamificacion.js:54`, `checkin.js:211-217`), los hitos se otorgan sin repetirse y la pantalla muestra el mensaje (`CheckinPage.jsx:408-417`); el administrador configura los hitos (`config.js:190-280`, `HitosConfig`). 12 pruebas. Sección 33.3. Menores: «Te faltan 1» sin decir si son días o visitas; con dos hitos a la vez solo se muestra el mensaje del primero; `PUT /admin/hitos/:id` con un id no numérico da 503. |
 | RQNF-07 | Parcial | **Implementado** | #33 | Scripts `test` y `test:cov` (`backend/package.json:8-9`); 122 de 122 pruebas; cobertura de líneas de 97,72 % en `checkin.js` y 90,32 % en `notificaciones.js` (`docs/evidencias/cobertura-backend-2026-10-20.txt`, medido sobre `develop` @ `3c35d53`). Sección 34. Observación: `npm test` en el CI queda para la parte 2. |
 | RQF-02 | Implementado | **Implementado** | #30 | Se cierra la observación del kiosco: `CheckinPage.jsx` llama a `marcarActividad()` después de cada check-in correcto (`:170`, `:225`). |
 
@@ -106,8 +119,8 @@ Fórmula: (implementados + 0,5 × parciales) / total; los puntos son esa suma. E
 **Decisión de Luis aplicada (2026-10-16):** se retiraron RQF-23 (repetía RQF-08), RQF-24 (repetía RQF-05) y RQF-25 (repetía RQF-03 y es un defecto de seguridad), y RQF-26 (editar el perfil) se fusionó en RQF-15. La numeración queda consecutiva, sin renumerar. Con los cuatro, el avance habría sido 63,4 % (26 puntos de 41).
 
 **Ruta a la meta del 90 %** (hoja «Trabajo pendiente», que se pone verde al llegar a la meta; la del 80 % ya está superada):
-- Sin esperar al monitor: el registro de cada envío (RQF-09, issue #24) → 89,2 % y la prueba de usabilidad (RQNF-04, Daniel, D5) → **90,5 %**; después, la prueba de navegadores con el backend (RQNF-06, Daniel, D4) → 91,9 %.
-- RQNF-02 suma solo con el tiempo: Parcial el lunes 26 en la noche y, si da 99 % o más, Implementado como pronto el domingo 1/11.
+- Sin esperar al monitor: el registro de cada envío (RQF-09, issue #24) → 89,2 % y la prueba de usabilidad (RQNF-04, Daniel, D5) → **90,5 %**; después, terminar la prueba de navegadores (RQNF-06, Daniel, D4, PR #52) → 91,9 %.
+- RQNF-02 necesita un monitor externo: Parcial con un día operativo completo medido e Implementado con 7 días seguidos al 99 % o más.
 
 ## Qué se hizo
 
@@ -166,7 +179,7 @@ Comprobados otra vez contra el código antes de aplicarlos:
 | RQNF-10 | Implementado | **Parcial** | Una base creada solo con `backend/migrations` no tiene `vista_miembros_activos`, `auditoria` ni las columnas de `reto` e `hito_gamificacion` que usa el código. |
 
 También:
-- **RQF-17:** sigue Implementado, pero ahora anota el riesgo de seguridad: si el correo no sale, el código vuelve en la respuesta (`auth.js:337-346`) y su validación no tiene límite. Se quitó la cita a TC-2.1..2.3 de `Informe_Pruebas_E2E.md`, que probó el flujo viejo por enlace.
+- **RQF-17:** sigue Implementado, pero ahora anota el riesgo de seguridad: si el correo no sale, el código vuelve en la respuesta (`auth.js:355-362`) y su validación no tiene límite. Se quitó la cita a TC-2.1..2.3 de `Informe_Pruebas_E2E.md`, que probó el flujo viejo por enlace.
 - **RQF-21:** se acotó al pago, porque el plan y la vigencia ya están en RQF-04.
 - **RQF-16:** observación de que el campo «días de prueba» de Configuración no tiene efecto.
 - **Ruta al 80 %:** RQNF-01 solo cuenta después de corregir la búsqueda del QR y medir con volumen realista; RQF-25 dejó de sumar y después se retiró.
@@ -225,7 +238,7 @@ Ajustes de redacción:
 
 - **Seguridad:** la fuga de datos entre gimnasios de `vista.js` (punto 2 de arriba). **Resuelto en el PR #11.**
 - **Seguridad:** CORS abierto con `credentials: true` (`index.js:50-57`).
-- **Seguridad:** el código de recuperación de contraseña vuelve en la respuesta si el correo no sale (`auth.js:337-346`), y `verify-reset-code` y `reset-password` no tienen límite de intentos.
+- **Seguridad:** el código de recuperación de contraseña vuelve en la respuesta si el correo no sale (`auth.js:355-362`), y `verify-reset-code` y `reset-password` no tienen límite de intentos.
 - **Funcional:** `sendWhatsAppText` (`whatsapp.js:222-247`) no avisa cuando falla o cuando el cliente no está listo; por eso el contrato y los avisos de vencimiento se registran como enviados sin haber salido. **Resuelto en el PR #9**; queda que el contrato y el job no inician el cliente tras un reinicio (RQF-13 y PR #10).
 - **Funcional:** la eliminación de cuenta (`auth.js:480-561`) siempre falla y responde 500 (RQF-22). **Resuelto en el PR #15.**
 - **Seguridad:** el JWT del personal no expira, porque `generarToken` ignora `JWT_EXPIRES_IN` (`backend/src/lib/auth-helpers.js:102-113`). **Resuelto en el PR #18.**
