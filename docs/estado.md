@@ -11,14 +11,14 @@
 
 **No cambia ningún estado: el avance sigue en 87,8 % (32,5/37).** Se corrigen datos vencidos y se registra lo fusionado el 27 de octubre (`develop` @ `a9f7ce1`).
 
-- **RQNF-02 sigue Pendiente y el monitor de GitHub no sirve como evidencia.** Del 2026-10-26 al 2026-11-05 corrió 43 de 2.244 mediciones (1,9 %) y 9 salieron bien. Ningún día tuvo el horario completo. Los fallos revisados son timeouts de 30 s: pasan horas entre corridas y Render se duerme. El calendario del 26/10 y el 1/11 queda sin efecto; falta un monitor externo. Conteo y diagnóstico en `docs/evidencias/rqnf-02-disponibilidad.md`.
+- **RQNF-02 sigue Pendiente y el monitor de GitHub no sirve como evidencia.** Del 2026-10-26 al 2026-11-05 corrió 43 de 2.244 mediciones (1,9 %) y 9 salieron bien. Ningún día tuvo el horario completo. Las 34 fallidas son timeouts de 30 s: pasan horas entre corridas y Render se duerme. El calendario del 26/10 y el 1/11 queda sin efecto; falta un monitor externo. Conteo y diagnóstico en `docs/evidencias/rqnf-02-disponibilidad.md`.
 - **RQF-08, RQF-13 y RQF-14:** se quita la frase de que el monitor mantiene despierto a Render. No cambia su estado, pero los crons de las 8:00, las 9:00 y las 15:00 solo corren si el servicio está despierto.
 - **PR #55 (RQF-03):** arreglo de Daniel. Editar un miembro con la fecha de nacimiento vacía ya no da 503: la cadena vacía se guarda como NULL (`miembros.js:139-140`). Suma una prueba de regresión.
 - **PR #56 (RQF-05 y RQNF-04):** el ingreso por documento se guarda como MANUAL aunque el selector esté en QR (`CheckinPage.jsx:196-200`), y Enter en ese campo registra (`:252-254`, `:377`).
 - **RQNF-04 sigue Parcial:** el protocolo está en el PR #53 (borrador), pero las sesiones con participantes no se han hecho.
-- **RQNF-06 sigue Parcial:** el PR #52 repite la prueba con el backend en los tres navegadores y sigue sin fusionar. El verificador lo aprobó con observaciones: faltan el dashboard en Chrome y Edge, que salió a medio cargar, y la versión mayor anterior de cada navegador.
+- **RQNF-06 sigue Parcial:** el PR #52 repite la prueba con el backend en los tres navegadores y sigue sin fusionar. En su revisión del 2026-10-27, el verificador lo aprobó con observaciones: faltan el dashboard en Chrome y Edge, que salió a medio cargar, y la versión mayor anterior de cada navegador.
 - **Release 1 (PR #45):** sigue sin aprobación y `main` sigue en el PR #8, así que nada de lo fusionado en `develop` desde el 16 de octubre ha llegado a `main`.
-- **Citas de líneas:** se actualizaron en el Excel, el docx y la matriz las de `CheckinPage.jsx` que corrió el #56. También se corrigen dos que ya estaban viejas: las de la fila de RQNF-04 y `auth.js:337-346`, que ahora es `auth.js:355-362`.
+- **Citas de líneas:** se actualizaron en el Excel, el docx y la matriz las de `CheckinPage.jsx` que corrió el #56. También se corrigen las que ya estaban viejas: las de la fila de RQNF-04, `auth.js:360` y `:399` (ahora `:378` y `:417`) y `auth.js:337-346`, que ahora es `auth.js:355-365`.
 
 ## Actualización del 2026-10-25 (tarea L7)
 
@@ -175,11 +175,11 @@ Comprobados otra vez contra el código antes de aplicarlos:
 | RQF-22 | Implementado | **Pendiente** | La eliminación de cuenta aborta la transacción y el gimnasio queda intacto: `safe()` (`auth.js:496-502`) no usa `SAVEPOINT` y ninguna migración crea `auditoria`. Probado por el verificador en PostgreSQL 18 (§11.2.1). Yo lo había marcado leyendo solo el código. |
 | RQF-13 | Implementado | **Parcial** | Con WhatsApp listo, un envío fallido queda como exitoso: `sendWhatsAppText` se traga el error (`whatsapp.js:244-246`) y el `catch` de `admin-contrato.js:132-138` nunca corre. |
 | RQF-14 | Implementado | **Parcial** | Si WhatsApp no está listo, `sendWhatsAppText` vuelve sin error y el job marca el aviso como enviado (`expiracion.js:206-207`); nunca se reintenta. |
-| RQNF-09 | Implementado | **Parcial** | `verify-reset-code` (`auth.js:360`) y `reset-password` (`:399`) no tienen límite de intentos. |
+| RQNF-09 | Implementado | **Parcial** | `verify-reset-code` (`auth.js:378`) y `reset-password` (`:417`) no tienen límite de intentos. |
 | RQNF-10 | Implementado | **Parcial** | Una base creada solo con `backend/migrations` no tiene `vista_miembros_activos`, `auditoria` ni las columnas de `reto` e `hito_gamificacion` que usa el código. |
 
 También:
-- **RQF-17:** sigue Implementado, pero ahora anota el riesgo de seguridad: si el correo no sale, el código vuelve en la respuesta (`auth.js:355-362`) y su validación no tiene límite. Se quitó la cita a TC-2.1..2.3 de `Informe_Pruebas_E2E.md`, que probó el flujo viejo por enlace.
+- **RQF-17:** sigue Implementado, pero ahora anota el riesgo de seguridad: si el correo no sale, el código vuelve en la respuesta (`auth.js:355-365`) y su validación no tiene límite. Se quitó la cita a TC-2.1..2.3 de `Informe_Pruebas_E2E.md`, que probó el flujo viejo por enlace.
 - **RQF-21:** se acotó al pago, porque el plan y la vigencia ya están en RQF-04.
 - **RQF-16:** observación de que el campo «días de prueba» de Configuración no tiene efecto.
 - **Ruta al 80 %:** RQNF-01 solo cuenta después de corregir la búsqueda del QR y medir con volumen realista; RQF-25 dejó de sumar y después se retiró.
@@ -238,7 +238,7 @@ Ajustes de redacción:
 
 - **Seguridad:** la fuga de datos entre gimnasios de `vista.js` (punto 2 de arriba). **Resuelto en el PR #11.**
 - **Seguridad:** CORS abierto con `credentials: true` (`index.js:50-57`).
-- **Seguridad:** el código de recuperación de contraseña vuelve en la respuesta si el correo no sale (`auth.js:355-362`), y `verify-reset-code` y `reset-password` no tienen límite de intentos.
+- **Seguridad:** el código de recuperación de contraseña vuelve en la respuesta si el correo no sale (`auth.js:355-365`), y `verify-reset-code` y `reset-password` no tienen límite de intentos.
 - **Funcional:** `sendWhatsAppText` (`whatsapp.js:222-247`) no avisa cuando falla o cuando el cliente no está listo; por eso el contrato y los avisos de vencimiento se registran como enviados sin haber salido. **Resuelto en el PR #9**; queda que el contrato y el job no inician el cliente tras un reinicio (RQF-13 y PR #10).
 - **Funcional:** la eliminación de cuenta (`auth.js:480-561`) siempre falla y responde 500 (RQF-22). **Resuelto en el PR #15.**
 - **Seguridad:** el JWT del personal no expira, porque `generarToken` ignora `JWT_EXPIRES_IN` (`backend/src/lib/auth-helpers.js:102-113`). **Resuelto en el PR #18.**
