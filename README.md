@@ -292,6 +292,35 @@ solo con migraciones iguales a las de producción (`ConsultasDB/`). En producci�
 cambia nada, y una base Docker con filas viejas las conserva en `notificacion_docker` y
 `envio_mensaje_docker`.
 
+### Base aislada para pruebas de integración
+
+Las pruebas de integración usan PostgreSQL 16 en el puerto `5433`, con la base
+`fitloyalty_test` y un volumen separado del entorno de desarrollo. Iníciala desde
+la raíz del repositorio:
+
+```powershell
+docker compose -p fitloyalty-test --profile test up -d --wait db-test
+```
+
+Ejecuta las pruebas desde PowerShell. Estas aplican las migraciones reales antes
+de conectar; cada caso abre una transacción y la revierte al terminar:
+
+```powershell
+$env:DATABASE_URL = 'postgresql://fitloyalty_test:fitloyalty_test@localhost:5433/fitloyalty_test'; $env:DB_SSL = 'false'; npm run test:integration --prefix backend
+```
+
+Al finalizar, elimina únicamente el proyecto y volumen de pruebas:
+
+```powershell
+docker compose -p fitloyalty-test --profile test down -v
+```
+
+El parámetro `-p fitloyalty-test` aísla los recursos de desarrollo; no lo omitas
+en el comando de apagado. Si `DATABASE_URL` no está definida, Jest marca el
+grupo de integración como omitido y las pruebas unitarias actuales siguen
+ejecutándose normalmente. Si está definida, su nombre debe terminar en `_test`;
+la suite falla en vez de conectarse a una base con otro nombre.
+
 ### Vista SQL
 
 `ConsultasDB/Query_Inicial_Crear_Tablas.sql` define la vista `vista_miembros_activos`,
