@@ -16,7 +16,7 @@
  * DISABLE_SCHEDULER=true en el env.
  */
 
-const cron = require('node-cron');
+const cronScheduler = require('./cronScheduler');
 const { runJob: runExpiracionJob } = require('./expiracion');
 
 const DISABLED = String(process.env.DISABLE_SCHEDULER || '').toLowerCase() === 'true';
@@ -43,7 +43,7 @@ function start() {
     // Avisos de vencimiento: todos los dias a las 9:00 AM hora Colombia.
     // La expresion cron es: min hora dia mes diaSemana
     //   "0 9 * * *"  -> a las 9:00 AM todos los dias
-    expiracionTask = cron.schedule('0 9 * * *', async () => {
+    expiracionTask = cronScheduler.schedule('0 9 * * *', async () => {
         console.log('[scheduler] Disparando job de avisos de vencimiento...');
         try {
             const summary = await runExpiracionJob();
