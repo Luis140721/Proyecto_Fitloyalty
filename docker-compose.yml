@@ -43,6 +43,27 @@ services:
       timeout: 5s
       retries: 10
 
+  # PostgreSQL aislado para las pruebas de integración. El perfil evita
+  # levantarlo durante el desarrollo; el proyecto Compose separado impide que
+  # `down -v` de pruebas borre el volumen de desarrollo.
+  db-test:
+    image: postgres:16-alpine
+    container_name: fitloyalty_db_test
+    profiles: ["test"]
+    environment:
+      POSTGRES_USER: ${POSTGRES_TEST_USER:-fitloyalty_test}
+      POSTGRES_PASSWORD: ${POSTGRES_TEST_PASSWORD:-fitloyalty_test}
+      POSTGRES_DB: ${POSTGRES_TEST_DB:-fitloyalty_test}
+    ports:
+      - "${POSTGRES_TEST_PORT:-5433}:5432"
+    volumes:
+      - pgdata-test:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_TEST_USER:-fitloyalty_test} -d ${POSTGRES_TEST_DB:-fitloyalty_test}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   # ----------------------------------------------------------------------
   # Backend Node 24 + Express. Espera a db, luego corre migraciones idempotentes
   # y levanta `npm start` (node src/index.js).
@@ -117,3 +138,5 @@ services:
 volumes:
   pgdata:
     name: fitloyalty_pgdata
+  pgdata-test:
+    name: fitloyalty_test_pgdata

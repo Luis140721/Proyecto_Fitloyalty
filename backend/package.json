@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node src/index.js",
     "test": "jest --coverage",
+    "test:integration": "jest --runInBand --coverage=false tests/integration",
     "dev": "nodemon src/index.js",
     "seed": "node src/db/seed_pg.js",
     "postinstall": "node scripts/postinstall.js"
