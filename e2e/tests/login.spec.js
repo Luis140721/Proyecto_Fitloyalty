@@ -1,6 +1,8 @@
 import { expect, test } from '@playwright/test';
 
-const API = 'http://localhost:3001/api';
+test.use({ storageState: { cookies: [], origins: [] } });
+
+const API = 'http://127.0.0.1:3001/api';
 
 // JWT de mentira con vencimiento lejano: el front solo lo decodifica para saber cuando vence.
 const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');

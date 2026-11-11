@@ -1,7 +1,9 @@
 import { expect, test } from '@playwright/test';
 
+test.use({ storageState: { cookies: [], origins: [] } });
+
 // Estos tests usan el backend real y la BD de pruebas (npm run db:up): no simulan el API.
-const API = 'http://localhost:3001/api';
+const API = 'http://127.0.0.1:3001/api';
 
 test('should open the dashboard of the new gym when the owner signs up with valid data', async ({ page }) => {
   // Arrange: correo unico porque la BD conserva los registros entre corridas

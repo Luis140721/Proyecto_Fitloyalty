@@ -350,7 +350,9 @@ En PowerShell, el segundo comando es
 `$env:TEST_DATABASE_URL='postgres://fitloyalty_test:fitloyalty_test@127.0.0.1:5433/fitloyalty_test'; npm --prefix backend run test:integracion; Remove-Item Env:TEST_DATABASE_URL`
 (el `Remove-Item` evita que la variable siga definida en la terminal).
 
-- Sin `TEST_DATABASE_URL`, `npm test` y el CI los muestran como *skipped*: la BD llega al CI en la semana 8.
+- Sin `TEST_DATABASE_URL`, `npm test` los muestra como *skipped*. En CI, el job `integracion`
+  levanta PostgreSQL 16 como servicio, ejecuta las migraciones y corre esta suite con la variable
+  definida, por lo que no se omiten.
 - La variable es `TEST_DATABASE_URL` y no `DATABASE_URL`, porque `backend/.env` trae la de
   desarrollo y `dotenv` la cargaría.
 - Dos revisiones, las dos antes de abrir una conexión:
@@ -360,6 +362,19 @@ En PowerShell, el segundo comando es
     host es `127.0.0.1` y nunca `localhost`, que en Windows puede resolver a `::1`.
   - Antes de migrar, se revisan el host, el puerto y la BD que `pg` va a usar de verdad con el
     pool de la app ya construido. Si no son los de la BD de pruebas, los tests fallan sin conectarse.
+
+### CI de pruebas
+
+El workflow `.github/workflows/ci.yml` ejecuta en cada PR las pruebas unitarias del backend, las
+pruebas del frontend, la integración con PostgreSQL 16 como servicio y Playwright contra el backend
+con la BD desechable. El job de integración aplica las migraciones antes de probar; el E2E espera
+la API con `curl` y también aplica las migraciones antes de iniciarla. Los reportes de cobertura
+del backend y frontend se publican como artefactos, y el reporte HTML de Playwright se adjunta si
+el job falla.
+
+Para ejecutar localmente los E2E, sigue los pasos de [e2e/README.md](e2e/README.md). La suite
+reutiliza una sesión preparada una vez por API y requiere una URL de PostgreSQL local de pruebas
+que termine en `_test`; nunca uses la BD de desarrollo.
 
 ---
 

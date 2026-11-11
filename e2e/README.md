@@ -3,7 +3,9 @@
 Prueban la app completa desde el navegador. `npm test` levanta el backend real (puerto 3001) y el frontend (puerto 5173); la base de datos es una BD de pruebas desechable en Docker (puerto 5433).
 
 - `tests/login.spec.js`: inicio de sesión. Simula el API con `page.route`.
-- `tests/register-gym.spec.js`: registro de gimnasio. Usa el backend real y la BD de pruebas.
+- `tests/register-gym.spec.js`: registro de gimnasio y rechazo de correo duplicado contra el API real.
+- `tests/alta-miembro*.spec.js`: alta de miembro, persistencia del plan/pago, validación y carga lenta.
+- `global-setup.js`: crea por API una cuenta única y prepara una sesión reutilizable; el teardown elimina esa cuenta.
 
 ## Requisitos
 
@@ -24,6 +26,7 @@ npm install
 npx playwright install chromium   # solo la primera vez (unos 110 MB)
 npm run db:up                     # crea la BD de pruebas y espera a que esté lista
 npm test                          # levanta backend y frontend y corre los tests
+npm test -- --repeat-each=5       # comprueba estabilidad antes del PR
 npm run db:down                   # destruye la BD de pruebas y sus datos
 ```
 

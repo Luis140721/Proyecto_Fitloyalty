@@ -42,10 +42,16 @@ jobs:
       - run: npm ci
       - name: Comprobar sintaxis de src/
         run: find src -name '*.js' -print0 | xargs -0 -n1 node --check
-      # Las pruebas simulan la base de datos y los envios (WhatsApp, correo): no
-      # necesitan servicios ni secretos. RQNF-07.
-      - name: Pruebas
-        run: npm test
+      - name: Pruebas unitarias y cobertura
+        run: npm run test:cov -- '--testPathIgnorePatterns=tests/(integracion|integration)'
+      - name: Publicar cobertura backend
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cobertura-backend
+          path: backend/coverage/
+          if-no-files-found: warn
+          retention-days: 7
 
   frontend:
     runs-on: ubuntu-latest
@@ -60,4 +66,137 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
-      - run: npm run build
+      - name: Pruebas y cobertura
+        run: npm test
+      - name: Build de producción
+        run: npm run build
+      - name: Publicar cobertura frontend
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cobertura-frontend
+          path: frontend/coverage/
+          if-no-files-found: warn
+          retention-days: 7
+
+  integracion:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16.15-alpine
+        env:
+          POSTGRES_USER: fitloyalty_test
+          POSTGRES_PASSWORD: fitloyalty_test
+          POSTGRES_DB: fitloyalty_test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U fitloyalty_test -d fitloyalty_test"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+    env:
+      DATABASE_URL: postgres://fitloyalty_test:fitloyalty_test@127.0.0.1:5433/fitloyalty_test
+      TEST_DATABASE_URL: postgres://fitloyalty_test:fitloyalty_test@127.0.0.1:5433/fitloyalty_test
+      DB_SSL: "false"
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - name: Aplicar migraciones
+        run: node src/db/migrate.js
+      - name: Pruebas de integración PostgreSQL
+        run: npm run test:integracion
+      - name: Pruebas S6 de integración del miembro
+        run: npm run test:integration
+
+  e2e:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16.15-alpine
+        env:
+          POSTGRES_USER: fitloyalty_test
+          POSTGRES_PASSWORD: fitloyalty_test
+          POSTGRES_DB: fitloyalty_test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U fitloyalty_test -d fitloyalty_test"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+    env:
+      DATABASE_URL: postgres://fitloyalty_test:fitloyalty_test@127.0.0.1:5433/fitloyalty_test
+      E2E_DATABASE_URL: postgres://fitloyalty_test:fitloyalty_test@127.0.0.1:5433/fitloyalty_test
+      DB_SSL: "false"
+      DISABLE_SCHEDULER: "true"
+      ENABLE_WHATSAPP: "false"
+      BREVO_API_KEY: ""
+      FRONTEND_URL: http://127.0.0.1:5173
+      JWT_SECRET: jwt-solo-para-e2e-no-es-secreto
+      NODE_ENV: test
+      PUPPETEER_SKIP_DOWNLOAD: "true"
+      RESEND_API_KEY: ""
+      PORT: "3001"
+      PLAYWRIGHT_EXTERNAL_API: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+            e2e/package-lock.json
+      - name: Instalar dependencias
+        run: |
+          npm ci --prefix backend
+          npm ci --prefix frontend
+          npm ci --prefix e2e
+      - name: Instalar Chromium
+        working-directory: e2e
+        run: npx playwright install --with-deps chromium
+      - name: Migrar, iniciar API y ejecutar Playwright
+        run: |
+          set -euo pipefail
+          node backend/src/db/migrate.js
+          npm start --prefix backend > backend-api.log 2>&1 &
+          api_pid=$!
+          trap 'kill "$api_pid" 2>/dev/null || true; wait "$api_pid" 2>/dev/null || true' EXIT
+          ready=0
+          for attempt in $(seq 1 60); do
+            if curl --silent --fail --output /dev/null http://127.0.0.1:3001/api/health; then
+              ready=1
+              break
+            fi
+            if ! kill -0 "$api_pid" 2>/dev/null; then
+              cat backend-api.log
+              exit 1
+            fi
+            sleep 2
+          done
+          if [ "$ready" -ne 1 ]; then
+            tail -n 100 backend-api.log
+            curl --fail http://127.0.0.1:3001/api/health
+            exit 1
+          fi
+          npm test --prefix e2e
+      - name: Publicar reporte Playwright si falla
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            e2e/playwright-report/
+            e2e/test-results/
+          if-no-files-found: warn
+          retention-days: 7

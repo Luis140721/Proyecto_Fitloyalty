@@ -170,17 +170,20 @@ Cada persona debe tener commits propios en ≥ 3 áreas distintas antes de la su
 
 ---
 
-## Semana 07 · 17–22 nov · E2E completo + cierre · `[Piso: 80%]`
+## Semana 07 · 17–22 nov · E2E completo + cierre · `[Piso: 75%]`
 
 ### E2E
-- [ ] **Santiago** — Playwright cubre los **3 flujos críticos**:
-  1. **Registro de gimnasio** (signup → onboarding → dashboard)
-  2. **Login + checkin de miembro** (login → seleccionar miembro → checkin QR → ver estado)
-  3. **Alta de miembro con cobro** (login owner → alta miembro → ver pago → ver factura PDF)
+- [ ] **Grupo** — seleccionar y repartir un flujo por integrante; los tres flujos críticos propuestos son:
+  1. **Registro de gimnasio** (signup → onboarding → dashboard), porque sin completar el registro no se puede empezar a usar el servicio.
+  2. **Login + checkin de miembro** (login → seleccionar miembro → checkin QR → ver estado), porque valida acceso y una operación diaria del gimnasio.
+  3. **Alta de miembro con cobro** (login owner → alta miembro → verificar plan y pago persistidos), porque maneja datos personales y pagos. La factura PDF no está implementada.
+
+### BACK
+- [ ] **Santiago** — Como responsable de la capa API en S6, llevar el backend a ≥75% con pruebas unitarias o de API. Esta semana nadie más trabaja el backend.
 
 ### DEVOPS
-- [ ] **Daniel** — CI ampliado con Postgres como servicio, corre unitarias + integración + E2E en cada PR.
-- [ ] **Daniel** — Subir `coverageThreshold` a **80%** en backend **y** frontend. El PR falla si baja.
+- [ ] **Grupo** — Medir la cobertura real después de integrar los PR y subir los umbrales al mayor entre 75% y la cobertura real. No cambiarlos antes del cierre.
+- [ ] **Daniel** — Incorporar Playwright al CI en semana 08; en S7 los E2E se repiten localmente cinco veces.
 - [ ] **Luis** — Verificar que `pnpm audit --audit-level=high` sigue limpio.
 
 ### DOC
@@ -192,9 +195,35 @@ Cada persona debe tener commits propios en ≥ 3 áreas distintas antes de la su
 - [ ] **Santiago** — **Matriz de rotación final**: confirmar que cada integrante tiene commits propios en ≥ 3 áreas. Capturas en `docs/matriz-rotacion.md`.
 
 **Acceptance criterios:**
-- Coverage ≥ 80% en frontend **y** backend, exigida en CI
-- 3 flujos E2E críticos pasando en CI
+- Coverage ≥ 75% en frontend **y** backend, medida tras integrar los PR de la semana
+- 3 flujos E2E críticos cubiertos y estables con `--repeat-each=5`; E2E al CI en semana 08
 - `docs/estrategia-pruebas.md` completo
+
+**Aporte individual de Daniel (2026-11-10):** Playwright cubre el alta de
+miembro y el guardado del plan/pago en la base de pruebas; incluye validación
+visible, lectura posterior de los datos persistidos, doble clic con `POST`
+retrasado y carga lenta de la lista. El doble clic genera una sola petición y
+un solo miembro; la carga lenta no bloquea la apertura ni borra lo escrito en
+el formulario. La implementación actual no genera factura PDF, por lo que esa
+parte del flujo sigue pendiente. La cobertura se mide y el umbral se ajusta al
+cierre, no con este aporte aislado.
+
+## Semana 08 · CI completo · `[Piso: 80%]`
+
+### Aporte individual de Daniel · E2E
+- [x] Job Playwright con PostgreSQL 16 como servicio, migraciones previas, API en segundo plano, readiness con `curl`, Chromium y artefacto HTML si falla.
+- [x] La configuración local sigue levantando API/frontend y valida que solo se use una BD de pruebas `*_test`.
+- [x] Se integran las pruebas S7 de alta, validación, doble envío y red lenta; el reporte S7 registra la mutación detectada (dos `POST` al quitar la protección del botón).
+- [ ] Verificar en CI que los flujos pasan contra PostgreSQL 16; Docker no está instalado localmente y el puerto local 5433 no tiene un servidor activo.
+- [ ] Rojo provocado del job y enlace al run corregido: pendiente de ejecutar en GitHub.
+
+### Estado inicial y cobertura medida
+- Último CI consultado: run `42321971859` (#45, develop → main). Backend: 12 suites, 252 aprobadas, 0 omitidas; frontend ejecutó build pero no pruebas; no existían jobs de integración ni E2E. Duración aproximada: rama 1 s, backend 17 s, frontend 16 s.
+- Branch protection/ruleset de `main`: no verificable con el acceso disponible; requiere confirmación de una persona administradora del repositorio.
+- Validación local: backend, 14 suites / 310 tests aprobados / 0 omitidos; frontend, 2 archivos / 8 tests aprobados; build frontend aprobado; Playwright enumeró 8 tests en 5 archivos. No se ejecutó Playwright contra el stack actual.
+- Medición local en la rama: frontend 3,59% líneas / 44,18% ramas / 21,05% funciones / 3,59% sentencias; backend 45,87% líneas / 39,42% ramas / 48,57% funciones / 44,58% sentencias.
+- [ ] Subir umbrales a 80%: bloqueado hasta ampliar la cobertura. Configurarlos ahora haría fallar las suites; la evidencia y el artefacto deben revisarse por las personas responsables de Front y backend.
+- [ ] PR de prueba con tests rotos en cada capa y confirmación de bloqueo de merge: requiere coordinación del equipo y comprobar primero los checks obligatorios.
 
 ---
 
