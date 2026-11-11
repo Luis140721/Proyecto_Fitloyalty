@@ -99,8 +99,8 @@ describe('exigirBdDePruebas', () => {
   test('la config de los E2E usa esta misma guardia con E2E_DATABASE_URL', () => {
     const config = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'e2e', 'playwright.config.js'), 'utf8');
 
-    expect(config).toContain("import { exigirBdDePruebas } from './guardia-bd.cjs';");
-    expect(config).toContain("exigirBdDePruebas(DATABASE_URL, 'E2E_DATABASE_URL');");
+    expect(config).toContain("const { exigirBdDePruebas } = require('./guardia-bd.cjs');");
+    expect(config).toContain("exigirBdDePruebas(databaseUrl, 'E2E_DATABASE_URL');");
     expect(config).not.toMatch(/function\s+exigirBdDePruebas/);
   });
 });
