@@ -57,6 +57,7 @@ frontend/.vite.err.log
 # --- Capturas de playwright / browser (NO subir)
 *.png
 **/*.png
+!docs/evidencias/capturas/rqnf-06/*.png
 .fitloyalty-*.png
 .fitloyalty-*.jpg
 kinetic-*.png
