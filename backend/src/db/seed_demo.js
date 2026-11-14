@@ -92,6 +92,8 @@ async function limpiar(gymId) {
   const ids = rows.map((r) => r.id_miembro);
   await pool.query('DELETE FROM checkin WHERE id_miembro = ANY($1)', [ids]);
   await pool.query('DELETE FROM plan_cobro WHERE id_miembro = ANY($1)', [ids]);
+  // Los envios registrados (RQF-09) apuntan al miembro sin ON DELETE CASCADE.
+  await pool.query('DELETE FROM envio_mensaje WHERE id_miembro = ANY($1)', [ids]);
   await pool.query('DELETE FROM miembro WHERE id_miembro = ANY($1)', [ids]);
   return ids.length;
 }

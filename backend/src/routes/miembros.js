@@ -713,17 +713,32 @@ router.delete(
     if (!Number.isFinite(id)) throw new AppError(400, 'Id invalido', 'VALIDATION_ERROR');
     const gymId = req.user.gymId;
 
+    let client;
     try {
-      const { rows } = await pool.query(
+      client = await pool.connect();
+      await client.query('BEGIN');
+      // envio_mensaje apunta al miembro sin ON DELETE CASCADE (en produccion y,
+      // desde la migracion 014, en Docker): sus envios (RQF-09) se borran antes,
+      // en la misma transaccion. Si el miembro no es de este gimnasio no se
+      // borra nada: el filtro por gimnasio y el ROLLBACK del 404 lo aseguran.
+      await client.query(
+        'DELETE FROM envio_mensaje WHERE id_miembro = $1 AND id_gimnasio = $2',
+        [id, gymId]
+      );
+      const { rows } = await client.query(
         'DELETE FROM miembro WHERE id_miembro = $1 AND id_gimnasio = $2 RETURNING id_miembro',
         [id, gymId]
       );
       if (rows.length === 0) throw new AppError(404, 'Miembro no encontrado', 'MEMBER_NOT_FOUND');
+      await client.query('COMMIT');
       return res.json({ message: 'Miembro eliminado permanentemente.' });
     } catch (err) {
+      if (client) await client.query('ROLLBACK').catch(() => {});
       if (err instanceof AppError) throw err;
       console.error('[DELETE /admin/miembros/:id/permanent] Error:', err.message);
       throw new AppError(503, 'No pudimos eliminar el miembro. Intenta de nuevo.', 'DB_UNREACHABLE');
+    } finally {
+      if (client) client.release();
     }
   })
 );
