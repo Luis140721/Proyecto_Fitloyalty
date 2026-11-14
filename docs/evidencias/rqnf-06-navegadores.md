@@ -17,9 +17,18 @@ Texto de RQNF-06 en la matriz y en el documento de requisitos:
 ## Resultado
 
 **Los cinco navegadores pasan las 9 pantallas principales: 45 de 45
-comprobaciones.** Cada paso se comprueba en la pantalla y, cuando escribe
-datos, también en la base: la fila nueva, el método del check-in y el valor
-editado.
+comprobaciones.** Cada paso se comprueba en la pantalla. La edición, el alta y
+los dos check-ins se comprueban también en la base: el teléfono guardado, el
+documento nuevo y una sola fila nueva con su método. «Configuración» solo
+comprueba el mensaje de confirmación.
+
+**Notas del verificador (no cambian el resultado):**
+- El teléfono que se escribe es fijo por navegador, así que, si se repite la
+  corrida contra la misma base, la comprobación en la base no distingue un
+  guardado nuevo. El paso igual exige el mensaje «Miembro actualizado.».
+- En las capturas del check-in QR, el aviso «Ingreso registrado.» queda debajo
+  del borde inferior a 768 px. Se ve el ingreso nuevo arriba en «Ingresos de
+  hoy», y el recorrido lee el aviso.
 
 | Navegador | Versión | Portada | Login | Dashboard | Miembros | Edición | Alta | Check-in manual | Check-in QR | Configuración |
 |---|---|---|---|---|---|---|---|---|---|---|
