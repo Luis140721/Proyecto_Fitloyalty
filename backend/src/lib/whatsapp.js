@@ -216,34 +216,42 @@ async function sendWhatsAppQR(telefono, nombre, gymName, qrCodeText, qrBase64) {
 /**
  * Envia un mensaje de texto plano a un numero. Usado por el job automatico
  * de avisos de vencimiento (jobs/expiracion.js) que necesita mandar texto
- * sin imagen de QR. La funcion es tolerante a fallos: si el modulo esta
- * deshabilitado o el cliente no esta listo, loguea y no lanza.
+ * sin imagen de QR. Si el modulo esta deshabilitado, el cliente no esta listo,
+ * el telefono es invalido o el envio falla, LANZA un Error: asi el llamador no
+ * registra como enviado un mensaje que nunca salio.
  */
+function errorWhatsapp(code, mensaje) {
+    const err = new Error(mensaje);
+    err.code = code;
+    return err;
+}
+
 async function sendWhatsAppText(telefono, texto) {
     if (!ENABLED || !client) {
-        console.warn('[WhatsApp] Modulo deshabilitado, se omite envio de texto.');
-        return;
+        throw errorWhatsapp('WHATSAPP_DESHABILITADO', 'El modulo de WhatsApp esta deshabilitado en este servidor');
     }
+    // El cliente es perezoso: aqui se inicializa la primera vez que se envia algo
+    // (por ejemplo el job de avisos tras un reinicio), por eso nadie debe
+    // comprobar isWhatsAppReady() ANTES de llamar a esta funcion.
     const ok = await ensureClient();
     if (!ok) {
-        console.warn('[WhatsApp] Cliente no listo, se omite envio de texto a', telefono);
-        return;
+        throw errorWhatsapp('WHATSAPP_NO_LISTO', 'El cliente de WhatsApp no esta listo (falta autenticar el QR o iniciar Chrome)');
     }
+    let numeroLimpio = String(telefono || '').replace(/\D/g, '');
+    if (numeroLimpio.length === 10) {
+        numeroLimpio = '57' + numeroLimpio;
+    }
+    if (numeroLimpio.length < 7) {
+        throw new Error(`Telefono invalido para WhatsApp: ${telefono}`);
+    }
+    const chatId = `${numeroLimpio}@c.us`;
     try {
-        let numeroLimpio = String(telefono || '').replace(/\D/g, '');
-        if (numeroLimpio.length === 10) {
-            numeroLimpio = '57' + numeroLimpio;
-        }
-        if (numeroLimpio.length < 7) {
-            console.warn('[WhatsApp] Telefono invalido para envio:', telefono);
-            return;
-        }
-        const chatId = `${numeroLimpio}@c.us`;
         await client.sendMessage(chatId, texto);
-        console.log(`[WhatsApp] Texto enviado a ${numeroLimpio} (${texto.length} chars)`);
     } catch (err) {
         console.error('[WhatsApp] Error al enviar texto:', err.message);
+        throw err;
     }
+    console.log(`[WhatsApp] Texto enviado a ${numeroLimpio} (${texto.length} chars)`);
 }
 
 /**

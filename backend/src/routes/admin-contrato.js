@@ -101,40 +101,23 @@ router.post(
         const texto = armarContrato(m);
         const version = (req.body && req.body.version) || 'v1';
 
-        // Verificamos honestamente si el cliente de WhatsApp esta listo
-        // ANTES de intentar enviar. Si no, le avisamos al admin que
-        // escanee el QR de auth en los logs de Render primero.
-        if (!whatsapp.isWhatsAppReady()) {
-            const r = await pool.query(`
-                INSERT INTO contrato_enviado
-                    (id_miembro, id_gimnasio, enviado_por, telefono_destino,
-                     plantilla_version, exito, error_mensaje)
-                VALUES ($1, $2, $3, $4, $5, $6, $7)
-                RETURNING id_contrato_enviado, creado_en
-            `, [m.id_miembro, m.id_gimnasio, req.user.id || null,
-                tel, version, false,
-                'Cliente WhatsApp no autenticado (QR sin escanear en logs de Render)']);
-            return res.json({
-                ok: true,
-                exito: false,
-                contrato_id: r.rows[0].id_contrato_enviado,
-                creado_en: r.rows[0].creado_en,
-                telefono: tel,
-                gimnasio_id: m.id_gimnasio,
-                mensaje: 'El cliente de WhatsApp no esta autenticado. Pide a un admin que escanee el QR de autenticacion desde los logs del servidor (Render > Logs). Una vez escaneado, re-envia el contrato.',
-                cliente_listo: false,
-                preview: texto,
-            });
-        }
-
+        // El cliente de WhatsApp es perezoso: se inicializa dentro de
+        // sendWhatsAppText. Por eso NO se comprueba isWhatsAppReady() antes de
+        // enviar (tras un reinicio siempre daria falso y el contrato nunca saldria);
+        // si no esta listo, sendWhatsAppText lanza WHATSAPP_NO_LISTO y abajo se le
+        // avisa al admin que escanee el QR de auth en los logs de Render.
         let exito = false;
         let errorMensaje = null;
+        let noListo = false;
         try {
             await whatsapp.sendWhatsAppText(tel, texto);
             exito = true;
         } catch (err) {
             exito = false;
-            errorMensaje = err.message || 'Error desconocido al enviar WhatsApp';
+            noListo = err.code === 'WHATSAPP_NO_LISTO';
+            errorMensaje = noListo
+                ? 'Cliente WhatsApp no autenticado (QR sin escanear en logs de Render)'
+                : (err.message || 'Error desconocido al enviar WhatsApp');
         }
 
         // Registrar auditoria
@@ -156,7 +139,10 @@ router.post(
             gimnasio_id: m.id_gimnasio,
             mensaje: exito
                 ? `Contrato enviado a ${tel}`
-                : `No se pudo enviar. ${errorMensaje || 'Verifica que el cliente de WhatsApp este autenticado en el servidor.'}`,
+                : noListo
+                    ? 'El cliente de WhatsApp no esta autenticado. Pide a un admin que escanee el QR de autenticacion desde los logs del servidor (Render > Logs). Una vez escaneado, re-envia el contrato.'
+                    : `No se pudo enviar. ${errorMensaje || 'Verifica que el cliente de WhatsApp este autenticado en el servidor.'}`,
+            cliente_listo: !noListo,
             preview: texto,
         });
     })

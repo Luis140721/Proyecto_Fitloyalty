@@ -12,12 +12,17 @@
  *   GET /api/jobs/expiracion/preview
  *     Solo candidatos, sin envio. Equivalente a dryRun pero sin
  *     contar como envio.
+ *
+ *   POST /api/jobs/abandono/run
+ *     body opcional: { "dryRun": true }  -> calcula las alertas sin guardarlas
+ *     Solo evalua el gimnasio del administrador que lo llama.
  */
 
 const express = require('express');
 const { authenticate, authorize } = require('../middleware/auth');
 const asyncHandler = require('../lib/asyncHandler');
 const { runJob, miembrosPorVencer } = require('../jobs/expiracion');
+const { runJob: runAbandono } = require('../jobs/abandono');
 const pool = require('../db/db');
 
 const router = express.Router();
@@ -32,6 +37,19 @@ router.post(
         const dryRun = Boolean(req.body && req.body.dryRun);
         const summary = await runJob({ dryRun });
         res.json(summary);
+    })
+);
+
+// Alertas de abandono (RQF-08): "correr ya" para el gimnasio del administrador,
+// sin esperar a las 8:00. Solo toca su propio gimnasio.
+router.post(
+    '/abandono/run',
+    authenticate,
+    authorize('admin'),
+    asyncHandler(async (req, res) => {
+        const dryRun = Boolean(req.body && req.body.dryRun);
+        const resumen = await runAbandono({ gymId: req.user.gymId, dryRun });
+        res.json(resumen);
     })
 );
 

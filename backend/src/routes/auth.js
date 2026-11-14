@@ -10,7 +10,7 @@
  *   POST /api/auth/forgot-password  -> genera OTP de recuperacion
  *   POST /api/auth/verify-reset-code -> valida OTP, devuelve resetToken
  *   POST /api/auth/reset-password    -> aplica nuevo password con resetToken
- *   DELETE /api/auth/account         -> elimina cuenta y datos del gimnasio (cascade)
+ *   DELETE /api/auth/account         -> el dueño, con su contrasena, elimina la cuenta y los datos del gimnasio
  *
  * Convenciones:
  *   - Codigos de error: 400 validacion, 401 credenciales, 403 sin permiso, 409 duplicado, 500 servidor.
@@ -22,13 +22,14 @@
 const express = require('express');
 const bcrypt  = require('bcryptjs');
 const jwt     = require('jsonwebtoken');
+const { z }   = require('zod');
 const pool    = require('../db/db');
 const { authenticate } = require('../middleware/auth');
 const asyncHandler     = require('../lib/asyncHandler');
 const { AppError }     = require('../lib/errors');
 const {
   validarEmail, validarContrasena, normEmail,
-  usuarioSeguro, generarToken, generarResetToken, random6,
+  usuarioSeguro, generarToken, generarResetToken, random6, sqlIdDueno,
 } = require('../lib/auth-helpers');
 const { sendRecoveryCode } = require('../lib/email');
 const { trialDays } = require('../lib/trial');
@@ -151,6 +152,17 @@ router.post('/signup', asyncHandler(async (req, res) => {
     );
     const owner = userRows[0];
 
+    // 3b. Dueño del gimnasio (migracion 013). Si la columna aun no existe, se
+    //     sigue sin ella: el codigo usa el admin activo mas antiguo.
+    await client.query('SAVEPOINT id_dueno');
+    try {
+      await client.query('UPDATE gimnasio SET id_dueno = $1 WHERE id_gimnasio = $2', [owner.id_usuario, gym.id_gimnasio]);
+      await client.query('RELEASE SAVEPOINT id_dueno');
+    } catch (err) {
+      await client.query('ROLLBACK TO SAVEPOINT id_dueno');
+      if (err.code !== '42703') throw err;
+    }
+
     // 4. Configuracion por defecto del gimnasio
     await client.query(
       `INSERT INTO configuracion_gimnasio (id_gimnasio, actualizado_por)
@@ -215,7 +227,7 @@ router.post('/login', asyncHandler(async (req, res) => {
                    ELSE 'RECEPCIONISTA' END AS rol_nombre
        FROM usuario u
        INNER JOIN gimnasio g ON g.id_gimnasio = u.id_gimnasio
-       WHERE LOWER(u.email) = $1 AND u.activo = TRUE`,
+       WHERE LOWER(u.email) = $1`,
       [email.toLowerCase()]
     );
     usuario = rows[0];
@@ -234,6 +246,12 @@ router.post('/login', asyncHandler(async (req, res) => {
     throw new AppError(500, 'Error validando la contrasena', 'PASSWORD_CHECK_FAILED');
   }
   if (!ok) throw new AppError(401, 'Credenciales incorrectas', 'BAD_CREDENTIALS');
+
+  // Cuenta desactivada por el admin (RQF-01). Se avisa solo despues de validar
+  // la contrasena, para no revelar a cualquiera si un correo existe o no.
+  if (usuario.activo === false) {
+    throw new AppError(403, 'Tu cuenta esta desactivada. Pide al administrador del gimnasio que la reactive.', 'ACCOUNT_DISABLED');
+  }
 
   let token;
   try {
@@ -464,19 +482,97 @@ router.post('/reset-password', asyncHandler(async (req, res) => {
 // Derecho de supresion (Ley 1581 de 2012, art. 15).
 // Elimina TODOS los datos del gimnasio del usuario autenticado:
 //   - gimnasio
-//   - usuarios (admin + staff) y sus sesiones
-//   - miembros, membresias, pagos, congelaciones, checkins
-//   - invitaciones de staff
-//   - configuration, canales, plantillas, campanas, envios
-//   - alertas, hitos, retos, notificaciones, etiquetas, retos_miembro
+//   - usuarios (admin + staff), sus sesiones y codigos de recuperacion
+//   - miembros, membresias, pagos, congelaciones, checkins, planes de cobro
+//   - invitaciones de staff y registros de auditoria del gimnasio
+//   - configuracion, canales, plantillas, campanas, envios, contratos
+//   - alertas, hitos, retos, notificaciones, etiquetas
 //
-// La mayoria de las tablas hijas tiene FK con ON DELETE CASCADE hacia gimnasio
-// o a usuario; donde no existe cascade, se borra explicitamente antes de
-// gimnasio para no violar constraints.
+// Todo va en UNA transaccion: o se borra todo o no se borra nada.
 //
-// Solo el ADMIN puede ejecutar esta accion. Staff y miembros NO pueden
-// eliminar el gimnasio.
+// En la base de Neon (ConsultasDB) casi ninguna FK tiene ON DELETE CASCADE,
+// asi que se borra en orden explicito: cada tabla antes de las tablas a las
+// que apunta (membresia antes que plan_membresia, todo lo que apunta a
+// usuario antes que usuario) y gimnasio al final. Si una migracion nueva crea
+// una tabla que apunta a gimnasio, miembro o usuario sin CASCADE, hay que
+// agregarla a PASOS_ELIMINAR_CUENTA; si no, el borrado falla y se deshace.
+//
+// No se escribe en auditoria: cualquier fila nueva apuntaria al gimnasio o al
+// usuario que se estan borrando y romperia la FK. El rastro queda en el log
+// del servidor (solo ids, sin datos personales).
+//
+// Solo el DUEÑO puede ejecutar esta accion, y debe escribir su contrasena en
+// el cuerpo: { password, reason? }. El dueño es gimnasio.id_dueno, que el
+// signup llena con el usuario que crea el gimnasio (migracion 013); si falta,
+// el admin activo mas antiguo (sqlIdDueno). Recepcionistas, admins invitados
+// y miembros NO pueden eliminar el gimnasio. El rol que se mira es el de la
+// BD: authenticate lo vuelve a leer en cada peticion.
 // --------------------------------------------------------------------------
+const eliminarCuentaSchema = z.object({
+  password: z.string({ required_error: 'Escribe tu contrasena para confirmar.' })
+    .min(1, 'Escribe tu contrasena para confirmar.'),
+  reason: z.string().max(1000).optional(),
+});
+
+const MIEMBROS_DEL_GYM   = 'SELECT id_miembro FROM miembro WHERE id_gimnasio = $1';
+const USUARIOS_DEL_GYM   = 'SELECT id_usuario FROM usuario WHERE id_gimnasio = $1';
+const MEMBRESIAS_DEL_GYM = `SELECT id_membresia FROM membresia WHERE id_miembro IN (${MIEMBROS_DEL_GYM})`;
+
+const PASOS_ELIMINAR_CUENTA = [
+  ['envio_mensaje',              'DELETE FROM envio_mensaje WHERE id_gimnasio = $1'],
+  ['campana_destinatario',       'DELETE FROM campana_destinatario WHERE id_campana IN (SELECT id_campana FROM campana WHERE id_gimnasio = $1)'],
+  ['campana',                    'DELETE FROM campana WHERE id_gimnasio = $1'],
+  ['plantilla_mensaje',          'DELETE FROM plantilla_mensaje WHERE id_gimnasio = $1'],
+  ['canal_comunicacion',         'DELETE FROM canal_comunicacion WHERE id_gimnasio = $1'],
+  ['alerta_abandono',            'DELETE FROM alerta_abandono WHERE id_gimnasio = $1'],
+  ['hito_miembro',               `DELETE FROM hito_miembro WHERE id_miembro IN (${MIEMBROS_DEL_GYM})`],
+  ['hito_gamificacion',          'DELETE FROM hito_gamificacion WHERE id_gimnasio = $1'],
+  ['miembro_etiqueta',           `DELETE FROM miembro_etiqueta WHERE id_miembro IN (${MIEMBROS_DEL_GYM})`],
+  ['etiqueta_comportamiento',    'DELETE FROM etiqueta_comportamiento WHERE id_gimnasio = $1'],
+  ['reto_miembro',               'DELETE FROM reto_miembro WHERE id_reto IN (SELECT id_reto FROM reto WHERE id_gimnasio = $1)'],
+  ['reto',                       'DELETE FROM reto WHERE id_gimnasio = $1'],
+  ['notificacion',               'DELETE FROM notificacion WHERE id_gimnasio = $1'],
+  ['alerta_vencimiento_enviada', `DELETE FROM alerta_vencimiento_enviada WHERE id_miembro IN (${MIEMBROS_DEL_GYM})`],
+  ['contrato_enviado',           'DELETE FROM contrato_enviado WHERE id_gimnasio = $1'],
+  ['plan_cobro',                 'DELETE FROM plan_cobro WHERE id_gimnasio = $1'],
+  ['config_gimnasio',            'DELETE FROM config_gimnasio WHERE id_gimnasio = $1'],
+  ['configuracion_gimnasio',     'DELETE FROM configuracion_gimnasio WHERE id_gimnasio = $1'],
+  ['invitacion_staff',           'DELETE FROM invitacion_staff WHERE id_gimnasio = $1'],
+  ['auditoria',                  `DELETE FROM auditoria WHERE id_gimnasio = $1 OR id_usuario IN (${USUARIOS_DEL_GYM})`],
+  ['pago',                       `DELETE FROM pago WHERE id_membresia IN (${MEMBRESIAS_DEL_GYM})`],
+  ['congelacion_membresia',      `DELETE FROM congelacion_membresia WHERE id_membresia IN (${MEMBRESIAS_DEL_GYM})`],
+  ['checkin',                    `DELETE FROM checkin WHERE id_gimnasio = $1 OR id_miembro IN (${MIEMBROS_DEL_GYM})`],
+  ['membresia',                  `DELETE FROM membresia WHERE id_miembro IN (${MIEMBROS_DEL_GYM})`],
+  ['plan_membresia',             'DELETE FROM plan_membresia WHERE id_gimnasio = $1'],
+  ['miembro',                    'DELETE FROM miembro WHERE id_gimnasio = $1'],
+  ['password_reset',             `DELETE FROM password_reset WHERE id_usuario IN (${USUARIOS_DEL_GYM})`],
+  ['sesion',                     `DELETE FROM sesion WHERE id_usuario IN (${USUARIOS_DEL_GYM})`],
+  ['usuario',                    'DELETE FROM usuario WHERE id_gimnasio = $1'],
+];
+
+// La tabla o la columna no existe en esa version del esquema (Docker y Neon
+// no son identicos). Ese paso se omite; cualquier otro error deshace todo.
+const ESQUEMA_AUSENTE = new Set(['42P01', '42703']);
+
+/**
+ * Corre un DELETE dentro de su propio SAVEPOINT. En PostgreSQL un error deja
+ * la transaccion abortada y todo lo que sigue falla con 25P02, por eso el
+ * try/catch solo no basta: hay que volver al SAVEPOINT antes de seguir.
+ */
+async function borrarPaso(client, tabla, sql, params) {
+  await client.query('SAVEPOINT paso_eliminar');
+  try {
+    const r = await client.query(sql, params);
+    await client.query('RELEASE SAVEPOINT paso_eliminar');
+    return r.rowCount;
+  } catch (err) {
+    await client.query('ROLLBACK TO SAVEPOINT paso_eliminar');
+    if (ESQUEMA_AUSENTE.has(err.code)) return 0;
+    err.tabla = tabla;
+    throw err;
+  }
+}
+
 router.delete('/account', authenticate, asyncHandler(async (req, res) => {
   const gymId = req.user.gymId;
   const userId = req.user.id;
@@ -486,74 +582,62 @@ router.delete('/account', authenticate, asyncHandler(async (req, res) => {
   if (userRole !== 'admin') {
     throw new AppError(403, 'Solo el administrador del gimnasio puede eliminar la cuenta.', 'NOT_ADMIN');
   }
+  const parsed = parse(eliminarCuentaSchema, req.body);
+  if (!parsed.ok) throw new AppError(parsed.status, parsed.error, 'VALIDATION_ERROR', { issues: parsed.issues });
+
+  // Confirmacion ANTES de abrir la transaccion: que sea el dueño y que la
+  // contrasena coincida. Un token robado o un admin invitado no basta.
+  let cuenta;
+  try {
+    const { rows } = await pool.query(
+      `SELECT u.password_hash,
+              COALESCE(u.id_usuario = ${sqlIdDueno('u')}, FALSE) AS es_dueno
+         FROM usuario u
+        WHERE u.id_usuario = $1 AND u.id_gimnasio = $2 AND u.activo = TRUE`,
+      [userId, gymId]
+    );
+    cuenta = rows[0];
+  } catch (err) {
+    console.error('[DELETE /auth/account] Error consultando usuario:', err.code, err.message);
+    throw new AppError(503, 'No pudimos validar tu cuenta. Intenta de nuevo.', 'DB_UNREACHABLE');
+  }
+  if (!cuenta) throw new AppError(404, 'Usuario no encontrado', 'USER_NOT_FOUND');
+  if (!cuenta.es_dueno) {
+    throw new AppError(403, 'Solo el dueño del gimnasio (quien creo la cuenta) puede eliminarla.', 'NOT_OWNER');
+  }
+  // 403 y no 401: la sesion es valida. Un 401 haria que el front la diera por
+  // vencida y cerrara la sesion solo por equivocarse de contrasena.
+  if (!(await bcrypt.compare(parsed.data.password, cuenta.password_hash))) {
+    throw new AppError(403, 'La contrasena no coincide.', 'WRONG_PASSWORD');
+  }
 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
-    // Borrado en orden: tablas dependientes primero, gimnasio al final.
-    // Cada delete hace idempotente: si una tabla no existe, la omitimos.
-    const safe = async (sql, params) => {
-      try {
-        await client.query(sql, params);
-      } catch (err) {
-        // 42P01 = undefined_table. Si la tabla no existe, no es bloqueante.
-        if (err.code !== '42P01') throw err;
-      }
-    };
-
-    // Hijos del gimnasio (FK con id_gimnasio)
-    await safe(`DELETE FROM envio_mensaje     WHERE id_gimnasio = $1`, [gymId]);
-    await safe(`DELETE FROM campana_destinatario WHERE id_campana IN (SELECT id_campana FROM campana WHERE id_gimnasio = $1)`, [gymId]);
-    await safe(`DELETE FROM campana          WHERE id_gimnasio = $1`, [gymId]);
-    await safe(`DELETE FROM plantilla_mensaje WHERE id_gimnasio = $1`, [gymId]);
-    await safe(`DELETE FROM canal_comunicacion WHERE id_gimnasio = $1`, [gymId]);
-    await safe(`DELETE FROM alerta_abandono  WHERE id_gimnasio = $1`, [gymId]);
-    await safe(`DELETE FROM hito_miembro     WHERE id_miembro IN (SELECT id_miembro FROM miembro WHERE id_gimnasio = $1)`, [gymId]);
-    await safe(`DELETE FROM hito_gamificacion WHERE id_gimnasio = $1`, [gymId]);
-    await safe(`DELETE FROM etiqueta_comportamiento WHERE id_gimnasio = $1`, [gymId]);
-    await safe(`DELETE FROM reto_miembro     WHERE id_reto IN (SELECT id_reto FROM reto WHERE id_gimnasio = $1)`, [gymId]);
-    await safe(`DELETE FROM reto            WHERE id_gimnasio = $1`, [gymId]);
-    await safe(`DELETE FROM notificacion    WHERE id_gimnasio = $1`, [gymId]);
-    await safe(`DELETE FROM configuracion_gimnasio WHERE id_gimnasio = $1`, [gymId]);
-    await safe(`DELETE FROM invitacion_staff WHERE id_gimnasio = $1`, [gymId]);
-    await safe(`DELETE FROM plan_membresia  WHERE id_gimnasio = $1`, [gymId]);
-    await safe(`DELETE FROM auditoria       WHERE id_gimnasio = $1`, [gymId]);
-
-    // Hijos de miembro (que ya vamos a borrar, pero sus hijos primero)
-    await safe(`DELETE FROM pago             WHERE id_membresia IN (SELECT id_membresia FROM membresia WHERE id_miembro IN (SELECT id_miembro FROM miembro WHERE id_gimnasio = $1))`, [gymId]);
-    await safe(`DELETE FROM congelacion_membresia WHERE id_membresia IN (SELECT id_membresia FROM membresia WHERE id_miembro IN (SELECT id_miembro FROM miembro WHERE id_gimnasio = $1))`, [gymId]);
-    await safe(`DELETE FROM checkin         WHERE id_gimnasio = $1`, [gymId]);
-    await safe(`DELETE FROM miembro_etiqueta WHERE id_miembro IN (SELECT id_miembro FROM miembro WHERE id_gimnasio = $1)`, [gymId]);
-    await safe(`DELETE FROM membresia       WHERE id_miembro IN (SELECT id_miembro FROM miembro WHERE id_gimnasio = $1)`, [gymId]);
-    await safe(`DELETE FROM password_reset  WHERE id_usuario IN (SELECT id_usuario FROM usuario WHERE id_gimnasio = $1)`, [gymId]);
-    await safe(`DELETE FROM sesion          WHERE id_usuario IN (SELECT id_usuario FROM usuario WHERE id_gimnasio = $1)`, [gymId]);
-    await safe(`DELETE FROM miembro         WHERE id_gimnasio = $1`, [gymId]);
-    await safe(`DELETE FROM usuario         WHERE id_gimnasio = $1`, [gymId]);
-
-    // Auditoria: registre la eliminacion ANTES de borrar gimnasio (FK).
-    try {
-      await client.query(
-        `INSERT INTO auditoria (id_gimnasio, tabla_afectada, id_registro, accion, id_usuario, detalle, fecha_evento)
-         VALUES ($1, 'gimnasio', $1::text::int, 'DELETE', $2, $3, NOW())`,
-        [gymId, userId, JSON.stringify({ descripcion: 'Cuenta eliminada por solicitud ARCO (Ley 1581/2012)' })]
-      );
-    } catch (err) {
-      if (err.code !== '42P01') console.warn('[DELETE /auth/account] Warning auditoria:', err.message);
+    let filas = 0;
+    for (const [tabla, sql] of PASOS_ELIMINAR_CUENTA) {
+      filas += await borrarPaso(client, tabla, sql, [gymId]);
     }
 
-    // Eliminar el gimnasio (trigger CASCADE lo arrastra si existe)
-    await client.query(`DELETE FROM gimnasio WHERE id_gimnasio = $1`, [gymId]);
+    const { rowCount } = await client.query('DELETE FROM gimnasio WHERE id_gimnasio = $1', [gymId]);
+    if (rowCount === 0) {
+      await client.query('ROLLBACK');
+      throw new AppError(404, 'El gimnasio de esta cuenta ya no existe.', 'GYM_NOT_FOUND');
+    }
+    filas += rowCount;
 
     await client.query('COMMIT');
+    console.info(`[DELETE /auth/account] Gimnasio ${gymId} eliminado por el usuario ${userId} (Ley 1581/2012): ${filas} filas.`);
 
     return res.json({
       message: 'Cuenta eliminada. Todos los datos del gimnasio fueron borrados de forma permanente.',
-      deleted: { gymId },
+      deleted: { gymId, filas },
     });
   } catch (err) {
+    if (err instanceof AppError) throw err;
     await client.query('ROLLBACK').catch(() => {});
-    console.error('[DELETE /auth/account] Error:', err.code, err.message);
+    console.error('[DELETE /auth/account] Error:', err.code, err.tabla || '', err.constraint || '', err.message);
     throw new AppError(500, 'No pudimos eliminar la cuenta. Intenta de nuevo o escribe a fitloyaltysaas@gmail.com.', 'DELETE_FAILED');
   } finally {
     client.release();

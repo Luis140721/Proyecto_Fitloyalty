@@ -24,7 +24,7 @@
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
 SMTP_USER=tu_correo@gmail.com
-SMTP_PASSWORD=xxxx xxxx xxxx xxxx
+SMTP_PASSWORD=<contraseña-de-aplicación-de-16-letras>
 SMTP_FROM="FitLoyalty Soporte" <tu_correo@gmail.com>
 FRONTEND_URL=http://localhost:5173
 ```

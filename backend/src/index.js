@@ -21,6 +21,7 @@ const pool    = require('./db/db');
 const { applyMigrations } = require('./db/migrate');
 const { notFound, errorHandler } = require('./middleware/errorHandler');
 const asyncHandler = require('./lib/asyncHandler');
+const { AppError } = require('./lib/errors');
 
 const authRoutes     = require('./routes/auth');
 const staffRoutes    = require('./routes/staff');
@@ -50,8 +51,10 @@ const allowedOrigins = (process.env.FRONTEND_URL || 'http://localhost:5173')
 app.use(cors({
   origin: (origin, cb) => {
     if (!origin) return cb(null, true);
-    if (allowedOrigins.includes(origin)) return cb(null, true);
-    return cb(null, true);
+    if (allowedOrigins.includes(origin)) {
+      return cb(null, true);
+    }
+    return cb(new AppError(403, 'Origen no permitido', 'CORS_BLOCKED'));
   },
   credentials: true,
 }));
@@ -70,6 +73,21 @@ const forgotLimiter = rateLimit({
   standardHeaders: true, legacyHeaders: false,
   message: { error: 'Demasiadas solicitudes. Intenta de nuevo en un minuto.' },
 });
+const verifyResetLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, max: 5,
+  standardHeaders: true, legacyHeaders: false,
+  message: { error: 'Demasiados intentos de verificación. Intenta más tarde.' },
+});
+const resetPasswordLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, max: 5,
+  standardHeaders: true, legacyHeaders: false,
+  message: { error: 'Demasiados intentos de restablecimiento. Intenta más tarde.' },
+});
+const accountLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, max: 5,
+  standardHeaders: true, legacyHeaders: false,
+  message: { error: 'Demasiadas solicitudes en la cuenta. Intenta más tarde.' },
+});
 const clienteLoginLimiter = rateLimit({
   windowMs: 60 * 1000, max: 10,
   standardHeaders: true, legacyHeaders: false,
@@ -78,6 +96,10 @@ const clienteLoginLimiter = rateLimit({
 
 app.use('/api/auth/login', loginLimiter);
 app.use('/api/auth/forgot-password', forgotLimiter);
+app.use('/api/auth/verify-reset-code', verifyResetLimiter);
+app.use('/api/auth/reset-password', resetPasswordLimiter);
+app.use('/api/auth/account', accountLimiter);
+
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/admin/miembros', require('./routes/admin-contrato'));

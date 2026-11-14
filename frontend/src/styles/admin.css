@@ -1304,6 +1304,17 @@
 .aviso--vencida    .aviso__icono { color: #F87171; }
 .aviso--por-vencer .aviso__icono { color: var(--primary-accent); }
 .aviso--riesgo     .aviso__icono { color: #FBBF24; }
+.aviso--acceso-bloqueado .aviso__icono { color: #F87171; }
+.aviso__visto {
+  font-size: 11px;
+  padding: 2px 8px;
+  border: 1px solid var(--outline-variant, rgba(255, 255, 255, 0.25));
+  border-radius: 999px;
+  color: var(--on-surface-variant);
+  cursor: pointer;
+}
+.aviso__visto:hover,
+.aviso__visto:focus-visible { background: rgba(255, 255, 255, 0.1); }
 
 .aviso__texto { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
 .aviso__texto strong { font-size: 13.5px; font-weight: 600; line-height: 1.3; }
