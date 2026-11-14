@@ -14,22 +14,25 @@ const jwt = require('jsonwebtoken');
 
 const mockQuery = jest.fn();
 const mockRelease = jest.fn();
+const mockConnect = jest.fn();
 // El mismo mockQuery atiende al pool y al cliente de la transaccion, para ver
 // todas las consultas en orden (BEGIN, COMMIT, ROLLBACK incluidos).
 jest.mock('../src/db/db', () => ({
   query: (...a) => mockQuery(...a),
-  connect: async () => ({ query: (...a) => mockQuery(...a), release: () => mockRelease() }),
+  connect: (...a) => mockConnect(...a),
 }));
 
 process.env.JWT_SECRET = 'secreto-de-pruebas';
 
 const notifRouter = require('../src/routes/notificaciones');
+const miembrosRouter = require('../src/routes/miembros');
 const { errorHandler } = require('../src/middleware/errorHandler');
 const { establecerBusquedaPersonal } = require('../src/middleware/auth');
 
 const token = (p) => jwt.sign(p, process.env.JWT_SECRET, p.role === 'cliente' ? {} : { expiresIn: '1h' });
 const ROL_BD = { admin: 'ADMINISTRADOR', receptionist: 'RECEPCIONISTA' };
 const RECEP = token({ id: 2, role: 'receptionist', gymId: 7 });
+const ADMIN = token({ id: 1, role: 'admin', gymId: 7 });
 const MIEMBRO = token({ id: 5, role: 'cliente', idMiembro: 5, gymId: 7 });
 
 let server, base;
@@ -38,6 +41,7 @@ beforeAll((done) => {
   const app = express();
   app.use(express.json());
   app.use('/api', notifRouter);
+  app.use('/api', miembrosRouter);
   app.use(errorHandler);
   server = app.listen(0, () => { base = `http://127.0.0.1:${server.address().port}`; done(); });
 });
@@ -59,6 +63,8 @@ const enviar = async (body, tk = RECEP) => {
 beforeEach(() => {
   mockQuery.mockReset();
   mockRelease.mockReset();
+  mockConnect.mockReset();
+  mockConnect.mockImplementation(async () => ({ query: (...a) => mockQuery(...a), release: () => mockRelease() }));
   jest.spyOn(console, 'error').mockImplementation(() => {});
 });
 afterEach(() => jest.restoreAllMocks());
@@ -66,28 +72,37 @@ afterEach(() => jest.restoreAllMocks());
 const TEXTO = 'Hola Ana, te saludamos de Gym Demo. Tu plan vencio hace 2 dias.';
 
 /**
- * Base falsa con estado: `canales` es el catalogo canal_comunicacion.
- * `canalTrasBloqueo` simula que otra peticion creo el canal mientras esta
- * esperaba el bloqueo: la busqueda de despues del bloqueo ya lo encuentra.
+ * Base falsa con estado: `canales` es el catalogo canal_comunicacion (cada
+ * canal es activo salvo que diga activo: false). `canalTrasBloqueo` simula
+ * que otra peticion creo el canal mientras esta esperaba el bloqueo: la
+ * busqueda de despues del bloqueo ya lo encuentra.
  */
-function prepararBD({ miembro = { nombre: 'Ana' }, canales = [], alerta = null, canalTrasBloqueo = null, fallaEnvio = false } = {}) {
-  const estado = { canales: [...canales], siguiente: 50, bloqueado: false };
+function prepararBD({ miembro = { nombre: 'Ana' }, canales = [], alerta = null, canalTrasBloqueo = null, fallaEnvio = false, fallaMiembro = false } = {}) {
+  const estado = { canales: canales.map((c) => ({ activo: true, ...c })), siguiente: 50, bloqueado: false };
   mockQuery.mockImplementation(async (sql, params = []) => {
     const s = sql.trim();
     if (/^(BEGIN|COMMIT|ROLLBACK)$/.test(s)) return {};
-    if (/FROM miembro/.test(s)) return { rows: miembro ? [miembro] : [] };
+    if (/FROM miembro/.test(s)) {
+      if (fallaMiembro) throw new Error('caida');
+      return { rows: miembro ? [miembro] : [] };
+    }
     if (/FROM alerta_abandono/.test(s)) return { rows: alerta && params[0] === alerta ? [{ id_alerta: alerta }] : [] };
     if (/pg_advisory_xact_lock/.test(s)) {
       estado.bloqueado = true;
-      if (canalTrasBloqueo) estado.canales.push(canalTrasBloqueo);
+      if (canalTrasBloqueo) estado.canales.push({ activo: true, ...canalTrasBloqueo });
       return { rows: [{}] };
     }
     if (/^SELECT id_canal FROM canal_comunicacion/.test(s)) {
       const [gym, tipo] = params;
-      return { rows: estado.canales.filter((c) => c.id_gimnasio === gym && c.tipo === tipo).map((c) => ({ id_canal: c.id_canal })) };
+      const soloActivos = /activo = TRUE/.test(s);
+      return {
+        rows: estado.canales
+          .filter((c) => c.id_gimnasio === gym && c.tipo === tipo && (!soloActivos || c.activo))
+          .map((c) => ({ id_canal: c.id_canal })),
+      };
     }
     if (/^INSERT INTO canal_comunicacion/.test(s)) {
-      const c = { id_canal: estado.siguiente++, id_gimnasio: params[0], tipo: params[1] };
+      const c = { id_canal: estado.siguiente++, id_gimnasio: params[0], tipo: params[1], activo: /TRUE/.test(s) };
       estado.canales.push(c);
       return { rows: [{ id_canal: c.id_canal }] };
     }
@@ -136,7 +151,7 @@ describe('POST /api/admin/notificaciones/enviado: canal del gimnasio', () => {
     expect(r.status).toBe(201);
     const [, params] = llamadas(/INSERT INTO canal_comunicacion/)[0];
     expect(params).toEqual([7, 'WHATSAPP']);
-    expect(estado.canales).toEqual([{ id_canal: 50, id_gimnasio: 7, tipo: 'WHATSAPP' }]);
+    expect(estado.canales).toEqual([{ id_canal: 50, id_gimnasio: 7, tipo: 'WHATSAPP', activo: true }]);
     expect(insertEnvio()[1][2]).toBe(50);
     // Orden: miembro, BEGIN, buscar, bloquear, buscar otra vez, crear, envio, aviso, COMMIT.
     const orden = mockQuery.mock.calls.map(([s]) => s.trim().match(/^(BEGIN|COMMIT|SELECT \w+|INSERT INTO \w+)/)[1]);
@@ -180,6 +195,34 @@ describe('POST /api/admin/notificaciones/enviado: canal del gimnasio', () => {
     expect(r.status).toBe(201);
     expect(llamadas(/INSERT INTO canal_comunicacion/)[0][1]).toEqual([7, 'EMAIL']);
   });
+
+  test('solo busca canales activos', async () => {
+    prepararBD({ canales: [{ id_canal: 4, id_gimnasio: 7, tipo: 'WHATSAPP' }] });
+    await enviar({ idMiembro: 12, mensaje: TEXTO });
+    const [sql] = llamadas(/^SELECT id_canal FROM canal_comunicacion/)[0];
+    expect(sql).toMatch(/activo = TRUE/);
+  });
+
+  test('si el unico canal del tipo esta inactivo: crea uno activo bajo bloqueo y no usa el inactivo', async () => {
+    const estado = prepararBD({ canales: [{ id_canal: 4, id_gimnasio: 7, tipo: 'WHATSAPP', activo: false }] });
+    const r = await enviar({ idMiembro: 12, mensaje: TEXTO });
+    expect(r.status).toBe(201);
+    expect(llamadas(/pg_advisory_xact_lock/)).toHaveLength(1);
+    expect(llamadas(/INSERT INTO canal_comunicacion/)[0][1]).toEqual([7, 'WHATSAPP']);
+    expect(estado.canales.find((c) => c.id_canal === 50)).toMatchObject({ activo: true });
+    expect(insertEnvio()[1][2]).toBe(50);
+  });
+
+  test('con un canal inactivo y otro activo: usa el activo y no crea otro', async () => {
+    prepararBD({ canales: [
+      { id_canal: 4, id_gimnasio: 7, tipo: 'WHATSAPP', activo: false },
+      { id_canal: 9, id_gimnasio: 7, tipo: 'WHATSAPP' },
+    ] });
+    const r = await enviar({ idMiembro: 12, mensaje: TEXTO });
+    expect(r.status).toBe(201);
+    expect(llamadas(/INSERT INTO canal_comunicacion/)).toHaveLength(0);
+    expect(insertEnvio()[1][2]).toBe(9);
+  });
 });
 
 describe('POST /api/admin/notificaciones/enviado: validaciones', () => {
@@ -190,6 +233,7 @@ describe('POST /api/admin/notificaciones/enviado: validaciones', () => {
     expect(r.body.code).toBe('MEMBER_NOT_FOUND');
     expect(mockQuery.mock.calls[0][1]).toEqual([12, 7]);
     expect(llamadas(/INSERT|BEGIN/)).toHaveLength(0);
+    expect(mockConnect).not.toHaveBeenCalled();
   });
 
   // 400 y no un mensaje inventado: mensaje_copiado es NOT NULL y es lo que
@@ -295,6 +339,76 @@ describe('POST /api/admin/notificaciones/enviado: lo que se guarda', () => {
     expect(llamadas(/^ROLLBACK$/)).toHaveLength(1);
     expect(llamadas(/^COMMIT$/)).toHaveLength(0);
     expect(mockRelease).toHaveBeenCalledTimes(1);
+  });
+
+  test('si la base no responde al buscar al miembro: 503, no 500', async () => {
+    prepararBD({ fallaMiembro: true });
+    const r = await enviar({ idMiembro: 12, mensaje: TEXTO });
+    expect(r.status).toBe(503);
+    expect(r.body.code).toBe('DB_UNREACHABLE');
+    expect(mockConnect).not.toHaveBeenCalled();
+  });
+
+  test('si no se puede pedir la conexion: 503, no 500', async () => {
+    prepararBD();
+    mockConnect.mockRejectedValue(new Error('sin conexiones'));
+    const r = await enviar({ idMiembro: 12, mensaje: TEXTO });
+    expect(r.status).toBe(503);
+    expect(r.body.code).toBe('DB_UNREACHABLE');
+    expect(mockRelease).not.toHaveBeenCalled();
+  });
+});
+
+describe('DELETE /api/admin/miembros/:id/permanent: borra antes los envios del miembro', () => {
+  // envio_mensaje apunta al miembro sin ON DELETE CASCADE: sin borrar antes
+  // sus envios, el DELETE del miembro falla (503) para quien recibio un mensaje.
+  const prepararBorrado = ({ existe = true, falla = false } = {}) => {
+    mockQuery.mockImplementation(async (sql) => {
+      const s = sql.trim();
+      if (/FROM gimnasio/.test(s)) return { rows: [{ id_gimnasio: 7, activo: true, trial_ends_at: null }] };
+      if (/^(BEGIN|COMMIT|ROLLBACK)$/.test(s)) return {};
+      if (/^DELETE FROM envio_mensaje/.test(s)) return { rowCount: 2 };
+      if (/^DELETE FROM miembro/.test(s)) {
+        if (falla) throw new Error('caida');
+        return { rows: existe ? [{ id_miembro: 12 }] : [] };
+      }
+      throw new Error('consulta inesperada: ' + s.slice(0, 60));
+    });
+  };
+  const borrar = (tk = ADMIN) =>
+    fetch(base + '/api/admin/miembros/12/permanent', { method: 'DELETE', headers: { Authorization: `Bearer ${tk}` } })
+      .then(async (r) => ({ status: r.status, body: await r.json().catch(() => ({})) }));
+  const orden = () => mockQuery.mock.calls
+    .map(([s]) => s.trim().match(/^(BEGIN|COMMIT|ROLLBACK|DELETE FROM \w+|SELECT)/)[1])
+    .filter((s) => s !== 'SELECT'); // la consulta del trial
+
+  test('borra los envios y luego al miembro, en una transaccion y filtrando por gimnasio', async () => {
+    prepararBorrado();
+    const r = await borrar();
+    expect(r.status).toBe(200);
+    expect(orden()).toEqual(['BEGIN', 'DELETE FROM envio_mensaje', 'DELETE FROM miembro', 'COMMIT']);
+    expect(llamadas(/DELETE FROM envio_mensaje/)[0][1]).toEqual([12, 7]);
+    expect(llamadas(/DELETE FROM miembro/)[0][1]).toEqual([12, 7]);
+    expect(mockRelease).toHaveBeenCalledTimes(1);
+  });
+
+  test('miembro de otro gimnasio: 404 y ROLLBACK, no queda borrado ningun envio', async () => {
+    prepararBorrado({ existe: false });
+    const r = await borrar();
+    expect(r.status).toBe(404);
+    expect(orden()).toEqual(['BEGIN', 'DELETE FROM envio_mensaje', 'DELETE FROM miembro', 'ROLLBACK']);
+  });
+
+  test('si la base falla: 503 y ROLLBACK', async () => {
+    prepararBorrado({ falla: true });
+    const r = await borrar();
+    expect(r.status).toBe(503);
+    expect(llamadas(/^ROLLBACK$/)).toHaveLength(1);
+    expect(mockRelease).toHaveBeenCalledTimes(1);
+  });
+
+  test('un recepcionista no puede: 403', async () => {
+    expect((await borrar(RECEP)).status).toBe(403);
   });
 });
 

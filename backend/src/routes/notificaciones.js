@@ -270,9 +270,10 @@ const envioSchema = z.object({
 });
 
 /**
- * Devuelve el id_canal del gimnasio para el tipo pedido y lo crea si todavia
- * no existe. canal_comunicacion es un catalogo por gimnasio y los gimnasios
- * reales no traen filas, asi que se crea la primera vez que se envia.
+ * Devuelve el id_canal activo del gimnasio para el tipo pedido y lo crea si
+ * todavia no hay uno activo. canal_comunicacion es un catalogo por gimnasio y
+ * los gimnasios reales no traen filas, asi que se crea la primera vez que se
+ * envia. Un canal inactivo no se usa: si es el unico, se crea uno activo.
  *
  * Solo usa columnas que existen tanto en produccion (ConsultasDB) como en
  * Docker (migracion 002): nombre_remitente, credenciales_json y es_principal
@@ -288,8 +289,8 @@ const envioSchema = z.object({
 async function canalDelGimnasio(client, gymId, tipo) {
   const buscar = () => client.query(
     `SELECT id_canal FROM canal_comunicacion
-      WHERE id_gimnasio = $1 AND tipo = $2
-      ORDER BY activo DESC, id_canal
+      WHERE id_gimnasio = $1 AND tipo = $2 AND activo = TRUE
+      ORDER BY id_canal
       LIMIT 1`,
     [gymId, tipo]
   );
@@ -320,23 +321,26 @@ router.post(
     const { idMiembro, canal, tipo, mensaje, idAlerta } = r.data;
     const gymId = req.user.gymId;
 
-    const { rows: existe } = await pool.query(
-      'SELECT nombre FROM miembro WHERE id_miembro = $1 AND id_gimnasio = $2',
-      [idMiembro, gymId]
-    );
-    if (existe.length === 0) throw new AppError(404, 'Miembro no encontrado.', 'MEMBER_NOT_FOUND');
-
-    // La alerta tiene que ser de ese miembro y de este gimnasio.
-    if (idAlerta) {
-      const { rows: alerta } = await pool.query(
-        'SELECT id_alerta FROM alerta_abandono WHERE id_alerta = $1 AND id_miembro = $2 AND id_gimnasio = $3',
-        [idAlerta, idMiembro, gymId]
-      );
-      if (alerta.length === 0) throw new AppError(404, 'Alerta no encontrada.', 'ALERT_NOT_FOUND');
-    }
-
-    const client = await pool.connect();
+    // Todo dentro del try: si la base no responde (tambien al pedir la
+    // conexion), la respuesta es 503 y no un 500 generico.
+    let client;
     try {
+      const { rows: existe } = await pool.query(
+        'SELECT nombre FROM miembro WHERE id_miembro = $1 AND id_gimnasio = $2',
+        [idMiembro, gymId]
+      );
+      if (existe.length === 0) throw new AppError(404, 'Miembro no encontrado.', 'MEMBER_NOT_FOUND');
+
+      // La alerta tiene que ser de ese miembro y de este gimnasio.
+      if (idAlerta) {
+        const { rows: alerta } = await pool.query(
+          'SELECT id_alerta FROM alerta_abandono WHERE id_alerta = $1 AND id_miembro = $2 AND id_gimnasio = $3',
+          [idAlerta, idMiembro, gymId]
+        );
+        if (alerta.length === 0) throw new AppError(404, 'Alerta no encontrada.', 'ALERT_NOT_FOUND');
+      }
+
+      client = await pool.connect();
       await client.query('BEGIN');
       const idCanal = await canalDelGimnasio(client, gymId, canal);
 
@@ -363,11 +367,12 @@ router.post(
       await client.query('COMMIT');
       return res.status(201).json({ message: 'Envio registrado.', envio: envio[0] });
     } catch (err) {
-      await client.query('ROLLBACK').catch(() => {});
+      if (client) await client.query('ROLLBACK').catch(() => {});
+      if (err instanceof AppError) throw err;
       console.error('[POST /admin/notificaciones/enviado] Error:', err.message);
       throw new AppError(503, 'No pudimos dejar constancia del envio.', 'DB_UNREACHABLE');
     } finally {
-      client.release();
+      if (client) client.release();
     }
   })
 );
