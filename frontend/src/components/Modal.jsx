@@ -47,6 +47,11 @@ export default function Modal({
 }) {
   const dialogRef = useRef(null);
   const lastFocusRef = useRef(null);
+  // onClose suele llegar como funcion en linea, que cambia en cada render. Si fuera
+  // dependencia del efecto, cada tecla en un campo del modal lo volveria a correr y
+  // el foco saltaria al boton de cerrar. Por eso se lee desde un ref.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   // Bloquea scroll del body + atrapa foco mientras el modal esta abierto.
   useEffect(() => {
@@ -71,7 +76,7 @@ export default function Modal({
 
     // Cierra con Escape.
     const onKey = (e) => {
-      if (e.key === 'Escape') onClose && onClose();
+      if (e.key === 'Escape' && onCloseRef.current) onCloseRef.current();
     };
     window.addEventListener('keydown', onKey);
 
@@ -84,7 +89,7 @@ export default function Modal({
         try { lastFocusRef.current.focus(); } catch (_) { /* noop */ }
       }
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 
