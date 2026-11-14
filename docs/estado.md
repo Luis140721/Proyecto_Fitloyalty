@@ -14,14 +14,14 @@
 | Req. | Antes | Ahora | PR | Evidencia y motivo |
 |---|---|---|---|---|
 | RQF-09 | Parcial | **Implementado** | #73 | Cada envío queda en `envio_mensaje` con canal, texto, usuario, estado y fecha (`notificaciones.js:315`, `:344-370`). El canal WhatsApp del gimnasio se crea la primera vez, con un bloqueo por gimnasio (`:292`, `:301`, `:306`). Probado contra el esquema de ConsultasDB y el de las migraciones, 18 de 18 en cada uno. Cierra el issue #24. Revisiones del verificador del 2026-11-13. |
-| RQNF-06 | Parcial | **Implementado** | #71, #72 | Las 9 pantallas principales en Chrome 157 y 156, Edge 157 y Firefox 160 y 159.0.1, contra el build de producción: 45 de 45 (`docs/evidencias/rqnf-06-navegadores.md`). Edge 156 se cubre con Chromium 156 y no se exige la cámara, por decisión de Luis. Revisión del verificador del 2026-11-14. |
+| RQNF-06 | Parcial | **Implementado** | #71, #72 | Las 9 pantallas principales en Chrome 157 y 156, Edge 157 y Firefox 160 y 159.0.1, contra el build de producción servido en local, con una base local y el código de `develop`: 45 de 45 (`docs/evidencias/rqnf-06-navegadores.md`). Edge 156 se cubre con Chromium 156 y no se exige la cámara, por decisión de Luis. Revisión del verificador del 2026-11-14. |
 
 **También:**
 - **RQF-09 cambia de módulo:** «Mensajes de retención» en vez de «Alertas de Abandono», por decisión de Luis, para distinguirlo de RQF-08.
 - **PR #71:** en «Editar miembro» y «Editar usuario» solo se podía escribir un carácter seguido, porque el foco saltaba al botón de cerrar del modal. Estaba en `main` desde el 20/08.
 - **Límites de RQF-09:** ENVIADO quiere decir que se abrió el mensaje en WhatsApp, no que se entregó; el canal se crea solo, sin pantalla de configuración; EMAIL se acepta pero nada lo envía; el borrado permanente de un miembro todavía puede fallar por otras tablas sin cascada (`notificacion.id_miembro`).
 - **RQNF-04 sigue Parcial:** Santiago hace las 3 sesiones. Por falta de Docker en su equipo las hace en producción, con un miembro de prueba (CC 79123456) y el frontend desplegado desde `hotfix/rqnf-04-checkin-manual`, que es la rama vieja `santiago` más el #56.
-- **Producción no tiene `develop`:** el frontend de Vercel se construía desde la rama `santiago` (septiembre) y el backend de Render también está desactualizado. Hasta configurar los dos para desplegar desde `main` (primero Render), lo fusionado en `develop` no llega a producción; del #56 solo está el hotfix.
+- **Producción no tiene `develop`:** el frontend de Vercel se construía desde la rama `santiago` (septiembre) y el backend de Render también está desactualizado. Hasta hacer la release `develop` → `main` (PR #45) y configurar los dos para desplegar desde `main` (primero Render), lo fusionado en `develop` no llega a producción; del #56 solo está el hotfix.
 - **Pendientes nuevos, fuera del porcentaje:** `seed_dev.js` no llena `usuario.rol` y `/me` lee `rol` antes que `id_rol` (`auth-helpers.js:94`), así que la cuenta de desarrollo se ve como recepción; el frontend consulta `trial-status` sin sesión.
 
 ## Actualización del 2026-11-06
@@ -274,7 +274,7 @@ Ajustes de redacción:
 ## Cómo verificar
 
 - **Porcentajes:** `docs/avance-requisitos.xlsx` → Resumen. Todo son fórmulas sobre las hojas RF y RNF.
-- **Evidencias:** hoja Evidencias, con la ruta del archivo y la línea en el commit `54b19fa`; las filas fechadas el 2026-10-18 citan `develop` @ `1ddcb24` o, las de RQF-01, RQF-02, RQF-04, RQF-07 y RQF-22, `develop` @ `f3d323c` o `bdf987b`; las del 2026-10-19, `develop` @ `dcda269` (RQF-09, con el issue #24) o `66186d7` (RQNF-10 y RQF-06).
+- **Evidencias:** hoja Evidencias, con la ruta del archivo y la línea en el commit `54b19fa`; las filas fechadas el 2026-10-18 citan `develop` @ `1ddcb24` o, las de RQF-01, RQF-02, RQF-04, RQF-07 y RQF-22, `develop` @ `f3d323c` o `bdf987b`; las del 2026-10-19, `develop` @ `dcda269` (RQF-09, con el issue #24) o `66186d7` (RQNF-10 y RQF-06). Las filas fechadas el 2026-11-06 citan `develop` @ `a9f7ce1`, y las del 2026-11-14, `develop` @ `b780cc9`.
 - **Documento:** `docs/Proyecto FitLoyalty - requisitos actualizados.docx`, tablas 5 y 6.
 - **Cobertura:** `docs/evidencias/cobertura-backend-2026-10-16.txt`.
 - **CI:** pestaña Actions del repositorio (ejecución exitosa en `main` 8acab31).
