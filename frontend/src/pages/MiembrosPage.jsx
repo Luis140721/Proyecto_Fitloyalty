@@ -274,6 +274,8 @@ export default function MiembrosPage() {
   const [searchParams] = useSearchParams();
   // Miembros a los que ya se les escribio en esta sesion, para marcar el boton.
   const [contactados, setContactados] = useState(() => new Set());
+  // Si el chat se abrio pero el envio no quedo registrado (RQF-09).
+  const [avisoEnvio, setAvisoEnvio] = useState('');
   const [items, setItems]   = useState([]);
   const [q, setQ]           = useState('');
   const [filtro, setFiltro] = useState('todos');
@@ -838,14 +840,18 @@ export default function MiembrosPage() {
       'noopener,noreferrer'
     );
     setContactados((prev) => new Set(prev).add(m.id_miembro));
+    setAvisoEnvio('');
     try {
+      // mensaje: el texto que se abrio en WhatsApp (va a mensaje_copiado).
       await api.post('/admin/notificaciones/enviado', {
         idMiembro: m.id_miembro,
         canal: 'WHATSAPP',
         tipo: w.motivo,
+        mensaje: w.mensaje,
       });
     } catch (_) {
-      // El mensaje ya se abrio; no vale la pena molestar por el registro.
+      // El mensaje ya se abrio; solo se avisa que no quedo registrado.
+      setAvisoEnvio(`Se abrió WhatsApp, pero no pudimos registrar el envío a ${m.nombre}.`);
     }
   };
 
@@ -1031,6 +1037,12 @@ export default function MiembrosPage() {
         <div className="alert alert-success anim-scale-in" role="status">
           <span className="material-symbols-outlined icon">check_circle</span>
           <span>{info}</span>
+        </div>
+      )}
+      {avisoEnvio && (
+        <div className="alert alert-warning anim-scale-in" role="status">
+          <span className="material-symbols-outlined icon">info</span>
+          <span>{avisoEnvio}</span>
         </div>
       )}
 

@@ -209,6 +209,8 @@ router.get(
             `${r.dias} dias`),
           id: `riesgo-${r.id_miembro}`,
           nivel: r.nivel,
+          // Para que el envio quede ligado a la alerta (envio_mensaje.id_alerta).
+          idAlerta: r.id_alerta,
         })),
       ];
 
@@ -250,11 +252,63 @@ router.post(
 // ---------------------------------------------------------------------------
 // POST /api/admin/notificaciones/enviado
 // ---------------------------------------------------------------------------
+// RQF-09: cada envio queda en envio_mensaje con su fecha y su estado.
+// - canal: solo los tipos que admite el CHECK de canal_comunicacion en
+//   produccion (EMAIL, WHATSAPP). SMS lo admitia Docker, no produccion.
+// - mensaje: el texto que se abrio en WhatsApp. Va a mensaje_copiado, que es
+//   NOT NULL: sin el no hay constancia de que se dijo, asi que es obligatorio.
+// - idAlerta: opcional, la alerta de abandono que motivo el mensaje.
 const envioSchema = z.object({
   idMiembro: z.coerce.number().int().positive(),
-  canal: z.enum(['WHATSAPP', 'EMAIL', 'SMS']).default('WHATSAPP'),
+  canal: z.enum(['WHATSAPP', 'EMAIL']).default('WHATSAPP'),
   tipo: z.string().max(40).optional(),
+  mensaje: z.string({ required_error: 'Falta el mensaje que se envio.' })
+    .trim()
+    .min(1, 'Falta el mensaje que se envio.')
+    .max(2000, 'El mensaje no puede superar 2000 caracteres.'),
+  idAlerta: z.coerce.number().int().positive().optional(),
 });
+
+/**
+ * Devuelve el id_canal del gimnasio para el tipo pedido y lo crea si todavia
+ * no existe. canal_comunicacion es un catalogo por gimnasio y los gimnasios
+ * reales no traen filas, asi que se crea la primera vez que se envia.
+ *
+ * Solo usa columnas que existen tanto en produccion (ConsultasDB) como en
+ * Docker (migracion 002): nombre_remitente, credenciales_json y es_principal
+ * no existen en Docker y para wa.me no significan nada (el envio lo hace el
+ * telefono del gimnasio).
+ *
+ * La tabla no tiene restriccion unica por (id_gimnasio, tipo). Para que dos
+ * envios a la vez no creen dos canales, antes de crear se toma un bloqueo de
+ * la transaccion por gimnasio (pg_advisory_xact_lock, se suelta solo con el
+ * COMMIT o el ROLLBACK) y se vuelve a buscar: la segunda peticion espera y
+ * encuentra el canal que creo la primera.
+ */
+async function canalDelGimnasio(client, gymId, tipo) {
+  const buscar = () => client.query(
+    `SELECT id_canal FROM canal_comunicacion
+      WHERE id_gimnasio = $1 AND tipo = $2
+      ORDER BY activo DESC, id_canal
+      LIMIT 1`,
+    [gymId, tipo]
+  );
+
+  let { rows } = await buscar();
+  if (rows.length > 0) return rows[0].id_canal;
+
+  await client.query("SELECT pg_advisory_xact_lock(hashtext('canal_comunicacion'), $1)", [gymId]);
+  ({ rows } = await buscar());
+  if (rows.length > 0) return rows[0].id_canal;
+
+  const { rows: nuevo } = await client.query(
+    `INSERT INTO canal_comunicacion (id_gimnasio, tipo, activo)
+     VALUES ($1, $2, TRUE)
+     RETURNING id_canal`,
+    [gymId, tipo]
+  );
+  return nuevo[0].id_canal;
+}
 
 router.post(
   '/admin/notificaciones/enviado',
@@ -263,7 +317,7 @@ router.post(
   asyncHandler(async (req, res) => {
     const r = envioSchema.safeParse(req.body || {});
     if (!r.success) throw new AppError(400, formatZodError(r.error), 'VALIDATION_ERROR');
-    const { idMiembro, canal, tipo } = r.data;
+    const { idMiembro, canal, tipo, mensaje, idAlerta } = r.data;
     const gymId = req.user.gymId;
 
     const { rows: existe } = await pool.query(
@@ -272,29 +326,48 @@ router.post(
     );
     if (existe.length === 0) throw new AppError(404, 'Miembro no encontrado.', 'MEMBER_NOT_FOUND');
 
+    // La alerta tiene que ser de ese miembro y de este gimnasio.
+    if (idAlerta) {
+      const { rows: alerta } = await pool.query(
+        'SELECT id_alerta FROM alerta_abandono WHERE id_alerta = $1 AND id_miembro = $2 AND id_gimnasio = $3',
+        [idAlerta, idMiembro, gymId]
+      );
+      if (alerta.length === 0) throw new AppError(404, 'Alerta no encontrada.', 'ALERT_NOT_FOUND');
+    }
+
+    const client = await pool.connect();
     try {
+      await client.query('BEGIN');
+      const idCanal = await canalDelGimnasio(client, gymId, canal);
+
       /*
        * El mensaje lo manda WhatsApp desde el telefono del gimnasio, asi que
        * el sistema no puede confirmar la entrega: solo deja constancia de que
        * se abrio el envio. Por eso el estado es ENVIADO y no ENTREGADO.
        */
-      await pool.query(
-        `INSERT INTO envio_mensaje (id_gimnasio, id_miembro, canal, estado, fecha_envio)
-         VALUES ($1, $2, $3, 'ENVIADO', NOW())`,
-        [gymId, idMiembro, canal]
+      const { rows: envio } = await client.query(
+        `INSERT INTO envio_mensaje (id_gimnasio, id_miembro, id_canal, id_alerta,
+                                    mensaje_copiado, estado, fecha_envio, enviado_por)
+         VALUES ($1, $2, $3, $4, $5, 'ENVIADO', NOW(), $6)
+         RETURNING id_envio, estado, fecha_envio`,
+        [gymId, idMiembro, idCanal, idAlerta || null, mensaje, req.user.id]
       );
 
-      await pool.query(
+      await client.query(
         `INSERT INTO notificacion (id_gimnasio, id_usuario, tipo, titulo, mensaje, leida)
          VALUES ($1, $2, $3, $4, $5, TRUE)`,
         [gymId, req.user.id, 'SISTEMA', 'Recordatorio enviado',
          `Se contacto a ${existe[0].nombre} por ${canal}${tipo ? ` (${tipo})` : ''}.`]
       );
 
-      return res.status(201).json({ message: 'Envio registrado.' });
+      await client.query('COMMIT');
+      return res.status(201).json({ message: 'Envio registrado.', envio: envio[0] });
     } catch (err) {
+      await client.query('ROLLBACK').catch(() => {});
       console.error('[POST /admin/notificaciones/enviado] Error:', err.message);
       throw new AppError(503, 'No pudimos dejar constancia del envio.', 'DB_UNREACHABLE');
+    } finally {
+      client.release();
     }
   })
 );
