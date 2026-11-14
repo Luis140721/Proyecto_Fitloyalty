@@ -1,0 +1,33 @@
+# BD de pruebas para los E2E (Playwright).
+#
+# Es un archivo aparte del docker-compose.yml de la raiz a proposito: aquel
+# levanta el backend completo y exige JWT_SECRET en un .env. Este solo levanta
+# Postgres, en el puerto 5433, para no chocar con la BD de desarrollo (5432).
+#
+#   npm run db:up     # crea el contenedor y espera a que acepte conexiones
+#   npm run db:down   # destruye el contenedor y su red (y con ellos, todos los datos)
+
+name: fitloyalty-e2e
+
+services:
+  db-test:
+    # Version de parche fija para que todos prueben contra el mismo Postgres.
+    image: postgres:16.15-alpine
+    # Credenciales SOLO de prueba: no son secretos. La BD es desechable y solo
+    # escucha en este equipo; nunca uses estos valores en otro ambiente.
+    environment:
+      POSTGRES_USER: fitloyalty_test
+      POSTGRES_PASSWORD: fitloyalty_test
+      POSTGRES_DB: fitloyalty_test
+    # Solo en 127.0.0.1: sin la IP, Docker publica el puerto en todas las
+    # interfaces y la BD quedaria abierta a la red con una clave conocida.
+    ports:
+      - "127.0.0.1:5433:5432"
+    # Datos en memoria: se borran al eliminar el contenedor (npm run db:down).
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fitloyalty_test -d fitloyalty_test"]
+      interval: 2s
+      timeout: 5s
+      retries: 30

@@ -15,9 +15,15 @@ module.exports = {
   collectCoverageFrom: [
     'src/lib/**/*.js',
     'src/middleware/**/*.js',
-    'src/routes/checkin.js',
-    'src/routes/notificaciones.js',
+    'src/routes/**/*.js',
+    'src/jobs/**/*.js',
   ],
+  // Semana 1: linea base medida el 2026-10-26 sobre develop @ 7e3ede9 (docs/cobertura-baseline-backend.txt).
+  // Es el piso: nunca puede bajar (regla de trinquete del bootcamp). Todavia no
+  // se exige el 30% de la semana 2; solo evita retroceder.
+  coverageThreshold: {
+    global: { statements: 39, branches: 35, functions: 43, lines: 41 },
+  },
   // Evita que Jest intente transformar código nativo (bcrypt, pg) sin
   // necesidad. Cuando agreguemos tests sobre rutas reales, podemos cambiar
   // a un setup más completo.

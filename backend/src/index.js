@@ -131,8 +131,9 @@ app.get('/api/health', asyncHandler(async (req, res) => {
   }
 }));
 
-// 404 para cualquier ruta /api/* que no haya matcheado antes.
-app.use('/api', notFound);
+// 404 en JSON para cualquier ruta que no haya matcheado antes, dentro o fuera de
+// /api: sin esto, Express responde fuera de /api con su pagina HTML.
+app.use(notFound);
 
 // Handler central SIEMPRE al final. Convierte cualquier error no controlado
 // en una respuesta JSON consistente, sin filtrar stack traces en prod.
