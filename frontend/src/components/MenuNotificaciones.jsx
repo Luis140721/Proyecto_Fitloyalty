@@ -13,6 +13,10 @@ import IconoWhatsapp from './IconoWhatsapp';
  *
  * Al tocar un aviso se va a Miembros con ese nombre ya buscado, que es lo que
  * uno quiere hacer despues de leerlo.
+ *
+ * Los retos completados (RQF-12) vienen de /admin/retos/avisos y se suman a la
+ * lista: el miembro reclama la recompensa en recepcion. Si esa consulta falla,
+ * los demas avisos se muestran igual.
  */
 
 const ETIQUETA_TIPO = {
@@ -20,6 +24,13 @@ const ETIQUETA_TIPO = {
   'por-vencer': 'Renueva',
   riesgo: 'En riesgo',
   'acceso-bloqueado': 'Bloqueado',
+  'reto-completado': 'Reto',
+};
+
+// Avisos que se marcan como vistos, con la ruta de cada tipo.
+const RUTA_VISTO = {
+  'acceso-bloqueado': (id) => `/admin/notificaciones/acceso-bloqueado/${id}/leida`,
+  'reto-completado': (id) => `/admin/retos/avisos/${id}/leida`,
 };
 
 export default function MenuNotificaciones() {
@@ -38,8 +49,11 @@ export default function MenuNotificaciones() {
     setCargando(true);
     setError('');
     try {
-      const { data } = await api.get('/admin/notificaciones');
-      setAvisos(data.avisos || []);
+      const [{ data }, retos] = await Promise.all([
+        api.get('/admin/notificaciones'),
+        api.get('/admin/retos/avisos').catch(() => ({ data: { avisos: [] } })),
+      ]);
+      setAvisos([...(data.avisos || []), ...(retos.data.avisos || [])]);
     } catch (err) {
       setError('No pudimos cargar los avisos.');
     } finally {
@@ -70,12 +84,13 @@ export default function MenuNotificaciones() {
     };
   }, [abierto]);
 
-  // Marca un acceso bloqueado como visto y lo quita de la lista.
+  // Marca un acceso bloqueado o un reto completado como visto y lo quita de la lista.
   const marcarVisto = async (aviso, e) => {
     e.stopPropagation();
     setAvisos((prev) => prev.filter((a) => a.id !== aviso.id));
     try {
-      await api.post(`/admin/notificaciones/acceso-bloqueado/${aviso.idNotificacion}/leida`);
+      const ruta = RUTA_VISTO[aviso.tipo] || RUTA_VISTO['acceso-bloqueado'];
+      await api.post(ruta(aviso.idNotificacion));
     } catch (_) {
       cargar(); // si no se pudo guardar, vuelve a aparecer
     }
@@ -192,7 +207,7 @@ export default function MenuNotificaciones() {
                       <IconoWhatsapp />
                       {enviados.has(a.id) ? 'Enviado' : 'WhatsApp'}
                     </span>
-                  ) : (
+                  ) : a.tipo !== 'reto-completado' && (
                     <span className="aviso__sin-tel" title="Este miembro no tiene un teléfono válido registrado">
                       Sin teléfono
                     </span>

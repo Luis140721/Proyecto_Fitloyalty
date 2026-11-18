@@ -3,7 +3,8 @@
 // Pantalla "Mis logros y retos":
 //   - Resumen (puntos, % completado)
 //   - Lista de hitos (logrados vs disponibles)
-//   - Lista de retos activos
+//   - Lista de retos: los vigentes de su segmento, con su progreso y la
+//     recompensa, y los que ya completo (RQF-12)
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -66,10 +67,10 @@ class _GamificacionScreenState extends State<GamificacionScreen> {
             const SizedBox(height: 22),
 
             // Retos
-            const Text('RETOS ACTIVOS',
+            const Text('RETOS',
                 style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 0.6, color: AppColors.textMuted)),
             const SizedBox(height: 10),
-            _retos(p),
+            _retos(p, fmtFecha),
             if (p.retosError != null) ...[
               const SizedBox(height: 12),
               ErrorBanner(mensaje: p.retosError!, onRetry: () => p.cargarRetos()),
@@ -227,7 +228,7 @@ class _GamificacionScreenState extends State<GamificacionScreen> {
     );
   }
 
-  Widget _retos(PerfilProvider p) {
+  Widget _retos(PerfilProvider p, DateFormat fmt) {
     if (p.retosStatus == DataStatus.loading) {
       return Column(
         children: const [
@@ -248,26 +249,47 @@ class _GamificacionScreenState extends State<GamificacionScreen> {
         child: const EmptyState(
           icon: Icons.flag_outlined,
           title: 'Sin retos activos',
-          subtitle: 'Cuando el gimnasio lance un reto, aparecera aqui.',
+          subtitle: 'Cuando el gimnasio lance un reto para ti, aparecera aqui.',
         ),
       );
     }
     return Column(
       children: [
-        for (final r in p.retos) _retoTile(r),
+        for (final r in p.retos) _retoTile(r, fmt),
       ],
     );
   }
 
-  Widget _retoTile(Reto r) {
+  Widget _retoTile(Reto r, DateFormat fmt) {
     final dias = r.diasRestantes;
+    final meta = r.meta ?? 0;
+    final acumulados = r.checkinsAcumulados ?? 0;
+    final avance = ((r.porcentajeAvance ?? (meta > 0 ? acumulados * 100 / meta : 0)) / 100).clamp(0.0, 1.0);
+
+    final String cuando;
+    if (r.completado && r.fechaCompletado != null) {
+      cuando = 'Completado el ${fmt.format(r.fechaCompletado!)}';
+    } else if (r.porEmpezar) {
+      cuando = 'Empieza el ${fmt.format(r.fechaInicio)}';
+    } else if (dias > 1) {
+      cuando = 'Termina en $dias dias';
+    } else if (dias == 1) {
+      cuando = 'Termina en 1 dia';
+    } else if (dias == 0) {
+      cuando = 'Termina hoy';
+    } else {
+      cuando = 'Termino el ${fmt.format(r.fechaFin)}';
+    }
+
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(
+          color: r.completado ? AppColors.success.withValues(alpha: 0.45) : AppColors.border,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -280,6 +302,7 @@ class _GamificacionScreenState extends State<GamificacionScreen> {
               ),
               if (r.completado) const StatusChip(label: 'Completado', color: AppColors.success)
               else if (r.participa) const StatusChip(label: 'Inscrito', color: AppColors.primary)
+              else if (r.porEmpezar) const StatusChip(label: 'Proximamente', color: AppColors.warning)
               else const StatusChip(label: 'Disponible', color: AppColors.textMuted),
             ],
           ),
@@ -288,49 +311,57 @@ class _GamificacionScreenState extends State<GamificacionScreen> {
             Text(r.descripcion!,
                 style: const TextStyle(fontSize: 13, color: AppColors.textSecondary, height: 1.35)),
           ],
-          const SizedBox(height: 10),
+          if (r.premio != null && r.premio!.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.workspace_premium, size: 16, color: AppColors.warning),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    r.completado ? 'Ganaste: ${r.premio!}. Reclamala en recepcion.' : 'Recompensa: ${r.premio!}',
+                    style: const TextStyle(fontSize: 13, color: AppColors.warning, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ],
+            ),
+          ],
+          const SizedBox(height: 8),
           Row(
             children: [
               const Icon(Icons.event_outlined, size: 14, color: AppColors.textMuted),
               const SizedBox(width: 4),
-              Text(
-                dias >= 0 ? 'Termina en $dias dias' : 'Termino hace ${-dias} dias',
-                style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
-              ),
-              const Spacer(),
-              if (r.premio != null && r.premio!.isNotEmpty) ...[
-                const Icon(Icons.workspace_premium, size: 14, color: AppColors.warning),
-                const SizedBox(width: 4),
-                Flexible(
-                  child: Text(r.premio!,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 12, color: AppColors.warning, fontWeight: FontWeight.w700)),
-                ),
-              ],
+              Text(cuando, style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
             ],
           ),
-          if (r.participa && r.meta != null && r.checkinsAcumulados != null && !r.completado) ...[
-            const SizedBox(height: 12),
+          const SizedBox(height: 12),
+          if (r.participa && meta > 0)
             Row(
               children: [
                 Expanded(
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(99),
                     child: LinearProgressIndicator(
-                      value: ((r.porcentajeAvance ?? 0) / 100).clamp(0.0, 1.0),
+                      value: avance,
                       minHeight: 6,
                       backgroundColor: AppColors.border,
-                      color: AppColors.primary,
+                      color: r.completado ? AppColors.success : AppColors.primary,
                     ),
                   ),
                 ),
                 const SizedBox(width: 10),
-                Text('${r.checkinsAcumulados}/${r.meta} visitas',
+                Text('$acumulados/$meta visitas',
                     style: const TextStyle(fontSize: 11, color: AppColors.textSecondary, fontWeight: FontWeight.w700)),
               ],
+            )
+          else if (meta > 0)
+            Text(
+              r.porEmpezar
+                  ? 'Meta: $meta visitas. Quedas inscrito solo con tu primer ingreso desde el ${fmt.format(r.fechaInicio)}.'
+                  : 'Meta: $meta visitas. Quedas inscrito solo con tu proximo ingreso.',
+              style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
             ),
-          ],
         ],
       ),
     );

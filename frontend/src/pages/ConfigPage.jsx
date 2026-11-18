@@ -3,6 +3,7 @@ import { api } from '../api';
 import PageTransition from '../components/PageTransition';
 import Ripple from '../components/Ripple';
 import HitosConfig from '../components/HitosConfig';
+import RetosConfig from '../components/RetosConfig';
 
 export default function ConfigPage() {
   const [config, setConfig] = useState({
@@ -325,6 +326,7 @@ export default function ConfigPage() {
       </section>
 
       <HitosConfig />
+      <RetosConfig />
     </PageTransition>
   );
 }

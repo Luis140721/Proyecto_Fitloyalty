@@ -13,6 +13,7 @@ const { requireActiveTrial } = require('../lib/trial');
 const { ULTIMO_PLAN } = require('../lib/planes');
 const { registrarAccesoBloqueado } = require('../lib/accesos');
 const { calcularGamificacion } = require('../lib/gamificacion');
+const { registrarProgresoRetos } = require('../lib/retos');
 const { z } = require('zod');
 const { formatZodError } = require('../lib/validators');
 
@@ -207,14 +208,25 @@ router.post(
         [miembro.id_miembro, gymId, metodo, req.user.id, observacion || null, true]
       );
 
-      // Racha y hitos (RQF-11). No frena el ingreso: si falla, devuelve null.
-      const gamificacion = await calcularGamificacion(pool, { gymId, idMiembro: miembro.id_miembro });
+      // Racha y hitos (RQF-11) y retos (RQF-12), a la vez: son independientes.
+      // Ninguno frena el ingreso: si fallan, devuelven null. Solo llegan aqui
+      // los ingresos validos; los rechazados y los repetidos ya respondieron.
+      const [gamificacion, retos] = await Promise.all([
+        calcularGamificacion(pool, { gymId, idMiembro: miembro.id_miembro }),
+        registrarProgresoRetos(pool, {
+          gymId,
+          idMiembro: miembro.id_miembro,
+          idCheckin: rows[0].id_checkin,
+          nombre: miembro.nombre,
+        }),
+      ]);
 
       return res.status(201).json({
         message: 'Ingreso registrado.',
         duplicado: false,
         checkin: rows[0],
         gamificacion,
+        retos,
         miembro: { 
           id: miembro.id_miembro, 
           nombre: miembro.nombre, 

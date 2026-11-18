@@ -427,10 +427,14 @@ CREATE TABLE notificacion (
     mensaje TEXT NOT NULL,
     leida BOOLEAN NOT NULL DEFAULT FALSE,
     fecha_creacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    -- A quien va el aviso: GIMNASIO (campana del panel) o MIEMBRO (bandeja de la
+    -- app). Migracion 015, issue #46.
+    destinatario VARCHAR(10) NOT NULL DEFAULT 'GIMNASIO',
     FOREIGN KEY (id_gimnasio) REFERENCES gimnasio(id_gimnasio),
     FOREIGN KEY (id_usuario) REFERENCES usuario(id_usuario),
     FOREIGN KEY (id_miembro) REFERENCES miembro(id_miembro),
-    CHECK (tipo IN ('ALERTA', 'RETO', 'CAMPANA', 'SISTEMA'))
+    CHECK (tipo IN ('ALERTA', 'RETO', 'CAMPANA', 'SISTEMA')),
+    CHECK (destinatario IN ('GIMNASIO', 'MIEMBRO'))
 );
 
 -- =========================================================
@@ -465,6 +469,8 @@ CREATE INDEX idx_envio_miembro ON envio_mensaje(id_miembro);
 CREATE INDEX idx_campana_gimnasio ON campana(id_gimnasio);
 CREATE INDEX idx_reto_gimnasio ON reto(id_gimnasio);
 CREATE INDEX idx_reto_miembro_reto ON reto_miembro(id_reto);
+CREATE INDEX idx_reto_miembro_miembro ON reto_miembro(id_miembro);
+CREATE INDEX idx_notificacion_miembro_destinatario ON notificacion(id_miembro, destinatario, leida);
 CREATE INDEX idx_auditoria_tabla_fecha ON auditoria(tabla_afectada, fecha_evento DESC);
 
 -- =========================================================

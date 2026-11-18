@@ -164,6 +164,7 @@ export default function CheckinPage() {
         miembro: data.miembro,
         advertencia: data.duplicado ? 'ya-registrado' : data.advertencia,
         gamificacion: data.gamificacion,
+        retos: data.retos,
       });
       setFrameFlash({ type: fbType, key: Date.now() });
       if (fbType === 'success') vibrate(80);
@@ -229,6 +230,7 @@ export default function CheckinPage() {
         miembro: data.miembro,
         advertencia: data.advertencia,
         gamificacion: data.gamificacion,
+        retos: data.retos,
       });
       setFrameFlash({ type: fbType, key: Date.now() });
       if (fbType === 'success') vibrate(80);
@@ -416,6 +418,21 @@ export default function CheckinPage() {
                     <small style={{ display: 'block', marginTop: 2 }}>
                       Racha: {feedback.gamificacion.racha} {feedback.gamificacion.racha === 1 ? 'día' : 'días'} · Asistencias: {feedback.gamificacion.totalAsistencias}
                     </small>
+                  </span>
+                )}
+                {/* Retos de asistencia (RQF-12): el que se completa con este ingreso y el avance de los demas. */}
+                {feedback.retos?.progreso?.length > 0 && (
+                  <span style={{ display: 'block', marginTop: 8, fontSize: 14 }}>
+                    {feedback.retos.completados.map((r) => (
+                      <strong key={r.id} style={{ display: 'block' }}>
+                        🎯 ¡Completaste el reto «{r.nombre}»!{r.recompensa ? ` Recompensa: ${r.recompensa}.` : ''}
+                      </strong>
+                    ))}
+                    {feedback.retos.progreso.filter((r) => !r.completado).map((r) => (
+                      <small key={r.id} style={{ display: 'block', marginTop: 2 }}>
+                        Reto «{r.nombre}»: {r.acumulados} de {r.meta} check-ins
+                      </small>
+                    ))}
                   </span>
                 )}
               </span>
