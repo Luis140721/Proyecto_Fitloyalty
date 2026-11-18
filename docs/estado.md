@@ -1,11 +1,28 @@
 # Estado: avance real de requisitos
 
-- **Fecha:** 2026-11-06 (actualizaciones tras las fusiones en `develop` del 18, el 19, el 20, el 25 y el 27; la medición inicial fue el 2026-10-16)
-- **Rama:** `docs/avance-2026-11-06` (PR hacia `develop`). Las anteriores fueron `docs/avance-2026-10-18` (PR #20), `docs/avance-2026-10-19` (PR #25), `docs/avance-2026-10-19-b` (PR #29), `docs/avance-2026-10-20` (PR #35) y `docs/avance-2026-10-25` (PR #44); la medición inicial se hizo en `docs/avance-requisitos` (PR #6, ya en `main`).
-- **Código verificado:** `develop` @ `a9f7ce1` para los requisitos de las actualizaciones (secciones siguientes); el resto, `main` @ `54b19fa`. El PR #5 (`8acab31`) solo agregó `CONTRIBUTING.md` y el check de nombre de rama al CI (sin cambios en el código de la app); se fusionó en esta rama y es la base de la evidencia del CI.
+- **Fecha:** 2026-11-14 (actualizaciones tras las fusiones en `develop` del 18, el 19, el 20, el 25 y el 27 de octubre y el 13 y el 14 de noviembre; la medición inicial fue el 2026-10-16)
+- **Rama:** `docs/avance-2026-11-14` (PR hacia `develop`). Las anteriores fueron `docs/avance-2026-11-06` (PR #70), `docs/avance-2026-10-18` (PR #20), `docs/avance-2026-10-19` (PR #25), `docs/avance-2026-10-19-b` (PR #29), `docs/avance-2026-10-20` (PR #35) y `docs/avance-2026-10-25` (PR #44); la medición inicial se hizo en `docs/avance-requisitos` (PR #6, ya en `main`).
+- **Código verificado:** `develop` @ `b780cc9` para los requisitos de las actualizaciones (secciones siguientes); el resto, `main` @ `54b19fa`. El PR #5 (`8acab31`) solo agregó `CONTRIBUTING.md` y el check de nombre de rama al CI (sin cambios en el código de la app); se fusionó en esta rama y es la base de la evidencia del CI.
 - **Base de la documentación:** por decisión de Luis, los archivos de Santiago del PR #4 (`docs/borrador-matriz-requisitos` @ `00cdcdb`), verificados y corregidos aquí.
 - **Copias de seguridad:** los originales de `Documentación/` están en `54b19fa` y los archivos de Santiago sin corregir en el commit `5db4e2a` de esta rama (o en `00cdcdb`). Ejemplo: `git show 00cdcdb:docs/avance-requisitos.xlsx > copia.xlsx`.
 - **Responsable de esta tarea:** agente ejecutor (Claude de Luis). Solo documentación y Excel; el reparto de las implementaciones está en `docs/plan-trabajo.md`.
+
+## Actualización del 2026-11-14
+
+**El avance sube a 90,5 % (33,5/37): RF 90,9 % y RNF 90,0 %. Se supera la meta del 90 %.** Solo se marcó lo que está fusionado en `develop` (`b780cc9`) y revisado por el verificador.
+
+| Req. | Antes | Ahora | PR | Evidencia y motivo |
+|---|---|---|---|---|
+| RQF-09 | Parcial | **Implementado** | #73 | Cada envío queda en `envio_mensaje` con canal, texto, usuario, estado y fecha (`notificaciones.js:315`, `:344-370`). El canal WhatsApp del gimnasio se crea la primera vez, con un bloqueo por gimnasio (`:292`, `:301`, `:306`). Probado contra el esquema de ConsultasDB y el de las migraciones, 18 de 18 en cada uno. Cierra el issue #24. Revisiones del verificador del 2026-11-13. |
+| RQNF-06 | Parcial | **Implementado** | #71, #72 | Las 9 pantallas principales en Chrome 157 y 156, Edge 157 y Firefox 160 y 159.0.1, contra el build de producción servido en local, con una base local y el código de `develop`: 45 de 45 (`docs/evidencias/rqnf-06-navegadores.md`). Edge 156 se cubre con Chromium 156 y no se exige la cámara, por decisión de Luis. Revisión del verificador del 2026-11-14. |
+
+**También:**
+- **RQF-09 cambia de módulo:** «Mensajes de retención» en vez de «Alertas de Abandono», por decisión de Luis, para distinguirlo de RQF-08.
+- **PR #71:** en «Editar miembro» y «Editar usuario» solo se podía escribir un carácter seguido, porque el foco saltaba al botón de cerrar del modal. Estaba en `main` desde el 20/08.
+- **Límites de RQF-09:** ENVIADO quiere decir que se abrió el mensaje en WhatsApp, no que se entregó; el canal se crea solo, sin pantalla de configuración; EMAIL se acepta pero nada lo envía; el borrado permanente de un miembro todavía puede fallar por otras tablas sin cascada (`notificacion.id_miembro`).
+- **RQNF-04 sigue Parcial:** Santiago hace las 3 sesiones. Por falta de Docker en su equipo las hace en producción, con un miembro de prueba (CC 79123456) y el frontend desplegado desde `hotfix/rqnf-04-checkin-manual`, que es la rama vieja `santiago` más el #56.
+- **Producción no tiene `develop`:** el frontend de Vercel se construía desde la rama `santiago` (septiembre) y el backend de Render también está desactualizado. Hasta hacer la release `develop` → `main` (PR #45) y configurar los dos para desplegar desde `main` (primero Render), lo fusionado en `develop` no llega a producción; del #56 solo está el hotfix.
+- **Pendientes nuevos, fuera del porcentaje:** `seed_dev.js` no llena `usuario.rol` y `/me` lee `rol` antes que `id_rol` (`auth-helpers.js:94`), así que la cuenta de desarrollo se ve como recepción; el frontend consulta `trial-status` sin sesión.
 
 ## Actualización del 2026-11-06
 
@@ -111,16 +128,17 @@ Solo se marcó lo que está fusionado en `develop` y revisado por el verificador
 
 | Alcance | RF | RNF | Global |
 |---|---:|---:|---:|
-| **Final (RQF-01..22, RQNF-01..15)** | 88,6 % (19,5 puntos de 22) | 86,7 % (13 puntos de 15) | **87,8 % (32,5 puntos de 37)** |
-| Solo original del docx (RQF-01..12, RQNF-01..08) | 79,2 % (9,5 puntos de 12) | 75,0 % (6 puntos de 8) | 77,5 % (15,5 puntos de 20) |
+| **Final (RQF-01..22, RQNF-01..15)** | 90,9 % (20 puntos de 22) | 90,0 % (13,5 puntos de 15) | **90,5 % (33,5 puntos de 37)** |
+| Solo original del docx (RQF-01..12, RQNF-01..08) | 83,3 % (10 puntos de 12) | 81,3 % (6,5 puntos de 8) | 82,5 % (16,5 puntos de 20) |
 
-Fórmula: (implementados + 0,5 × parciales) / total; los puntos son esa suma. El 2026-10-16 el avance era 62,2 % (23/37, la cifra conciliada con el verificador); RQF-22 suma 1 punto, y RQNF-05, RQF-07, RQF-02 y RQF-01 medio cada uno; el 2026-10-19 RQF-09 resta medio (issue #24) y RQNF-10 y RQF-06 suman medio cada uno; el 2026-10-20 RQF-11 suma 1 punto y RQF-14, RQF-13, RQF-04 y RQNF-07 medio cada uno; el 2026-10-25 RQNF-01 y RQNF-15 suman 1 punto cada uno y RQF-08 y RQNF-09 medio cada uno. **La meta del Excel es el 90 % (33,3 puntos, decisión de Luis del 2026-10-25) y faltan 0,8: 0,3 en RF y 0,5 en RNF.** La del 80 % pedida para la entrega (29,6 puntos) ya está superada; ver la hoja «Trabajo pendiente». El PR #4 decía 80,5 % porque daba por implementados requisitos que el código no respalda y contaba aparte funciones que repetían otras (ver «Correcciones»).
+Fórmula: (implementados + 0,5 × parciales) / total; los puntos son esa suma. El 2026-10-16 el avance era 62,2 % (23/37, la cifra conciliada con el verificador); RQF-22 suma 1 punto, y RQNF-05, RQF-07, RQF-02 y RQF-01 medio cada uno; el 2026-10-19 RQF-09 resta medio (issue #24) y RQNF-10 y RQF-06 suman medio cada uno; el 2026-10-20 RQF-11 suma 1 punto y RQF-14, RQF-13, RQF-04 y RQNF-07 medio cada uno; el 2026-10-25 RQNF-01 y RQNF-15 suman 1 punto cada uno y RQF-08 y RQNF-09 medio cada uno. El 2026-11-14, RQF-09 y RQNF-06 suman medio punto cada uno. **La meta del Excel es el 90 % (33,3 puntos, decisión de Luis del 2026-10-25) y ya está superada, con 33,5 puntos.** La del 80 % pedida para la entrega (29,6 puntos) ya está superada; ver la hoja «Trabajo pendiente». El PR #4 decía 80,5 % porque daba por implementados requisitos que el código no respalda y contaba aparte funciones que repetían otras (ver «Correcciones»).
 
 **Decisión de Luis aplicada (2026-10-16):** se retiraron RQF-23 (repetía RQF-08), RQF-24 (repetía RQF-05) y RQF-25 (repetía RQF-03 y es un defecto de seguridad), y RQF-26 (editar el perfil) se fusionó en RQF-15. La numeración queda consecutiva, sin renumerar. Con los cuatro, el avance habría sido 63,4 % (26 puntos de 41).
 
-**Ruta a la meta del 90 %** (hoja «Trabajo pendiente», que se pone verde al llegar a la meta; la del 80 % ya está superada):
-- Sin esperar al monitor: el registro de cada envío (RQF-09, issue #24) → 89,2 % y la prueba de usabilidad (RQNF-04, Daniel, D5) → **90,5 %**; después, terminar la prueba de navegadores (RQNF-06, Daniel, D4, PR #52) → 91,9 %.
+**Ruta al 100 %** (hoja «Trabajo pendiente»; la meta del 90 % ya está superada):
+- La prueba de usabilidad (RQNF-04): Santiago hace las 3 sesiones → 91,9 %.
 - RQNF-02 necesita un monitor externo: Parcial con un día operativo completo medido e Implementado con 7 días seguidos al 99 % o más.
+- RQF-12 (retos) y RQF-10 (campañas) siguen Pendientes: 1 punto cada uno.
 
 ## Qué se hizo
 
@@ -256,7 +274,7 @@ Ajustes de redacción:
 ## Cómo verificar
 
 - **Porcentajes:** `docs/avance-requisitos.xlsx` → Resumen. Todo son fórmulas sobre las hojas RF y RNF.
-- **Evidencias:** hoja Evidencias, con la ruta del archivo y la línea en el commit `54b19fa`; las filas fechadas el 2026-10-18 citan `develop` @ `1ddcb24` o, las de RQF-01, RQF-02, RQF-04, RQF-07 y RQF-22, `develop` @ `f3d323c` o `bdf987b`; las del 2026-10-19, `develop` @ `dcda269` (RQF-09, con el issue #24) o `66186d7` (RQNF-10 y RQF-06).
+- **Evidencias:** hoja Evidencias, con la ruta del archivo y la línea en el commit `54b19fa`; las filas fechadas el 2026-10-18 citan `develop` @ `1ddcb24` o, las de RQF-01, RQF-02, RQF-04, RQF-07 y RQF-22, `develop` @ `f3d323c` o `bdf987b`; las del 2026-10-19, `develop` @ `dcda269` (RQF-09, con el issue #24) o `66186d7` (RQNF-10 y RQF-06). Las filas fechadas el 2026-11-06 citan `develop` @ `a9f7ce1`, y las del 2026-11-14, `develop` @ `b780cc9`.
 - **Documento:** `docs/Proyecto FitLoyalty - requisitos actualizados.docx`, tablas 5 y 6.
 - **Cobertura:** `docs/evidencias/cobertura-backend-2026-10-16.txt`.
 - **CI:** pestaña Actions del repositorio (ejecución exitosa en `main` 8acab31).
