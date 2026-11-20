@@ -8,16 +8,18 @@
  * el detalle que se guarda en auditoria, o null si no hay nada que registrar.
  */
 function cambiosDeCuenta(antes, despues) {
-  if (antes.activo && despues.activo === false) {
-    return { eventos: ['DESACTIVADA'], antes: { activo: true }, despues: { activo: false } };
-  }
-  if (!antes.activo && despues.activo === true) {
-    return { eventos: ['REACTIVADA'], antes: { activo: false }, despues: { activo: true } };
+  const detalle = { eventos: [], antes: {}, despues: {} };
+  if (despues.activo !== antes.activo) {
+    detalle.eventos.push(despues.activo ? 'REACTIVADA' : 'DESACTIVADA');
+    detalle.antes.activo = antes.activo;
+    detalle.despues.activo = despues.activo;
   }
   if (despues.rol !== antes.rol) {
-    return { eventos: ['ROL_CAMBIADO'], antes: { rol: antes.rol }, despues: { rol: despues.rol } };
+    detalle.eventos.push('ROL_CAMBIADO');
+    detalle.antes.rol = antes.rol;
+    detalle.despues.rol = despues.rol;
   }
-  return null;
+  return detalle.eventos.length ? detalle : null;
 }
 
 module.exports = { cambiosDeCuenta };
