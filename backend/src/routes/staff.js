@@ -39,6 +39,8 @@ const inviteSchema = z.object({
 // Roles que se pueden asignar al editar: los mismos de la invitacion (el CHECK
 // de usuario.rol en Neon solo acepta estos dos).
 const ID_ROL = { ADMINISTRADOR: 1, RECEPCIONISTA: 2 };
+// Nombre de cada id_rol que puede tener una cuenta: el mismo mapeo de ROL_EXPR.
+const NOMBRE_DE_ROL = { 1: 'ADMINISTRADOR', 2: 'RECEPCIONISTA', 3: 'ENTRENADOR' };
 
 const updateStaffSchema = z.object({
   nombre: z.string().trim()
@@ -452,7 +454,7 @@ router.patch(
 
     // HU-04, criterio 4: el cambio y su fila de auditoria (con el responsable)
     // van en la misma transaccion: si la auditoria no se guarda, no hay cambio.
-    const rolAntes = { 1: 'ADMINISTRADOR', 2: 'RECEPCIONISTA', 3: 'ENTRENADOR' }[actual.id_rol];
+    const rolAntes = NOMBRE_DE_ROL[actual.id_rol];
     const detalle = cambiosDeCuenta(
       { activo: actual.activo, rol: rolAntes, nombre: actual.nombre },
       { activo: activo ?? actual.activo, rol: rol ?? rolAntes, nombre: nombre ?? actual.nombre }
