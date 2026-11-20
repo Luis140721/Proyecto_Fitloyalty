@@ -49,7 +49,7 @@ afterEach(() => {
 });
 
 describe('api.js: el token de la sesion', () => {
-  test('should save, read and clear the token in localStorage', () => {
+  test('should read the token when it is saved and stop when it is cleared', () => {
     // Act y Assert
     setToken('token-1');
     expect(getToken()).toBe('token-1');
@@ -111,7 +111,7 @@ describe('api.js: el token de la sesion', () => {
 });
 
 describe('api.js: el error que reciben las pantallas', () => {
-  test('should pass the message, code and details of the backend', async () => {
+  test('should pass the message, code and details when the backend answers an error', async () => {
     // Arrange
     api.defaults.adapter = fallaCon(400, { error: 'Datos invalidos.', code: 'VALIDATION_ERROR', details: { issues: [{ path: ['email'] }] } });
 
@@ -174,7 +174,7 @@ describe('api.js: el error que reciben las pantallas', () => {
     });
   });
 
-  test('should keep the code and the message of an error without answer that is not of network', async () => {
+  test('should keep the code and the message when a request without answer is not a network error', async () => {
     // Arrange: por ejemplo, una peticion cancelada
     api.defaults.adapter = sinRespuesta('ERR_CANCELED', 'canceled');
 
@@ -190,7 +190,7 @@ describe('api.js: el error que reciben las pantallas', () => {
     ['Escribe el documento.', 'Escribe el documento.'],
     [{ message: 'Miembro no encontrado.' }, 'Miembro no encontrado.'],
     [{}, 'Error desconocido'],
-  ])('should describe %j as "%s"', (err, texto) => {
+  ])('should describe %j as "%s" when describeError gets it', (err, texto) => {
     // Act y Assert
     expect(describeError(err)).toBe(texto);
   });
@@ -236,7 +236,7 @@ describe('api.js: la sesion que vence en medio del uso', () => {
     expect(avisos).toEqual([]);
   });
 
-  test('should not touch a new token saved while the old request was on its way', async () => {
+  test('should not touch the new token when it was saved while the old request was on its way', async () => {
     // Arrange: otra pestana inicio sesion mientras viajaba la peticion
     setToken('token-viejo');
     api.defaults.adapter = async (config) => {

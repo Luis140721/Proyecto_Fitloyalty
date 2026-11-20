@@ -267,7 +267,7 @@ describe('CheckinPage: el QR y la respuesta del backend', () => {
 });
 
 describe('CheckinPage: la cámara', () => {
-  test('should register a QR read by the camera once and read it again only after four seconds', async () => {
+  test('should register the QR once and read it again only after four seconds when the camera reads it', async () => {
     // Arrange: hora fija para medir la espera entre lecturas del mismo QR
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-10-28T14:00:00.000Z'));
@@ -381,7 +381,7 @@ describe('CheckinPage: lo que queda despues de un ingreso', () => {
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 
-  test('should take the notice away after five seconds so the next person starts clean', async () => {
+  test('should take the notice away when five seconds pass, so the next person starts clean', async () => {
     // Arrange: timers falsos para setTimeout; los clicks van con fireEvent
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     abrirCheckin();

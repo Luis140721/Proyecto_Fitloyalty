@@ -134,7 +134,7 @@ describe('MiembrosPage: la ficha del miembro', () => {
   });
 
   // Reemplaza 16 campos tecla por tecla: con toda la suite en paralelo se acerca a los 5 s por defecto.
-  test('should send every field of the file that the person changes', async () => {
+  test('should send every field when the person changes the whole file', async () => {
     // Arrange
     const { user } = await abrirFichaDeAna();
     const ficha_ = within(ficha());
@@ -172,7 +172,7 @@ describe('MiembrosPage: la ficha del miembro', () => {
     })));
   }, 15000);
 
-  test('should close the file with the X of the dialog without saving', async () => {
+  test('should close the file without saving when the X of the dialog is clicked', async () => {
     // Arrange
     const { user } = await abrirFichaDeAna();
 
@@ -226,12 +226,12 @@ describe('MiembrosPage: la ficha del miembro', () => {
 });
 
 describe('MiembrosPage: el plan y el cobro', () => {
-  test('should run in the time zone where new Date() moves the API date one day back', () => {
-    // Control: si la zona no quedo fijada, los tests de fechas no probarian nada
+  test('should move the API date one day back when new Date() reads it in this zone (control of the zone)', () => {
+    // Act y Assert (control): si la zona no quedo fijada, los tests de fechas no probarian nada
     expect(new Date(PLAN.fecha_inicio).toLocaleDateString('es-CO')).toBe('30/9/2026');
   });
 
-  test('should show and save the plan dates of the API without moving them one day in Colombia', async () => {
+  test('should show and save the plan dates without moving them one day when the browser is in Colombia', async () => {
     // Arrange
     const { user } = await abrirFichaDeAna();
 
@@ -289,7 +289,7 @@ describe('MiembrosPage: el plan y el cobro', () => {
     expect(mockPut).not.toHaveBeenCalled();
   });
 
-  test('should save the price, method, reference and dates that the person types in the plan', async () => {
+  test('should save the price, method, reference and dates when the person types them in the plan', async () => {
     // Arrange
     const { user } = await abrirFichaDeAna();
     const ficha_ = within(ficha());
@@ -327,7 +327,7 @@ describe('MiembrosPage: el plan y el cobro', () => {
 });
 
 describe('MiembrosPage: los errores de la ficha', () => {
-  test('should explain that the plan could not be loaded and hide the plan editor', async () => {
+  test('should explain it and hide the plan editor when the plan cannot be loaded', async () => {
     // Arrange
     const getNormal = apiQueResponde();
     mockGet = vi.fn(async (url) => {
@@ -368,7 +368,7 @@ describe('MiembrosPage: los errores de la ficha', () => {
     expect(await within(ficha()).findByRole('alert')).toHaveTextContent('WhatsApp no responde.');
   });
 
-  test('should tell the reception that only the admin can freeze the membership', async () => {
+  test('should say that only the admin can freeze when the person is the reception', async () => {
     // Arrange
     rol = 'receptionist';
 
@@ -382,7 +382,7 @@ describe('MiembrosPage: los errores de la ficha', () => {
 });
 
 describe('MiembrosPage: congelar la membresia', () => {
-  test('should freeze the membership with the reason after the user confirms', async () => {
+  test('should freeze the membership with the reason when the user confirms', async () => {
     // Arrange
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     mockPost = vi.fn(async () => ({ data: { message: 'Membresía congelada desde hoy.' } }));
@@ -432,7 +432,7 @@ describe('MiembrosPage: congelar la membresia', () => {
     expect(window.confirm).not.toHaveBeenCalled();
   });
 
-  test('should show the freeze error of the API', async () => {
+  test('should show the error of the API when the membership cannot be frozen', async () => {
     // Arrange
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     mockPost = vi.fn(async () => { throw { status: 409, code: 'ALREADY_FROZEN', message: 'La membresía ya está congelada.' }; });
@@ -447,7 +447,7 @@ describe('MiembrosPage: congelar la membresia', () => {
 });
 
 describe('MiembrosPage: el QR y el contrato', () => {
-  test('should copy the QR code and confirm it on the button', async () => {
+  test('should copy the QR code and confirm it on the button when Copiar is clicked', async () => {
     // Arrange
     const { user } = await abrirFichaDeAna();
     const escribir = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue();
@@ -499,7 +499,7 @@ describe('MiembrosPage: el QR y el contrato', () => {
 });
 
 describe('MiembrosPage: el aviso por WhatsApp de la lista', () => {
-  test('should open the chat with the message of the server and record it without opening the file', async () => {
+  test('should open the chat with the message of the server and record it without opening the file when WhatsApp is clicked', async () => {
     // Arrange
     const abrir = vi.spyOn(window, 'open').mockReturnValue(null);
     const { user } = renderWithProviders(<MiembrosPage />, { route: '/admin/miembros' });

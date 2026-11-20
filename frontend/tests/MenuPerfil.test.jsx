@@ -57,7 +57,7 @@ describe('MenuPerfil: la ficha de la sesion', () => {
     expect(await screen.findByText('Ruta actual: /admin/config')).toBeInTheDocument();
   });
 
-  test('should not offer Configuración to the reception and name the role in words', async () => {
+  test('should not offer Configuración and name the role in words when the person is the reception', async () => {
     // Arrange
     sesion = { ...sesion, user: { ...ADMIN, role: 'receptionist' } };
     const { user } = abrirEncabezado();
@@ -110,7 +110,7 @@ describe('MenuPerfil: la ficha de la sesion', () => {
 });
 
 describe('MenuPerfil: abrir y cerrar', () => {
-  test('should close with Escape, with a click outside and with the avatar, but not with a click inside', async () => {
+  test('should close when Escape, a click outside or the avatar is used, but not when the click is inside', async () => {
     // Arrange
     const { user } = abrirEncabezado();
     await user.click(disparador());

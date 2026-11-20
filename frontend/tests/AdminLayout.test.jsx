@@ -38,7 +38,7 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 describe('AdminLayout: el encabezado', () => {
-  test('should show only a spinner while the session is still being checked', () => {
+  test('should show only a spinner when the session is still being checked', () => {
     // Arrange
     sesion = { ...sesion, loading: true, ready: false };
 
@@ -51,7 +51,7 @@ describe('AdminLayout: el encabezado', () => {
     expect(mockRefresh).toHaveBeenCalledTimes(1);
   });
 
-  test('should name the gym, greet the person and title the section of the route', async () => {
+  test('should name the gym, greet the person and title the section when the panel opens', async () => {
     // Act
     abrirPanel('/admin/miembros');
 
@@ -172,7 +172,7 @@ describe('AdminLayout: el menu lateral', () => {
     ['receptionist', ['Miembros', 'Check-in'], 'Recepción'],
     ['trainer', [], 'Entrenador'],
     [undefined, ['Miembros', 'Check-in'], 'Recepción'],
-  ])('should show the sections that the role %s can open', (rol, secciones, nombreRol) => {
+  ])('should show only the allowed sections when the role is %s', (rol, secciones, nombreRol) => {
     // Arrange
     sesion = { ...sesion, user: { ...ADMIN, role: rol } };
 
@@ -185,7 +185,7 @@ describe('AdminLayout: el menu lateral', () => {
     expect(within(menuLateral()).getByText(nombreRol)).toBeInTheDocument();
   });
 
-  test('should mark the section of the current route as active', () => {
+  test('should mark the section as active when its route is open', () => {
     // Act
     abrirPanel('/admin/checkin');
 
@@ -194,7 +194,7 @@ describe('AdminLayout: el menu lateral', () => {
     expect(within(menuLateral()).getByRole('link', { name: 'Miembros' })).not.toHaveAttribute('aria-current');
   });
 
-  test('should open the side menu with the hamburger and close it with Cerrar menú', async () => {
+  test('should open the side menu with the hamburger and close it when Cerrar menú is clicked', async () => {
     // Arrange
     const { user } = abrirPanel();
 
@@ -229,7 +229,7 @@ describe('AdminLayout: el menu lateral', () => {
     expect(await screen.findByText('Ruta actual: /admin/checkin')).toBeInTheDocument();
   });
 
-  test('should close the session from the side menu and close the menu too', async () => {
+  test('should close the session and the menu when Cerrar sesión of the side menu is clicked', async () => {
     // Arrange
     const { user } = abrirPanel();
     await user.click(screen.getByRole('button', { name: 'Abrir menú' }));

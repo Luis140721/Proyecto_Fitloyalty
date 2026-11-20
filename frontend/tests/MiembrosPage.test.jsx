@@ -244,7 +244,7 @@ describe('MiembrosPage: alta con el asistente de 5 pasos', () => {
     expect(mockPost).not.toHaveBeenCalled();
   });
 
-  test('should create the member after the five steps and announce it in a status message', async () => {
+  test('should create the member and announce it in a status message when the five steps are completed', async () => {
     // Arrange: solo se fija la fecha (los timers siguen reales para user-event)
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date(2026, 9, 27, 10, 0, 0));

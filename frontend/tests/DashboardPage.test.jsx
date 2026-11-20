@@ -120,7 +120,7 @@ describe('DashboardPage: la carga', () => {
     expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
   });
 
-  test('should show the loading bar until the API answers', async () => {
+  test('should show the loading bar when the API has not answered yet', async () => {
     // Arrange: el dashboard no responde hasta que el test lo diga
     let responder;
     mockGet = vi.fn((url, opciones) => (url === '/admin/dashboard'
@@ -168,7 +168,7 @@ describe('DashboardPage: la carga', () => {
     expect(within(riesgo).queryByText('Quinto Fuera')).not.toBeInTheDocument();
   });
 
-  test('should mark in warning the memberships that expire in three days or less', async () => {
+  test('should mark the membership in warning when it expires in three days or less', async () => {
     // Act
     abrirDashboard();
     await cargado();
@@ -297,7 +297,7 @@ describe('DashboardPage: los botones', () => {
     });
   });
 
-  test('should download the CSV with the file name of Content-Disposition and then free the Blob URL', async () => {
+  test('should download the CSV with the name of Content-Disposition and free the Blob URL when the export is clicked', async () => {
     // Arrange: 8:00 p. m. del 27 en Colombia, ya 28 en UTC; manda el nombre del servidor
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-10-28T01:00:00.000Z'));

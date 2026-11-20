@@ -30,7 +30,7 @@ beforeEach(() => {
 });
 
 describe('HitosConfig: la lista', () => {
-  test('should list each milestone with its type, goal and message and offer the opposite state', async () => {
+  test('should list each milestone with its type, goal, message and opposite state when the page loads', async () => {
     // Act
     abrirHitos();
 
@@ -93,7 +93,7 @@ describe('HitosConfig: la lista', () => {
 });
 
 describe('HitosConfig: crear un hito', () => {
-  test('should keep Agregar hito disabled until the name and the message have text', async () => {
+  test('should enable Agregar hito only when the name and the message have text', async () => {
     // Arrange
     const { user } = abrirHitos();
     await screen.findByText('Primera semana');

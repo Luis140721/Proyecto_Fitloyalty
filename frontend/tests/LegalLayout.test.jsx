@@ -47,7 +47,7 @@ describe('LegalLayout', () => {
     ['Privacidad', '/legal/privacidad'],
     ['Política de datos', '/legal/datos'],
     ['Eliminar cuenta', '/legal/eliminar-cuenta'],
-  ])('should open %s from the footer', async (enlace, ruta) => {
+  ])('should open %s when it is clicked in the footer', async (enlace, ruta) => {
     // Arrange
     const { user } = abrirMarco();
 
@@ -70,7 +70,7 @@ describe('LegalLayout', () => {
     expect(await screen.findByText('Ruta actual: /')).toBeInTheDocument();
   });
 
-  test('should sign the footer with the current year', () => {
+  test('should sign the footer with the current year when a legal page opens', () => {
     // Arrange
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2027-01-02T12:00:00.000Z'));
@@ -82,7 +82,7 @@ describe('LegalLayout', () => {
     expect(within(piePagina()).getByText('© 2027 FitLoyalty')).toBeInTheDocument();
   });
 
-  test('should show the terms page with its title and its update date inside the layout', () => {
+  test('should show the title and the update date inside the layout when the terms page opens', () => {
     // Act
     renderWithProviders(<TerminosPage />, { route: '/legal/terminos' });
 

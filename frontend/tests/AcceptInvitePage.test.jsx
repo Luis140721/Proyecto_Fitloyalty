@@ -62,7 +62,7 @@ describe('AcceptInvitePage', () => {
 });
 
 describe('AcceptInvitePage: verificar la invitacion', () => {
-  test('should warn that the link has no token and not call the API', () => {
+  test('should warn and not call the API when the link has no token', () => {
     // Act
     abrirInvitacion('/accept-invite');
 
@@ -71,7 +71,7 @@ describe('AcceptInvitePage: verificar la invitacion', () => {
     expect(mockGet).not.toHaveBeenCalled();
   });
 
-  test('should say it is checking the invitation while the server wakes up', () => {
+  test('should say it is checking the invitation when the server has not answered yet', () => {
     // Arrange
     mockGet = vi.fn(() => new Promise(() => {}));
 
@@ -145,7 +145,7 @@ describe('AcceptInvitePage: la contrasena', () => {
     expect(confirmacion()).toHaveFocus();
   });
 
-  test('should take the error away as soon as the person types again and confirm a valid password', async () => {
+  test('should take the error away and confirm the password when the person types a valid one', async () => {
     // Arrange
     const { user } = await conFormulario();
     await user.click(crearCuenta());
@@ -160,7 +160,7 @@ describe('AcceptInvitePage: la contrasena', () => {
     expect(screen.getByText('Coinciden.')).toBeInTheDocument();
   });
 
-  test('should show and hide what is typed with the eye button', async () => {
+  test('should show and hide what is typed when the eye button is clicked', async () => {
     // Arrange
     const { user } = await conFormulario();
 
@@ -178,7 +178,7 @@ describe('AcceptInvitePage: aceptar', () => {
   test.each([
     ['receptionist', '/admin/checkin'],
     ['admin', '/admin/dashboard'],
-  ])('should accept with the token and the password and take a %s to the panel', async (rol, panel) => {
+  ])('should accept with the token and the password and open the panel when a %s accepts', async (rol, panel) => {
     // Arrange
     mockAcceptInvite = vi.fn(async () => ({ id: 9, name: 'Ana', role: rol }));
     const { user } = await conFormulario();

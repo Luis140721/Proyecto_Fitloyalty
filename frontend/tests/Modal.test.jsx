@@ -46,7 +46,7 @@ describe('Modal', () => {
     expect(screen.getByRole('dialog', { name: 'Editar nota' })).toHaveAttribute('aria-modal', 'true');
   });
 
-  test('should keep the focus in the field while the user types at the pace of a person', async () => {
+  test('should keep the focus in the field when the user types at the pace of a person', async () => {
     // Arrange: 60 ms entre teclas, mas que los 32 ms con los que el dialogo toma el foco al abrir
     const user = await abrirNota({ delay: 60 });
     const nota = screen.getByRole('textbox', { name: 'Nota' });
@@ -59,7 +59,7 @@ describe('Modal', () => {
     expect(nota).toHaveFocus();
   });
 
-  test('should close with Escape and give the focus back to the button that opened it', async () => {
+  test('should close and give the focus back to the button that opened it when Escape is pressed', async () => {
     // Arrange
     const user = await abrirNota();
 

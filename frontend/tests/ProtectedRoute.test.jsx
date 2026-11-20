@@ -36,7 +36,7 @@ beforeEach(() => {
 });
 
 describe('ProtectedRoute', () => {
-  test('should wait with a spinner and not redirect while the session is being checked', () => {
+  test('should wait and not redirect when the session is still being checked', () => {
     // Arrange
     sesion = { user: null, loading: true, ready: false };
 
@@ -71,7 +71,7 @@ describe('ProtectedRoute', () => {
     ['role', { role: 'receptionist' }],
     ['rol', { rol: 'receptionist' }],
     ['rol_nombre', { rol_nombre: 'receptionist' }],
-  ])('should take a role that is not allowed (read from %s) to the check-in', (_campo, usuario) => {
+  ])('should take the person to the check-in when the role read from %s is not allowed', (_campo, usuario) => {
     // Arrange
     sesion = { ...sesion, user: { id: 2, ...usuario } };
 

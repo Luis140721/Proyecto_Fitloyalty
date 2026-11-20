@@ -49,7 +49,7 @@ beforeEach(() => {
 afterEach(() => window.history.pushState({}, '', '/'));
 
 describe('App: rutas publicas', () => {
-  test('should open the landing on the root', () => {
+  test('should open the landing when the root is visited', () => {
     // Act
     abrirEn('/');
 
@@ -57,7 +57,7 @@ describe('App: rutas publicas', () => {
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('El motor de tu gimnasio');
   });
 
-  test('should send the old /register to the gym sign-up', async () => {
+  test('should open the gym sign-up when the old /register is visited', async () => {
     // Act
     abrirEn('/register');
 
@@ -66,7 +66,7 @@ describe('App: rutas publicas', () => {
     expect(window.location.pathname).toBe('/register-owner');
   });
 
-  test('should send a route that does not exist to the 404 page', async () => {
+  test('should open the 404 page when the route does not exist', async () => {
     // Act
     abrirEn('/planes-viejos');
 
@@ -80,7 +80,7 @@ describe('App: rutas publicas', () => {
     ['/legal/privacidad', /privacidad/i],
     ['/legal/datos', /datos/i],
     ['/legal/eliminar-cuenta', 'Eliminar cuenta y datos'],
-  ])('should open the legal page %s', (ruta, titulo) => {
+  ])('should open the legal page when %s is visited', (ruta, titulo) => {
     // Act
     abrirEn(ruta);
 
@@ -99,7 +99,7 @@ describe('App: rutas del panel', () => {
     expect(window.location.pathname).toBe('/login');
   });
 
-  test('should open the configuration inside the panel for an admin', async () => {
+  test('should open the configuration inside the panel when an admin visits it', async () => {
     // Act
     abrirEn('/admin/config', 'ADMINISTRADOR');
 
@@ -111,7 +111,7 @@ describe('App: rutas del panel', () => {
     expect(mockGet).toHaveBeenCalledWith('/auth/me');
   });
 
-  test('should take the reception from the dashboard to the check-in', async () => {
+  test('should take the reception to the check-in when it opens the dashboard', async () => {
     // Act
     abrirEn('/admin/dashboard', 'RECEPCIONISTA');
 

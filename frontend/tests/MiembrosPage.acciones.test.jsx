@@ -164,7 +164,7 @@ describe('MiembrosPage: el alta con todos los datos', () => {
     expect(screen.getByText('Paso 3 de 5')).toBeInTheDocument();
   });
 
-  test('should take the start date typed by hand, recalculate the end and keep the payment state chosen by the person', async () => {
+  test('should recalculate the end and keep the chosen payment state when the start date is typed by hand', async () => {
     // Arrange
     const { user } = await abrirAlta();
     await user.type(campo(/^Nombre completo/), 'Sofía Gómez');
@@ -226,7 +226,7 @@ describe('MiembrosPage: el alta con todos los datos', () => {
 });
 
 describe('MiembrosPage: las reglas del asistente', () => {
-  test('should not accept a birth date in the future', async () => {
+  test('should not move on when the birth date is in the future', async () => {
     // Arrange
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date(2026, 10, 19, 10, 0, 0));
@@ -244,7 +244,7 @@ describe('MiembrosPage: las reglas del asistente', () => {
     expect(screen.getByText('Paso 1 de 5')).toBeInTheDocument();
   });
 
-  test('should explain that the emergency phone needs 10 digits and stay on step 2', async () => {
+  test('should stay on step 2 and ask for 10 digits when the emergency phone is incomplete', async () => {
     // Arrange
     const { user } = await abrirAlta();
     await user.type(campo(/^Nombre completo/), 'Sofía Gómez');
@@ -312,7 +312,7 @@ describe('MiembrosPage: los filtros', () => {
     ['Vence pronto', { vencePronto: true }],
     ['En riesgo', { enRiesgo: true }],
     ['Congelado', { congelada: true }],
-  ])('should show only the members of the tab %s', async (pestana, marca) => {
+  ])('should show only those members when the tab %s is chosen', async (pestana, marca) => {
     // Arrange
     miembros = [ANA, { ...JULIO, nombre: 'Julio Mora', activo: true, ...marca }];
     const { user } = abrirMiembros();
@@ -329,7 +329,7 @@ describe('MiembrosPage: los filtros', () => {
 });
 
 describe('MiembrosPage: el miembro recien creado', () => {
-  test('should open WhatsApp with the phone and a welcome message from the notice of the new member', async () => {
+  test('should offer WhatsApp with the phone and a welcome message when the member is created', async () => {
     // Arrange y Act
     await crearASofia();
 
@@ -356,7 +356,7 @@ describe('MiembrosPage: el miembro recien creado', () => {
     expect(descargar).toHaveBeenCalledTimes(1);
   });
 
-  test('should close the notice of the new member with Cerrar and leave the member in the list', async () => {
+  test('should close the notice and leave the member in the list when Cerrar is clicked', async () => {
     // Arrange
     const { user } = await crearASofia();
     const aviso = screen.getByRole('dialog', { name: '¡Miembro creado exitosamente!' });
@@ -386,7 +386,7 @@ describe('MiembrosPage: desactivar y eliminar', () => {
     expect(filaDe('Ana Pérez')).toBeInTheDocument();
   });
 
-  test('should close the confirmations with the X of the dialog without touching the member', async () => {
+  test('should close the confirmations without touching the member when the X of the dialog is clicked', async () => {
     // Arrange
     const { user } = abrirMiembros();
     await screen.findByRole('row', { name: /Ana Pérez/ });
@@ -418,7 +418,7 @@ describe('MiembrosPage: desactivar y eliminar', () => {
     expect(mockDelete).not.toHaveBeenCalled();
   });
 
-  test('should list the deactivated members and ask before deleting one for ever', async () => {
+  test('should ask before deleting for ever when a deactivated member is deleted', async () => {
     // Arrange
     const { user } = abrirMiembros();
     await screen.findByRole('row', { name: /Ana Pérez/ });
@@ -486,7 +486,7 @@ describe('MiembrosPage: cancelar el alta', () => {
 });
 
 describe('MiembrosPage: el calendario', () => {
-  test('should show the months of the date picker in Spanish', async () => {
+  test('should show the months in Spanish when the date picker opens', async () => {
     // Arrange
     const { user } = await abrirAlta();
 
@@ -500,7 +500,7 @@ describe('MiembrosPage: el calendario', () => {
 });
 
 describe('MiembrosPage: sin miembros', () => {
-  test('should open the wizard from the empty list', async () => {
+  test('should open the wizard when the list is empty and the person clicks Nuevo miembro', async () => {
     // Arrange
     miembros = [];
     const { user } = abrirMiembros();

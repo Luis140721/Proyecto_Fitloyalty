@@ -211,7 +211,7 @@ describe('RegisterOwnerPage', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Error interno del servidor, intenta de nuevo');
   });
 
-  it('should disable the button and show "Creando..." while the gym is being created', async () => {
+  it('should disable the button and show "Creando..." when the gym is being created', async () => {
     // Arrange: register() no responde hasta que el test lo decide
     let responder;
     mockRegister.mockImplementation(() => new Promise((resolve) => { responder = resolve; }));
@@ -231,7 +231,7 @@ describe('RegisterOwnerPage', () => {
     expect(await screen.findByText('Ruta actual: /admin/dashboard')).toBeInTheDocument();
   });
 
-  it('should show and hide the password with the eye button', async () => {
+  it('should show and hide the password when the eye button is clicked', async () => {
     // Arrange
     const { user } = abrirRegistro();
     await user.type(campos.password(), 'clave123');

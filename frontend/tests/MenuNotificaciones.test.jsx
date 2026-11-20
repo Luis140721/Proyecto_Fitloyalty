@@ -121,7 +121,7 @@ describe('MenuNotificaciones: la campana', () => {
     expect(within(panel()).queryByText(/^Todo al día/)).not.toBeInTheDocument();
   });
 
-  test('should reload the notices every 30 seconds and each time the bell opens', async () => {
+  test('should reload the notices when 30 seconds pass and when the bell opens', async () => {
     // Arrange
     vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
     abrirEncabezado();
@@ -148,7 +148,7 @@ describe('MenuNotificaciones: lo que se hace con un aviso', () => {
     expect(await screen.findByText('Ruta actual: /admin/miembros?q=Carlos%20Ruiz')).toBeInTheDocument();
   });
 
-  test('should open WhatsApp with the message, record the sending and mark it as sent without leaving the page', async () => {
+  test('should open WhatsApp, record the sending and mark it as sent when the WhatsApp button of a notice is clicked', async () => {
     // Arrange
     const abrir = vi.spyOn(window, 'open').mockReturnValue(null);
     const { user } = await abrirCampana();
@@ -208,7 +208,7 @@ describe('MenuNotificaciones: lo que se hace con un aviso', () => {
 });
 
 describe('MenuNotificaciones: abrir y cerrar', () => {
-  test('should close with Escape and with a click outside, and stay open with a click inside', async () => {
+  test('should close when Escape or a click outside happens, and stay open when the click is inside', async () => {
     // Arrange
     const { user } = await abrirCampana();
 

@@ -43,7 +43,7 @@ describe('EliminarCuentaPage: sin sesion', () => {
     expect(await screen.findByText('Ruta actual: /login')).toBeInTheDocument();
   });
 
-  test('should explain that only the owner can delete the account', () => {
+  test('should explain that only the owner can delete the account when nobody is signed in', () => {
     // Arrange
     sesion = { user: null, gym: null, logout: mockLogout };
 
@@ -57,7 +57,7 @@ describe('EliminarCuentaPage: sin sesion', () => {
 });
 
 describe('EliminarCuentaPage: con sesion', () => {
-  test('should keep the delete button disabled until the password is typed and the box is checked', async () => {
+  test('should enable the delete button only when the password is typed and the box is checked', async () => {
     // Arrange
     const { user } = abrirPagina();
 
@@ -69,7 +69,7 @@ describe('EliminarCuentaPage: con sesion', () => {
     expect(eliminar()).toBeEnabled();
   });
 
-  test('should name the gym that will be deleted in the confirmation box', () => {
+  test('should name the gym in the confirmation box when the gym is known', () => {
     // Act
     abrirPagina();
 
@@ -88,7 +88,7 @@ describe('EliminarCuentaPage: con sesion', () => {
     expect(casilla().closest('label')).toHaveTextContent('"Ana Pérez"');
   });
 
-  test('should delete the account with the password and the reason, close the session and confirm', async () => {
+  test('should delete the account, close the session and confirm when the owner confirms with the password', async () => {
     // Arrange
     const { user } = abrirPagina();
     await user.type(screen.getByRole('textbox', { name: 'Motivo (opcional)' }), 'Cerramos el gimnasio');

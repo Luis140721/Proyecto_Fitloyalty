@@ -208,7 +208,7 @@ describe('ConfigPage: guardar', () => {
     await waitFor(() => expect(mockPut).toHaveBeenCalledWith('/admin/config', expect.objectContaining({ dias_aviso_vencimiento: 0 })));
   });
 
-  test('should send the six plan prices that the admin types as numbers', async () => {
+  test('should send the six plan prices as numbers when the admin types them', async () => {
     // Arrange
     const { user } = abrirConfig();
     await cargada();

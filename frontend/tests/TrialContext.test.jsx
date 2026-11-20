@@ -36,7 +36,7 @@ beforeEach(() => {
 });
 
 describe('TrialProvider', () => {
-  test('should start loading and then show the trial of the API', async () => {
+  test('should show the trial of the API when it answers after loading', async () => {
     // Act
     abrir();
 

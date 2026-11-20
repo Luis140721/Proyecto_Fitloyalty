@@ -27,7 +27,7 @@ describe('CardGlass', () => {
     expect(tarjeta).toHaveClass('card-glass', 'card-glass--p-sm', 'card-glass--interactive');
   });
 
-  test('should let the own onKeyDown of the page cancel the activation', async () => {
+  test('should not open the card when the onKeyDown of the page cancels the key', async () => {
     // Arrange
     const abrir = vi.fn();
     const user = userEvent.setup();
@@ -41,7 +41,7 @@ describe('CardGlass', () => {
     expect(abrir).not.toHaveBeenCalled();
   });
 
-  test('should ignore other keys', async () => {
+  test('should not open the card when another key is pressed', async () => {
     // Arrange
     const abrir = vi.fn();
     const user = userEvent.setup();
@@ -72,7 +72,7 @@ describe('CardGlass', () => {
     expect(boton).not.toHaveAttribute('role');
   });
 
-  test('should be a plain box without onClick and use the medium padding for an unknown value', () => {
+  test('should be a plain box with the medium padding when it has no onClick and an unknown padding', () => {
     // Act
     render(<CardGlass as="article" padding="xl" className="extra" aria-label="Resumen">Resumen</CardGlass>);
 
