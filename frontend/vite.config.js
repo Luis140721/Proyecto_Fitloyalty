@@ -24,8 +24,9 @@ export default defineConfig({
         // atras" cae al inicio si no hay historial) ni LandingPage (sus botones
         // llevan al registro del gimnasio).
       ],
-      // Semana 1: linea base medida el 2026-10-26 sobre develop @ 7e3ede9 (docs/cobertura-baseline-frontend.txt). No puede bajar.
-      thresholds: { lines: 1, branches: 9, functions: 6, statements: 1 },
+      // Cierre de S2 a S4 (2026-11-19): el mayor entre el piso de la S4 (50%) y la cobertura
+      // real del CI (Linux), redondeada hacia abajo (run 44653040667). No puede bajar.
+      thresholds: { lines: 56, branches: 77, functions: 56, statements: 56 },
     },
   },
 })

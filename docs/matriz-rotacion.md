@@ -36,6 +36,7 @@ La cobertura que se anota es la del CI (Linux), no la de Windows. Con el mismo c
 | Semana | Frontend (%) | Backend (%) | Umbral configurado |
 |---|---|---|---|
 | S1 (línea base) | 1,11 líneas · 1,11 sentencias · 10 ramas · 6,12 funciones | 18,08 líneas · 17,16 sentencias · 16,88 ramas · 21,69 funciones | Backend: líneas 18, sentencias 17, ramas 16, funciones 21 · Frontend: líneas 1, sentencias 1, ramas 10, funciones 6 |
+| S2 a S4 (cierre conjunto, 2026-11-19, CI) | 56,89 líneas · 56,89 sentencias · 77,98 ramas · 56,96 funciones | 62,36 líneas · 61,28 sentencias · 54,96 ramas · 66,93 funciones | Backend: líneas 61, sentencias 60, ramas 54, funciones 66 (Windows da 61,88 y 60,89) · Frontend: líneas 56, sentencias 56, ramas 77, funciones 56 |
 
 ## Registro de vocero aleatorio
 
