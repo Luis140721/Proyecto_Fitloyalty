@@ -504,19 +504,26 @@ router.get(
   requireActiveTrial(pool),
   asyncHandler(async (req, res) => {
     const id = Number(req.params.id);
-    const { rows: cuenta } = await pool.query(
-      'SELECT id_usuario FROM usuario WHERE id_usuario = $1 AND id_gimnasio = $2',
-      [id, req.user.gymId]
-    );
+    let cuenta;
+    let rows;
+    try {
+      ({ rows: cuenta } = await pool.query(
+        'SELECT id_usuario FROM usuario WHERE id_usuario = $1 AND id_gimnasio = $2',
+        [id, req.user.gymId]
+      ));
+      ({ rows } = await pool.query(
+        `SELECT a.fecha_evento, a.detalle, u.nombre AS responsable
+           FROM auditoria a
+           LEFT JOIN usuario u ON u.id_usuario = a.id_usuario
+          WHERE a.tabla_afectada = 'usuario' AND a.id_registro = $1 AND a.id_gimnasio = $2
+          ORDER BY a.fecha_evento DESC, a.id_auditoria DESC`,
+        [id, req.user.gymId]
+      ));
+    } catch (err) {
+      console.error('[GET /admin/staff/:id/auditoria] Error:', err.message);
+      throw new AppError(503, 'No pudimos leer el historial. Intenta de nuevo.', 'DB_UNREACHABLE');
+    }
     if (cuenta.length === 0) throw new AppError(404, 'Usuario no encontrado en este gimnasio.', 'STAFF_NOT_FOUND');
-    const { rows } = await pool.query(
-      `SELECT a.fecha_evento, a.detalle, u.nombre AS responsable
-         FROM auditoria a
-         LEFT JOIN usuario u ON u.id_usuario = a.id_usuario
-        WHERE a.tabla_afectada = 'usuario' AND a.id_registro = $1 AND a.id_gimnasio = $2
-        ORDER BY a.fecha_evento DESC, a.id_auditoria DESC`,
-      [id, req.user.gymId]
-    );
     return res.json({ auditoria: rows.map((f) => ({ fecha: f.fecha_evento, responsable: f.responsable, ...f.detalle })) });
   })
 );
