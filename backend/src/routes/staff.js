@@ -500,6 +500,8 @@ router.patch(
 router.get(
   '/admin/staff/:id/auditoria',
   authenticate,
+  authorize('admin'),
+  requireActiveTrial(pool),
   asyncHandler(async (req, res) => {
     const id = Number(req.params.id);
     const { rows: cuenta } = await pool.query(
