@@ -1,3 +1,5 @@
 node_modules/
 test-results/
 playwright-report/
+# Sesion guardada por tests/auth.setup.js
+playwright/.auth/
