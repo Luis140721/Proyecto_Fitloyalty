@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../context/AuthContext';
@@ -34,6 +34,8 @@ export default function AcceptInvitePage() {
   const [confirm, setConfirm] = useState('');
   const [showPwd, setShowPwd] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const passwordRef = useRef(null);
+  const confirmRef = useRef(null);
 
   const score = strengthScore(password);
 
@@ -83,8 +85,9 @@ export default function AcceptInvitePage() {
     setFieldErrors(found);
     if (Object.keys(found).length > 0) {
       // Enfoca el primer campo con problema para no dejar al usuario buscando.
-      const first = document.querySelector('.field-input--error');
-      if (first) first.focus();
+      // Va por los errores recien encontrados: buscar .field-input--error aqui
+      // no sirve, porque React todavia no pinto esa clase.
+      (found.password ? passwordRef : confirmRef).current?.focus();
       return;
     }
     setSubmitting(true);
@@ -176,6 +179,7 @@ export default function AcceptInvitePage() {
                 <span className="field-label">Crea tu contraseña (mín. 6 caracteres, al menos un número)</span>
                 <div style={{ position: 'relative' }}>
                   <input
+                    ref={passwordRef}
                     className={`field-input${fieldErrors.password ? ' field-input--error' : ''}`}
                     type={showPwd ? 'text' : 'password'}
                     required minLength={6}
@@ -226,6 +230,7 @@ export default function AcceptInvitePage() {
               <label className="field">
                 <span className="field-label">Confirma tu contraseña</span>
                 <input
+                  ref={confirmRef}
                   className={`field-input${fieldErrors.confirm ? ' field-input--error' : ''}`}
                   type={showPwd ? 'text' : 'password'}
                   required
