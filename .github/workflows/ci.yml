@@ -161,6 +161,87 @@ jobs:
           }
           JS
 
+  # La app completa en un navegador: el webServer de playwright.config.js
+  # levanta el backend (que migra al arrancar) y el frontend, y espera a que
+  # /api/health responda 200 antes del primer test.
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16.15-alpine
+        env:
+          POSTGRES_USER: fitloyalty_test
+          POSTGRES_PASSWORD: fitloyalty_test
+          POSTGRES_DB: fitloyalty_test
+        ports:
+          - "127.0.0.1:5433:5432"
+        options: >-
+          --health-cmd "pg_isready -U fitloyalty_test -d fitloyalty_test"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+    env:
+      PUPPETEER_SKIP_DOWNLOAD: "true"
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: pnpm/action-setup@v6.1.0
+        with:
+          package_json_file: e2e/package.json
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: |
+            backend/pnpm-lock.yaml
+            frontend/pnpm-lock.yaml
+            e2e/pnpm-lock.yaml
+      - name: Dependencias de backend, frontend y e2e
+        run: |
+          pnpm --dir backend install --frozen-lockfile
+          pnpm --dir frontend install --frozen-lockfile
+          pnpm --dir e2e install --frozen-lockfile
+      # Los navegadores no se cachean: Playwright recomienda instalarlos en cada
+      # corrida, porque restaurarlos tarda casi lo mismo.
+      - name: Chromium
+        working-directory: e2e
+        run: pnpm exec playwright install --with-deps chromium
+      # La BD es la que playwright.config.js usa por defecto (127.0.0.1:5433,
+      # fitloyalty_test). Ademas del list y el HTML, deja un JSON para contar.
+      - name: Pruebas E2E
+        working-directory: e2e
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_NAME: resultados-e2e.json
+        run: pnpm test --reporter=list,html,json
+      - name: Ningun test saltado
+        if: always()
+        working-directory: e2e
+        run: |
+          node <<'JS'
+          const fs = require('fs');
+          if (!fs.existsSync('resultados-e2e.json')) {
+            console.log('::error::Playwright no dejo resultados-e2e.json: la config o el webServer fallaron antes de los tests.');
+            process.exit(1);
+          }
+          const { stats } = JSON.parse(fs.readFileSync('resultados-e2e.json', 'utf8'));
+          const linea = `${stats.expected} pasan, ${stats.unexpected} fallan, ${stats.flaky} inestables y ${stats.skipped} saltados`;
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `### E2E\n\n${linea}\n`);
+          console.log(linea);
+          if (stats.expected + stats.unexpected + stats.flaky === 0 || stats.skipped > 0) {
+            console.log('::error::Hay tests E2E saltados o no corrio ninguno.');
+            process.exit(1);
+          }
+          JS
+      # Si algo falla, el reporte HTML con las trazas queda descargable.
+      - uses: actions/upload-artifact@v7.0.2
+        if: failure()
+        with:
+          name: e2e-report
+          path: |
+            e2e/playwright-report/
+            e2e/test-results/
+          retention-days: 7
+
   # No construye ni prueba nada: deja en el resumen del run quién hizo commits
   # de pruebas desde el lunes (evidencia individual del bootcamp).
   evidencia-individual:
