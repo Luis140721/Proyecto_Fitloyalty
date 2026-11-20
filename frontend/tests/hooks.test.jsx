@@ -10,7 +10,7 @@
  */
 import { describe, expect, test, vi, afterEach } from 'vitest';
 import { useState } from 'react';
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import useAnimatedCount from '../src/hooks/useAnimatedCount';
@@ -163,18 +163,25 @@ describe('useApiHandler', () => {
     expect(onError).toHaveBeenCalledWith(error);
   });
 
-  test('should keep the notice after six seconds when the error is persistent', async () => {
-    // Arrange
-    const { user } = abrir({ handler: async () => { throw { status: 503, message: 'Servidor caido.' }; }, opciones: { persistent: true } });
-    await user.click(screen.getByRole('button', { name: 'Enviar' }));
-    await screen.findByRole('alert');
+  test.each([
+    [true, 1],
+    [false, 0],
+  ])('should keep the notice after six seconds only when the error is persistent (%s)', async (persistent, avisos) => {
+    // Arrange: timers falsos desde antes del click, para que el cierre de 6 s sea falso
+    vi.useFakeTimers();
+    render(<MemoryRouter><ErrorProvider><Formulario
+      handler={async () => { throw { status: 503, message: 'Servidor caido.' }; }}
+      opciones={{ persistent }}
+    /></ErrorProvider></MemoryRouter>);
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar' }));
+    await act(async () => {});
+    expect(screen.getByRole('alert')).toHaveTextContent('Servidor caido.');
 
     // Act
-    vi.useFakeTimers();
     act(() => vi.advanceTimersByTime(7000));
 
     // Assert
-    expect(screen.getByRole('alert')).toHaveTextContent('Servidor caido.');
+    expect(screen.queryAllByRole('alert')).toHaveLength(avisos);
   });
 
   test('should give the pushApiError of the banner through useApiErrors', async () => {
