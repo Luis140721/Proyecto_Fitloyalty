@@ -250,3 +250,56 @@ describe('member routes: the error contract', () => {
     expect(mockLlamadas.find(({ sql }) => patron.test(sql)).params.slice(-2)).toEqual([99, 7]);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Hallazgos de contrato de las rutas del plan, corregidos en routes/miembros.js.
+describe('GET and PUT /api/admin/miembros/:id/plan: contract findings', () => {
+  const PLAN = { tipo_plan: 'MENSUAL', fecha_inicio: '2026-01-01', fecha_fin: '2026-02-01', valor_total: 100000, valor_pagado: 0, metodo_pago: 'EFECTIVO' };
+  // Como PostgreSQL: un id que no es entero hace fallar la consulta con el dato en el mensaje.
+  const comoPostgres = () => (params) => {
+    if (params.some((p) => p === 'abc')) throw Object.assign(new Error('invalid input syntax for type integer: "abc"'), { code: '22P02' });
+    return { rows: [] };
+  };
+
+  test.each([
+    ['get', '/api/admin/miembros/abc/plan', undefined],
+    ['put', '/api/admin/miembros/abc/plan', PLAN],
+  ])('should answer 400 VALIDATION_ERROR without querying when %s %s gets an id that is not a number', async (metodo, ruta, cuerpo) => {
+    // Arrange
+    responder([/plan_cobro|FROM miembro|congelacion_plan/, comoPostgres()]);
+
+    // Act
+    const r = await llamar(metodo, ruta, ADMIN, cuerpo);
+
+    // Assert
+    esErrorDelContrato(r, 400, 'VALIDATION_ERROR');
+    expect(consultasDeDatos()).toHaveLength(0);
+  });
+
+  test.each([
+    ['get', '/api/admin/miembros/88/plan', undefined],
+    ['put', '/api/admin/miembros/88/plan', PLAN],
+  ])('should answer 503 DB_UNREACHABLE without the SQL when the database fails on %s %s', async (metodo, ruta, cuerpo) => {
+    // Arrange
+    responder([/plan_cobro|FROM miembro|congelacion_plan/, ERROR_PG()]);
+
+    // Act
+    const r = await llamar(metodo, ruta, ADMIN, cuerpo);
+
+    // Assert
+    esErrorDelContrato(r, 503, 'DB_UNREACHABLE');
+  });
+
+  test('should answer 402 TRIAL_EXPIRED without reading the plan when the gym trial has ended', async () => {
+    // Arrange: la prueba gratuita del gimnasio vencio ayer
+    mockGimnasio.trial_ends_at = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    responder([/plan_cobro|congelacion_plan/, filas([{ id_plan_cobro: 5 }])]);
+
+    // Act
+    const r = await llamar('get', '/api/admin/miembros/88/plan', RECEPCION);
+
+    // Assert
+    esErrorDelContrato(r, 402, 'TRIAL_EXPIRED');
+    expect(consultasDeDatos()).toHaveLength(0);
+  });
+});

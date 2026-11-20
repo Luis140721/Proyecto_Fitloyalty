@@ -771,36 +771,47 @@ const planSchema = z.object({
   proxima_fecha_cobro: z.string().optional().or(z.literal('')),
 });
 
+// El id del miembro en las rutas del plan: un entero escrito completo. Sin esto
+// un id como "abc" llegaba a PostgreSQL, que respondia 500 con su mensaje.
+const esIdDeMiembro = (texto) => /^\d+$/.test(String(texto));
+
 router.get(
   '/admin/miembros/:id/plan',
   authenticate,
   authorize('admin', 'receptionist'),
+  requireActiveTrial(pool),
   asyncHandler(async (req, res) => {
-    const { rows } = await pool.query(
-      `SELECT pc.id_plan_cobro, pc.tipo_plan, pc.fecha_inicio, pc.fecha_fin,
-              pc.valor_total, pc.valor_pagado, pc.metodo_pago, pc.referencia_pago,
-              pc.estado_pago, pc.proxima_fecha_cobro, pc.congelado_desde,
-              (CURRENT_DATE - pc.congelado_desde)::int AS dias_congelado
-         FROM plan_cobro pc
-         INNER JOIN miembro m ON m.id_miembro = pc.id_miembro
-        WHERE pc.id_miembro = $1 AND m.id_gimnasio = $2 AND pc.activo = TRUE
-        ORDER BY pc.fecha_fin DESC NULLS LAST, pc.id_plan_cobro DESC
-        LIMIT 1`,
-      [req.params.id, req.user.gymId]
-    );
-    // Ultimos congelamientos del miembro (HU-39: fecha y responsable de cada uno).
-    const { rows: congelaciones } = await pool.query(
-      `SELECT cp.id_congelacion, cp.fecha_inicio, cp.fecha_fin, cp.dias, cp.motivo,
-              uc.nombre AS congelada_por, ud.nombre AS descongelada_por
-         FROM congelacion_plan cp
-         LEFT JOIN usuario uc ON uc.id_usuario = cp.congelada_por
-         LEFT JOIN usuario ud ON ud.id_usuario = cp.descongelada_por
-        WHERE cp.id_miembro = $1 AND cp.id_gimnasio = $2
-        ORDER BY cp.creada_en DESC
-        LIMIT 5`,
-      [req.params.id, req.user.gymId]
-    );
-    return res.json({ plan: rows[0] || null, congelaciones });
+    if (!esIdDeMiembro(req.params.id)) throw new AppError(400, 'Id invalido', 'VALIDATION_ERROR');
+    try {
+      const { rows } = await pool.query(
+        `SELECT pc.id_plan_cobro, pc.tipo_plan, pc.fecha_inicio, pc.fecha_fin,
+                pc.valor_total, pc.valor_pagado, pc.metodo_pago, pc.referencia_pago,
+                pc.estado_pago, pc.proxima_fecha_cobro, pc.congelado_desde,
+                (CURRENT_DATE - pc.congelado_desde)::int AS dias_congelado
+           FROM plan_cobro pc
+           INNER JOIN miembro m ON m.id_miembro = pc.id_miembro
+          WHERE pc.id_miembro = $1 AND m.id_gimnasio = $2 AND pc.activo = TRUE
+          ORDER BY pc.fecha_fin DESC NULLS LAST, pc.id_plan_cobro DESC
+          LIMIT 1`,
+        [req.params.id, req.user.gymId]
+      );
+      // Ultimos congelamientos del miembro (HU-39: fecha y responsable de cada uno).
+      const { rows: congelaciones } = await pool.query(
+        `SELECT cp.id_congelacion, cp.fecha_inicio, cp.fecha_fin, cp.dias, cp.motivo,
+                uc.nombre AS congelada_por, ud.nombre AS descongelada_por
+           FROM congelacion_plan cp
+           LEFT JOIN usuario uc ON uc.id_usuario = cp.congelada_por
+           LEFT JOIN usuario ud ON ud.id_usuario = cp.descongelada_por
+          WHERE cp.id_miembro = $1 AND cp.id_gimnasio = $2
+          ORDER BY cp.creada_en DESC
+          LIMIT 5`,
+        [req.params.id, req.user.gymId]
+      );
+      return res.json({ plan: rows[0] || null, congelaciones });
+    } catch (err) {
+      console.error('[GET /admin/miembros/:id/plan] Error:', err.message);
+      throw new AppError(503, 'No pudimos cargar el plan. Intenta de nuevo.', 'DB_UNREACHABLE');
+    }
   })
 );
 
@@ -956,6 +967,7 @@ router.put(
   authorize('admin', 'receptionist'),
   requireActiveTrial(pool),
   asyncHandler(async (req, res) => {
+    if (!esIdDeMiembro(req.params.id)) throw new AppError(400, 'Id invalido', 'VALIDATION_ERROR');
     const parsed = parse(planSchema, req.body);
     if (!parsed.ok) throw new AppError(parsed.status, parsed.error, 'VALIDATION_ERROR', { issues: parsed.issues });
     const d = parsed.data;
@@ -968,51 +980,57 @@ router.put(
       throw new AppError(400, 'Lo pagado no puede superar el valor del plan.', 'VALIDATION_ERROR');
     }
 
-    const { rows: duenio } = await pool.query(
-      'SELECT id_miembro FROM miembro WHERE id_miembro = $1 AND id_gimnasio = $2',
-      [req.params.id, gymId]
-    );
-    if (duenio.length === 0) throw new AppError(404, 'Miembro no encontrado.', 'MEMBER_NOT_FOUND');
-
-    const estado = d.valor_pagado >= d.valor_total && d.valor_total > 0
-      ? 'PAGADO'
-      : d.valor_pagado > 0 ? 'PARCIAL' : 'PENDIENTE';
-
-    const { rows: actual } = await pool.query(
-      `SELECT id_plan_cobro FROM plan_cobro
-        WHERE id_miembro = $1 AND activo = TRUE
-        ORDER BY fecha_fin DESC NULLS LAST, id_plan_cobro DESC LIMIT 1`,
-      [req.params.id]
-    );
-
     let plan;
-    if (actual.length > 0) {
-      const { rows } = await pool.query(
-        `UPDATE plan_cobro
-            SET tipo_plan = $1, fecha_inicio = $2, fecha_fin = $3, valor_total = $4,
-                valor_pagado = $5, metodo_pago = $6, referencia_pago = $7,
-                estado_pago = $8, proxima_fecha_cobro = $9,
-                actualizado_por = $10, fecha_actualizacion = NOW()
-          WHERE id_plan_cobro = $11
-        RETURNING *`,
-        [d.tipo_plan, d.fecha_inicio, d.fecha_fin, d.valor_total, d.valor_pagado,
-         d.metodo_pago, d.referencia_pago || null, estado, d.proxima_fecha_cobro || null,
-         req.user.id, actual[0].id_plan_cobro]
+    try {
+      const { rows: duenio } = await pool.query(
+        'SELECT id_miembro FROM miembro WHERE id_miembro = $1 AND id_gimnasio = $2',
+        [req.params.id, gymId]
       );
-      plan = rows[0];
-    } else {
-      const { rows } = await pool.query(
-        `INSERT INTO plan_cobro
-           (id_miembro, id_gimnasio, tipo_plan, fecha_inicio, fecha_fin, valor_total,
-            valor_pagado, metodo_pago, referencia_pago, estado_pago, proxima_fecha_cobro,
-            activo, actualizado_por)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,TRUE,$12)
-        RETURNING *`,
-        [req.params.id, gymId, d.tipo_plan, d.fecha_inicio, d.fecha_fin, d.valor_total,
-         d.valor_pagado, d.metodo_pago, d.referencia_pago || null, estado,
-         d.proxima_fecha_cobro || null, req.user.id]
+      if (duenio.length === 0) throw new AppError(404, 'Miembro no encontrado.', 'MEMBER_NOT_FOUND');
+
+      const estado = d.valor_pagado >= d.valor_total && d.valor_total > 0
+        ? 'PAGADO'
+        : d.valor_pagado > 0 ? 'PARCIAL' : 'PENDIENTE';
+
+      const { rows: actual } = await pool.query(
+        `SELECT id_plan_cobro FROM plan_cobro
+          WHERE id_miembro = $1 AND activo = TRUE
+          ORDER BY fecha_fin DESC NULLS LAST, id_plan_cobro DESC LIMIT 1`,
+        [req.params.id]
       );
-      plan = rows[0];
+
+      if (actual.length > 0) {
+        const { rows } = await pool.query(
+          `UPDATE plan_cobro
+              SET tipo_plan = $1, fecha_inicio = $2, fecha_fin = $3, valor_total = $4,
+                  valor_pagado = $5, metodo_pago = $6, referencia_pago = $7,
+                  estado_pago = $8, proxima_fecha_cobro = $9,
+                  actualizado_por = $10, fecha_actualizacion = NOW()
+            WHERE id_plan_cobro = $11
+          RETURNING *`,
+          [d.tipo_plan, d.fecha_inicio, d.fecha_fin, d.valor_total, d.valor_pagado,
+           d.metodo_pago, d.referencia_pago || null, estado, d.proxima_fecha_cobro || null,
+           req.user.id, actual[0].id_plan_cobro]
+        );
+        plan = rows[0];
+      } else {
+        const { rows } = await pool.query(
+          `INSERT INTO plan_cobro
+             (id_miembro, id_gimnasio, tipo_plan, fecha_inicio, fecha_fin, valor_total,
+              valor_pagado, metodo_pago, referencia_pago, estado_pago, proxima_fecha_cobro,
+              activo, actualizado_por)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,TRUE,$12)
+          RETURNING *`,
+          [req.params.id, gymId, d.tipo_plan, d.fecha_inicio, d.fecha_fin, d.valor_total,
+           d.valor_pagado, d.metodo_pago, d.referencia_pago || null, estado,
+           d.proxima_fecha_cobro || null, req.user.id]
+        );
+        plan = rows[0];
+      }
+    } catch (err) {
+      if (err instanceof AppError) throw err;
+      console.error('[PUT /admin/miembros/:id/plan] Error:', err.message);
+      throw new AppError(503, 'No pudimos guardar el plan. Intenta de nuevo.', 'DB_UNREACHABLE');
     }
 
     return res.json({ message: 'Plan actualizado.', plan });
