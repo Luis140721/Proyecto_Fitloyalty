@@ -129,21 +129,21 @@ export default function AcceptInvitePage() {
 
           {error && (
             <div className="alert alert-error" role="alert">
-              <span className="material-symbols-outlined icon">error</span>
+              <span className="material-symbols-outlined icon" aria-hidden="true">error</span>
               <span>{error}</span>
             </div>
           )}
 
           {!token && (
             <div className="alert alert-warning">
-              <span className="material-symbols-outlined icon">warning</span>
+              <span className="material-symbols-outlined icon" aria-hidden="true">warning</span>
               <span>Esta URL no incluye un token de invitación. Pídele al dueño que te reenvíe el link.</span>
             </div>
           )}
 
           {token && loading && (
             <div className="alert alert-info" role="status">
-              <span className="material-symbols-outlined icon">hourglass_top</span>
+              <span className="material-symbols-outlined icon" aria-hidden="true">hourglass_top</span>
               <span>
                 Verificando tu invitación…
                 <br />
@@ -202,7 +202,7 @@ export default function AcceptInvitePage() {
                       cursor: 'pointer', borderRadius: 'var(--radius)',
                     }}
                   >
-                    <span className="material-symbols-outlined icon">{showPwd ? 'visibility_off' : 'visibility'}</span>
+                    <span className="material-symbols-outlined icon" aria-hidden="true">{showPwd ? 'visibility_off' : 'visibility'}</span>
                   </button>
                 </div>
                 <div className={`strength l-${score}`} aria-hidden="true">
@@ -210,12 +210,12 @@ export default function AcceptInvitePage() {
                 </div>
                 {fieldErrors.password ? (
                   <span className="field-error" id="err-password" role="alert">
-                    <span className="material-symbols-outlined icon">error</span>
+                    <span className="material-symbols-outlined icon" aria-hidden="true">error</span>
                     {fieldErrors.password}
                   </span>
                 ) : password.length >= 6 && /\d/.test(password) ? (
                   <span className="field-ok">
-                    <span className="material-symbols-outlined icon">check_circle</span>
+                    <span className="material-symbols-outlined icon" aria-hidden="true">check_circle</span>
                     Contraseña válida.
                   </span>
                 ) : (
@@ -241,12 +241,12 @@ export default function AcceptInvitePage() {
                 />
                 {fieldErrors.confirm ? (
                   <span className="field-error" id="err-confirm" role="alert">
-                    <span className="material-symbols-outlined icon">error</span>
+                    <span className="material-symbols-outlined icon" aria-hidden="true">error</span>
                     {fieldErrors.confirm}
                   </span>
                 ) : confirm && password === confirm ? (
                   <span className="field-ok">
-                    <span className="material-symbols-outlined icon">check_circle</span>
+                    <span className="material-symbols-outlined icon" aria-hidden="true">check_circle</span>
                     Coinciden.
                   </span>
                 ) : null}
@@ -261,7 +261,7 @@ export default function AcceptInvitePage() {
                 ) : (
                   <>
                     Crear cuenta y entrar
-                    <span className="material-symbols-outlined icon">arrow_forward</span>
+                    <span className="material-symbols-outlined icon" aria-hidden="true">arrow_forward</span>
                   </>
                 )}
               </button>
