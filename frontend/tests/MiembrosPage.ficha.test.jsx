@@ -172,6 +172,19 @@ describe('MiembrosPage: la ficha del miembro', () => {
     })));
   }, 15000);
 
+  test('should send the empty email so the API clears it when the person deletes it in the file', async () => {
+    // Arrange
+    const { user } = await abrirFichaDeAna();
+
+    // Act
+    await user.clear(within(ficha()).getByRole('textbox', { name: 'Email' }));
+    await user.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+
+    // Assert: el updateSchema del backend convierte '' en null
+    expect(await screen.findByRole('status')).toHaveTextContent('Miembro actualizado.');
+    expect(mockPut.mock.calls[0][1]).toHaveProperty('email', '');
+  });
+
   test('should close the file without saving when the X of the dialog is clicked', async () => {
     // Arrange
     const { user } = await abrirFichaDeAna();

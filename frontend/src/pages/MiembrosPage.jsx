@@ -896,7 +896,9 @@ export default function MiembrosPage() {
       for (const k of EDITABLES) {
         if (editForm[k] !== undefined) payload[k] = editForm[k];
       }
-      if (!payload.email) delete payload.email;
+      // Un correo vacio se envia tal cual: el backend lo guarda como null
+      // (updateSchema de routes/miembros.js). Si se quitara del payload, borrar
+      // el correo en la ficha no tendria efecto y el viejo seguiria guardado.
       await api.put(`/admin/miembros/${editing.id_miembro}`, payload);
       setEditing(null);
       setEditForm(empty);
