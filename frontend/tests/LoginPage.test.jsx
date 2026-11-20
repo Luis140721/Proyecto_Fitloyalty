@@ -107,3 +107,45 @@ describe('LoginPage', () => {
     expect(campoClave()).toHaveAttribute('type', 'password');
   });
 });
+
+// Semana 8 (Front, Santiago): ramas que el reporte de cobertura marcaba sin cubrir
+// (LoginPage.jsx lineas 25 y 31, y las formas de reconocer a un administrador).
+describe('LoginPage: ramas sin cubrir del reporte de la semana 8', () => {
+  const entrar = async (user) => {
+    await user.type(campoCorreo(), 'ana@fitgym.co');
+    await user.type(campoClave(), 'clave1234');
+    await user.click(botonEntrar());
+  };
+
+  test.each([
+    ['rol ADMINISTRADOR', { id: 1, rol: 'ADMINISTRADOR' }],
+    ['id_rol 1', { id: 1, id_rol: 1 }],
+  ])('should open the dashboard when the admin comes as %s', async (_forma, usuario) => {
+    mockLogin.mockResolvedValue(usuario);
+    const { user } = abrirLogin();
+
+    await entrar(user);
+
+    expect(await screen.findByText('Ruta actual: /admin/dashboard')).toBeInTheDocument();
+  });
+
+  test('should show a generic error and stay when login resolves without a user', async () => {
+    mockLogin.mockResolvedValue(null);
+    const { user } = abrirLogin();
+
+    await entrar(user);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('No se pudo iniciar sesión');
+    expect(screen.queryByText(/Ruta actual/)).not.toBeInTheDocument();
+    expect(botonEntrar()).toBeEnabled();
+  });
+
+  test('should show a generic error when the failure brings no message', async () => {
+    mockLogin.mockRejectedValue({ status: 0 });
+    const { user } = abrirLogin();
+
+    await entrar(user);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('No se pudo iniciar sesión');
+  });
+});
