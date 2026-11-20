@@ -126,7 +126,7 @@ export default function MenuNotificaciones() {
         aria-expanded={abierto}
         title="Notificaciones"
       >
-        <span className="material-symbols-outlined icon">notifications</span>
+        <span className="material-symbols-outlined icon" aria-hidden="true">notifications</span>
         {avisos.length > 0 && <span className="menu-flotante__contador">{avisos.length}</span>}
       </button>
 
@@ -134,8 +134,9 @@ export default function MenuNotificaciones() {
         <div className="menu-flotante__panel anim-scale-in" role="dialog" aria-label="Notificaciones">
           <header className="menu-flotante__cabecera">
             <strong>Avisos</strong>
-            <button className="btn btn-ghost btn-sm" onClick={cargar} disabled={cargando}>
-              <span className="material-symbols-outlined icon">refresh</span>
+            {/* Solo icono: aria-label le da nombre (sin el, se leia "refresh"). */}
+            <button className="btn btn-ghost btn-sm" onClick={cargar} disabled={cargando} aria-label="Actualizar avisos">
+              <span className="material-symbols-outlined icon" aria-hidden="true">refresh</span>
             </button>
           </header>
 
@@ -161,7 +162,7 @@ export default function MenuNotificaciones() {
                 className={`aviso aviso--${a.tipo}`}
                 onClick={() => irAlMiembro(a)}
               >
-                <span className="material-symbols-outlined aviso__icono">{a.icono}</span>
+                <span className="material-symbols-outlined aviso__icono" aria-hidden="true">{a.icono}</span>
                 <span className="aviso__texto">
                   <strong>{a.titulo}</strong>
                   <small>{a.detalle}</small>
