@@ -187,6 +187,19 @@ describe('CheckinPage: el QR y la respuesta del backend', () => {
     expect(mockMarcarActividad).not.toHaveBeenCalled();
   });
 
+  test('should deny the entry as overdue when the member is inactive', async () => {
+    // Arrange: el backend tambien puede mandar INACTIVO
+    mockPost = vi.fn(async () => ({ data: { miembro: { ...CARLOS, estado: 'inactivo' } } }));
+    const { user } = abrirCheckin();
+
+    // Act
+    await user.type(campoDocumento(), '79123456{Enter}');
+
+    // Assert
+    expect(await screen.findByRole('alert')).toHaveTextContent('Acceso denegado: Membresía vencida');
+    expect(mockMarcarActividad).not.toHaveBeenCalled();
+  });
+
   test('should show the message of the backend when the membership is frozen', async () => {
     // Arrange
     const mensaje = 'Tu membresía está congelada. Pide en recepción que la reactiven para poder ingresar.';

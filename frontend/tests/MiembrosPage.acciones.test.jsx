@@ -468,6 +468,23 @@ describe('MiembrosPage: desactivar y eliminar', () => {
   });
 });
 
+describe('MiembrosPage: cancelar el alta', () => {
+  test('should close the wizard and keep the list when the person clicks Cerrar in the header', async () => {
+    // Arrange
+    const { user } = await abrirAlta();
+    await user.type(campo(/^Nombre completo/), 'Sofía Gómez');
+
+    // Act
+    await user.click(screen.getByRole('button', { name: 'Cerrar' }));
+
+    // Assert
+    expect(screen.queryByText('Paso 1 de 5')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Nuevo miembro' })).toBeInTheDocument();
+    expect(filaDe('Ana Pérez')).toBeInTheDocument();
+    expect(mockPost).not.toHaveBeenCalled();
+  });
+});
+
 describe('MiembrosPage: sin miembros', () => {
   test('should open the wizard from the empty list', async () => {
     // Arrange
