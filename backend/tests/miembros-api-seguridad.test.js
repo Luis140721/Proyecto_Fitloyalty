@@ -291,6 +291,54 @@ describe('GET and PUT /api/admin/miembros/:id/plan: contract findings', () => {
     esErrorDelContrato(r, 503, 'DB_UNREACHABLE');
   });
 
+  // Solo la BD que no responde es 503 "intenta de nuevo". Cualquier otro error de
+  // la BD es un fallo real: sigue al errorHandler (500), que en produccion no
+  // muestra el mensaje.
+  const PLANES = [
+    ['get', '/api/admin/miembros/88/plan', undefined],
+    ['put', '/api/admin/miembros/88/plan', PLAN],
+  ];
+  const CORTES = [
+    ['the server refuses the connection (ECONNREFUSED)', () => Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:5432'), { code: 'ECONNREFUSED' })],
+    ['pg loses the connection, with no SQLSTATE', () => new Error('Connection terminated unexpectedly')],
+    ['the pool cannot get a connection in time', () => new Error('timeout exceeded when trying to connect')],
+  ];
+  const FALLOS_REALES = [
+    ['a column does not exist (42703)', () => Object.assign(new Error('column "valor" does not exist'), { code: '42703' })],
+    ['the route has a bug (TypeError)', () => new TypeError("Cannot read properties of undefined (reading 'id_plan_cobro')")],
+  ];
+  const cruzar = (rutas, casos) => rutas.flatMap(([metodo, ruta, cuerpo]) => casos.map(([caso, error]) => [metodo, ruta, caso, cuerpo, error]));
+
+  test.each(cruzar(PLANES, CORTES))('should answer 503 DB_UNREACHABLE when %s %s fails because %s', async (metodo, ruta, _caso, cuerpo, error) => {
+    // Arrange
+    responder([/plan_cobro|FROM miembro|congelacion_plan/, () => { throw error(); }]);
+
+    // Act
+    const r = await llamar(metodo, ruta, ADMIN, cuerpo);
+
+    // Assert
+    esErrorDelContrato(r, 503, 'DB_UNREACHABLE');
+  });
+
+  test.each(cruzar(PLANES, FALLOS_REALES))('should answer 500 INTERNAL_ERROR, not 503, when %s %s fails because %s', async (metodo, ruta, _caso, cuerpo, error) => {
+    // Arrange: en produccion, como en Render
+    const entorno = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+    responder([/plan_cobro|FROM miembro|congelacion_plan/, () => { throw error(); }]);
+
+    // Act
+    let r;
+    try {
+      r = await llamar(metodo, ruta, ADMIN, cuerpo);
+    } finally {
+      process.env.NODE_ENV = entorno;
+    }
+
+    // Assert
+    esErrorDelContrato(r, 500, 'INTERNAL_ERROR');
+    expect(r.body.error).toBe('Error interno del servidor');
+  });
+
   test('should answer 402 TRIAL_EXPIRED without reading the plan when the gym trial has ended', async () => {
     // Arrange: la prueba gratuita del gimnasio vencio ayer
     mockGimnasio.trial_ends_at = new Date(Date.now() - 24 * 60 * 60 * 1000);
