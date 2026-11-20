@@ -288,6 +288,24 @@ describe('CheckinPage: la cámara', () => {
     expect(mockMarcarActividad).toHaveBeenCalledTimes(2);
   });
 
+  test('should ignore another QR when the camera reads it while the first check-in is on its way', async () => {
+    // Arrange: el registro del primer QR se queda esperando
+    let responder;
+    mockPost = vi.fn(() => new Promise((resolve) => { responder = () => resolve(registrado()); }));
+    const { user } = abrirCheckin();
+    await user.click(screen.getByRole('button', { name: 'Activar cámara' }));
+
+    // Act: llega otro QR antes de que responda el primero
+    await act(async () => escaner.leer('QR-CARLOS'));
+    await act(async () => escaner.leer('QR-ANA'));
+    await act(async () => responder());
+
+    // Assert
+    expect(await aviso()).toHaveTextContent('Ingreso registrado.');
+    expect(mockPost).toHaveBeenCalledTimes(1);
+    expect(mockPost).toHaveBeenCalledWith('/admin/checkin', { metodo: 'QR', codigo: 'QR-CARLOS' });
+  });
+
   test('should warn without the success vibration when the camera reads a member who already checked in', async () => {
     // Arrange
     const vibrar = espiarVibracion();
