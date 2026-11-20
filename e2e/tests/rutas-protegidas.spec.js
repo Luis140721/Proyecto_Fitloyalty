@@ -83,7 +83,7 @@ test('should drop a token with a forged signature and show the login', async ({ 
 
   // Assert
   await expect(page).toHaveURL(/\/login$/);
-  await expect(page.getByRole('heading', { name: 'Bienvenido otra vez' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Bienvenido de vuelta' })).toBeVisible();
   expect(await tokenGuardado(page)).toBeNull();
 });
 
