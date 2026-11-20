@@ -47,11 +47,16 @@ export default defineConfig({
       cwd: '../backend',
       // /api/health responde 503 mientras no hay BD: Playwright espera el 200.
       url: `${API_URL}/health`,
-      // Nunca reutilizar un backend ya abierto: podria estar conectado a la BD de
-      // desarrollo y los tests le crearian gimnasios de prueba.
-      reuseExistingServer: false,
+      // En tu equipo nunca se reutiliza un backend ya abierto: podria estar
+      // conectado a la BD de desarrollo y los tests le crearian gimnasios de
+      // prueba. En el CI si: el job e2e de tests.yml lo arranca en segundo plano
+      // despues de pasar la URL por la guardia, y en el runner no hay mas BD que
+      // el servicio. Por eso no pongas CI=1 en tu equipo con un backend en 3001.
+      reuseExistingServer: !!process.env.CI,
       timeout: 60_000,
       // dotenv no pisa variables ya definidas, asi que estas mandan sobre backend/.env.
+      // El paso "Start backend" de tests.yml repite estas variables: si cambias
+      // una aqui, cambiala alli.
       env: {
         PORT: '3001',
         NODE_ENV: 'test',

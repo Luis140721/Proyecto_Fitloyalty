@@ -9,17 +9,17 @@ Reglas:
 - Cada semana cambias de capa. No repites capa hasta haber pasado por las cuatro.
 - En la columna escribe la capa y, al cerrar la semana, el enlace a tu PR de tests.
 - Quien revisa tu PR debe haber trabajado en otra capa esa semana.
-- S1 (E2E) y S3 (Front) son semanas de tema común: todo el grupo trabaja en la misma capa y no cuentan para la rotación. Por eso Luis (E2E en S1 y S2) y Daniel (Front en S2 y S3) no rompen la regla.
+- S1 (E2E), S3 (Front) y S7 (E2E) son semanas de tema común: todo el grupo trabaja en la misma capa y no cuentan para la rotación. Por eso Luis (E2E en S1 y S2) y Daniel (Front en S2 y S3) no rompen la regla.
 
 > La rama de la semana que el bootcamp llama `test/semana-01` aquí se llama `chore/test-semana-01`, porque el check `rama` del CI solo acepta ramas `feat/`, `fix/`, `docs/` o `chore/`.
 
 Propuesta pendiente de acuerdo del grupo; ver [plan-pruebas-bootcamp.md](plan-pruebas-bootcamp.md). Según el bootcamp, en la semana 1 todos hacen E2E y en la 3 todos hacen Front. Cada integrante debe tener commits de test propios en la capa de cada semana.
 
-| Integrante (usuario GitHub) | S1 | S2 | S3 | S4 | S5 | S6 |
-|---|---|---|---|---|---|---|
-| Luis (@Luis140721) | E2E: registro de gimnasio ([#38](https://github.com/Luis140721/Proyecto_Fitloyalty/pull/38)) | E2E (CI): CI con umbral y pnpm ([#61](https://github.com/Luis140721/Proyecto_Fitloyalty/pull/61)); unitarias de `email.js` y de la validación del registro ([#59](https://github.com/Luis140721/Proyecto_Fitloyalty/pull/59)) | Front: `RegisterOwnerPage` ([#60](https://github.com/Luis140721/Proyecto_Fitloyalty/pull/60)) | Front: contrato del API que consume el front, `MiembrosPage` y `AcceptInvitePage` ([#57](https://github.com/Luis140721/Proyecto_Fitloyalty/pull/57)) | API: dobles sobre una dependencia externa del backend (en curso) | BD: integración con la BD de pruebas (en curso) |
-| Santiago (@Salamank06) | E2E: inicio de sesión ([#48](https://github.com/Luis140721/Proyecto_Fitloyalty/pull/48)) | API: reglas de login y recuperación de clave ([#49](https://github.com/Luis140721/Proyecto_Fitloyalty/pull/49)) | Front: `LoginPage` ([#50](https://github.com/Luis140721/Proyecto_Fitloyalty/pull/50)) | E2E: seguridad y contrato de errores del API ([#51](https://github.com/Luis140721/Proyecto_Fitloyalty/pull/51)) | | |
-| Daniel (@dftv3429-eng) | E2E: alta de miembro (pendiente) | Front (pendiente) | Front (pendiente; el backend ya pasa del 40 %) | API (pendiente) | | |
+| Integrante (usuario GitHub) | S1 | S2 | S3 | S4 | S5 | S6 | S7 | S8 |
+|---|---|---|---|---|---|---|---|---|
+| Luis (@Luis140721) | E2E: registro de gimnasio ([#38](https://github.com/Luis140721/Proyecto_Fitloyalty/pull/38)) | E2E (CI): CI con umbral y pnpm ([#61](https://github.com/Luis140721/Proyecto_Fitloyalty/pull/61)); unitarias de `email.js` y de la validación del registro ([#59](https://github.com/Luis140721/Proyecto_Fitloyalty/pull/59)) | Front: `RegisterOwnerPage` ([#60](https://github.com/Luis140721/Proyecto_Fitloyalty/pull/60)) | Front: contrato del API que consume el front, `MiembrosPage` y `AcceptInvitePage` ([#57](https://github.com/Luis140721/Proyecto_Fitloyalty/pull/57)) | API: invitación del personal con el correo y el reloj simulados ([#65](https://github.com/Luis140721/Proyecto_Fitloyalty/pull/65)) | BD: BD de pruebas ([#68](https://github.com/Luis140721/Proyecto_Fitloyalty/pull/68)) y restricciones contra la BD real ([#69](https://github.com/Luis140721/Proyecto_Fitloyalty/pull/69)) | E2E: check-in de un miembro ([#79](https://github.com/Luis140721/Proyecto_Fitloyalty/pull/79)) | E2E: CI completo y rutas protegidas ([#78](https://github.com/Luis140721/Proyecto_Fitloyalty/pull/78)) |
+| Santiago (@Salamank06) | E2E: inicio de sesión ([#48](https://github.com/Luis140721/Proyecto_Fitloyalty/pull/48)) | API: reglas de login y recuperación de clave ([#49](https://github.com/Luis140721/Proyecto_Fitloyalty/pull/49)) | Front: `LoginPage` ([#50](https://github.com/Luis140721/Proyecto_Fitloyalty/pull/50)) | E2E: seguridad y contrato de errores del API ([#51](https://github.com/Luis140721/Proyecto_Fitloyalty/pull/51)) | Front: cliente HTTP `api.js` con MSW ([#82](https://github.com/Luis140721/Proyecto_Fitloyalty/pull/82)) | BD: `plan_cobro` y `ULTIMO_PLAN` contra la BD real; largos de miembro sin 500 ([#83](https://github.com/Luis140721/Proyecto_Fitloyalty/pull/83)) | E2E: inicio de sesión con el backend real y defectos de tiempos ([#84](https://github.com/Luis140721/Proyecto_Fitloyalty/pull/84)) | Front: ramas sin cubrir de `ProtectedRoute`, `LoginPage` y `BadgeEstado` ([#85](https://github.com/Luis140721/Proyecto_Fitloyalty/pull/85)) |
+| Daniel (@dftv3429-eng) | E2E: alta de miembro (pendiente) | Front (pendiente) | Front (pendiente; el backend ya pasa del 40 %) | API (pendiente) | | | E2E: alta de miembro (pendiente) | (pendiente) |
 
 ## Cobertura semanal
 
@@ -36,6 +36,9 @@ La cobertura que se anota es la del CI (Linux), no la de Windows. Con el mismo c
 | Semana | Frontend (%) | Backend (%) | Umbral configurado |
 |---|---|---|---|
 | S1 (línea base) | 1,11 líneas · 1,11 sentencias · 10 ramas · 6,12 funciones | 18,08 líneas · 17,16 sentencias · 16,88 ramas · 21,69 funciones | Backend: líneas 18, sentencias 17, ramas 16, funciones 21 · Frontend: líneas 1, sentencias 1, ramas 10, funciones 6 |
+| S2 (cierre conjunto con el #77, 2026-11-19, CI) | 56,89 líneas · 56,89 sentencias · 77,98 ramas · 56,96 funciones | 62,36 líneas · 61,28 sentencias · 54,96 ramas · 66,93 funciones | Backend: líneas 61, sentencias 60, ramas 54, funciones 66 (Windows da 61,88 y 60,89) · Frontend: líneas 56, sentencias 56, ramas 77, funciones 56 |
+| S3 (cierre conjunto con el #77, 2026-11-19, CI) | 56,89 líneas · 56,89 sentencias · 77,98 ramas · 56,96 funciones | 62,36 líneas · 61,28 sentencias · 54,96 ramas · 66,93 funciones | Backend: líneas 61, sentencias 60, ramas 54, funciones 66 (Windows da 61,88 y 60,89) · Frontend: líneas 56, sentencias 56, ramas 77, funciones 56 |
+| S4 (cierre conjunto con el #77, 2026-11-19, CI) | 56,89 líneas · 56,89 sentencias · 77,98 ramas · 56,96 funciones | 62,36 líneas · 61,28 sentencias · 54,96 ramas · 66,93 funciones | Backend: líneas 61, sentencias 60, ramas 54, funciones 66 (Windows da 61,88 y 60,89) · Frontend: líneas 56, sentencias 56, ramas 77, funciones 56 |
 
 ## Registro de vocero aleatorio
 
@@ -49,3 +52,5 @@ El vocero escribe su respuesta **antes** de que el instructor llegue a la mesa; 
 | S4 | | | | |
 | S5 | | | | |
 | S6 | | | | |
+| S7 | | | | |
+| S8 | | | | |
