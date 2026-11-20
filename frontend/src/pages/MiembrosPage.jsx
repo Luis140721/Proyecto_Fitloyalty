@@ -15,6 +15,9 @@ import Modal from '../components/Modal';
 import Ripple from '../components/Ripple';
 import QRCode from 'qrcode';
 
+// CampoFecha usa locale="es": sin registrarlo, el calendario sale en ingles.
+registerLocale('es', es);
+
 /** Mensaje de error bajo un campo. No renderiza nada si no hay error. */
 function ErrorCampo({ msg }) {
   if (!msg) return null;
