@@ -104,4 +104,18 @@ describe('PATCH /api/admin/staff/:id: the audit trail', () => {
       detalle: { eventos: ['ROL_CAMBIADO'], antes: { rol: 'RECEPCIONISTA' }, despues: { rol: 'ADMINISTRADOR' } },
     })]);
   });
+
+  test('should record the old and the new name when an admin renames a receptionist', async () => {
+    // Arrange: Ana se llama «Ana Recepcion»
+
+    // Act
+    const r = await editar(ANA, { nombre: '  Ana Maria  ' });
+
+    // Assert
+    expect(r.status).toBe(200);
+    expect(mockBd.auditoria).toEqual([expect.objectContaining({
+      id_registro: ANA,
+      detalle: { eventos: ['NOMBRE_CAMBIADO'], antes: { nombre: 'Ana Recepcion' }, despues: { nombre: 'Ana Maria' } },
+    })]);
+  });
 });

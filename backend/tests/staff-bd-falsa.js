@@ -60,10 +60,14 @@ function crearBdFalsa() {
           .map((u) => ({ ...Object.fromEntries(columnas.map((c) => [c, u[c]])), rol: rolNombre(u.id_rol), es_dueno: esDueno(u) })),
       };
     }
-    // PATCH /admin/staff/:id: el usuario actual, solo si es del gimnasio.
-    if (/SELECT id_usuario, id_rol, activo, COALESCE[\s\S]*FROM usuario\s+WHERE id_usuario = \$1 AND id_gimnasio = \$2/.test(sql)) {
+    // PATCH /admin/staff/:id: el usuario actual, solo si es del gimnasio (el nombre, solo si se pide).
+    const actualPatch = sql.match(/SELECT id_usuario,( nombre,)? id_rol, activo, COALESCE[\s\S]*FROM usuario\s+WHERE id_usuario = \$1 AND id_gimnasio = \$2/);
+    if (actualPatch) {
       const u = bd.usuarios.find((x) => x.id_usuario === params[0] && x.id_gimnasio === params[1]);
-      return { rows: u ? [{ id_usuario: u.id_usuario, id_rol: u.id_rol, activo: u.activo, es_dueno: esDueno(u) }] : [] };
+      if (!u) return { rows: [] };
+      const fila = { id_usuario: u.id_usuario, id_rol: u.id_rol, activo: u.activo, es_dueno: esDueno(u) };
+      if (actualPatch[1]) fila.nombre = u.nombre;
+      return { rows: [fila] };
     }
     const cambio = sql.match(/^\s*UPDATE usuario SET ([\s\S]+?)\s+WHERE id_usuario = \$(\d+) AND id_gimnasio = \$(\d+)/);
     if (cambio) {
