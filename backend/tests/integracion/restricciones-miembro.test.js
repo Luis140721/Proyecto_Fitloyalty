@@ -36,9 +36,12 @@ const NO_NULOS = [
 // 500 en gimnasio.nombre, gimnasio.email, usuario.nombre y usuario.email
 // (corregido en lib/validators.js, con su test unitario en
 // signup-longitudes.test.js), y POST /api/admin/miembros respondia 500
-// DB_UNREACHABLE en miembro.nombre y miembro.documento (corregido en el #83,
-// en createSchema y updateSchema de routes/miembros.js, con su test unitario
-// en miembros-longitudes.test.js).
+// DB_UNREACHABLE en las columnas de miembro. Corregido en routes/miembros.js:
+//   - nombre, documento, telefono y email, en el #83 (createSchema y
+//     updateSchema, con su test unitario en miembros-longitudes.test.js);
+//   - contacto_emergencia, telefono_emergencia, objetivo y nivel_experiencia,
+//     y en plan_cobro referencia_pago, valor_total y valor_pagado, en
+//     createSchema, con su test unitario en miembros-alta-topes.test.js.
 const LARGOS = [
   ['gimnasio', 'nombre', 100], ['gimnasio', 'nit', 20], ['gimnasio', 'direccion', 200], ['gimnasio', 'telefono', 20],
   ['gimnasio', 'email', 150], ['gimnasio', 'plan_activo', 20],
