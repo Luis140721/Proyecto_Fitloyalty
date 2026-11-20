@@ -66,7 +66,7 @@ export default function ConfigPage() {
     return (
       <PageTransition>
         <div style={{ textAlign: 'center', padding: 100 }}>
-          <span className="material-symbols-outlined anim-spin" style={{ fontSize: 48 }}>refresh</span>
+          <span className="material-symbols-outlined anim-spin" style={{ fontSize: 48 }} aria-hidden="true">refresh</span>
           <p style={{ marginTop: 20 }}>Cargando configuración...</p>
         </div>
       </PageTransition>
@@ -86,14 +86,14 @@ export default function ConfigPage() {
 
       {error && (
         <div className="alert alert-error anim-scale-in" role="alert" style={{ marginBottom: 24 }}>
-          <span className="material-symbols-outlined icon">error</span>
+          <span className="material-symbols-outlined icon" aria-hidden="true">error</span>
           <span>{error}</span>
         </div>
       )}
 
       {success && (
         <div className="alert alert-success anim-scale-in" role="alert" style={{ marginBottom: 24 }}>
-          <span className="material-symbols-outlined icon">check_circle</span>
+          <span className="material-symbols-outlined icon" aria-hidden="true">check_circle</span>
           <span>{success}</span>
         </div>
       )}
@@ -308,7 +308,7 @@ export default function ConfigPage() {
               onClick={crearRipple}
               disabled={saving}
             >
-              <span className="material-symbols-outlined icon">save</span>
+              <span className="material-symbols-outlined icon" aria-hidden="true">save</span>
               {saving ? 'Guardando...' : 'Guardar Configuración'}
             </button>
             <button
@@ -317,7 +317,7 @@ export default function ConfigPage() {
               onClick={loadConfig}
               disabled={loading}
             >
-              <span className="material-symbols-outlined icon">refresh</span>
+              <span className="material-symbols-outlined icon" aria-hidden="true">refresh</span>
               Restablecer
             </button>
           </div>

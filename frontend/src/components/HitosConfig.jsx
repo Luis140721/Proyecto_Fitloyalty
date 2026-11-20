@@ -64,7 +64,7 @@ export default function HitosConfig() {
 
       {error && (
         <div className="alert alert-error" role="alert" style={{ marginBottom: 16 }}>
-          <span className="material-symbols-outlined icon">error</span>
+          <span className="material-symbols-outlined icon" aria-hidden="true">error</span>
           <span>{error}</span>
         </div>
       )}
@@ -113,7 +113,7 @@ export default function HitosConfig() {
         </label>
         <div style={{ marginTop: 12 }}>
           <button type="submit" className="btn btn-secondary" disabled={guardando || !nuevo.nombre.trim() || !nuevo.mensaje.trim()}>
-            <span className="material-symbols-outlined icon">add</span>
+            <span className="material-symbols-outlined icon" aria-hidden="true">add</span>
             {guardando ? 'Guardando...' : 'Agregar hito'}
           </button>
         </div>
