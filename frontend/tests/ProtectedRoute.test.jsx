@@ -83,7 +83,7 @@ describe('ProtectedRoute', () => {
 
     abrir(['admin']);
 
-    expect(screen.getByText('Pantalla de check-in ROJO PROVOCADO')).toBeInTheDocument();
+    expect(screen.getByText('Pantalla de check-in')).toBeInTheDocument();
     expect(screen.queryByText('Contenido protegido')).not.toBeInTheDocument();
   });
 
