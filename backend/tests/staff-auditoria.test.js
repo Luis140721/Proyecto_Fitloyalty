@@ -73,4 +73,20 @@ describe('PATCH /api/admin/staff/:id: the audit trail', () => {
     })]);
     expect(usuario(ANA).activo).toBe(false);
   });
+
+  test('should record who reactivated the account when an admin reactivates an inactive receptionist', async () => {
+    // Arrange
+    usuario(ANA).activo = false;
+
+    // Act
+    const r = await editar(ANA, { activo: true });
+
+    // Assert
+    expect(r.status).toBe(200);
+    expect(mockBd.auditoria).toEqual([expect.objectContaining({
+      id_registro: ANA,
+      id_usuario: LUIS,
+      detalle: { eventos: ['REACTIVADA'], antes: { activo: false }, despues: { activo: true } },
+    })]);
+  });
 });
