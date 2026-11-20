@@ -6,6 +6,10 @@
  * Solo se simula el cliente HTTP (api.get y api.post). getToken, setToken y
  * tokenVenceEn son los reales de api.js y trabajan sobre localStorage, y el
  * banner de errores es el real.
+ *
+ * Se llama AuthProvider.test.jsx para no chocar con AuthContext.test.jsx de la
+ * semana 8 (PR #78): alla estan el 403, el 404 y el fallo de red de /auth/me, y
+ * aqui no se repiten.
  */
 import { describe, expect, test, vi, beforeEach, afterEach } from 'vitest';
 import { useState } from 'react';
@@ -117,10 +121,11 @@ describe('AuthProvider: al abrir la app', () => {
     expect(await sesionAbierta('Sesión de Ana Pérez como admin en Gimnasio Central')).toBeInTheDocument();
   });
 
-  test.each([401, 403, 404])('should drop the saved token when /auth/me answers %i', async (status) => {
+  // 403, 404 y el fallo de red estan en AuthContext.test.jsx (semana 8); aqui solo el 401.
+  test('should drop the saved token when /auth/me answers 401', async () => {
     // Arrange
     localStorage.setItem(TOKEN_KEY, TOKEN_VIGENTE);
-    mockGet = vi.fn(async () => { throw { status, code: 'X', message: 'Token no valido' }; });
+    mockGet = vi.fn(async () => { throw { status: 401, code: 'TOKEN_INVALID', message: 'Token no valido' }; });
 
     // Act
     abrirApp();
@@ -128,19 +133,6 @@ describe('AuthProvider: al abrir la app', () => {
     // Assert
     expect(await screen.findByText('Sin sesión')).toBeInTheDocument();
     expect(localStorage.getItem(TOKEN_KEY)).toBeNull();
-  });
-
-  test('should keep the saved token when /auth/me fails because there is no connection', async () => {
-    // Arrange: un bajon de red no dice que el token este muerto
-    localStorage.setItem(TOKEN_KEY, TOKEN_VIGENTE);
-    mockGet = vi.fn(async () => { throw { status: 0, code: 'NETWORK', isNetwork: true, message: 'Sin conexion' }; });
-
-    // Act
-    abrirApp();
-
-    // Assert
-    expect(await screen.findByText('Sin sesión')).toBeInTheDocument();
-    expect(localStorage.getItem(TOKEN_KEY)).toBe(TOKEN_VIGENTE);
   });
 
   test('should close the session with the inactivity notice when the last activity is older than 30 minutes', async () => {
