@@ -5,40 +5,41 @@
  * servicio db-test de e2e/docker-compose.yml (127.0.0.1:5433, BD
  * fitloyalty_test), el mismo que usan los E2E.
  *
- * La URL llega por TEST_DATABASE_URL y no por DATABASE_URL, como en el
- * bootcamp: backend/.env trae la DATABASE_URL de desarrollo y cualquier
- * require('dotenv') (migrate.js, index.js) la carga, asi que un test que
- * leyera DATABASE_URL podria escribir en la BD de desarrollo.
+ * La URL llega por DATABASE_URL, como en el bootcamp, pero solo cuenta la del
+ * entorno del proceso: la que exporta quien corre los tests o el job del CI.
+ * backend/.env trae la DATABASE_URL de desarrollo y cualquier require('dotenv')
+ * (migrate.js, index.js) la carga; por eso aqui no se lee process.env sino el
+ * valor que guardo tests/integracion/entorno-del-proceso.js (setupFiles de
+ * jest.config.js) antes de que el archivo de test cargue nada.
  *
- *   - Sin TEST_DATABASE_URL, describeConBd se salta: el CI no tiene BD hasta
- *     la semana 8 y la cobertura se mide sin ella.
+ *   - Sin DATABASE_URL en el entorno del proceso, describeConBd se salta,
+ *     aunque backend/.env la tenga. Asi corre `pnpm test` en el job backend.
  *   - Con una URL que no es la BD de pruebas local, el archivo de test falla
  *     al cargar este modulo, antes de conectarse (e2e/guardia-bd.cjs, la misma
  *     guardia de los E2E).
  *   - Antes de la primera consulta se revisa ademas el destino que pg va a
  *     usar de verdad con las opciones del pool ya construido.
  *
- * Cada archivo de integracion requiere este modulo ANTES que cualquier cosa de
- * src/: aqui se fija DATABASE_URL para que el pool de la app (src/db/db.js)
- * apunte a la BD de pruebas. dotenv no pisa variables ya definidas, asi que
- * backend/.env ya no puede cambiarla.
+ * Aqui tambien se vuelve a fijar DATABASE_URL, por si el archivo de test ya
+ * hubiera cargado dotenv: el pool de la app (src/db/db.js) apunta siempre a la
+ * BD de pruebas.
  */
 const ConnectionParameters = require('pg/lib/connection-parameters');
 const { exigirBdDePruebas, motivosDelDestino } = require('../../../e2e/guardia-bd.cjs');
 
-const URL_PRUEBAS = process.env.TEST_DATABASE_URL;
+const URL_PRUEBAS = globalThis.DATABASE_URL_DEL_PROCESO;
 
 if (URL_PRUEBAS) {
-  exigirBdDePruebas(URL_PRUEBAS, 'TEST_DATABASE_URL');
+  exigirBdDePruebas(URL_PRUEBAS, 'DATABASE_URL');
   process.env.DATABASE_URL = URL_PRUEBAS;
   process.env.DB_SSL = 'false'; // el contenedor no tiene SSL
 }
 
-/** describe que se salta sin TEST_DATABASE_URL (Jest no trae describe.skipIf). */
+/** describe que se salta sin DATABASE_URL en el entorno del proceso (Jest no trae describe.skipIf). */
 const describeConBd = URL_PRUEBAS ? describe : describe.skip;
 
 // Llave fija de pg_advisory_lock. Si Jest corre varios archivos a la vez (npm
-// test con TEST_DATABASE_URL usa varios procesos), solo uno aplica las
+// test con DATABASE_URL usa varios procesos), solo uno aplica las
 // migraciones en una BD recien creada y los demas esperan su turno.
 const CANDADO_MIGRACIONES = 20261028;
 

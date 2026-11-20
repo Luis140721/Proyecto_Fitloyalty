@@ -305,25 +305,30 @@ que consume `GET /api/vista/miembros-activos`.
 
 ### Pruebas de integración (BD real)
 
-Los tests de `backend/tests/integracion/` corren contra PostgreSQL de verdad, en la BD de
-pruebas desechable `db-test` de `e2e/docker-compose.yml`: la misma de los E2E, en
+Los tests de `backend/tests/integracion/` y `backend/tests/registro-envio-real.test.js` corren
+contra PostgreSQL de verdad, en la BD de pruebas desechable `db-test` de `e2e/docker-compose.yml`: la misma de los E2E, en
 `127.0.0.1:5433`, BD `fitloyalty_test`, con los datos en memoria. El esquema lo crean las
 migraciones de `backend/migrations`, con la misma función que aplica el backend al arrancar.
 Desde la raíz:
 
 ```bash
 docker compose -f e2e/docker-compose.yml up -d --wait db-test
-TEST_DATABASE_URL=postgres://fitloyalty_test:fitloyalty_test@127.0.0.1:5433/fitloyalty_test pnpm --dir backend run test:integracion
+DATABASE_URL=postgres://fitloyalty_test:fitloyalty_test@127.0.0.1:5433/fitloyalty_test pnpm --dir backend run test:integracion
 docker compose -f e2e/docker-compose.yml down -v
 ```
 
 En PowerShell, el segundo comando es
-`$env:TEST_DATABASE_URL='postgres://fitloyalty_test:fitloyalty_test@127.0.0.1:5433/fitloyalty_test'; pnpm --dir backend run test:integracion; Remove-Item Env:TEST_DATABASE_URL`
+`$env:DATABASE_URL='postgres://fitloyalty_test:fitloyalty_test@127.0.0.1:5433/fitloyalty_test'; pnpm --dir backend run test:integracion; Remove-Item Env:DATABASE_URL`
 (el `Remove-Item` evita que la variable siga definida en la terminal).
 
-- Sin `TEST_DATABASE_URL`, `pnpm test` y el CI los muestran como *skipped*: la BD llega al CI en la semana 8.
-- La variable es `TEST_DATABASE_URL` y no `DATABASE_URL`, porque `backend/.env` trae la de
-  desarrollo y `dotenv` la cargaría.
+- Sin `DATABASE_URL`, `pnpm test` los muestra como *skipped*: así corren en el job `backend`.
+  En el CI corren en el job `integracion` de `.github/workflows/tests.yml`, con PostgreSQL como
+  servicio, y ese job falla si queda alguno saltado.
+- La variable es `DATABASE_URL`, como en el bootcamp, pero solo cuenta la del entorno del
+  proceso: la que exportas en la terminal o la que pone el CI. `backend/.env` trae la de
+  desarrollo y `dotenv` la cargaría; `tests/integracion/entorno-del-proceso.js` (`setupFiles` de
+  `jest.config.js`) guarda la del proceso antes de que un test cargue nada, así que la del `.env`
+  no activa estos tests.
 - Dos revisiones, las dos antes de abrir una conexión:
   - Al cargar los tests, la guardia de `e2e/guardia-bd.cjs`, la misma de los E2E, exige la forma
     exacta `postgres://usuario:clave@127.0.0.1:5433/nombre_test`, con `?sslmode=` como único
@@ -331,6 +336,9 @@ En PowerShell, el segundo comando es
     host es `127.0.0.1` y nunca `localhost`, que en Windows puede resolver a `::1`.
   - Antes de migrar, se revisan el host, el puerto y la BD que `pg` va a usar de verdad con el
     pool de la app ya construido. Si no son los de la BD de pruebas, los tests fallan sin conectarse.
+- La guardia confía en lo que escuche en `127.0.0.1:5433`. En Windows, si ese puerto ya lo ocupa
+  otro Postgres (de otro proyecto), los tests se conectan a ese: antes de correrlos, comprueba que
+  `docker ps --filter publish=5433` muestre solo el contenedor de `db-test`.
 
 ---
 

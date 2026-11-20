@@ -13,7 +13,8 @@
  * acceso-bloqueado.test.js y tests/gamificacion.test.js prueban las mismas
  * reglas con un pool falso; estos ven lo que el falso no puede: que el SQL
  * corre, que las columnas existen y lo que hacen el orden, los filtros y las
- * restricciones. Sin TEST_DATABASE_URL se salta.
+ * restricciones. Sin DATABASE_URL en el entorno del
+ * proceso se salta.
  */
 const { describeConBd, prepararBdDePruebas } = require('./bd-pruebas');
 const { crearGimnasio, crearMiembro, usarTransaccionPorTest } = require('./datos');
