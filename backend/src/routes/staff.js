@@ -450,34 +450,42 @@ router.patch(
     if (activo !== undefined) set('activo', activo);
     params.push(id, gymId);
 
+    // HU-04, criterio 4: el cambio y su fila de auditoria (con el responsable)
+    // van en la misma transaccion: si la auditoria no se guarda, no hay cambio.
+    const rolAntes = Object.keys(ID_ROL).find((k) => ID_ROL[k] === actual.id_rol);
+    const detalle = cambiosDeCuenta(
+      { activo: actual.activo, rol: rolAntes, nombre: actual.nombre },
+      { activo: activo ?? actual.activo, rol: rol ?? rolAntes, nombre: nombre ?? actual.nombre }
+    );
+
     let actualizado;
+    let client;
     try {
-      const { rows } = await pool.query(
+      client = await pool.connect();
+      await client.query('BEGIN');
+      const { rows } = await client.query(
         `UPDATE usuario SET ${sets.join(', ')}
           WHERE id_usuario = $${params.length - 1} AND id_gimnasio = $${params.length}
           RETURNING id_usuario, nombre, email, id_rol, activo, ${ROL_EXPR}, ${ES_DUENO_EXPR}`,
         params
       );
       actualizado = rows[0];
+      if (actualizado && detalle) {
+        await client.query(
+          `INSERT INTO auditoria (id_gimnasio, tabla_afectada, id_registro, accion, id_usuario, detalle)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [gymId, 'usuario', id, 'UPDATE', req.user.id, JSON.stringify(detalle)]
+        );
+      }
+      await client.query('COMMIT');
     } catch (err) {
+      if (client) { try { await client.query('ROLLBACK'); } catch (_) { /* la conexion ya cayo */ } }
       console.error('[PATCH /admin/staff/:id] Error actualizando usuario:', err.code, err.message);
       throw new AppError(503, 'No pudimos actualizar al usuario. Intenta de nuevo.', 'DB_UNREACHABLE');
+    } finally {
+      if (client) client.release();
     }
     if (!actualizado) throw new AppError(404, 'Usuario no encontrado en este gimnasio.', 'STAFF_NOT_FOUND');
-
-    // HU-04, criterio 4: el cambio queda en auditoria con el responsable.
-    const rolAntes = Object.keys(ID_ROL).find((k) => ID_ROL[k] === actual.id_rol);
-    const detalle = cambiosDeCuenta(
-      { activo: actual.activo, rol: rolAntes, nombre: actual.nombre },
-      { activo: activo ?? actual.activo, rol: rol ?? rolAntes, nombre: nombre ?? actual.nombre }
-    );
-    if (detalle) {
-      await pool.query(
-        `INSERT INTO auditoria (id_gimnasio, tabla_afectada, id_registro, accion, id_usuario, detalle)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
-        [gymId, 'usuario', id, 'UPDATE', req.user.id, JSON.stringify(detalle)]
-      );
-    }
 
     const message = desactiva ? 'Usuario desactivado. Ya no puede iniciar sesion.'
       : (activo === true && !actual.activo) ? 'Usuario reactivado.'
