@@ -370,9 +370,30 @@ describe('MiembrosPage: el aviso por WhatsApp de la lista', () => {
     expect(abrir).toHaveBeenCalledWith(
       `https://wa.me/573109876543?text=${encodeURIComponent(CARLOS.whatsapp.mensaje)}`, '_blank', 'noopener,noreferrer',
     );
-    await waitFor(() => expect(mockPost).toHaveBeenCalledWith('/admin/notificaciones/enviado', { idMiembro: 2, canal: 'WHATSAPP', tipo: 'vencida' }));
+    // El registro guarda tambien el texto que se abrio en WhatsApp (RQF-09, #73).
+    await waitFor(() => expect(mockPost).toHaveBeenCalledWith('/admin/notificaciones/enviado', {
+      idMiembro: 2, canal: 'WHATSAPP', tipo: 'vencida', mensaje: CARLOS.whatsapp.mensaje,
+    }));
     expect(within(filaDe('Carlos Ruiz')).getByRole('button', { name: 'Enviado' })).toBeInTheDocument();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.queryByText(/no pudimos registrar el envío/)).not.toBeInTheDocument();
+  });
+
+  test('should warn that the sending was not recorded when the chat opens but the record fails', async () => {
+    // Arrange
+    vi.spyOn(window, 'open').mockReturnValue(null);
+    mockPost = vi.fn(async () => { throw { status: 503, code: 'DB_UNREACHABLE', message: 'Sin conexion.' }; });
+    const { user } = renderWithProviders(<MiembrosPage />, { route: '/admin/miembros' });
+    await screen.findByRole('row', { name: /Carlos Ruiz/ });
+
+    // Act
+    await user.click(within(filaDe('Carlos Ruiz')).getByRole('button', { name: 'Avisar' }));
+
+    // Assert
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'Se abrió WhatsApp, pero no pudimos registrar el envío a Carlos Ruiz.',
+    );
+    expect(within(filaDe('Carlos Ruiz')).getByRole('button', { name: 'Enviado' })).toBeInTheDocument();
   });
 
   test('should say there is no phone instead of a button when the member has no valid phone', async () => {
