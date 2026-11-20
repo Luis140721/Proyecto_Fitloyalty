@@ -600,6 +600,20 @@ describe('MiembrosPage: el calendario', () => {
     expect(await screen.findByRole('option', { name: 'noviembre' })).toBeInTheDocument();
     expect(screen.queryByRole('option', { name: 'November' })).not.toBeInTheDocument();
   });
+
+  test('should write the day picked in the calendar when the person clicks it', async () => {
+    // Arrange: solo se fija la fecha, para que el calendario abra en noviembre de 2026
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 10, 19, 10, 0, 0));
+    const { user } = await abrirAlta();
+    await user.click(campo('Fecha nacimiento'));
+
+    // Act
+    await user.click(await screen.findByRole('option', { name: /15 de noviembre de 2026/ }));
+
+    // Assert
+    expect(campo(/^Fecha nacimiento/)).toHaveValue('15/11/2026');
+  });
 });
 
 describe('MiembrosPage: sin miembros', () => {
