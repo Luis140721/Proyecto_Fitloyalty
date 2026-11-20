@@ -131,6 +131,56 @@ describe('MiembrosPage: la ficha del miembro', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
+  test('should send every field of the file that the person changes', async () => {
+    // Arrange
+    const { user } = await abrirFichaDeAna();
+    const ficha_ = within(ficha());
+    const reemplazar = async (etiqueta, texto) => {
+      const el = ficha_.getByLabelText(etiqueta);
+      await user.clear(el);
+      await user.type(el, texto);
+    };
+
+    // Act
+    await reemplazar('Nombre completo', 'Ana María Pérez');
+    await reemplazar('Documento', '1020304051');
+    await reemplazar('Email', 'anamaria@correo.co');
+    await user.selectOptions(ficha_.getByLabelText('Tipo de documento'), 'CE');
+    await reemplazar('Fecha de nacimiento', '1991-06-18');
+    await user.selectOptions(ficha_.getByLabelText('Género'), 'Otro');
+    await reemplazar('Ciudad', 'Cali');
+    await reemplazar('Dirección', 'Carrera 7 # 8-9');
+    await reemplazar('Contacto de emergencia', 'Pedro Pérez');
+    await reemplazar('Teléfono de emergencia', '3120000000');
+    await reemplazar('Condiciones médicas', 'Asma');
+    await reemplazar('Alergias', 'Polen');
+    await user.selectOptions(ficha_.getByLabelText('Objetivo'), 'Resistencia');
+    await user.selectOptions(ficha_.getByLabelText('Nivel de experiencia'), 'Avanzado');
+    await reemplazar('Observaciones', 'Prefiere las clases de la tarde');
+    await user.click(ficha_.getByRole('checkbox', { name: 'Miembro activo' }));
+    await user.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+
+    // Assert
+    await waitFor(() => expect(mockPut).toHaveBeenCalledWith('/admin/miembros/1', expect.objectContaining({
+      nombre: 'Ana María Pérez', documento: '1020304051', email: 'anamaria@correo.co', tipo_documento: 'CE',
+      fecha_nacimiento: '1991-06-18', genero: 'Otro', ciudad: 'Cali', direccion: 'Carrera 7 # 8-9',
+      contacto_emergencia: 'Pedro Pérez', telefono_emergencia: '3120000000', condiciones_medicas: 'Asma', alergias: 'Polen',
+      objetivo: 'Resistencia', nivel_experiencia: 'Avanzado', observaciones: 'Prefiere las clases de la tarde', activo: false,
+    })));
+  });
+
+  test('should close the file without saving when the person clicks Cancelar', async () => {
+    // Arrange
+    const { user } = await abrirFichaDeAna();
+
+    // Act
+    await user.click(screen.getByRole('button', { name: 'Cancelar' }));
+
+    // Assert
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(mockPut).not.toHaveBeenCalled();
+  });
+
   test('should keep the file open with the API error when saving fails', async () => {
     // Arrange
     mockPut = vi.fn(async () => { throw { status: 409, code: 'DUPLICATE_DOCUMENT', message: 'Ya existe un miembro con ese documento.' }; });
