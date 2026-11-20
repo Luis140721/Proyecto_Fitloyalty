@@ -23,4 +23,16 @@ describe('cambiosDeCuenta', () => {
       despues: { activo: false, rol: 'RECEPCIONISTA' },
     });
   });
+
+  test('should record the old and the new name when only the name changes', () => {
+    // Arrange
+    const antes = { activo: true, rol: 'RECEPCIONISTA', nombre: 'Ana Recepcion' };
+    const despues = { activo: true, rol: 'RECEPCIONISTA', nombre: 'Ana Maria' };
+
+    // Act
+    const detalle = cambiosDeCuenta(antes, despues);
+
+    // Assert
+    expect(detalle).toEqual({ eventos: ['NOMBRE_CAMBIADO'], antes: { nombre: 'Ana Recepcion' }, despues: { nombre: 'Ana Maria' } });
+  });
 });
