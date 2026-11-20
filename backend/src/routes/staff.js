@@ -506,6 +506,7 @@ router.get(
   requireActiveTrial(pool),
   asyncHandler(async (req, res) => {
     const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) throw new AppError(400, 'Id invalido', 'VALIDATION_ERROR');
     let cuenta;
     let rows;
     try {
