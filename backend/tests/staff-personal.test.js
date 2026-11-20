@@ -220,7 +220,7 @@ describe('PATCH /api/admin/staff/:id: allowed changes', () => {
   });
 
   test.each([
-    ['reading the user fails', /SELECT id_usuario, id_rol, activo/, '[PATCH /admin/staff/:id] Error consultando usuario:'],
+    ['reading the user fails', /SELECT id_usuario,[\w, ]* id_rol, activo, COALESCE/, '[PATCH /admin/staff/:id] Error consultando usuario:'],
     ['saving the change fails', /UPDATE usuario SET/, '[PATCH /admin/staff/:id] Error actualizando usuario:'],
   ])('should answer 503 and change nothing when %s', async (_caso, consulta, registro) => {
     // Dobles: fake de la BD que falla en esa consulta y spy en console.error.

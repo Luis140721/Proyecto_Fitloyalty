@@ -417,7 +417,7 @@ router.patch(
     try {
       schema = await detectStaffSchema();
       const { rows } = await pool.query(
-        `SELECT id_usuario, id_rol, activo, ${ES_DUENO_EXPR}
+        `SELECT id_usuario, nombre, id_rol, activo, ${ES_DUENO_EXPR}
            FROM usuario
           WHERE id_usuario = $1 AND id_gimnasio = $2`,
         [id, gymId]
@@ -468,8 +468,8 @@ router.patch(
     // HU-04, criterio 4: el cambio queda en auditoria con el responsable.
     const rolAntes = Object.keys(ID_ROL).find((k) => ID_ROL[k] === actual.id_rol);
     const detalle = cambiosDeCuenta(
-      { activo: actual.activo, rol: rolAntes },
-      { activo: activo ?? actual.activo, rol: rol ?? rolAntes }
+      { activo: actual.activo, rol: rolAntes, nombre: actual.nombre },
+      { activo: activo ?? actual.activo, rol: rol ?? rolAntes, nombre: nombre ?? actual.nombre }
     );
     if (detalle) {
       await pool.query(
