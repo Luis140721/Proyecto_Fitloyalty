@@ -7,7 +7,10 @@
  * caida. Ahora responden 400 "Id inválido" sin consultar. Valor limite:
  * 2147483647 pasa la validacion y llega a la BD; 2147483648 no.
  *
- * Rutas: GET y PUT /api/admin/miembros/:id y GET y PUT /:id/plan.
+ * Rutas: todas las de routes/miembros.js que reciben el id: GET, PUT y DELETE
+ * /api/admin/miembros/:id, DELETE /:id/permanent, GET y PUT /:id/plan y POST
+ * /:id/congelar y /:id/descongelar. Un id que no es un numero tambien da
+ * "Id inválido", con tilde, en todas.
  *
  * Dobles: la BD es un stub que anota cada consulta y no encuentra nada (el
  * miembro no existe); la lectura del personal en authenticate es un stub;
@@ -63,20 +66,23 @@ const RUTAS = [
   ['put', '/api/admin/miembros/:id', { nombre: 'Ana Maria' }],
   ['get', '/api/admin/miembros/:id/plan', undefined],
   ['put', '/api/admin/miembros/:id/plan', PLAN],
+  ['delete', '/api/admin/miembros/:id', undefined],
+  ['delete', '/api/admin/miembros/:id/permanent', undefined],
+  ['post', '/api/admin/miembros/:id/congelar', {}],
+  ['post', '/api/admin/miembros/:id/descongelar', {}],
 ];
 const conId = (ruta, id) => ruta.replace(':id', String(id));
 
 describe('the member id in the URL fits in miembro.id_miembro INTEGER', () => {
   test.each(RUTAS)('should let %s %s with the id 2147483647, the largest INTEGER, pass the validation and reach the database', async (metodo, ruta, cuerpo) => {
-    // Arrange: el stub no encuentra al miembro (404, o el plan vacio en el GET del plan)
+    // Arrange: el stub no encuentra al miembro ni su plan (404, o el plan vacio en el GET del plan)
 
     // Act
     const r = await llamar(metodo, conId(ruta, 2147483647), cuerpo);
 
     // Assert
     expect(r.status).not.toBe(400);
-    expect(mockConsultas.length).toBeGreaterThan(0);
-    expect(mockConsultas[0].params.map(String)).toContain('2147483647');
+    expect(mockConsultas.some(({ params }) => params.map(String).includes('2147483647'))).toBe(true);
   });
 
   test.each(RUTAS)('should answer 400 "Id inválido" without querying when %s %s gets the id 2147483648, one more than INTEGER', async (metodo, ruta, cuerpo) => {
@@ -97,6 +103,18 @@ describe('the member id in the URL fits in miembro.id_miembro INTEGER', () => {
 
     // Act
     const r = await llamar(metodo, conId(ruta, '99999999999'), cuerpo);
+
+    // Assert
+    expect(r.status).toBe(400);
+    expect(r.body).toEqual({ error: 'Id inválido', code: 'VALIDATION_ERROR' });
+    expect(mockConsultas).toEqual([]);
+  });
+
+  test.each(RUTAS)('should answer 400 "Id inválido", with the accent, without querying when %s %s gets an id that is not a number', async (metodo, ruta, cuerpo) => {
+    // Arrange
+
+    // Act
+    const r = await llamar(metodo, conId(ruta, 'abc'), cuerpo);
 
     // Assert
     expect(r.status).toBe(400);

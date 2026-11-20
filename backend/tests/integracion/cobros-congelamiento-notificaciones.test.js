@@ -611,6 +611,8 @@ describeConBd('plan_cobro, congelacion_plan, notificacion y envio_mensaje contra
     test.each([
       ['get', '/admin/miembros/:id'],
       ['get', '/admin/miembros/:id/plan'],
+      ['delete', '/admin/miembros/:id'],
+      ['delete', '/admin/miembros/:id/permanent'],
     ])('%s %s con el id 2147483648 responde 400 Id inválido, y con 2147483647 llega a la BD', async (metodo, ruta) => {
       // Arrange: el gimnasio no tiene esos miembros
 
