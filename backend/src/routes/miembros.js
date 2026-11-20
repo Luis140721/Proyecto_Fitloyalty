@@ -34,6 +34,19 @@ const QRCode = require('qrcode');
 
 const router = express.Router();
 
+// Topes de las columnas que escriben el alta y el PUT del plan (migraciones 002
+// y 004). Sin ellos un dato que no cabe llegaba a PostgreSQL y la ruta respondia
+// 500 o 503 DB_UNREACHABLE (hallazgo de la integracion de la semana 6).
+//   - MAX_VALOR_PLAN: plan_cobro.valor_total y valor_pagado son NUMERIC(10,2).
+//   - cabeEnLaColumna: un VARCHAR(n) se mide en caracteres; .length cuenta
+//     unidades UTF-16 y un emoji vale 2, por eso [...texto] (como en
+//     lib/validators.js).
+//   - valorQueCabe: el alta recibe los valores como texto y los lee con parseFloat.
+const MAX_VALOR_PLAN = 99999999.99;
+const MENSAJE_VALOR_PLAN = 'El valor del plan no puede pasar de 99.999.999,99';
+const cabeEnLaColumna = (n, etiqueta) => [(texto) => [...texto].length <= n, { message: `${etiqueta} admite maximo ${n} caracteres` }];
+const valorQueCabe = () => [(texto) => !(parseFloat(texto) > MAX_VALOR_PLAN), { message: MENSAJE_VALOR_PLAN }];
+
 // Clave secreta para cifrar QR (en producción debería estar en variables de entorno)
 const QR_ENCRYPTION_KEY = process.env.QR_ENCRYPTION_KEY || 'FitLoyalty2024SecretKey';
 
@@ -87,25 +100,25 @@ const createSchema = z.object({
   email:     z.string().email().optional().or(z.literal('').transform(() => undefined)),
   direccion: z.string().optional(),
   // Salud y emergencia
-  contacto_emergencia: z.string().optional(),
-  telefono_emergencia: z.string().optional(),
+  contacto_emergencia: z.string().refine(...cabeEnLaColumna(100, 'El contacto de emergencia')).optional(),
+  telefono_emergencia: z.string().refine(...cabeEnLaColumna(20, 'El telefono de emergencia')).optional(),
   condiciones_medicas: z.string().optional(),
   alergias: z.string().optional(),
   // Plan y cobros
   tipo_plan: z.enum(['MENSUAL', 'TRIMESTRAL', 'SEMESTRAL', 'ANUAL', 'CLASES_SUELTAS', 'ILIMITADO', 'OTRO']).default('MENSUAL'),
   fecha_inicio: z.string().optional(),
   fecha_fin: z.string().optional(),
-  valor_total: z.string().optional(),
-  valor_pagado: z.string().default('0'),
+  valor_total: z.string().refine(...valorQueCabe()).optional(),
+  valor_pagado: z.string().refine(...valorQueCabe()).default('0'),
   metodo_pago: z.enum(['EFECTIVO', 'TRANSFERENCIA', 'TARJETA', 'PSE', 'NEQUI', 'DAVIPLATA', 'OTRO']).default('EFECTIVO'),
-  referencia_pago: z.string().optional(),
+  referencia_pago: z.string().refine(...cabeEnLaColumna(100, 'La referencia del pago')).optional(),
   estado_pago: z.enum(['PENDIENTE', 'PAGADO', 'PARCIAL']).default('PENDIENTE'),
   proxima_fecha_cobro: z.string().optional(),
   activar_recordatorio: z.boolean().default(false),
   dias_recordatorio: z.number().default(7),
   // Info adicional
-  objetivo: z.string().optional(),
-  nivel_experiencia: z.string().optional(),
+  objetivo: z.string().refine(...cabeEnLaColumna(50, 'El objetivo')).optional(),
+  nivel_experiencia: z.string().refine(...cabeEnLaColumna(30, 'El nivel de experiencia')).optional(),
   observaciones: z.string().optional(),
   // Términos
   acepto_terminos: z.boolean().default(false),
@@ -760,16 +773,13 @@ router.delete(
 // PUT  /api/admin/miembros/:id/plan   -> cambia o renueva el plan
 // ---------------------------------------------------------------------------
 
-// plan_cobro.valor_total es NUMERIC(10,2): el maximo es 99999999.99. Sin este
-// tope, un valor mayor llegaba a la BD (22003) y la ruta respondia 503.
-// valor_pagado no necesita uno propio: no puede superar a valor_total.
-const MAX_VALOR_PLAN = 99999999.99;
-
+// valor_total lleva el tope de NUMERIC(10,2) (MAX_VALOR_PLAN, arriba).
+// valor_pagado no necesita uno propio: la ruta exige que no supere a valor_total.
 const planSchema = z.object({
   tipo_plan: z.enum(['MENSUAL', 'TRIMESTRAL', 'SEMESTRAL', 'ANUAL', 'CLASES_SUELTAS', 'ILIMITADO', 'OTRO']),
   fecha_inicio: z.string().min(10),
   fecha_fin: z.string().min(10),
-  valor_total: z.coerce.number().min(0).max(MAX_VALOR_PLAN, 'El valor del plan no puede pasar de 99.999.999,99'),
+  valor_total: z.coerce.number().min(0).max(MAX_VALOR_PLAN, MENSAJE_VALOR_PLAN),
   valor_pagado: z.coerce.number().min(0),
   metodo_pago: z.enum(['EFECTIVO', 'TRANSFERENCIA', 'TARJETA', 'PSE', 'NEQUI', 'DAVIPLATA', 'OTRO']),
   referencia_pago: z.string().max(80).optional().or(z.literal('')),
