@@ -8,7 +8,7 @@
  * renderWithProviders. Las reglas finas de cada campo ya están en
  * validateRegisterOwnerForm.test.js; aquí se prueba lo que ve la persona.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen } from '@testing-library/react';
 import RegisterOwnerPage from '../src/pages/RegisterOwnerPage';
 import { renderWithProviders } from './renderWithProviders';
@@ -50,7 +50,12 @@ async function llenarFormulario(user, cambios = {}) {
   }
 }
 
-beforeEach(() => { mockRegister = vi.fn(); });
+beforeEach(() => {
+  mockRegister = vi.fn();
+  // jsdom no tiene scrollIntoView, que la pagina usa para llevar al primer error.
+  Element.prototype.scrollIntoView = vi.fn();
+});
+afterEach(() => { delete Element.prototype.scrollIntoView; });
 
 describe('RegisterOwnerPage', () => {
   it('should send the cleaned data and open the dashboard when the form is valid', async () => {
@@ -108,6 +113,19 @@ describe('RegisterOwnerPage', () => {
     expect(campos.gymPhone()).toHaveAttribute('aria-invalid', 'true');
     expect(campos.ownerEmail()).not.toHaveAttribute('aria-invalid');
     expect(mockRegister).not.toHaveBeenCalled();
+  });
+
+  it('should move the focus to the first field with an error when the form is sent with errors', async () => {
+    // Arrange: el error esta en el telefono, no en el primer campo del formulario
+    const { user } = abrirRegistro();
+    await llenarFormulario(user, { gymPhone: '300123456' });
+
+    // Act
+    await user.click(botonCrear());
+
+    // Assert
+    expect(campos.gymPhone()).toHaveFocus();
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith({ block: 'center', behavior: 'smooth' });
   });
 
   it('should clear the phone error when the person edits the phone again', async () => {
