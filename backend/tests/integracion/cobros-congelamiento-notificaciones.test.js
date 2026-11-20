@@ -604,6 +604,26 @@ describeConBd('plan_cobro, congelacion_plan, notificacion y envio_mensaje contra
       expect(await unaFila('SELECT COUNT(*)::int AS n FROM miembro WHERE id_gimnasio = $1', [gym.id_gimnasio])).toEqual({ n: 0 });
     });
 
+    // Red del id fuera de rango: miembro.id_miembro es INTEGER. Con 2147483648
+    // PostgreSQL rechaza el valor (22003) y la ruta respondia 503 "intenta de
+    // nuevo"; con 2147483647 no encuentra la fila. El valor limite esta en
+    // miembros-id-rango.test.js.
+    test.each([
+      ['get', '/admin/miembros/:id'],
+      ['get', '/admin/miembros/:id/plan'],
+    ])('%s %s con el id 2147483648 responde 400 Id inválido, y con 2147483647 llega a la BD', async (metodo, ruta) => {
+      // Arrange: el gimnasio no tiene esos miembros
+
+      // Act
+      const maximo = await pedir(metodo, ruta.replace(':id', '2147483647'));
+      const fuera = await pedir(metodo, ruta.replace(':id', '2147483648'));
+
+      // Assert
+      expect([200, 404]).toContain(maximo.status);
+      expect(fuera.status).toBe(400);
+      expect(fuera.body).toEqual({ error: 'Id inválido', code: 'VALIDATION_ERROR' });
+    });
+
     // Red del hallazgo del valor del plan: 100000000 no cabe en NUMERIC(10,2);
     // antes llegaba a la BD (22003) y la ruta respondia 503. El valor limite
     // esta en miembros-plan-valores.test.js.
