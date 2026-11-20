@@ -760,11 +760,16 @@ router.delete(
 // PUT  /api/admin/miembros/:id/plan   -> cambia o renueva el plan
 // ---------------------------------------------------------------------------
 
+// plan_cobro.valor_total es NUMERIC(10,2): el maximo es 99999999.99. Sin este
+// tope, un valor mayor llegaba a la BD (22003) y la ruta respondia 503.
+// valor_pagado no necesita uno propio: no puede superar a valor_total.
+const MAX_VALOR_PLAN = 99999999.99;
+
 const planSchema = z.object({
   tipo_plan: z.enum(['MENSUAL', 'TRIMESTRAL', 'SEMESTRAL', 'ANUAL', 'CLASES_SUELTAS', 'ILIMITADO', 'OTRO']),
   fecha_inicio: z.string().min(10),
   fecha_fin: z.string().min(10),
-  valor_total: z.coerce.number().min(0),
+  valor_total: z.coerce.number().min(0).max(MAX_VALOR_PLAN, 'El valor del plan no puede pasar de 99.999.999,99'),
   valor_pagado: z.coerce.number().min(0),
   metodo_pago: z.enum(['EFECTIVO', 'TRANSFERENCIA', 'TARJETA', 'PSE', 'NEQUI', 'DAVIPLATA', 'OTRO']),
   referencia_pago: z.string().max(80).optional().or(z.literal('')),

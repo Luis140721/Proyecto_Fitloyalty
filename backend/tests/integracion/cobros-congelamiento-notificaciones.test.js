@@ -584,12 +584,10 @@ describeConBd('plan_cobro, congelacion_plan, notificacion y envio_mensaje contra
       expect(await unaFila('SELECT COUNT(*)::int AS n FROM miembro WHERE id_gimnasio = $1', [gym.id_gimnasio])).toEqual({ n: 0 });
     });
 
-    // Hallazgo sin corregir: el esquema del plan no acota valor_total ni
-    // valor_pagado a NUMERIC(10,2), la BD rechaza 100000000 (22003) y la ruta
-    // responde 503 "intenta de nuevo". Va con la expectativa correcta y
-    // test.failing: cuando alguien lo corrija, este test falla y hay que
-    // quitarle el .failing.
-    test.failing('PUT /:id/plan con 100000000 responde 400 y deja el plan como estaba', async () => {
+    // Red del hallazgo del valor del plan: 100000000 no cabe en NUMERIC(10,2);
+    // antes llegaba a la BD (22003) y la ruta respondia 503. El valor limite
+    // esta en miembros-plan-valores.test.js.
+    test('PUT /:id/plan con 100000000 responde 400 y deja el plan como estaba', async () => {
       // Arrange
       const miembro = await crearMiembro(tx.cliente, gym.id_gimnasio);
       const plan = await crearPlan(tx.cliente, miembro);
