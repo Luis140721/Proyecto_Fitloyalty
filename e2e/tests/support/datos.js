@@ -10,12 +10,20 @@ import { API_URL, CLAVE_TOKEN, SESION } from './entorno.js';
 // El front llama al backend directo en API_URL (no hay proxy de Vite para /api),
 // asi que las rutas van completas y con el token de la sesion guardada.
 
-/** Cabecera con el token del dueno que guardo auth.setup.js. */
+/**
+ * Cabeceras con el token del dueno que guardo auth.setup.js.
+ *
+ * Connection: close, porque el `request` de Playwright reutiliza la conexion y
+ * el servidor de Node la cierra tras 5 s sin uso (keepAliveTimeout). Si el test
+ * pasa unos 5 s en la pantalla entre dos llamadas, la segunda puede salir por
+ * una conexion que el backend esta cerrando: "socket hang up" (1 de 5 en la
+ * suite completa). Es del test, no de la app: el navegador reintenta solo.
+ */
 function conSesion() {
   const { origins } = JSON.parse(readFileSync(SESION, 'utf8'));
   const item = origins.flatMap((o) => o.localStorage).find((i) => i.name === CLAVE_TOKEN);
   if (!item) throw new Error(`No hay ${CLAVE_TOKEN} en ${SESION}: corre los tests con el proyecto "setup" (pnpm test).`);
-  return { Authorization: `Bearer ${item.value}` };
+  return { Authorization: `Bearer ${item.value}`, Connection: 'close' };
 }
 
 // Fechas fijas: si el plan esta vigente o vencido no depende del dia de la corrida.
@@ -30,11 +38,12 @@ export const nombreUnico = () => `Miembro E2E ${randomUUID().slice(0, 8)}`;
 
 /**
  * POST /admin/miembros con su plan (plan_cobro), como la hace la recepcion. No
- * revisa la respuesta: es para los tests que la revisan ellos mismos.
+ * revisa la respuesta: es para los tests que la revisan ellos mismos. Por
+ * defecto va al gimnasio de la sesion; `cabeceras` permite usar otro (crearGimnasio).
  */
-export function enviarAlta(request, { nombre = nombreUnico(), documento = documentoUnico(), plan = PLAN_VIGENTE } = {}) {
+export function enviarAlta(request, { nombre = nombreUnico(), documento = documentoUnico(), plan = PLAN_VIGENTE } = {}, cabeceras = conSesion()) {
   return request.post(`${API_URL}/admin/miembros`, {
-    headers: conSesion(),
+    headers: cabeceras,
     data: {
       nombre,
       documento,
@@ -50,6 +59,27 @@ export function enviarAlta(request, { nombre = nombreUnico(), documento = docume
   });
 }
 
+/**
+ * Gimnasio nuevo con su dueno, por API (como auth.setup.js), para el test que
+ * necesita uno solo para el. Devuelve su id y las cabeceras con su token.
+ */
+export async function crearGimnasio(request) {
+  const sufijo = randomUUID().slice(0, 8);
+  const respuesta = await request.post(`${API_URL}/auth/signup`, {
+    headers: { Connection: 'close' },
+    data: {
+      gymName: `Gimnasio E2E ${sufijo}`,
+      gymPhone: '3001234567',
+      ownerName: 'Recepcion E2E',
+      ownerEmail: `dueno.${sufijo}@example.com`,
+      password: `clave${sufijo}1`,
+    },
+  });
+  expect(respuesta.status(), await respuesta.text()).toBe(201);
+  const { token, gym } = await respuesta.json();
+  return { id: gym.id, cabeceras: { Authorization: `Bearer ${token}`, Connection: 'close' } };
+}
+
 /** Alta de un miembro con su plan; falla si el backend no responde 201. */
 export async function crearMiembro(request, plan = PLAN_VIGENTE) {
   const nombre = nombreUnico();
@@ -61,9 +91,9 @@ export async function crearMiembro(request, plan = PLAN_VIGENTE) {
 }
 
 /** Miembros activos del gimnasio con ese documento (la busqueda de la lista). */
-export async function miembrosConDocumento(request, documento) {
+export async function miembrosConDocumento(request, documento, cabeceras = conSesion()) {
   const respuesta = await request.get(`${API_URL}/admin/miembros`, {
-    headers: conSesion(),
+    headers: cabeceras,
     params: { q: documento, pageSize: 100 },
   });
   expect(respuesta.status(), await respuesta.text()).toBe(200);

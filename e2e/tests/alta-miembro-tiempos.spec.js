@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { AltaMiembroPage } from './support/alta-miembro-page.js';
-import { documentoUnico, enviarAlta, miembrosConDocumento, nombreUnico } from './support/datos.js';
+import { retenerAltasDelGimnasio } from './support/bd.js';
+import { crearGimnasio, documentoUnico, enviarAlta, miembrosConDocumento, nombreUnico } from './support/datos.js';
 import { SESION } from './support/entorno.js';
 import { RUTA_MIEMBROS, peticionesA, retenerRespuestas, retrasarRespuestas } from './support/red.js';
 
@@ -76,20 +77,33 @@ test.describe('doble envio', () => {
   // Dos peticiones al mismo tiempo con el mismo documento, como dos recepcionistas
   // registrando a la misma persona. El navegador ya no manda dos (tests de arriba),
   // pero el backend revisa el documento y despues inserta, sin bloqueo ni
-  // restriccion unica: las dos pasan la revision. Falla 20 de 20 veces, por eso
-  // esta marcado como fallo esperado hasta que se corrija la incidencia.
+  // restriccion unica. Mandarlas juntas desde el test no basta: la ventana entre
+  // revisar e insertar es de una o dos consultas, y con la suite en paralelo a
+  // veces llegaban una detras de otra y el test.fail() pasaba, lo que hace fallar
+  // la suite. Por eso la BD retiene los INSERT de un gimnasio propio hasta que las
+  // dos peticiones estan esperando (una condicion, no un tiempo) y entonces las
+  // suelta. Queda como fallo esperado hasta que se corrija la incidencia.
   test.fail('should keep a single member when two requests create the same document at the same time', {
     annotation: { type: 'issue', description: 'Incidencia por crear: texto en el PR (carrera en POST /api/admin/miembros)' },
   }, async ({ request }) => {
-    // Arrange
+    // Arrange: un gimnasio solo para este test, con sus altas retenidas antes del INSERT
+    const gimnasio = await crearGimnasio(request);
     const datos = { nombre: nombreUnico(), documento: documentoUnico() };
-
-    // Act
-    const respuestas = await Promise.all([enviarAlta(request, datos), enviarAlta(request, datos)]);
+    const retencion = await retenerAltasDelGimnasio(gimnasio.id);
+    let estados;
+    try {
+      // Act: las dos revisan el documento (no hay nadie) y quedan esperando para insertar
+      const altas = [enviarAlta(request, datos, gimnasio.cabeceras), enviarAlta(request, datos, gimnasio.cabeceras)];
+      await expect.poll(() => retencion.esperando()).toBe(2);
+      await retencion.soltar();
+      estados = (await Promise.all(altas)).map((r) => r.status());
+    } finally {
+      await retencion.soltar();
+    }
 
     // Assert: una se crea y la otra recibe el 409 del documento repetido
-    expect(respuestas.map((r) => r.status()).sort()).toEqual([201, 409]);
-    expect(await miembrosConDocumento(request, datos.documento)).toHaveLength(1);
+    expect(estados.sort()).toEqual([201, 409]);
+    expect(await miembrosConDocumento(request, datos.documento, gimnasio.cabeceras)).toHaveLength(1);
   });
 });
 
