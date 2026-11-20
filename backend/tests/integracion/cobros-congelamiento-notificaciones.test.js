@@ -559,11 +559,22 @@ describeConBd('plan_cobro, congelacion_plan, notificacion y envio_mensaje contra
         .toEqual({ tipo_plan: 'TRIMESTRAL', valor_total: '300000.00', valor_pagado: '100000.00', estado_pago: 'PARCIAL', metodo_pago: 'NEQUI', actualizado_por: admin.id_usuario });
     });
 
-    // Red del hallazgo de los largos, que corrigio el #83 con las reglas del
-    // servicio (createSchema): estos casos ya no llegan a la BD.
+    // Red del hallazgo de los largos y los valores del alta: con las reglas del
+    // servicio (createSchema) estos casos ya no llegan a la BD. Nombre y
+    // documento los corrigio el #83; el resto, esta rama. Sin las reglas, los
+    // de miembro respondian 500 y los de plan_cobro 503, con el miembro ya
+    // guardado y sin plan: por eso se cuenta que no quedo ningun miembro.
+    const ANA_ALTA = { nombre: 'Ana', documento: 'CC12345', telefono: '3001234567' };
     test.each([
       ['POST /admin/miembros con un nombre de 101 caracteres', 'post', () => '/admin/miembros', { nombre: 'x'.repeat(101), documento: 'CC12345', telefono: '3001234567' }],
       ['POST /admin/miembros con un documento de 21 caracteres', 'post', () => '/admin/miembros', { nombre: 'Ana', documento: 'C'.repeat(21), telefono: '3001234567' }],
+      ['POST /admin/miembros con un contacto de emergencia de 101 caracteres', 'post', () => '/admin/miembros', { ...ANA_ALTA, contacto_emergencia: 'x'.repeat(101) }],
+      ['POST /admin/miembros con un telefono de emergencia de 21 caracteres', 'post', () => '/admin/miembros', { ...ANA_ALTA, telefono_emergencia: '3'.repeat(21) }],
+      ['POST /admin/miembros con un objetivo de 51 caracteres', 'post', () => '/admin/miembros', { ...ANA_ALTA, objetivo: 'x'.repeat(51) }],
+      ['POST /admin/miembros con un nivel de experiencia de 31 caracteres', 'post', () => '/admin/miembros', { ...ANA_ALTA, nivel_experiencia: 'x'.repeat(31) }],
+      ['POST /admin/miembros con una referencia de pago de 101 caracteres', 'post', () => '/admin/miembros', { ...ANA_ALTA, referencia_pago: 'x'.repeat(101) }],
+      ['POST /admin/miembros con valor_total 100000000', 'post', () => '/admin/miembros', { ...ANA_ALTA, valor_total: '100000000' }],
+      ['POST /admin/miembros con valor_pagado 100000000', 'post', () => '/admin/miembros', { ...ANA_ALTA, valor_total: '99999999.99', valor_pagado: '100000000' }],
     ])('%s responde 400 y no guarda nada', async (_caso, metodo, ruta, cuerpo) => {
       // Arrange: el gimnasio no tiene miembros
 
