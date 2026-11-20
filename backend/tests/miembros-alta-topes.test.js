@@ -70,7 +70,7 @@ describe('POST /api/admin/miembros: what does not fit in its column is rejected 
   // [campo, largo de la columna, texto de largo n, como empieza el mensaje]
   test.each([
     ['contacto_emergencia', 100, (n) => 'x'.repeat(n), 'El contacto de emergencia'],
-    ['telefono_emergencia', 20, (n) => '3'.repeat(n), 'El telefono de emergencia'],
+    ['telefono_emergencia', 20, (n) => '3'.repeat(n), 'El teléfono de emergencia'],
     ['objetivo', 50, (n) => 'x'.repeat(n), 'El objetivo'],
     ['nivel_experiencia', 30, (n) => 'x'.repeat(n), 'El nivel de experiencia'],
     ['referencia_pago', 100, (n) => 'x'.repeat(n), 'La referencia del pago'],
@@ -87,7 +87,7 @@ describe('POST /api/admin/miembros: what does not fit in its column is rejected 
     expect(escriturasDelJusto).toBe(2);
     expect(sobra.status).toBe(400);
     expect(sobra.headers['content-type']).toMatch(/^application\/json/);
-    expect(sobra.body).toMatchObject({ code: 'VALIDATION_ERROR', error: `${etiqueta} admite maximo ${n} caracteres` });
+    expect(sobra.body).toMatchObject({ code: 'VALIDATION_ERROR', error: `${etiqueta} admite máximo ${n} caracteres` });
     expect(mockEscrituras).toHaveLength(escriturasDelJusto);
   });
 

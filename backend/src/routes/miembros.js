@@ -44,7 +44,7 @@ const router = express.Router();
 //   - valorQueCabe: el alta recibe los valores como texto y los lee con parseFloat.
 const MAX_VALOR_PLAN = 99999999.99;
 const MENSAJE_VALOR_PLAN = 'El valor del plan no puede pasar de 99.999.999,99';
-const cabeEnLaColumna = (n, etiqueta) => [(texto) => [...texto].length <= n, { message: `${etiqueta} admite maximo ${n} caracteres` }];
+const cabeEnLaColumna = (n, etiqueta) => [(texto) => [...texto].length <= n, { message: `${etiqueta} admite máximo ${n} caracteres` }];
 const valorQueCabe = () => [(texto) => !(parseFloat(texto) > MAX_VALOR_PLAN), { message: MENSAJE_VALOR_PLAN }];
 
 // Clave secreta para cifrar QR (en producción debería estar en variables de entorno)
@@ -101,7 +101,7 @@ const createSchema = z.object({
   direccion: z.string().optional(),
   // Salud y emergencia
   contacto_emergencia: z.string().refine(...cabeEnLaColumna(100, 'El contacto de emergencia')).optional(),
-  telefono_emergencia: z.string().refine(...cabeEnLaColumna(20, 'El telefono de emergencia')).optional(),
+  telefono_emergencia: z.string().refine(...cabeEnLaColumna(20, 'El teléfono de emergencia')).optional(),
   condiciones_medicas: z.string().optional(),
   alergias: z.string().optional(),
   // Plan y cobros
@@ -796,7 +796,7 @@ router.get(
   authorize('admin', 'receptionist'),
   requireActiveTrial(pool),
   asyncHandler(async (req, res) => {
-    if (!esIdDeMiembro(req.params.id)) throw new AppError(400, 'Id invalido', 'VALIDATION_ERROR');
+    if (!esIdDeMiembro(req.params.id)) throw new AppError(400, 'Id inválido', 'VALIDATION_ERROR');
     try {
       const { rows } = await pool.query(
         `SELECT pc.id_plan_cobro, pc.tipo_plan, pc.fecha_inicio, pc.fecha_fin,
@@ -982,7 +982,7 @@ router.put(
   authorize('admin', 'receptionist'),
   requireActiveTrial(pool),
   asyncHandler(async (req, res) => {
-    if (!esIdDeMiembro(req.params.id)) throw new AppError(400, 'Id invalido', 'VALIDATION_ERROR');
+    if (!esIdDeMiembro(req.params.id)) throw new AppError(400, 'Id inválido', 'VALIDATION_ERROR');
     const parsed = parse(planSchema, req.body);
     if (!parsed.ok) throw new AppError(parsed.status, parsed.error, 'VALIDATION_ERROR', { issues: parsed.issues });
     const d = parsed.data;

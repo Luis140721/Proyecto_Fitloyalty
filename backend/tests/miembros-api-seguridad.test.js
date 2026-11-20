@@ -273,6 +273,7 @@ describe('GET and PUT /api/admin/miembros/:id/plan: contract findings', () => {
 
     // Assert
     esErrorDelContrato(r, 400, 'VALIDATION_ERROR');
+    expect(r.body.error).toBe('Id inválido');
     expect(consultasDeDatos()).toHaveLength(0);
   });
 
