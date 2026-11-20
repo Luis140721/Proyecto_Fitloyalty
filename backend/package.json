@@ -7,6 +7,7 @@
     "start": "node src/index.js",
     "test": "jest",
     "test:cov": "jest --coverage",
+    "test:integracion": "jest --runInBand tests/integracion",
     "dev": "nodemon src/index.js",
     "seed": "node src/db/seed_pg.js",
     "medir:checkin": "node scripts/medir-checkin.js",
