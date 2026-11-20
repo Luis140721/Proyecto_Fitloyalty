@@ -11,8 +11,19 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: ['src/**/*.{js,jsx}'],
-      // Arranque: solo monta React en el DOM, no tiene logica de negocio.
-      exclude: ['src/main.jsx'],
+      exclude: [
+        // Arranque: solo monta React en el DOM, no tiene logica de negocio.
+        'src/main.jsx',
+        // Textos legales: solo pasan titulo y parrafos fijos a LegalLayout. Sin
+        // estado, efectos, handlers, formularios, API ni condicionales.
+        // LegalLayout si se mide.
+        'src/pages/TerminosPage.jsx',
+        'src/pages/PrivacidadPage.jsx',
+        'src/pages/PoliticaDatosPage.jsx',
+        // No se excluyen NotFoundPage (elige el panel segun el rol y "Volver
+        // atras" cae al inicio si no hay historial) ni LandingPage (sus botones
+        // llevan al registro del gimnasio).
+      ],
       // Semana 1: linea base medida el 2026-10-26 sobre develop @ 7e3ede9 (docs/cobertura-baseline-frontend.txt). No puede bajar.
       thresholds: { lines: 1, branches: 9, functions: 6, statements: 1 },
     },

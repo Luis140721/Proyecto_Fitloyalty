@@ -35,6 +35,7 @@ import { useAuth } from '../context/AuthContext';
 import { useTrial } from '../context/TrialContext';
 import { useApiError } from '../components/ErrorBanner';
 import { api } from '../api';
+import { formatearFechaDia } from '../fechas';
 import EmptyState from '../components/EmptyState';
 import PageTransition from '../components/PageTransition';
 import useAnimatedCount from '../hooks/useAnimatedCount';
@@ -349,8 +350,10 @@ export default function DashboardPage() {
   const ingresosRef    = useAnimatedCount(data?.ingresosMes  ?? 0, { duration: 900 });
   const qrsRef         = useAnimatedCount(data?.qrsActivos   ?? data?.totalMiembros ?? 0, { duration: 900 });
 
-  // trial?.estado viene de TrialContext; lo dejamos tal cual el codigo previo.
-  const trialEsTrial = trial?.estado === 'trial';
+  // TrialContext guarda en `status` el reason de GET /api/billing/trial-status
+  // (lib/trial.js) y en `daysLeft` los dias que quedan. En los 3 ultimos dias el
+  // aviso urgente lo muestra AdminLayout; aqui no se repite.
+  const trialEsTrial = trial?.status === 'trial-activo' && !(trial.daysLeft <= 3);
 
   return (
     <PageTransition>
@@ -370,15 +373,15 @@ export default function DashboardPage() {
         <div style={{ display: 'flex', gap: 10 }}>
           <button type="button" className="btn btn-ghost" onClick={() => cargar(periodoHoras)}
             disabled={refrescando} aria-label="Actualizar el dashboard">
-            <span className="material-symbols-outlined icon">refresh</span>
+            <span className="material-symbols-outlined icon" aria-hidden="true">refresh</span>
             {refrescando ? 'Actualizando…' : 'Actualizar'}
           </button>
           <button type="button" className="btn btn-ghost" onClick={handleExport}>
-            <span className="material-symbols-outlined icon">file_download</span>
+            <span className="material-symbols-outlined icon" aria-hidden="true">file_download</span>
             Exportar
           </button>
           <button type="button" className="btn btn-primary" onClick={handleCheckin}>
-            <span className="material-symbols-outlined icon">qr_code_scanner</span>
+            <span className="material-symbols-outlined icon" aria-hidden="true">qr_code_scanner</span>
             Registrar entrada
           </button>
         </div>
@@ -391,7 +394,7 @@ export default function DashboardPage() {
           aria-live="polite"
           style={{ marginBottom: 16 }}
         >
-          <span className="material-symbols-outlined icon">info</span>
+          <span className="material-symbols-outlined icon" aria-hidden="true">info</span>
           <span>{toast.message}</span>
         </div>
       )}
@@ -399,11 +402,11 @@ export default function DashboardPage() {
       {trialEsTrial && (
         <div className="trial-banner">
           <div className="trial-banner__icon">
-            <span className="material-symbols-outlined icon">workspace_premium</span>
+            <span className="material-symbols-outlined icon" aria-hidden="true">workspace_premium</span>
           </div>
           <div className="trial-banner__text">
             <strong>Estás en período de prueba</strong>
-            <span>Te quedan {trial?.diasRestantes ?? 14} días. Activa tu plan para no perder datos.</span>
+            <span>Te quedan {trial.daysLeft ?? 14} días. Activa tu plan para no perder datos.</span>
           </div>
           <button type="button" className="btn btn-primary" onClick={handleActivatePlan}>
             Activar plan
@@ -413,12 +416,13 @@ export default function DashboardPage() {
 
       {error && (
         <div className="alert alert-error" role="alert">
-          <span className="material-symbols-outlined icon">error</span>
+          <span className="material-symbols-outlined icon" aria-hidden="true">error</span>
           <span>{error}</span>
         </div>
       )}
 
-      {!data && !error && <div className="bar-loader" />}
+      {/* La barra sola no le dice nada a un lector de pantalla: se anuncia como progreso. */}
+      {!data && !error && <div className="bar-loader" role="progressbar" aria-label="Cargando el dashboard" />}
 
       {data && (
         <>
@@ -426,7 +430,7 @@ export default function DashboardPage() {
             <article className="kpi anim-fade-up anim-delay-1">
               <div className="kpi-head">
                 <span className="kpi-label">Miembros activos</span>
-                <span className="kpi-icon"><span className="material-symbols-outlined icon">group</span></span>
+                <span className="kpi-icon"><span className="material-symbols-outlined icon" aria-hidden="true">group</span></span>
               </div>
               <span className="kpi-value">
                 <span ref={miembrosRef}>0</span>
@@ -436,7 +440,7 @@ export default function DashboardPage() {
             <article className="kpi anim-fade-up anim-delay-2">
               <div className="kpi-head">
                 <span className="kpi-label">Asistencia hoy</span>
-                <span className="kpi-icon"><span className="material-symbols-outlined icon">bolt</span></span>
+                <span className="kpi-icon"><span className="material-symbols-outlined icon" aria-hidden="true">bolt</span></span>
               </div>
               <span className="kpi-value">
                 <span ref={checkinsRef}>0</span>
@@ -446,7 +450,7 @@ export default function DashboardPage() {
             <article className="kpi anim-fade-up anim-delay-3">
               <div className="kpi-head">
                 <span className="kpi-label">Vencen en 7 días</span>
-                <span className="kpi-icon"><span className="material-symbols-outlined icon">event_upcoming</span></span>
+                <span className="kpi-icon"><span className="material-symbols-outlined icon" aria-hidden="true">event_upcoming</span></span>
               </div>
               <span className="kpi-value">
                 <span ref={vencen7Ref}>0</span>
@@ -457,7 +461,7 @@ export default function DashboardPage() {
               <div className="kpi-head">
                 <span className="kpi-label">En riesgo</span>
                 <span className="kpi-icon" style={{ color: 'var(--error)' }}>
-                  <span className="material-symbols-outlined icon">priority_high</span>
+                  <span className="material-symbols-outlined icon" aria-hidden="true">priority_high</span>
                 </span>
               </div>
               <span className="kpi-value">
@@ -471,7 +475,7 @@ export default function DashboardPage() {
             <article className="kpi anim-fade-up anim-delay-5">
               <div className="kpi-head">
                 <span className="kpi-label">Retención 90d</span>
-                <span className="kpi-icon"><span className="material-symbols-outlined icon">trending_up</span></span>
+                <span className="kpi-icon"><span className="material-symbols-outlined icon" aria-hidden="true">trending_up</span></span>
               </div>
               <span className="kpi-value">
                 <span ref={retentionRef}>0</span>
@@ -482,7 +486,7 @@ export default function DashboardPage() {
             <article className="kpi anim-fade-up anim-delay-6">
               <div className="kpi-head">
                 <span className="kpi-label">Cobros del mes</span>
-                <span className="kpi-icon"><span className="material-symbols-outlined icon">payments</span></span>
+                <span className="kpi-icon"><span className="material-symbols-outlined icon" aria-hidden="true">payments</span></span>
               </div>
               <span className="kpi-value">
                 $<span ref={ingresosRef}>0</span>
@@ -492,7 +496,7 @@ export default function DashboardPage() {
             <article className="kpi anim-fade-up anim-delay-7">
               <div className="kpi-head">
                 <span className="kpi-label">Plan más vendido</span>
-                <span className="kpi-icon"><span className="material-symbols-outlined icon">workspace_premium</span></span>
+                <span className="kpi-icon"><span className="material-symbols-outlined icon" aria-hidden="true">workspace_premium</span></span>
               </div>
               <span className="kpi-value" style={{ fontSize: 20 }}>
                 {data.planTop || 'Mensual'}
@@ -502,7 +506,7 @@ export default function DashboardPage() {
             <article className="kpi anim-fade-up anim-delay-8">
               <div className="kpi-head">
                 <span className="kpi-label">QR generados</span>
-                <span className="kpi-icon"><span className="material-symbols-outlined icon">qr_code</span></span>
+                <span className="kpi-icon"><span className="material-symbols-outlined icon" aria-hidden="true">qr_code</span></span>
               </div>
               <span className="kpi-value">
                 <span ref={qrsRef}>0</span>
@@ -604,7 +608,7 @@ export default function DashboardPage() {
                 </div>
                 <button type="button" className="btn btn-ghost btn-sm" onClick={handleVerTodos}>
                   Ver todos
-                  <span className="material-symbols-outlined icon">arrow_forward</span>
+                  <span className="material-symbols-outlined icon" aria-hidden="true">arrow_forward</span>
                 </button>
               </div>
               {data.proximos.length === 0 ? (
@@ -638,7 +642,7 @@ export default function DashboardPage() {
                           </div>
                         </td>
                         <td>{r.plan}</td>
-                        <td>{new Date(r.fecha_fin).toLocaleDateString('es-CO')}</td>
+                        <td>{formatearFechaDia(r.fecha_fin)}</td>
                         <td>
                           <span className={`chip chip-status ${r.dias_restantes <= 3 ? 'chip-status--warning' : 'chip-status--active'}`}>
                             {r.dias_restantes} días
@@ -651,7 +655,7 @@ export default function DashboardPage() {
                             onClick={() => handleFila(r)}
                             aria-label={`Ver detalle de ${r.miembro}`}
                           >
-                            <span className="material-symbols-outlined icon">chevron_right</span>
+                            <span className="material-symbols-outlined icon" aria-hidden="true">chevron_right</span>
                           </button>
                         </td>
                       </tr>
@@ -688,7 +692,7 @@ export default function DashboardPage() {
                         style={{ animationDelay: `${500 + i * 60}ms` }}
                       >
                         <div className="activity-row__icon">
-                          <span className="material-symbols-outlined icon">
+                          <span className="material-symbols-outlined icon" aria-hidden="true">
                             {r.metodo === 'QR' ? 'qr_code_scanner' : 'edit_note'}
                           </span>
                         </div>

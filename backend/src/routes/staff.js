@@ -63,9 +63,22 @@ function parse(schema, payload) {
   return { ok: true, data: result.data };
 }
 
+// Base de los enlaces de los correos: PUBLIC_FRONTEND_URL (documentada en
+// .env.example) y, si no esta, el primer origen no vacio de FRONTEND_URL.
+// FRONTEND_URL es la lista de origenes de CORS separada por comas (index.js);
+// entera rompia el enlace.
+function frontendBase() {
+  const publica = (process.env.PUBLIC_FRONTEND_URL || '').trim();
+  if (publica) return publica;
+  const [primero] = (process.env.FRONTEND_URL || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return primero || 'http://localhost:5173';
+}
+
 function buildAcceptUrl(token) {
-  const base = process.env.FRONTEND_URL || 'http://localhost:5173';
-  return `${base.replace(/\/$/, '')}/accept-invite?token=${encodeURIComponent(token)}`;
+  return `${frontendBase().replace(/\/$/, '')}/accept-invite?token=${encodeURIComponent(token)}`;
 }
 
 // ---------------------------------------------------------------------------
