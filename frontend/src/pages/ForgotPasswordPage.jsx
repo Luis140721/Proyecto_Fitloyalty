@@ -36,7 +36,11 @@ export default function ForgotPasswordPage() {
 
   useEffect(() => {
     if (step === 2) {
-      const t = setTimeout(() => codeRefs.current[0]?.focus(), 80);
+      // Solo si la persona no eligio ya una casilla: con el telefono cargado, el
+      // temporizador llegaba despues del toque y le devolvia el foco a la primera.
+      const t = setTimeout(() => {
+        if (!codeRefs.current.includes(document.activeElement)) codeRefs.current[0]?.focus();
+      }, 80);
       return () => clearTimeout(t);
     }
   }, [step]);

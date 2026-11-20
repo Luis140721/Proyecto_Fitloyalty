@@ -7,7 +7,7 @@
  * routes/auth.js: forgot-password, verify-reset-code y reset-password.
  */
 import { describe, expect, test, vi, beforeEach, afterEach } from 'vitest';
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import ForgotPasswordPage from '../src/pages/ForgotPasswordPage';
 import { renderWithProviders } from './renderWithProviders';
 
@@ -42,7 +42,10 @@ async function pedirCodigo(user, correo = CORREO) {
 beforeEach(() => {
   mockPost = apiQueResponde();
 });
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
 
 describe('ForgotPasswordPage: pedir el codigo', () => {
   test('should send the email and ask for the code when the person sends the email', async () => {
@@ -289,3 +292,41 @@ describe('ForgotPasswordPage: ramas sin cubrir de la semana 8', () => {
   });
 });
 
+// Al abrir el paso del codigo, la pagina enfoca la primera casilla 80 ms despues.
+// Con el telefono (o el CI) cargado, ese temporizador llegaba despues de que la
+// persona ya habia elegido otra casilla y le quitaba el foco.
+describe('ForgotPasswordPage: el foco al abrir el paso del codigo', () => {
+  /** Paso 1 con fireEvent: con setTimeout falso, user-event esperaria sus propias pausas. */
+  async function abrirPasoDelCodigo() {
+    abrir();
+    fireEvent.change(campoCorreo(), { target: { value: CORREO } });
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar código' }));
+    await act(async () => {});
+    expect(screen.getByText('Paso 2 de 3 — Verifica')).toBeInTheDocument();
+  }
+
+  test('should focus the first box when the code step opens and the person has not chosen one', async () => {
+    // Arrange: solo se falsea setTimeout, el de los 80 ms
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    await abrirPasoDelCodigo();
+
+    // Act
+    act(() => vi.advanceTimersByTime(80));
+
+    // Assert
+    expect(casilla(1)).toHaveFocus();
+  });
+
+  test('should keep the focus on the box the person chose when the timer of the code step runs later', async () => {
+    // Arrange: la persona toca la cuarta casilla antes de los 80 ms
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    await abrirPasoDelCodigo();
+    act(() => casilla(4).focus());
+
+    // Act
+    act(() => vi.advanceTimersByTime(80));
+
+    // Assert
+    expect(casilla(4)).toHaveFocus();
+  });
+});
