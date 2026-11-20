@@ -131,6 +131,7 @@ describe('MiembrosPage: la ficha del miembro', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
+  // Reemplaza 16 campos tecla por tecla: con toda la suite en paralelo se acerca a los 5 s por defecto.
   test('should send every field of the file that the person changes', async () => {
     // Arrange
     const { user } = await abrirFichaDeAna();
@@ -167,7 +168,7 @@ describe('MiembrosPage: la ficha del miembro', () => {
       contacto_emergencia: 'Pedro Pérez', telefono_emergencia: '3120000000', condiciones_medicas: 'Asma', alergias: 'Polen',
       objetivo: 'Resistencia', nivel_experiencia: 'Avanzado', observaciones: 'Prefiere las clases de la tarde', activo: false,
     })));
-  });
+  }, 15000);
 
   test('should close the file with the X of the dialog without saving', async () => {
     // Arrange
