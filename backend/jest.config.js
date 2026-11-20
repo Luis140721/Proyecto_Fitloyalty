@@ -15,6 +15,8 @@ module.exports = {
   collectCoverageFrom: [
     'src/lib/**/*.js',
     'src/middleware/**/*.js',
+    'src/routes/checkin.js',
+    'src/routes/notificaciones.js',
   ],
   // Evita que Jest intente transformar código nativo (bcrypt, pg) sin
   // necesidad. Cuando agreguemos tests sobre rutas reales, podemos cambiar

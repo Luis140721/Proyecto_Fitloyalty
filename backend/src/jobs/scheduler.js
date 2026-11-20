@@ -18,6 +18,7 @@
 
 const cron = require('node-cron');
 const { runJob: runExpiracionJob } = require('./expiracion');
+const { runJob: runAbandonoJob } = require('./abandono');
 
 const DISABLED = String(process.env.DISABLE_SCHEDULER || '').toLowerCase() === 'true';
 
@@ -25,7 +26,8 @@ const DISABLED = String(process.env.DISABLE_SCHEDULER || '').toLowerCase() === '
 // podria dispararse a horas raras. Forzamos America/Bogota).
 const TZ = 'America/Bogota';
 
-let expiracionTask = null;
+let expiracionTasks = [];
+let abandonoTask = null;
 let started = false;
 
 /**
@@ -40,10 +42,12 @@ function start() {
         return;
     }
 
-    // Avisos de vencimiento: todos los dias a las 9:00 AM hora Colombia.
+    // Avisos de vencimiento: todos los dias a las 9:00 AM y se reintenta a las
+    // 3:00 PM hora Colombia (por si WhatsApp no estaba listo en la primera).
+    // El job es idempotente (yaEnviado), asi que la segunda corrida solo envia
+    // lo que quedo pendiente.
     // La expresion cron es: min hora dia mes diaSemana
-    //   "0 9 * * *"  -> a las 9:00 AM todos los dias
-    expiracionTask = cron.schedule('0 9 * * *', async () => {
+    const correrExpiracion = async () => {
         console.log('[scheduler] Disparando job de avisos de vencimiento...');
         try {
             const summary = await runExpiracionJob();
@@ -56,18 +60,36 @@ function start() {
         } catch (err) {
             console.error('[scheduler] Error en job de vencimiento:', err.message);
         }
+    };
+    expiracionTasks = ['0 9 * * *', '0 15 * * *'].map(
+        (expr) => cron.schedule(expr, correrExpiracion, { timezone: TZ })
+    );
+
+    // Alertas de abandono (RQF-08): una vez al dia, antes de los avisos de las
+    // 9:00. El job es idempotente, asi que si el servicio estuvo dormido la
+    // corrida de la manana siguiente se pone al dia sola.
+    abandonoTask = cron.schedule('0 8 * * *', async () => {
+        console.log('[scheduler] Disparando job de alertas de abandono...');
+        try {
+            const resumen = await runAbandonoJob();
+            console.log('[scheduler] Job de abandono OK:', JSON.stringify(resumen));
+        } catch (err) {
+            console.error('[scheduler] Error en job de abandono:', err.message);
+        }
     }, { timezone: TZ });
 
-    console.log(`[scheduler] Activo. Job de vencimiento programado todos los dias a las 09:00 (${TZ}).`);
+    console.log(`[scheduler] Activo. Vencimiento a las 09:00 y 15:00, abandono a las 08:00 (${TZ}).`);
 }
 
 /**
  * Detiene el scheduler (util para tests).
  */
 function stop() {
-    if (expiracionTask) {
-        expiracionTask.stop();
-        expiracionTask = null;
+    if (expiracionTasks.length) {
+        expiracionTasks.forEach((t) => t.stop());
+        expiracionTasks = [];
+        if (abandonoTask) abandonoTask.stop();
+        abandonoTask = null;
         started = false;
         console.log('[scheduler] Detenido.');
     }

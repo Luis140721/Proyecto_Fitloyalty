@@ -4,7 +4,7 @@ Esta guía cubre el nuevo flujo **todo-en-uno** con Docker Compose: un solo coma
 levanta PostgreSQL, el backend (Express) y el frontend (Vite + nginx), sin instalar
 Node ni Postgres en tu maquina.
 
-> Para el flujo tradicional sin Docker, mira `COMO_CORRER.md`.
+> Para el flujo tradicional sin Docker, mira [`COMO_CORRER.md`](COMO_CORRER.md).
 
 ---
 

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 import { api } from '../api';
+import { useAuth } from '../context/AuthContext';
 import EmptyState from '../components/EmptyState';
 import PageTransition from '../components/PageTransition';
 import Ripple from '../components/Ripple';
@@ -18,7 +19,19 @@ function initialsOf(name) {
   return (name || '?').split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase();
 }
 
+// Estados con los que el backend niega el ingreso, y el texto que se muestra.
+// Una membresia congelada se distingue de una vencida (RQF-04): el backend manda
+// en `message` lo que hay que decirle a la persona.
+function mensajeDeBloqueo(estado, data) {
+  if (estado === 'CONGELADO') return data.message || 'Acceso denegado: Membresía congelada';
+  if (estado === 'VENCIDO' || estado === 'INACTIVO') return 'Acceso denegado: Membresía vencida';
+  return null;
+}
+
 export default function CheckinPage() {
+  // Un kiosco que solo registra ingresos con la camara no toca la pantalla, y la
+  // sesion se cerraria por inactividad (RQF-02): cada ingreso correcto cuenta.
+  const { marcarActividad } = useAuth();
   const [codigo, setCodigo] = useState('');
   const [documento, setDocumento] = useState('');
   const [metodo, setMetodo] = useState('QR');
@@ -131,8 +144,8 @@ export default function CheckinPage() {
 
       // --- INICIO BLOQUEO DE ACCESO FRONTEND ---
       const estadoMiembro = data.miembro?.estado ? String(data.miembro.estado).toUpperCase() : '';
-      if (estadoMiembro === 'VENCIDO' || estadoMiembro === 'INACTIVO') {
-        const errorMsg = 'Acceso denegado: Membresía vencida';
+      const errorMsg = mensajeDeBloqueo(estadoMiembro, data);
+      if (errorMsg) {
         setError(errorMsg);
         setFeedback({ type: 'error', msg: errorMsg, advertencia: true, miembro: data.miembro });
         setFrameFlash({ type: 'error', key: Date.now() });
@@ -150,9 +163,11 @@ export default function CheckinPage() {
         msg: data.message,
         miembro: data.miembro,
         advertencia: data.duplicado ? 'ya-registrado' : data.advertencia,
+        gamificacion: data.gamificacion,
       });
       setFrameFlash({ type: fbType, key: Date.now() });
       if (fbType === 'success') vibrate(80);
+      marcarActividad();
       setCodigo('');
       await loadRecent();
     } catch (err) {
@@ -170,13 +185,23 @@ export default function CheckinPage() {
     }
   };
 
-  const submit = async (e) => {
+  // porDocumento: el Enter del campo de documento registra por documento
+  // aunque haya texto en el campo del QR.
+  const submit = async (e, porDocumento = false) => {
     e.preventDefault();
     setError(''); setFeedback(null);
     const payload = { metodo };
-    if (codigo) payload.codigo = codigo.trim();
-    else if (documento) payload.documento = documento.trim();
-    else { setError('Escribe el código QR o el documento.'); return; }
+    if (codigo && !porDocumento) {
+      payload.codigo = codigo.trim();
+    } else if (documento) {
+      payload.documento = documento.trim();
+      // Escribir el documento es un ingreso manual: el selector arranca en QR
+      // y sin esto el ingreso quedaba guardado como QR (RQNF-04).
+      if (metodo === 'QR') payload.metodo = 'MANUAL';
+    } else {
+      setError('Escribe el código QR o el documento.');
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -184,8 +209,8 @@ export default function CheckinPage() {
 
       // --- INICIO BLOQUEO DE ACCESO FRONTEND ---
       const estadoMiembro = data.miembro?.estado ? String(data.miembro.estado).toUpperCase() : '';
-      if (estadoMiembro === 'VENCIDO' || estadoMiembro === 'INACTIVO') {
-        const errorMsg = 'Acceso denegado: Membresía vencida';
+      const errorMsg = mensajeDeBloqueo(estadoMiembro, data);
+      if (errorMsg) {
         setError(errorMsg);
         setFeedback({ type: 'error', msg: errorMsg, advertencia: true, miembro: data.miembro });
         setFrameFlash({ type: 'error', key: Date.now() });
@@ -203,9 +228,11 @@ export default function CheckinPage() {
         msg: data.message,
         miembro: data.miembro,
         advertencia: data.advertencia,
+        gamificacion: data.gamificacion,
       });
       setFrameFlash({ type: fbType, key: Date.now() });
       if (fbType === 'success') vibrate(80);
+      marcarActividad();
       setCodigo(''); setDocumento('');
       await loadRecent();
     } catch (err) {
@@ -220,6 +247,10 @@ export default function CheckinPage() {
 
   const onScan = (e) => {
     if (e.key === 'Enter') { e.preventDefault(); submit(e); }
+  };
+
+  const onDocumentoKey = (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); submit(e, true); }
   };
 
   const registrarRipple = Ripple({ opacity: 0.35 });
@@ -343,6 +374,7 @@ export default function CheckinPage() {
                   className="field-input"
                   value={documento}
                   onChange={(e) => setDocumento(e.target.value)}
+                  onKeyDown={onDocumentoKey}
                   placeholder="79123456"
                   inputMode="numeric"
                 />
@@ -372,6 +404,19 @@ export default function CheckinPage() {
                   <small style={{ display: 'block', marginTop: 4, fontSize: 12 }}>
                     {feedback.miembro.nombre} ({feedback.miembro.documento})
                   </small>
+                )}
+                {feedback.gamificacion && (
+                  <span style={{ display: 'block', marginTop: 8, fontSize: 14 }}>
+                    {feedback.gamificacion.hitosNuevos?.length > 0 && (
+                      <strong style={{ display: 'block' }}>
+                        🏆 Hito logrado: {feedback.gamificacion.hitosNuevos.map((h) => h.nombre).join(', ')}
+                      </strong>
+                    )}
+                    {feedback.gamificacion.mensaje}
+                    <small style={{ display: 'block', marginTop: 2 }}>
+                      Racha: {feedback.gamificacion.racha} {feedback.gamificacion.racha === 1 ? 'día' : 'días'} · Asistencias: {feedback.gamificacion.totalAsistencias}
+                    </small>
+                  </span>
                 )}
               </span>
             </div>

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
+import { useAuth } from '../context/AuthContext';
 import PageTransition from '../components/PageTransition';
 import Ripple from '../components/Ripple';
 import Modal from '../components/Modal';
@@ -22,6 +23,7 @@ function initials(n) {
 }
 
 export default function StaffPage() {
+  const { user } = useAuth();
   const [staff, setStaff]           = useState([]);
   const [invitations, setInvitations] = useState([]);
   const [form, setForm]             = useState({ email: '', nombre: '', rol: 'RECEPCIONISTA' });
@@ -39,6 +41,13 @@ export default function StaffPage() {
 
   // Modal de revocacion.
   const [confirmRevoke, setConfirmRevoke] = useState(null); // invitacion a revocar
+
+  // Edicion y desactivacion de usuarios (RQF-01).
+  const [editando, setEditando]     = useState(null); // usuario en el modal de edicion
+  const [editForm, setEditForm]     = useState({ nombre: '', rol: 'RECEPCIONISTA' });
+  const [editError, setEditError]   = useState('');
+  const [guardando, setGuardando]   = useState(false);
+  const [confirmEstado, setConfirmEstado] = useState(null); // usuario a desactivar
 
   const load = async () => {
     setLoading(true);
@@ -111,6 +120,59 @@ export default function StaffPage() {
     } catch (err) {
       setError(err.message || 'No se pudo revocar.');
       setConfirmRevoke(null);
+    }
+  };
+
+  // Nadie se quita el rol de admin ni se desactiva a si mismo, y la cuenta del
+  // dueño no se toca: el backend lo rechaza igual (403), aqui solo se avisa antes.
+  const esYo = (u) => user && u.id_usuario === user.id;
+  const protegido = (u) => esYo(u) || u.es_dueno;
+
+  const abrirEdicion = (u) => {
+    setEditando(u);
+    setEditForm({ nombre: u.nombre, rol: u.rol });
+    setEditError('');
+  };
+
+  const actualizarUsuario = async (u, cambios, okMsg) => {
+    const { data } = await api.patch(`/admin/staff/${u.id_usuario}`, cambios);
+    setStaff((lista) => lista.map((x) => (x.id_usuario === u.id_usuario ? { ...x, ...data.staff } : x)));
+    setInfo(okMsg || data.message);
+  };
+
+  const guardarEdicion = async (e) => {
+    e.preventDefault();
+    const u = editando;
+    const nombre = editForm.nombre.trim();
+    if (nombre.length < 2) { setEditError('El nombre debe tener al menos 2 caracteres.'); return; }
+    // Solo se envia lo que cambio: un entrenador puede cambiar de nombre sin
+    // que se le asigne otro rol.
+    const cambios = {};
+    if (nombre !== u.nombre) cambios.nombre = nombre;
+    if (editForm.rol !== u.rol) cambios.rol = editForm.rol;
+    if (Object.keys(cambios).length === 0) { setEditando(null); return; }
+    setGuardando(true);
+    setEditError('');
+    setError(''); setInfo('');
+    try {
+      await actualizarUsuario(u, cambios, `Se actualizaron los datos de ${nombre}.`);
+      setEditando(null);
+    } catch (err) {
+      setEditError(err.message || 'No se pudo guardar el cambio.');
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  const cambiarEstado = async (u, activo) => {
+    setError(''); setInfo('');
+    try {
+      await actualizarUsuario(u, { activo },
+        activo ? `La cuenta de ${u.nombre} está activa otra vez.` : `La cuenta de ${u.nombre} quedó desactivada: ya no puede iniciar sesión.`);
+    } catch (err) {
+      setError(err.message || 'No se pudo cambiar el estado del usuario.');
+    } finally {
+      setConfirmEstado(null);
     }
   };
 
@@ -299,13 +361,15 @@ export default function StaffPage() {
               </p>
             </div>
             <div style={{ overflowX: 'auto' }}>
-              <table className="table">
+              {/* Ancho minimo: en la columna angosta del layout el correo se
+                  partia letra por letra. Si no cabe, mejor scroll lateral. */}
+              <table className="table" style={{ minWidth: 520 }}>
                 <thead>
                   <tr>
                     <th>Persona</th>
                     <th>Email</th>
-                    <th>Rol</th>
-                    <th>Activo</th>
+                    <th>Rol y estado</th>
+                    <th aria-label="Acciones" />
                   </tr>
                 </thead>
                 <tbody>
@@ -314,19 +378,65 @@ export default function StaffPage() {
                       <td>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                           <span className="avatar avatar-primary">{initials(u.nombre)}</span>
-                          <strong>{u.nombre}</strong>
+                          <div style={{ minWidth: 0 }}>
+                            <strong>{u.nombre}</strong>
+                            {(u.es_dueno || esYo(u)) && (
+                              <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+                                {u.es_dueno && <span className="chip chip-status chip-status--warning">Dueño</span>}
+                                {esYo(u) && <span className="chip chip-status chip-status--frozen">Tú</span>}
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </td>
-                      <td>{u.email}</td>
+                      <td className="cell-wrap" style={{ wordBreak: 'normal', overflowWrap: 'anywhere' }}>{u.email}</td>
                       <td>
-                        <span className={ROLE_LABELS[u.rol]?.cls || 'role-pill'}>
-                          {ROLE_LABELS[u.rol]?.label || u.rol}
-                        </span>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 6 }}>
+                          <span className={ROLE_LABELS[u.rol]?.cls || 'role-pill'}>
+                            {ROLE_LABELS[u.rol]?.label || u.rol}
+                          </span>
+                          {u.activo
+                            ? <span className="chip chip-status chip-status--active">Activo</span>
+                            : <span className="chip chip-status chip-status--expired">Inactivo</span>}
+                        </div>
                       </td>
-                      <td>
-                        {u.activo
-                          ? <span className="chip chip-status chip-status--active">Activo</span>
-                          : <span className="chip chip-status chip-status--expired">Inactivo</span>}
+                      <td className="row-actions">
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          style={{ padding: '6px 8px' }}
+                          onClick={() => abrirEdicion(u)}
+                          aria-label={`Editar a ${u.nombre}`}
+                          title="Editar nombre o rol"
+                        >
+                          <span className="material-symbols-outlined icon">edit</span>
+                        </button>
+                        {u.activo ? (
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm"
+                            style={{ padding: '6px 8px' }}
+                            onClick={() => setConfirmEstado(u)}
+                            disabled={protegido(u)}
+                            aria-label={`Desactivar a ${u.nombre}`}
+                            title={protegido(u)
+                              ? (esYo(u) ? 'No puedes desactivar tu propia cuenta' : 'La cuenta del dueño no se puede desactivar')
+                              : 'Desactivar: ya no podrá iniciar sesión'}
+                          >
+                            <span className="material-symbols-outlined icon">person_off</span>
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm"
+                            style={{ padding: '6px 8px' }}
+                            onClick={() => cambiarEstado(u, true)}
+                            aria-label={`Reactivar a ${u.nombre}`}
+                            title="Reactivar: podrá volver a iniciar sesión"
+                          >
+                            <span className="material-symbols-outlined icon">person_check</span>
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -453,6 +563,91 @@ export default function StaffPage() {
         </p>
         <p style={{ marginTop: 10, color: 'var(--on-surface-variant)', fontSize: 13 }}>
           El link de aceptación dejará de funcionar inmediatamente.
+        </p>
+      </Modal>
+
+      {/* Modal de edicion de un usuario (RQF-01) */}
+      <Modal
+        open={Boolean(editando)}
+        onClose={() => setEditando(null)}
+        title="Editar usuario"
+        footer={
+          <>
+            <button type="button" className="btn btn-ghost" onClick={() => setEditando(null)}>
+              Cancelar
+            </button>
+            <button type="submit" form="form-editar-usuario" className="btn btn-primary" disabled={guardando}>
+              <span className="material-symbols-outlined icon">save</span>
+              {guardando ? 'Guardando...' : 'Guardar cambios'}
+            </button>
+          </>
+        }
+      >
+        <form id="form-editar-usuario" className="auth-form" onSubmit={guardarEdicion} noValidate>
+          {editError && (
+            <div className="alert alert-error" role="alert">
+              <span className="material-symbols-outlined icon">error</span>
+              <span>{editError}</span>
+            </div>
+          )}
+          <label className="field">
+            <span className="field-label">Nombre</span>
+            <input
+              className="field-input"
+              value={editForm.nombre}
+              onChange={(e) => setEditForm((f) => ({ ...f, nombre: e.target.value }))}
+              maxLength={100}
+              required
+            />
+          </label>
+          <label className="field">
+            <span className="field-label">Rol</span>
+            <select
+              className="field-input"
+              value={editForm.rol}
+              onChange={(e) => setEditForm((f) => ({ ...f, rol: e.target.value }))}
+              disabled={Boolean(editando) && protegido(editando) && editando.rol === 'ADMINISTRADOR'}
+            >
+              {editando && !['RECEPCIONISTA', 'ADMINISTRADOR'].includes(editando.rol) && (
+                <option value={editando.rol} disabled>{ROLE_LABELS[editando.rol]?.label || editando.rol}</option>
+              )}
+              <option value="RECEPCIONISTA">Recepcionista</option>
+              <option value="ADMINISTRADOR">Administrador</option>
+            </select>
+          </label>
+          {editando && protegido(editando) && editando.rol === 'ADMINISTRADOR' && (
+            <p style={{ margin: 0, fontSize: 13, color: 'var(--on-surface-variant)' }}>
+              {esYo(editando)
+                ? 'No puedes quitarte el rol de administrador a ti mismo.'
+                : 'La cuenta del dueño siempre conserva el rol de administrador.'}
+            </p>
+          )}
+        </form>
+      </Modal>
+
+      {/* Modal de confirmacion al desactivar un usuario */}
+      <Modal
+        open={Boolean(confirmEstado)}
+        onClose={() => setConfirmEstado(null)}
+        variant="danger"
+        title="Desactivar usuario"
+        footer={
+          <>
+            <button type="button" className="btn btn-ghost" onClick={() => setConfirmEstado(null)}>
+              Cancelar
+            </button>
+            <button type="button" className="btn btn-danger" onClick={() => cambiarEstado(confirmEstado, false)}>
+              <span className="material-symbols-outlined icon">person_off</span>
+              Sí, desactivar
+            </button>
+          </>
+        }
+      >
+        <p style={{ margin: 0, lineHeight: 1.5 }}>
+          ¿Desactivar a <strong>{confirmEstado?.nombre}</strong> ({confirmEstado?.email})?
+        </p>
+        <p style={{ marginTop: 10, color: 'var(--on-surface-variant)', fontSize: 13 }}>
+          No podrá iniciar sesión hasta que reactives la cuenta. Sus registros se conservan.
         </p>
       </Modal>
     </PageTransition>

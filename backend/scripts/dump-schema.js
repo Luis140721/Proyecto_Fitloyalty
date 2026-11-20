@@ -3,7 +3,7 @@
  *
  * Conecta a la BD que indique DATABASE_URL (o las vars sueltas DB_*) y
  * vuelca tablas + columnas del schema public. Solo se usa para mapear
- * columnas reales; se borra despues de generar SCHEMA_MAP.md.
+ * columnas reales; se borra despues de generar docs/arquitectura/SCHEMA_MAP.md.
  */
 const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '../.env') });

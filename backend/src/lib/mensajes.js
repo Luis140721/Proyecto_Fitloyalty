@@ -30,6 +30,9 @@ function mensajeParaMiembro(tipo, gym, nombre, dato) {
   const primerNombre = String(nombre || '').split(' ')[0];
   const saludo = `Hola ${primerNombre}, te saludamos de ${gym}.`;
 
+  if (tipo === 'acceso-bloqueado') {
+    return `${saludo} Hoy intentaste ingresar y no pudimos dejarte pasar porque ${dato}. Pasa por recepcion y lo resolvemos para que sigas entrenando.`;
+  }
   if (tipo === 'vencida') {
     return `${saludo} Tu plan vencio ${dato}. Pasa cuando quieras y lo renovamos para que no pierdas el ritmo.`;
   }

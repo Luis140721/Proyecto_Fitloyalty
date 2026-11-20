@@ -19,6 +19,7 @@ const ETIQUETA_TIPO = {
   vencida: 'Vencida',
   'por-vencer': 'Renueva',
   riesgo: 'En riesgo',
+  'acceso-bloqueado': 'Bloqueado',
 };
 
 export default function MenuNotificaciones() {
@@ -27,6 +28,8 @@ export default function MenuNotificaciones() {
   const [cargando, setCargando] = useState(false);
   // Avisos a los que ya se les escribio en esta sesion, para marcarlos.
   const [enviados, setEnviados] = useState(() => new Set());
+  // Si el envio se abrio pero no quedo registrado, se dice sin estorbar.
+  const [avisoRegistro, setAvisoRegistro] = useState('');
   const [error, setError] = useState('');
   const contenedorRef = useRef(null);
   const navigate = useNavigate();
@@ -44,11 +47,11 @@ export default function MenuNotificaciones() {
     }
   };
 
-  // Se carga al montar para poder pintar el contador, y se refresca cada
-  // dos minutos: son datos que cambian despacio.
+  // Se carga al montar para poder pintar el contador y se refresca cada 30 s,
+  // para que un acceso bloqueado en recepcion le llegue pronto al administrador.
   useEffect(() => {
     cargar();
-    const t = setInterval(cargar, 120000);
+    const t = setInterval(cargar, 30000);
     return () => clearInterval(t);
   }, []);
 
@@ -66,6 +69,17 @@ export default function MenuNotificaciones() {
       document.removeEventListener('keydown', escape);
     };
   }, [abierto]);
+
+  // Marca un acceso bloqueado como visto y lo quita de la lista.
+  const marcarVisto = async (aviso, e) => {
+    e.stopPropagation();
+    setAvisos((prev) => prev.filter((a) => a.id !== aviso.id));
+    try {
+      await api.post(`/admin/notificaciones/acceso-bloqueado/${aviso.idNotificacion}/leida`);
+    } catch (_) {
+      cargar(); // si no se pudo guardar, vuelve a aparecer
+    }
+  };
 
   const irAlMiembro = (aviso) => {
     setAbierto(false);
@@ -86,15 +100,20 @@ export default function MenuNotificaciones() {
     const url = `https://wa.me/${aviso.telefono}?text=${encodeURIComponent(aviso.mensaje || '')}`;
     window.open(url, '_blank', 'noopener,noreferrer');
     setEnviados((prev) => new Set(prev).add(aviso.id));
+    setAvisoRegistro('');
     try {
+      // mensaje: el texto que se abrio en WhatsApp (RQF-09, mensaje_copiado).
+      // idAlerta solo viene en los avisos "en riesgo".
       await api.post('/admin/notificaciones/enviado', {
         idMiembro: aviso.idMiembro,
         canal: 'WHATSAPP',
         tipo: aviso.tipo,
+        mensaje: aviso.mensaje,
+        idAlerta: aviso.idAlerta,
       });
     } catch (_) {
-      // Si no se pudo dejar constancia, el mensaje igual se abrio: no vale
-      // la pena interrumpir al usuario por el registro.
+      // El mensaje igual se abrio: no se interrumpe, solo se deja una nota.
+      setAvisoRegistro(`Se abrió WhatsApp, pero no pudimos registrar el envío a ${aviso.nombreMiembro}.`);
     }
   };
 
@@ -121,6 +140,11 @@ export default function MenuNotificaciones() {
           </header>
 
           <div className="menu-flotante__cuerpo">
+            {avisoRegistro && (
+              <p className="menu-flotante__vacio" role="status" style={{ padding: '10px 16px' }}>
+                {avisoRegistro}
+              </p>
+            )}
             {cargando && avisos.length === 0 && (
               <p className="menu-flotante__vacio">Cargando…</p>
             )}
@@ -144,6 +168,18 @@ export default function MenuNotificaciones() {
                 </span>
                 <span className="aviso__acciones">
                   <span className="aviso__etiqueta">{ETIQUETA_TIPO[a.tipo] || a.tipo}</span>
+                  {a.idNotificacion && (
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      className="aviso__visto"
+                      onClick={(e) => marcarVisto(a, e)}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') marcarVisto(a, e); }}
+                      title="Marcar como visto"
+                    >
+                      Visto
+                    </span>
+                  )}
                   {a.telefono ? (
                     <span
                       role="button"

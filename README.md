@@ -19,6 +19,7 @@ Proyecto formativo — **SENA, TG. Análisis y Desarrollo de Software, Ficha 322
 - [Base de datos](#base-de-datos)
 - [Correo transaccional (Brevo)](#correo-transaccional-brevo)
 - [Ramas](#ramas)
+- [Documentación](docs/README.md)
 - [Problemas frecuentes](#problemas-frecuentes)
 
 ---
@@ -77,7 +78,7 @@ docker compose down -v             # detener y BORRAR la base de datos
 docker compose exec db psql -U fitloyalty -d fitloyalty
 ```
 
-> Guía ampliada de Docker en [`DOCKER.md`](DOCKER.md).
+> Guía ampliada de Docker en [`docs/guias/DOCKER.md`](docs/guias/DOCKER.md).
 
 ---
 
@@ -124,7 +125,7 @@ Ninguno de los dos archivos `.env` se versiona — están cubiertos por `.gitign
 | Variable             | Obligatoria | Por defecto | Descripción |
 |----------------------|:-----------:|-------------|-------------|
 | `JWT_SECRET`         | **sí**      | —           | Clave de firma de los JWT. El compose falla si no está |
-| `JWT_EXPIRES_IN`     | no          | `7d`        | Vigencia del token |
+| `JWT_EXPIRES_IN`     | no          | `8h`        | Vigencia del token del personal (`8h`, `30m`, `1d`; un número sin unidad son segundos). El de la app del miembro dura 30 días y no cambia. Ojo: `docker-compose.yml` pasa `7d` si no la defines en `.env` |
 | `PORT`               | no          | `3001`      | Puerto del backend |
 | `NODE_ENV`           | no          | `production`| Entorno de ejecución |
 | `SUPPORT_EMAIL`      | no          | `fitloyaltysaas@gmail.com` | Correo de soporte mostrado en los emails |
@@ -143,6 +144,7 @@ Ninguno de los dos archivos `.env` se versiona — están cubiertos por `.gitign
 | Variable         | Obligatoria | Por defecto | Descripción |
 |------------------|:-----------:|-------------|-------------|
 | `VITE_API_BASE`  | no          | vacío       | Déjalo vacío para usar rutas relativas y el proxy de nginx |
+| `VITE_INACTIVIDAD_MIN` | no    | `30`        | Minutos sin actividad (mouse, teclado, toque o scroll) antes de cerrar la sesión del panel. Se lee al compilar (`npm run build`, Vercel); el build de Docker no la recibe y usa 30 |
 | `FRONTEND_PORT`  | no          | `5173`      | Puerto publicado del frontend |
 
 ---
@@ -197,10 +199,10 @@ Proyecto_FitLoyalty/
 │       ├── context/         → AuthContext (JWT + estado global), TrialContext
 │       ├── pages/           → Login, Dashboard, Miembros, Check-in, Equipo…
 │       └── styles/
+├── fitloyalty_cliente/      → app móvil del miembro (Flutter)
 ├── ConsultasDB/             → scripts SQL de creación y poblado
 ├── Documentación/           → backlog, casos de uso, estimaciones
-├── Evidencias_Sustentacion/ → pruebas E2E y QA responsive
-├── Historias de Usuario/    → historias y capturas del tablero Azure DevOps
+├── docs/                    → guías, arquitectura, sustentación, evidencias y seguimiento (ver docs/README.md)
 └── docker-compose.yml
 ```
 
@@ -249,6 +251,7 @@ Las rutas marcadas con 🔒 la exigen; sin token responden `401`.
 | POST   | `/admin/staff/invite` 🔒              | Invita a un miembro del equipo por correo |
 | GET    | `/admin/staff/invitations` 🔒         | Invitaciones pendientes |
 | POST   | `/admin/staff/invitations/:id/revoke` 🔒 | Revoca una invitación |
+| PATCH  | `/admin/staff/:id` 🔒                 | Edita nombre o rol, desactiva o reactiva a un usuario del equipo (solo admin; nadie se desactiva a sí mismo y la cuenta del dueño no se desactiva) |
 | GET    | `/auth/accept-invite/:token`          | Valida el token de invitación (público) |
 | POST   | `/auth/accept-invite`                 | Crea la cuenta desde la invitación (público) |
 | GET    | `/asistencia` 🔒                      | Historial de asistencia |
@@ -268,9 +271,26 @@ reiniciar el contenedor no las repite.
 
 ```
 backend/migrations/
-├── 002_esquema_inicial.sql     → tablas, índices y roles
-└── 003_invitacion_staff.sql    → invitaciones de equipo
+├── 002_esquema_inicial.sql                 → tablas, índices y roles
+├── 003_invitacion_staff.sql                → invitaciones de equipo
+├── 004_cliente_pin.sql                     → PIN de la app del miembro
+├── 004_extender_miembro_cobros.sql         → datos del miembro y plan_cobro
+├── 005_cliente_password.sql                → contraseña de la app del miembro
+├── 005_fix_missing_columns.sql             → columnas que faltaban en miembro
+├── 006_gimnasio_dias_aviso.sql             → días de aviso de vencimiento
+├── 007_alerta_vencimiento_enviada.sql      → avisos de vencimiento ya enviados
+├── 008_contrato_enviado.sql                → contratos enviados por WhatsApp
+├── 009_auditoria_y_gamificacion.sql        → auditoria y columnas de hitos y retos
+├── 010_congelar_membresia.sql              → membresías congeladas
+├── 011_vista_miembros_activos_gimnasio.sql → vista filtrable por gimnasio
+├── 013_gimnasio_id_dueno.sql               → dueño del gimnasio (gimnasio.id_dueno)
+└── 014_notificacion_envio_como_produccion.sql → notificacion y envio_mensaje iguales a producción
 ```
+
+La 012 está reservada. La 014 deja `notificacion` y `envio_mensaje` de una base creada
+solo con migraciones iguales a las de producción (`ConsultasDB/`). En producción no
+cambia nada, y una base Docker con filas viejas las conserva en `notificacion_docker` y
+`envio_mensaje_docker`.
 
 ### Vista SQL
 

@@ -11,14 +11,15 @@
  */
 const express = require('express');
 const pool    = require('../db/db');
-const { authenticate } = require('../middleware/auth');
+const { authenticate, authorize } = require('../middleware/auth');
 const asyncHandler = require('../lib/asyncHandler');
 const { AppError } = require('../lib/errors');
 
 const router = express.Router();
 
-// Todas las rutas requieren estar logueado.
-router.use(authenticate);
+// Solo el personal del gimnasio. El token de un miembro (app movil, rol
+// 'cliente') tambien trae gymId y antes podia leer nombres y documentos.
+router.use(authenticate, authorize('admin', 'receptionist'));
 
 // --------------------------------------------------------------------------
 // GET /api/asistencia

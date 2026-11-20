@@ -32,11 +32,11 @@ const BRAND = {
 function escapeHtml(s) {
   if (s === null || s === undefined) return '';
   return String(s)
-    .replaceAll('&', '&')
-    .replaceAll('<', '<')
-    .replaceAll('>', '>')
-    .replaceAll('"', '"')
-    .replaceAll("'", "'");
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
 }
 
 // ---------- Layout reusable ----------
