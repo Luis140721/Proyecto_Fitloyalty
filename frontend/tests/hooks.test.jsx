@@ -19,10 +19,11 @@ import { ErrorProvider } from '../src/components/ErrorBanner';
 
 function Contador({ valor, duracion }) {
   const ref = useAnimatedCount(valor, duracion === undefined ? undefined : { duration: duracion });
-  return <span data-testid="contador" ref={ref}>0</span>;
+  return <output aria-label="Miembros activos" ref={ref}>0</output>;
 }
 
-const contador = () => screen.getByTestId('contador');
+// <output> tiene el rol status: se busca por su nombre, como lo leeria un lector de pantalla.
+const contador = () => screen.getByRole('status', { name: 'Miembros activos' });
 
 /** Pide movimiento reducido (o no) por matchMedia. */
 function movimientoReducido(si) {
@@ -46,7 +47,7 @@ describe('useAnimatedCount', () => {
     expect(contador()).toHaveTextContent('1.250.000');
   });
 
-  test('should count up frame by frame and end exactly on the target', () => {
+  test('should count up frame by frame and end exactly on the target when there is no reduced motion', () => {
     // Arrange: sin matchMedia (como jsdom) no hay movimiento reducido
     vi.useFakeTimers({ toFake: ['requestAnimationFrame', 'cancelAnimationFrame', 'performance'] });
     render(<Contador valor={100} duracion={800} />);
@@ -184,7 +185,7 @@ describe('useApiHandler', () => {
     expect(screen.queryAllByRole('alert')).toHaveLength(avisos);
   });
 
-  test('should give the pushApiError of the banner through useApiErrors', async () => {
+  test('should put the error in the banner when a page calls the pushApiError of useApiErrors', async () => {
     // Arrange
     function Avisar() {
       const pushError = useApiErrors();
