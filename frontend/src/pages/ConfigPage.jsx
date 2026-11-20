@@ -25,6 +25,8 @@ export default function ConfigPage() {
   const [success, setSuccess] = useState('');
 
   const loadConfig = async () => {
+    // Restablecer vuelve a cargar: el error de antes ya no aplica.
+    setError('');
     setLoading(true);
     try {
       const { data } = await api.get('/admin/config');
