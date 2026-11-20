@@ -352,8 +352,11 @@ describe('/api/admin/hitos: the gamification milestones', () => {
   // DEFECTO (sin corregir, zona de Santiago): hitoSchema no tiene mensajes
   // propios y el admin ve el texto de zod en ingles. HitosConfig.jsx tiene
   // noValidate y muestra err.message, asi que una meta en 0 o vacia (Number('')
-  // es 0) muestra «Number must be greater than or equal to 1». Pasa a verde
-  // cuando el esquema de hitos explique el error en espanol.
+  // es 0) muestra «Number must be greater than or equal to 1». Queda como fallo
+  // esperado hasta que se corrija la incidencia #88:
+  // https://github.com/Luis140721/Proyecto_Fitloyalty/issues/88
+  // Cuando el esquema de hitos explique el error en espanol, este test pasa y
+  // test.failing lo marca en rojo: hay que quitarle el .failing.
   test.failing('should explain in Spanish why the milestone is not valid when the admin sends a goal of 0', async () => {
     // Act
     const r = await pedir('post', '/admin/hitos').send({ ...NUEVO, valor_objetivo: 0 });
