@@ -193,9 +193,10 @@ jobs:
           pnpm --dir frontend install --frozen-lockfile
           pnpm --dir e2e install --frozen-lockfile
       # Antes de arrancar el backend: la URL pasa por la misma guardia de los
-      # tests de integracion y de playwright.config.js.
+      # tests de integracion y de playwright.config.js. Sin DATABASE_URL, vacia
+      # o con otra forma, sale con codigo 1 y solo el mensaje (sin el valor).
       - name: La BD es la de pruebas
-        run: node -e "require('./e2e/guardia-bd.cjs').exigirBdDePruebas(process.env.DATABASE_URL, 'DATABASE_URL')"
+        run: node e2e/guardia-bd.cjs DATABASE_URL
       # Arranca el backend en segundo plano: sigue vivo en los pasos siguientes.
       # Son las variables del webServer del backend en playwright.config.js; si
       # cambias una alli, cambiala aqui.

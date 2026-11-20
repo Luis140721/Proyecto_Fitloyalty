@@ -61,7 +61,20 @@ function diagnostico(url) {
   return { recibido: `${u.hostname || '?'}:${u.port || '(sin puerto)'}/${bd || '?'}`, motivos };
 }
 
+// Lo que se dice cuando la variable falta o esta vacia: la regla, sin valores.
+const QUE_HACER =
+  'las pruebas con BD (integracion y E2E) solo corren contra la BD de pruebas local, db-test ' +
+  '(127.0.0.1:5433, nombre terminado en _test). Levantala con ' +
+  '"docker compose -f e2e/docker-compose.yml up -d --wait db-test" (desde la raiz)';
+
 function exigirBdDePruebas(url, variable) {
+  // Sin la variable, url.includes daba un TypeError en vez de decir que falta.
+  if (url === undefined || url === null) {
+    throw new Error(`Falta ${variable}: ${QUE_HACER} y define ${variable} con la forma ${FORMA_LEGIBLE}.`);
+  }
+  if (String(url).trim() === '') {
+    throw new Error(`${variable} esta vacia: ${QUE_HACER} y define ${variable} con la forma ${FORMA_LEGIBLE}.`);
+  }
   // Dos casos con su propio mensaje; FORMA tambien los rechaza.
   if (/\s/.test(url)) throw new Error(`${variable} no puede tener espacios.`);
   // Lo que va despues de # es fragmento para new URL, que no lo revisa, pero no
@@ -78,3 +91,19 @@ function exigirBdDePruebas(url, variable) {
 }
 
 module.exports = { exigirBdDePruebas, motivosDelDestino };
+
+// Desde la linea de comandos, como en el paso «La BD es la de pruebas» del job
+// e2e (tests.yml):
+//   node e2e/guardia-bd.cjs DATABASE_URL
+// Revisa la variable con ese nombre. Si no es la BD de pruebas, escribe solo el
+// mensaje, sin la pila ni el valor de la variable, y sale con codigo 1. En
+// GitHub Actions el mensaje va como ::error:: para que salga en el resumen.
+if (require.main === module) {
+  const variable = process.argv[2] || 'DATABASE_URL';
+  try {
+    exigirBdDePruebas(process.env[variable], variable);
+  } catch (err) {
+    console.error((process.env.GITHUB_ACTIONS === 'true' ? '::error::' : '') + err.message);
+    process.exitCode = 1;
+  }
+}
