@@ -464,13 +464,15 @@ router.patch(
     }
     if (!actualizado) throw new AppError(404, 'Usuario no encontrado en este gimnasio.', 'STAFF_NOT_FOUND');
 
-    // HU-04, criterio 4: la desactivacion queda en auditoria con el responsable.
-    if (desactiva) {
+    // HU-04, criterio 4: desactivar y reactivar quedan en auditoria con el responsable.
+    const reactiva = activo === true && !actual.activo;
+    if (desactiva || reactiva) {
       await pool.query(
         `INSERT INTO auditoria (id_gimnasio, tabla_afectada, id_registro, accion, id_usuario, detalle)
          VALUES ($1, $2, $3, $4, $5, $6)`,
-        [gymId, 'usuario', id, 'UPDATE', req.user.id,
-          JSON.stringify({ eventos: ['DESACTIVADA'], antes: { activo: true }, despues: { activo: false } })]
+        [gymId, 'usuario', id, 'UPDATE', req.user.id, JSON.stringify(desactiva
+          ? { eventos: ['DESACTIVADA'], antes: { activo: true }, despues: { activo: false } }
+          : { eventos: ['REACTIVADA'], antes: { activo: false }, despues: { activo: true } })]
       );
     }
 
