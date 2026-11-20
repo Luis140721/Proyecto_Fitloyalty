@@ -60,7 +60,9 @@ export default defineConfig({
       },
     },
     {
-      command: `npm run dev --prefix ../frontend -- --port ${FRONT_PORT} --strictPort`,
+      // Sin `--`: pnpm le pasa a Vite los argumentos tal cual, y con `--` Vite
+      // ignoraria el puerto.
+      command: `pnpm --dir ../frontend run dev --port ${FRONT_PORT} --strictPort`,
       url: FRONT_URL,
       // Tampoco se reutiliza un front ya abierto: podria estar apuntando a otro API.
       reuseExistingServer: false,

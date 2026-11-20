@@ -1,6 +1,8 @@
 {
   "name": "fitloyalty-e2e",
   "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.15.0",
   "engines": { "node": ">=22" },
   "scripts": {
     "test": "playwright test",
@@ -10,6 +12,6 @@
     "db:down": "docker compose down --volumes"
   },
   "devDependencies": {
-    "@playwright/test": "1.49.1"
+    "@playwright/test": "1.63.0"
   }
 }

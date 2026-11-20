@@ -153,7 +153,7 @@ dos imagenes, una red.
 |---|---|
 | `docker-compose.yml` | Orquesta `db`, `backend`, `frontend` |
 | `.env.example` / `.env` | Variables del entorno (NO commitear `.env`) |
-| `backend/Dockerfile` | Build multi-stage del backend (Node 24 + npm + `npm start`) |
+| `backend/Dockerfile` | Build multi-stage del backend (Node 24 + pnpm 12.15.0, arranca con `node src/index.js`) |
 | `backend/.dockerignore` | Excluye `node_modules`, `.env`, logs |
 | `backend/migrations/00*.sql` | Esquema (aplicadas automaticamente al arrancar) |
 | `frontend/Dockerfile` | Build Vite + runtime nginx:alpine |

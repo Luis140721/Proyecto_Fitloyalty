@@ -1,3 +1,12 @@
-packages:
-  - 'backend'
-  - 'frontend'
+# Ajustes de pnpm para la raiz (concurrently para `pnpm run dev`). Sin
+# `packages`: backend, frontend y e2e son proyectos aparte, cada uno con su
+# pnpm-workspace.yaml y su pnpm-lock.yaml, porque Docker, Render y Vercel los
+# instalan por carpeta y no ven este archivo ni un lockfile de la raiz.
+#
+# pnpm no corre los scripts de instalacion de las dependencias salvo los que se
+# permiten aqui; si aparece uno sin decidir, `pnpm install` falla
+# (ERR_PNPM_IGNORED_BUILDS).
+allowBuilds:
+  # Lo trae whatsapp-web.js de la raiz, que no envia nada: el Chrome que usa
+  # WhatsApp lo descarga el backend.
+  puppeteer: false
