@@ -1,11 +1,27 @@
 # Estado: avance real de requisitos
 
-- **Fecha:** 2026-11-14 (actualizaciones tras las fusiones en `develop` del 18, el 19, el 20, el 25 y el 27 de octubre y el 13 y el 14 de noviembre; la medición inicial fue el 2026-10-16)
-- **Rama:** `docs/avance-2026-11-14` (PR hacia `develop`). Las anteriores fueron `docs/avance-2026-11-06` (PR #70), `docs/avance-2026-10-18` (PR #20), `docs/avance-2026-10-19` (PR #25), `docs/avance-2026-10-19-b` (PR #29), `docs/avance-2026-10-20` (PR #35) y `docs/avance-2026-10-25` (PR #44); la medición inicial se hizo en `docs/avance-requisitos` (PR #6, ya en `main`).
+- **Fecha:** 2026-11-20 (actualizaciones tras las fusiones en `develop` del 18, el 19, el 20, el 25 y el 27 de octubre y el 13 y el 14 de noviembre, y el PR #100 del 20 de noviembre; la medición inicial fue el 2026-10-16)
+- **Rama:** `docs/avance-2026-11-20` (PR hacia `develop`, después del PR #100). Las anteriores fueron `docs/avance-2026-11-14` (PR #74), `docs/avance-2026-11-06` (PR #70), `docs/avance-2026-10-18` (PR #20), `docs/avance-2026-10-19` (PR #25), `docs/avance-2026-10-19-b` (PR #29), `docs/avance-2026-10-20` (PR #35) y `docs/avance-2026-10-25` (PR #44); la medición inicial se hizo en `docs/avance-requisitos` (PR #6, ya en `main`).
 - **Código verificado:** `develop` @ `b780cc9` para los requisitos de las actualizaciones (secciones siguientes); el resto, `main` @ `54b19fa`. El PR #5 (`8acab31`) solo agregó `CONTRIBUTING.md` y el check de nombre de rama al CI (sin cambios en el código de la app); se fusionó en esta rama y es la base de la evidencia del CI.
 - **Base de la documentación:** por decisión de Luis, los archivos de Santiago del PR #4 (`docs/borrador-matriz-requisitos` @ `00cdcdb`), verificados y corregidos aquí.
 - **Copias de seguridad:** los originales de `Documentación/` están en `54b19fa` y los archivos de Santiago sin corregir en el commit `5db4e2a` de esta rama (o en `00cdcdb`). Ejemplo: `git show 00cdcdb:docs/avance-requisitos.xlsx > copia.xlsx`.
 - **Responsable de esta tarea:** agente ejecutor (Claude de Luis). Solo documentación y Excel; el reparto de las implementaciones está en `docs/plan-trabajo.md`.
+
+## Actualización del 2026-11-20
+
+**El avance sube a 95,9 % (35,5/37): RF 100 % y RNF 90,0 %. Con las sesiones de RQNF-04 (Santiago) llega a 97,3 % (36/37).** Los dos requisitos funcionales que seguían Pendientes quedan implementados en el PR #100 (`feat/qr-dinamico-retos-campanas`). Este PR de documentación se fusiona después del #100; si el verificador pide cambios, se ajusta aquí antes de fusionar.
+
+| Req. | Antes | Ahora | PR | Evidencia y motivo |
+|---|---|---|---|---|
+| RQF-12 | Pendiente | **Implementado** | #100 | CRUD de retos con meta, fechas, segmento y recompensa (`retos.js:103-243`); inscripción automática en el check-in (segmento TODOS), desde el panel o con «Unirme» en la app, que valida el segmento (`cliente.js:437`); avance en cada check-in por días distintos (`lib/retos.js:67-92`, `checkin.js:250`); al completar, aviso RETO en la campana con WhatsApp (`notificaciones.js:234`) y mensaje al miembro en el check-in y en la app. |
+| RQF-10 | Pendiente | **Implementado** | #100 | Plantillas con variables (`campanas.js:109-160`), segmentos inactivos/nuevos/próximos a vencer/todos (`lib/segmentos.js:47-90`), campañas manuales o programadas (scheduler cada 10 min, `scheduler.js:96-97`) por WhatsApp o correo, ejecución bloqueada con `FOR UPDATE` y constancia en `campana_destinatario` y `envio_mensaje` (`lib/campanas.js:59-190`). |
+
+**También:**
+- **QR dinámico (RQF-05, RQNF-03):** la app muestra un QR que cambia cada 30 s (`FLD<id>T<8 dígitos>`, HMAC-SHA256 estilo TOTP), calculado sin internet; el check-in lo valida con una ventana de ~90 s (`checkin.js:77-115`, `lib/qr-dinamico.js`). En Configuración, «Exigir el QR dinámico» (`gimnasio.qr_dinamico_obligatorio`) hace que el QR fijo, una foto o una captura dejen de servir; el documento sigue funcionando. Se eligió sobre un «QR del gimnasio» porque mantiene el flujo de recepción de RQF-05 y RQNF-04. No cambia el estado de RQF-05, que ya era Implementado.
+- **Migración 015:** en Docker reconstruye `plantilla_mensaje`, `campana` y `campana_destinatario` con el DDL de producción (el `pg_dump -s` sale idéntico) y agrega `campana.canal`, `gimnasio.qr_dinamico_obligatorio`, `reto.creado_por` y `reto_miembro.fecha_inscripcion`. En producción solo agrega columnas e índices; con `Poblar_Tablas.sql` se conservan los datos de ejemplo. Antes de desplegar, correrla en una copia de producción dentro de `BEGIN; … ROLLBACK;`.
+- **Pruebas:** `npm test` 320/320; contra PostgreSQL 18 local, `retos-campanas-real.test.js` y `registro-envio-real.test.js` 52/52 con el esquema de producción y 52/52 con el de Docker; `flutter test` 4/4; recorrido en el navegador con capturas (`docs/evidencias/rqf-10-12-qr-dinamico.md`).
+- **Límites:** en Render no hay Chrome, así que las campañas por WhatsApp se envían a mano con wa.me desde el panel (ENVIADO = se abrió el mensaje); el aviso al miembro de un reto completado es en el check-in y en la app, no push. Hay que definir `QR_DINAMICO_SECRET` en Render.
+- **Lo que falta para el 100 %:** RQNF-04 (Parcial: las 3 sesiones de usabilidad, Santiago) y RQNF-02 (Pendiente: monitor externo con 7 días al 99 %, Daniel).
 
 ## Actualización del 2026-11-14
 

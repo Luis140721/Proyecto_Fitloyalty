@@ -7,6 +7,8 @@ const links = [
   { to: '/admin/dashboard', label: 'Dashboard', icon: 'space_dashboard',  roles: ['admin'] },
   { to: '/admin/miembros',  label: 'Miembros',  icon: 'group',             roles: ['admin', 'receptionist'] },
   { to: '/admin/checkin',   label: 'Check-in',  icon: 'qr_code_scanner',   roles: ['admin', 'receptionist'] },
+  { to: '/admin/retos',     label: 'Retos',     icon: 'emoji_events',      roles: ['admin'] },
+  { to: '/admin/campanas',  label: 'Campañas',  icon: 'campaign',          roles: ['admin'] },
   { to: '/admin/staff',     label: 'Equipo',    icon: 'badge',             roles: ['admin'] },
   { to: '/admin/config',    label: 'Configuración', icon: 'settings',      roles: ['admin'] },
 ];

@@ -208,6 +208,25 @@ export default function ConfigPage() {
 
           <header className="chart-card__head" style={{ marginTop: 32, paddingTop: 16, borderTop: '1px solid var(--border-subtle)' }}>
             <div>
+              <h3>Check-in con QR</h3>
+              <p>
+                La app del miembro muestra un QR que cambia cada 30 segundos. Si lo exiges, el QR fijo
+                (impreso, en una captura o reenviado) deja de servir; el ingreso por documento sigue funcionando.
+              </p>
+            </div>
+          </header>
+
+          <label className="field" style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <input
+              type="checkbox"
+              checked={!!config.qr_dinamico_obligatorio}
+              onChange={(e) => setConfig({ ...config, qr_dinamico_obligatorio: e.target.checked })}
+            />
+            <span className="field-label" style={{ margin: 0 }}>Exigir el QR dinámico de la app (más seguro)</span>
+          </label>
+
+          <header className="chart-card__head" style={{ marginTop: 32, paddingTop: 16, borderTop: '1px solid var(--border-subtle)' }}>
+            <div>
               <h3>Recordatorios de Cobro</h3>
               <p>Configuración para notificaciones de vencimiento de planes.</p>
             </div>

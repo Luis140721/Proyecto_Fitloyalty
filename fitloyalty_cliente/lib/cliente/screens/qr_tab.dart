@@ -4,6 +4,10 @@
 // escanee en la recepcion. Si el backend envio la imagen PNG en base64, se
 // muestra esa; si no, se genera en el cliente con qr_flutter a partir del
 // codigo en texto. Tambien permite verlo en pantalla completa.
+//
+// Si el backend envia los datos del QR dinamico, se muestra ese: cambia cada
+// 30 segundos y se calcula en el telefono, asi que funciona sin internet y una
+// captura deja de servir enseguida.
 
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -13,6 +17,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../providers/perfil_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common.dart';
+import '../widgets/qr_dinamico_view.dart';
 import 'qr_fullscreen.dart';
 
 class QrTab extends StatefulWidget {
@@ -51,21 +56,27 @@ class _QrTabState extends State<QrTab> {
           padding: const EdgeInsets.all(20),
           children: [
             const SizedBox(height: 8),
-            const Center(
+            Center(
               child: Text(
-                'Muestra este codigo en recepcion',
+                p.qrDinamico != null
+                    ? 'Muestra este codigo en recepcion. Cambia cada 30 segundos.'
+                    : 'Muestra este codigo en recepcion',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
               ),
             ),
             const SizedBox(height: 24),
 
-            // QR
-            Center(child: _qrBox(p)),
+            // QR: el dinamico si el servidor lo envia; si no, el fijo.
+            Center(
+              child: p.qrDinamico != null && p.qrStatus != DataStatus.loading
+                  ? QrDinamicoView(qr: p.qrDinamico!)
+                  : _qrBox(p),
+            ),
             const SizedBox(height: 16),
 
-            // Codigo en texto
-            if (p.qrCodigo != null)
+            // Codigo en texto (solo el QR fijo; el dinamico ya lo muestra)
+            if (p.qrCodigo != null && p.qrDinamico == null)
               Center(
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
@@ -98,7 +109,11 @@ class _QrTabState extends State<QrTab> {
                 label: const Text('Ver en pantalla completa'),
                 onPressed: () => Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (_) => QrFullscreen(codigo: p.qrCodigo!, imagenDataUrl: p.qrImagen)),
+                  MaterialPageRoute(builder: (_) => QrFullscreen(
+                    codigo: p.qrCodigo!,
+                    imagenDataUrl: p.qrImagen,
+                    dinamico: p.qrDinamico,
+                  )),
                 ),
               ),
           ],

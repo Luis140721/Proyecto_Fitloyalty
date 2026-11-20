@@ -110,6 +110,8 @@ app.use('/api', billingRoutes);
 app.use('/api', dashboardRoutes);
 app.use('/api', configRoutes);
 app.use('/api', require('./routes/notificaciones'));
+app.use('/api', require('./routes/retos'));     // RQF-12
+app.use('/api', require('./routes/campanas'));  // RQF-10
 app.use('/api/asistencia', require('./routes/asistencia'));
 app.use('/api/vista',     require('./routes/vista'));
 // App movil del cliente. El rate limit va SOLO sobre el login.

@@ -7,11 +7,15 @@ import 'package:flutter/material.dart';
 import 'package:photo_view/photo_view.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
+import '../utils/qr_dinamico.dart';
+import '../widgets/qr_dinamico_view.dart';
+
 class QrFullscreen extends StatelessWidget {
   final String codigo;
   final String? imagenDataUrl;
+  final QrDinamico? dinamico;
 
-  const QrFullscreen({super.key, required this.codigo, this.imagenDataUrl});
+  const QrFullscreen({super.key, required this.codigo, this.imagenDataUrl, this.dinamico});
 
   @override
   Widget build(BuildContext context) {
@@ -19,13 +23,21 @@ class QrFullscreen extends StatelessWidget {
       backgroundColor: Colors.black,
       appBar: AppBar(
         backgroundColor: Colors.black,
-        title: Text(codigo, style: const TextStyle(fontFamily: 'monospace', fontSize: 14)),
+        title: dinamico != null
+            ? const Text('Mi QR')
+            : Text(codigo, style: const TextStyle(fontFamily: 'monospace', fontSize: 14)),
       ),
       body: Center(child: _body()),
     );
   }
 
   Widget _body() {
+    if (dinamico != null) {
+      return Padding(
+        padding: const EdgeInsets.all(24),
+        child: QrDinamicoView(qr: dinamico!, size: 300, oscuro: true),
+      );
+    }
     if (imagenDataUrl != null && imagenDataUrl!.contains('base64,')) {
       final b64 = imagenDataUrl!.split('base64,').last;
       try {
