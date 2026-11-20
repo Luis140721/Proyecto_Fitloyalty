@@ -198,6 +198,7 @@ describe('MiembrosPage: la ficha del miembro', () => {
     expect(within(ficha()).queryByRole('img', { name: 'Código QR de Ana Pérez' })).not.toBeInTheDocument();
     expect(within(ficha()).getByText('QR-ANA')).toBeInTheDocument();
     expect(within(ficha()).getByRole('button', { name: 'Copiar código' })).toBeInTheDocument();
+    expect(within(ficha()).getByText('PARCIAL')).toBeInTheDocument();
   });
 
   test('should close the file without saving when the X of the dialog is clicked', async () => {
