@@ -93,7 +93,7 @@ describe('MenuNotificaciones: la campana', () => {
     expect(avisoDe(BLOQUEADO.titulo)).toHaveTextContent('Sin teléfono');
     expect(avisoDe(VENCIDA.titulo)).toHaveTextContent('Vencida');
     expect(avisoDe(RIESGO.titulo)).toHaveTextContent('En riesgo');
-    expect(within(avisoDe(VENCIDA.titulo)).getByTitle('Escribirle a Carlos Ruiz por WhatsApp')).toHaveTextContent('WhatsApp');
+    expect(within(avisoDe(VENCIDA.titulo)).getByRole('button', { name: 'WhatsApp' })).toHaveAttribute('title', 'Escribirle a Carlos Ruiz por WhatsApp');
   });
 
   test('should say everything is up to date when there are no notices', async () => {
@@ -154,14 +154,14 @@ describe('MenuNotificaciones: lo que se hace con un aviso', () => {
     const { user } = await abrirCampana();
 
     // Act
-    await user.click(within(avisoDe(RIESGO.titulo)).getByTitle('Escribirle a Luisa Gómez por WhatsApp'));
+    await user.click(within(avisoDe(RIESGO.titulo)).getByRole('button', { name: 'WhatsApp' }));
 
     // Assert
     expect(abrir).toHaveBeenCalledWith(`https://wa.me/573001112233?text=${encodeURIComponent(RIESGO.mensaje)}`, '_blank', 'noopener,noreferrer');
     await waitFor(() => expect(mockPost).toHaveBeenCalledWith('/admin/notificaciones/enviado', {
       idMiembro: 3, canal: 'WHATSAPP', tipo: 'riesgo', mensaje: RIESGO.mensaje, idAlerta: 31,
     }));
-    expect(within(avisoDe(RIESGO.titulo)).getByTitle('Escribirle a Luisa Gómez por WhatsApp')).toHaveTextContent('Enviado');
+    expect(within(avisoDe(RIESGO.titulo)).getByRole('button', { name: 'Enviado' })).toBeInTheDocument();
     expect(panel()).toBeInTheDocument();
   });
 
@@ -169,7 +169,7 @@ describe('MenuNotificaciones: lo que se hace con un aviso', () => {
     // Arrange
     const abrir = vi.spyOn(window, 'open').mockReturnValue(null);
     const { user } = await abrirCampana();
-    within(avisoDe(RIESGO.titulo)).getByTitle('Escribirle a Luisa Gómez por WhatsApp').focus();
+    within(avisoDe(RIESGO.titulo)).getByRole('button', { name: 'WhatsApp' }).focus();
 
     // Act y Assert: una letra no hace nada
     await user.keyboard('a');
@@ -187,7 +187,7 @@ describe('MenuNotificaciones: lo que se hace con un aviso', () => {
     const { user } = await abrirCampana();
 
     // Act: tambien con el teclado
-    within(avisoDe(VENCIDA.titulo)).getByTitle('Escribirle a Carlos Ruiz por WhatsApp').focus();
+    within(avisoDe(VENCIDA.titulo)).getByRole('button', { name: 'WhatsApp' }).focus();
     await user.keyboard('{Enter}');
 
     // Assert
