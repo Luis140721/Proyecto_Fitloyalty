@@ -47,10 +47,11 @@ const MENSAJE_VALOR_PLAN = 'El valor del plan no puede pasar de 99.999.999,99';
 const cabeEnLaColumna = (n, etiqueta) => [(texto) => [...texto].length <= n, { message: `${etiqueta} admite máximo ${n} caracteres` }];
 const valorQueCabe = () => [(texto) => !(parseFloat(texto) > MAX_VALOR_PLAN), { message: MENSAJE_VALOR_PLAN }];
 
-// El id de un miembro en la URL: un entero escrito completo que cabe en
-// miembro.id_miembro, INTEGER (hasta 2147483647). Sin esto, un id como "abc"
-// llegaba a PostgreSQL (500 con su mensaje en las rutas del plan) y uno como
-// 2147483648 tambien (22003, y la ruta respondia 503 "intenta de nuevo").
+// El id de un miembro en la URL, en todas las rutas de este archivo: un entero
+// escrito completo que cabe en miembro.id_miembro, INTEGER (hasta 2147483647).
+// Sin esto, un id como "abc" llegaba a PostgreSQL (500 con su mensaje en las
+// rutas del plan) y uno como 2147483648 tambien (22003, y la ruta respondia
+// 503 "intenta de nuevo").
 const ID_MAXIMO = 2147483647;
 const esIdDeMiembro = (texto) => /^\d+$/.test(String(texto)) && Number(texto) <= ID_MAXIMO;
 function idDeMiembro(texto) {
@@ -727,8 +728,7 @@ router.delete(
   authorize('admin'),
   requireActiveTrial(pool),
   asyncHandler(async (req, res) => {
-    const id = parseInt(req.params.id, 10);
-    if (!Number.isFinite(id)) throw new AppError(400, 'Id invalido', 'VALIDATION_ERROR');
+    const id = idDeMiembro(req.params.id);
 
     try {
       const { rows } = await pool.query(
@@ -756,8 +756,7 @@ router.delete(
   authorize('admin'),
   requireActiveTrial(pool),
   asyncHandler(async (req, res) => {
-    const id = parseInt(req.params.id, 10);
-    if (!Number.isFinite(id)) throw new AppError(400, 'Id invalido', 'VALIDATION_ERROR');
+    const id = idDeMiembro(req.params.id);
     const gymId = req.user.gymId;
 
     let client;
@@ -886,8 +885,7 @@ router.post(
   asyncHandler(async (req, res) => {
     const parsed = parse(congelarSchema, req.body);
     if (!parsed.ok) throw new AppError(parsed.status, parsed.error, 'VALIDATION_ERROR', { issues: parsed.issues });
-    const id = parseInt(req.params.id, 10);
-    if (!Number.isFinite(id)) throw new AppError(400, 'Id invalido', 'VALIDATION_ERROR');
+    const id = idDeMiembro(req.params.id);
     const { motivo, fecha_inicio: fechaPedida } = parsed.data;
 
     const client = await pool.connect();
@@ -943,8 +941,7 @@ router.post(
   authorize('admin'),
   requireActiveTrial(pool),
   asyncHandler(async (req, res) => {
-    const id = parseInt(req.params.id, 10);
-    if (!Number.isFinite(id)) throw new AppError(400, 'Id invalido', 'VALIDATION_ERROR');
+    const id = idDeMiembro(req.params.id);
 
     const client = await pool.connect();
     try {
