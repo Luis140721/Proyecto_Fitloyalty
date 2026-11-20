@@ -1740,6 +1740,8 @@ export default function MiembrosPage() {
           {/* --- Plan del miembro ------------------------------------------
               Vive en otra tabla, asi que tiene su propio boton de guardar y
               no viaja con el resto de la ficha. */}
+          {/* Si el plan no cargo no hay editor, pero el motivo se ve igual. */}
+          {!planForm && planError && <p className="field-error">{planError}</p>}
           {planForm && (
             <section className="plan-editor">
               <header className="plan-editor__cabecera">
