@@ -62,36 +62,37 @@ app.use(express.json());
 
 // Rate limits: login 5/min, forgot 3/min, cliente-login 10/min (más permisivo
 // porque es el cliente final el que se equivoca, no un atacante de fuerza bruta
-// sobre el panel admin).
+// sobre el panel admin). El 429 lleva { error, code: 'RATE_LIMITED' }, la misma
+// forma que el resto de errores del API (lib/errors.js).
 const loginLimiter = rateLimit({
   windowMs: 60 * 1000, max: 5,
   standardHeaders: true, legacyHeaders: false,
-  message: { error: 'Demasiados intentos. Intenta de nuevo en un minuto.' },
+  message: { error: 'Demasiados intentos. Intenta de nuevo en un minuto.', code: 'RATE_LIMITED' },
 });
 const forgotLimiter = rateLimit({
   windowMs: 60 * 1000, max: 3,
   standardHeaders: true, legacyHeaders: false,
-  message: { error: 'Demasiadas solicitudes. Intenta de nuevo en un minuto.' },
+  message: { error: 'Demasiadas solicitudes. Intenta de nuevo en un minuto.', code: 'RATE_LIMITED' },
 });
 const verifyResetLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, max: 5,
   standardHeaders: true, legacyHeaders: false,
-  message: { error: 'Demasiados intentos de verificación. Intenta más tarde.' },
+  message: { error: 'Demasiados intentos de verificación. Intenta más tarde.', code: 'RATE_LIMITED' },
 });
 const resetPasswordLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, max: 5,
   standardHeaders: true, legacyHeaders: false,
-  message: { error: 'Demasiados intentos de restablecimiento. Intenta más tarde.' },
+  message: { error: 'Demasiados intentos de restablecimiento. Intenta más tarde.', code: 'RATE_LIMITED' },
 });
 const accountLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, max: 5,
   standardHeaders: true, legacyHeaders: false,
-  message: { error: 'Demasiadas solicitudes en la cuenta. Intenta más tarde.' },
+  message: { error: 'Demasiadas solicitudes en la cuenta. Intenta más tarde.', code: 'RATE_LIMITED' },
 });
 const clienteLoginLimiter = rateLimit({
   windowMs: 60 * 1000, max: 10,
   standardHeaders: true, legacyHeaders: false,
-  message: { error: 'Demasiados intentos. Intenta de nuevo en un minuto.' },
+  message: { error: 'Demasiados intentos. Intenta de nuevo en un minuto.', code: 'RATE_LIMITED' },
 });
 
 app.use('/api/auth/login', loginLimiter);
@@ -131,8 +132,9 @@ app.get('/api/health', asyncHandler(async (req, res) => {
   }
 }));
 
-// 404 para cualquier ruta /api/* que no haya matcheado antes.
-app.use('/api', notFound);
+// 404 en JSON para cualquier ruta que no haya matcheado antes, dentro o fuera de
+// /api: sin esto, Express responde fuera de /api con su pagina HTML.
+app.use(notFound);
 
 // Handler central SIEMPRE al final. Convierte cualquier error no controlado
 // en una respuesta JSON consistente, sin filtrar stack traces en prod.

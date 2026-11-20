@@ -84,12 +84,12 @@ docker compose exec db psql -U fitloyalty -d fitloyalty
 
 ## Arranque sin Docker
 
-Requiere **Node 18+** y **PostgreSQL** corriendo en local con una base `fitloyalty` creada.
+Requiere **Node 22 o superior** (el CI y las imágenes de Docker usan 24), **pnpm 12.15.0** (`npm install -g pnpm@12.15.0`) y **PostgreSQL** corriendo en local con una base `fitloyalty` creada.
 
 ```bash
-npm run install:all                      # instala raíz + backend + frontend
+pnpm run install:all                     # instala raíz + backend + frontend
 cp backend/.env.example backend/.env     # ajusta DB_USER, DB_PASSWORD, JWT_SECRET
-npm run dev                              # levanta API y web en una sola terminal
+pnpm run dev                             # levanta API y web en una sola terminal
 ```
 
 Frontend en http://localhost:5173 y API en http://localhost:3001.
@@ -144,7 +144,7 @@ Ninguno de los dos archivos `.env` se versiona — están cubiertos por `.gitign
 | Variable         | Obligatoria | Por defecto | Descripción |
 |------------------|:-----------:|-------------|-------------|
 | `VITE_API_BASE`  | no          | vacío       | Déjalo vacío para usar rutas relativas y el proxy de nginx |
-| `VITE_INACTIVIDAD_MIN` | no    | `30`        | Minutos sin actividad (mouse, teclado, toque o scroll) antes de cerrar la sesión del panel. Se lee al compilar (`npm run build`, Vercel); el build de Docker no la recibe y usa 30 |
+| `VITE_INACTIVIDAD_MIN` | no    | `30`        | Minutos sin actividad (mouse, teclado, toque o scroll) antes de cerrar la sesión del panel. Se lee al compilar (`pnpm run build`, Vercel); el build de Docker no la recibe y usa 30 |
 | `FRONTEND_PORT`  | no          | `5173`      | Puerto publicado del frontend |
 
 ---
@@ -167,7 +167,7 @@ se crea sin periodo de prueba (acceso ilimitado).
 También puedes registrarte desde la interfaz en `/register-owner`, que crea el
 gimnasio y su administrador con 7 días de prueba.
 
-> `npm run seed` (`seed_pg.js`) **no crea usuarios**: solo actualiza contraseñas y
+> `pnpm run seed` (`seed_pg.js`) **no crea usuarios**: solo actualiza contraseñas y
 > fotos de una lista fija de correos que ya deben existir en la base. Sobre una base
 > vacía no hace nada. Usa `seed_dev.js`.
 
@@ -303,6 +303,35 @@ que consume `GET /api/vista/miembros-activos`.
 > docker compose exec -T db psql -U fitloyalty -d fitloyalty < ConsultasDB/Query_Inicial_Crear_Tablas.sql
 > ```
 
+### Pruebas de integración (BD real)
+
+Los tests de `backend/tests/integracion/` corren contra PostgreSQL de verdad, en la BD de
+pruebas desechable `db-test` de `e2e/docker-compose.yml`: la misma de los E2E, en
+`127.0.0.1:5433`, BD `fitloyalty_test`, con los datos en memoria. El esquema lo crean las
+migraciones de `backend/migrations`, con la misma función que aplica el backend al arrancar.
+Desde la raíz:
+
+```bash
+docker compose -f e2e/docker-compose.yml up -d --wait db-test
+TEST_DATABASE_URL=postgres://fitloyalty_test:fitloyalty_test@127.0.0.1:5433/fitloyalty_test pnpm --dir backend run test:integracion
+docker compose -f e2e/docker-compose.yml down -v
+```
+
+En PowerShell, el segundo comando es
+`$env:TEST_DATABASE_URL='postgres://fitloyalty_test:fitloyalty_test@127.0.0.1:5433/fitloyalty_test'; pnpm --dir backend run test:integracion; Remove-Item Env:TEST_DATABASE_URL`
+(el `Remove-Item` evita que la variable siga definida en la terminal).
+
+- Sin `TEST_DATABASE_URL`, `pnpm test` y el CI los muestran como *skipped*: la BD llega al CI en la semana 8.
+- La variable es `TEST_DATABASE_URL` y no `DATABASE_URL`, porque `backend/.env` trae la de
+  desarrollo y `dotenv` la cargaría.
+- Dos revisiones, las dos antes de abrir una conexión:
+  - Al cargar los tests, la guardia de `e2e/guardia-bd.cjs`, la misma de los E2E, exige la forma
+    exacta `postgres://usuario:clave@127.0.0.1:5433/nombre_test`, con `?sslmode=` como único
+    parámetro. El usuario, la clave y la BD solo pueden llevar letras, números y `. _ ~ -`. El
+    host es `127.0.0.1` y nunca `localhost`, que en Windows puede resolver a `::1`.
+  - Antes de migrar, se revisan el host, el puerto y la BD que `pg` va a usar de verdad con el
+    pool de la app ya construido. Si no son los de la BD de pruebas, los tests fallan sin conectarse.
+
 ---
 
 ## Correo transaccional (Brevo)
@@ -366,7 +395,7 @@ Otro proceso ocupa el 3001 o el 5173. Búscalo y ciérralo:
 ```bash
 netstat -ano | findstr "5173"
 ```
-Suele ser un `npm run dev` anterior que quedó vivo. Ojo: un servidor Vite escuchando
+Suele ser un `pnpm run dev` anterior que quedó vivo. Ojo: un servidor Vite escuchando
 solo en `::1` (IPv6) **tapa al contenedor** sin dar error de puerto, porque
 `localhost` resuelve IPv6 primero. Si la app responde pero se comporta raro,
 comprueba quién contesta — debe decir `Server: nginx`:

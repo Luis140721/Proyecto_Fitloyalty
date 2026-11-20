@@ -9,6 +9,9 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   rama:
     if: github.event_name == 'pull_request'
@@ -33,19 +36,31 @@ jobs:
     env:
       PUPPETEER_SKIP_DOWNLOAD: "true"
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7.0.1
+      # Instala la version de pnpm que fija "packageManager" en backend/package.json.
+      - uses: pnpm/action-setup@v6.1.0
+        with:
+          package_json_file: backend/package.json
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: 24
-          cache: npm
-          cache-dependency-path: backend/package-lock.json
-      - run: npm ci
+          cache: pnpm
+          cache-dependency-path: backend/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
       - name: Comprobar sintaxis de src/
         run: find src -name '*.js' -print0 | xargs -0 -n1 node --check
       # Las pruebas simulan la base de datos y los envios (WhatsApp, correo): no
-      # necesitan servicios ni secretos. RQNF-07.
-      - name: Pruebas
-        run: npm test
+      # necesitan servicios ni secretos. RQNF-07. `pnpm test` mide la cobertura y
+      # falla si baja del coverageThreshold de jest.config.js.
+      - name: Pruebas con cobertura y umbral
+        run: pnpm test
+      # El reporte de cobertura queda descargable desde la pestaña Actions.
+      - uses: actions/upload-artifact@v7.0.2
+        if: always()
+        with:
+          name: coverage-backend
+          path: backend/coverage/
+          retention-days: 7
 
   frontend:
     runs-on: ubuntu-latest
@@ -53,11 +68,45 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7.0.1
+      - uses: pnpm/action-setup@v6.1.0
+        with:
+          package_json_file: frontend/package.json
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: 24
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-      - run: npm ci
-      - run: npm run build
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      # Antes del build: si la cobertura baja de los thresholds de vite.config.js,
+      # el job falla sin gastar tiempo en compilar.
+      - name: Pruebas con cobertura y umbral
+        run: pnpm test
+      - run: pnpm run build
+      - uses: actions/upload-artifact@v7.0.2
+        if: always()
+        with:
+          name: coverage-frontend
+          path: frontend/coverage/
+          retention-days: 7
+
+  # No construye ni prueba nada: deja en el resumen del run quién hizo commits
+  # de pruebas desde el lunes (evidencia individual del bootcamp).
+  evidencia-individual:
+    runs-on: ubuntu-latest
+    steps:
+      # --since necesita el historial completo; el checkout por defecto trae un solo commit.
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Commits de pruebas por autor esta semana
+        run: |
+          autores="$(git shortlog -sn --since="last Monday" HEAD -- \
+            'backend/tests/*' 'frontend/tests/*' 'e2e/*' 'fitloyalty_cliente/test/*' '*.test.*' '*.spec.*')"
+          {
+            echo "### Commits de pruebas por autor desde el lunes"
+            echo
+            echo '```'
+            echo "${autores:-Sin commits de pruebas desde el lunes.}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

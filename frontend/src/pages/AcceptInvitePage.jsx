@@ -4,10 +4,12 @@ import { api } from '../api';
 import { useAuth } from '../context/AuthContext';
 import AuthPanel from '../components/AuthPanel';
 
+// Las claves son el `rol` que manda GET /api/auth/accept-invite/:token: el
+// rol_asignado de la invitacion, en mayusculas como en la BD.
 const ROL_LABEL = {
-  admin: 'administrador',
-  entrenador: 'entrenador',
-  recepcionista: 'recepcionista',
+  ADMINISTRADOR: 'administrador',
+  RECEPCIONISTA: 'recepcionista',
+  ENTRENADOR: 'entrenador',
 };
 
 function strengthScore(pwd) {
