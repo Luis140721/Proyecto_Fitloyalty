@@ -91,6 +91,7 @@ async function crearASofia() {
 }
 
 describe('MiembrosPage: el alta con todos los datos', () => {
+  // Teclea los cinco pasos campo por campo: con toda la suite en paralelo pasa de los 5 s por defecto.
   test('should send every optional field of the five steps when the member is created with all the data', async () => {
     // Arrange: solo se fija la fecha (los timers siguen reales para user-event)
     vi.useFakeTimers({ toFake: ['Date'] });
@@ -144,7 +145,7 @@ describe('MiembrosPage: el alta con todos los datos', () => {
       fecha_inicio: '2026-11-19', fecha_fin: '2027-02-17', proxima_fecha_cobro: '2027-02-18',
       objetivo: 'Ganar músculo', nivel_experiencia: 'Intermedio', observaciones: 'Viene en la mañana',
     }));
-  });
+  }, 15000);
 
   test('should jump to a later step with its tab when the current step is valid, and come back with Anterior', async () => {
     // Arrange
