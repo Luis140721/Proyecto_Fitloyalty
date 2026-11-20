@@ -19,6 +19,11 @@ function cambiosDeCuenta(antes, despues) {
     detalle.antes.rol = antes.rol;
     detalle.despues.rol = despues.rol;
   }
+  if (despues.nombre !== antes.nombre) {
+    detalle.eventos.push('NOMBRE_CAMBIADO');
+    detalle.antes.nombre = antes.nombre;
+    detalle.despues.nombre = despues.nombre;
+  }
   return detalle.eventos.length ? detalle : null;
 }
 
