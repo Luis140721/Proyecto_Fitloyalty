@@ -54,7 +54,7 @@ Se marca cada caso al terminar su ciclo. Los casos que aparezcan en el camino se
 - [x] `GET …/auditoria` con la BD caída: 503 (ciclo 11)
 - [x] el rol de antes de un entrenador (`id_rol` 3) salía vacío, porque `ID_ROL` no lo tiene (ciclo 12)
 - [ ] **Incidencia:** el orden del historial lo decide el `ORDER BY` del SQL, y la BD falsa ordena por su cuenta. El mutante que invierte el orden sobrevive; lo cubre la capa BD.
-- [ ] **Incidencia:** `GET …/auditoria` con un id no numérico responde 404 (la cuenta `NaN` no existe), no 400 como el PATCH. Queda así a propósito.
+- [x] `GET …/auditoria` con un id no numérico: 400 sin consultar, como el PATCH (ciclo 13). En PostgreSQL real el id `NaN` haría fallar la consulta (503); la BD falsa respondía 404.
 
 Los criterios 1 a 8 tienen al menos un test cada uno.
 
