@@ -12,6 +12,9 @@ export default function ProtectedRoute({ roles, children }) {
   }
 
   // 2) Tras revalidar: si NO hay user (token inválido/expirado), a login.
+  if (!user) {
+    return <Navigate to="/login" state={{ from: location.pathname }} replace />;
+  }
 
   // El backend puede devolver `role`, `rol` o `rol_nombre`.
   // El AuthContext ya normaliza a `user.role` ∈ {admin, receptionist, trainer}.
