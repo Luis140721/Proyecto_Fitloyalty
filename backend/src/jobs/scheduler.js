@@ -19,6 +19,7 @@
 const cron = require('node-cron');
 const { runJob: runExpiracionJob } = require('./expiracion');
 const { runJob: runAbandonoJob } = require('./abandono');
+const { runJob: runCampanasJob } = require('./campanas');
 
 const DISABLED = String(process.env.DISABLE_SCHEDULER || '').toLowerCase() === 'true';
 
@@ -28,6 +29,7 @@ const TZ = 'America/Bogota';
 
 let expiracionTasks = [];
 let abandonoTask = null;
+let campanasTask = null;
 let started = false;
 
 /**
@@ -78,7 +80,23 @@ function start() {
         }
     }, { timezone: TZ });
 
-    console.log(`[scheduler] Activo. Vencimiento a las 09:00 y 15:00, abandono a las 08:00 (${TZ}).`);
+    // Campanas programadas (RQF-10): cada 10 minutos ejecuta las que ya
+    // llegaron a su fecha_programada. Tambien corre al arrancar, por si el
+    // servicio estaba dormido a la hora (Render Free duerme sin trafico).
+    const correrCampanas = async () => {
+        try {
+            const resumen = await runCampanasJob();
+            if (resumen.ejecutadas > 0) {
+                console.log('[scheduler] Campanas programadas ejecutadas:', JSON.stringify(resumen));
+            }
+        } catch (err) {
+            console.error('[scheduler] Error en job de campanas:', err.message);
+        }
+    };
+    campanasTask = cron.schedule('*/10 * * * *', correrCampanas, { timezone: TZ });
+    setTimeout(correrCampanas, 15 * 1000);
+
+    console.log(`[scheduler] Activo. Vencimiento a las 09:00 y 15:00, abandono a las 08:00 y campanas cada 10 min (${TZ}).`);
 }
 
 /**
@@ -90,6 +108,8 @@ function stop() {
         expiracionTasks = [];
         if (abandonoTask) abandonoTask.stop();
         abandonoTask = null;
+        if (campanasTask) campanasTask.stop();
+        campanasTask = null;
         started = false;
         console.log('[scheduler] Detenido.');
     }
