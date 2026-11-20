@@ -6,13 +6,16 @@ Prueban la app completa desde el navegador. `pnpm test` levanta el backend real 
 - `tests/register-gym.spec.js`: registro de gimnasio. Usa el backend real y la BD de pruebas.
 - `tests/checkin.spec.js`: check-in de un miembro por documento (plan vigente, vencido, congelado y documento que no existe). Backend real y BD de pruebas.
 - `tests/checkin-tiempos.spec.js`: defectos de tiempos del check-in (doble envío y red lenta), con respuestas retrasadas por `page.route`.
+- `tests/alta-miembro.spec.js`: alta de un miembro con el asistente de 5 pasos (caso feliz, documento repetido y correo que rechaza el servidor). Backend real y BD de pruebas.
+- `tests/alta-miembro-tiempos.spec.js`: defectos de tiempos del alta (doble clic en «Crear miembro» y en «Siguiente →», dos altas simultáneas con el mismo documento y red lenta). El de las altas simultáneas está marcado con `test.fail()` mientras siga abierta su incidencia.
+- `tests/miembros-api-simulada.spec.js`: estados de la lista y del alta que el backend real no da cuando uno quiere (API caído, lista vacía, error de validación). Simula solo `/api/admin/miembros` con `page.route`; cada test anota qué doble usa.
 
 ## Sesión y datos
 
 - La sesión se prepara una sola vez por corrida, como en la guía «Authentication» de Playwright: `tests/auth.setup.js` es el proyecto `setup` de `playwright.config.js`, del que dependen los demás. Crea por API un gimnasio nuevo con su dueño, escribe el token en `localStorage` (el front no usa cookies) y guarda el estado del navegador en `e2e/playwright/.auth/user.json`, que está en `.gitignore`.
 - Los archivos que necesitan la sesión la cargan con `test.use({ storageState: SESION })` (`tests/support/entorno.js`). Los del login y el registro no la cargan: prueban justamente eso.
 - Los datos de cada test se crean por API con el fixture `request` y valores únicos (`tests/support/datos.js`): los tests corren en paralelo sobre el mismo gimnasio y la BD conserva lo de corridas anteriores. Por la UI solo va lo que el test prueba.
-- `tests/support/checkin-page.js` es el objeto de página del check-in (locators y pasos, sin aserciones) y `tests/support/red.js` retrasa o retiene respuestas y cuenta peticiones.
+- `tests/support/checkin-page.js` y `tests/support/alta-miembro-page.js` son los objetos de página del check-in y del alta de miembros (locators y pasos, sin aserciones). `tests/support/red.js` retrasa o retiene las respuestas de una ruta y cuenta peticiones.
 
 ## Requisitos
 
