@@ -119,6 +119,21 @@ describe('PATCH /api/admin/staff/:id: the audit trail', () => {
     })]);
   });
 
+  test.each([
+    ['the request is rejected (an admin deactivates their own account)', () => {}, LUIS, { activo: false }, 403],
+    ['nothing really changes (the account was already inactive)', () => { usuario(ANA).activo = false; }, ANA, { activo: false }, 200],
+  ])('should not write any audit row when %s', async (_caso, preparar, objetivo, cambios, status) => {
+    // Arrange
+    preparar();
+
+    // Act
+    const r = await editar(objetivo, cambios);
+
+    // Assert
+    expect(r.status).toBe(status);
+    expect(mockBd.auditoria).toEqual([]);
+  });
+
   test('should answer 503 and keep the account as it was when the audit row cannot be saved', async () => {
     // Arrange: la BD falla justo al guardar la auditoria
     mockBd.fallaCon = /INSERT INTO auditoria/;
