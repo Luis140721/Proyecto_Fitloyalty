@@ -1,124 +1,38 @@
+import { randomUUID } from 'node:crypto';
 import { expect, test } from '@playwright/test';
+import { documentoUnico } from './support/datos.js';
+import { SESION } from './support/entorno.js';
 
-test('registra un miembro tras iniciar sesión y completar los cinco pasos', async ({ page }) => {
-  const documento = String(Date.now()).slice(-10);
-  let miembroEnviado;
+// Alta de un miembro por el asistente de 5 pasos de /admin/miembros (flujo
+// critico de Daniel), contra el backend real y la BD de pruebas. La sesion del
+// dueno es la que guardo auth.setup.js, asi que el test no pasa por el login ni
+// simula el API: si el POST /api/admin/miembros se rompe, este test lo ve.
+test.use({ storageState: SESION });
 
-  await page.route('**/api/**', async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({}),
-    });
-  });
-
-  await page.route('**/api/auth/login', async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        token: 'e2e-test-token',
-        user: { id_usuario: 1, role: 'admin', name: 'Admin E2E' },
-      }),
-    });
-  });
-
-  await page.route('**/api/auth/me', async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        user: { id_usuario: 1, role: 'admin', name: 'Admin E2E' },
-        gym: null,
-      }),
-    });
-  });
-
-  await page.route('**/api/admin/config', async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ config: {} }),
-    });
-  });
-
-  await page.route('**/api/admin/miembros**', async (route) => {
-    const request = route.request();
-
-    if (request.method() === 'GET') {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ miembros: [] }),
-      });
-      return;
-    }
-
-    if (request.method() === 'POST') {
-      miembroEnviado = request.postDataJSON();
-      await route.fulfill({
-        status: 201,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          miembro: {
-            id_miembro: 7001,
-            nombre: miembroEnviado.nombre,
-            telefono: miembroEnviado.telefono,
-            codigo_qr: `e2e-${documento}`,
-          },
-        }),
-      });
-      return;
-    }
-
-    if (request.method() === 'PUT') {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ success: true }),
-      });
-      return;
-    }
-
-    await route.fulfill({ status: 405, body: 'Método no permitido' });
-  });
-
-  await page.goto('/login');
-  await page.getByLabel('Correo electrónico').fill('admin-e2e@example.test');
-  await page.getByRole('textbox', { name: /Contraseña/ }).fill('clave-e2e-simulada');
-  await page.getByRole('button', { name: /Entrar a mi panel/ }).click();
-  await expect(page).toHaveURL(/\/admin\/dashboard$/);
-
+test('should create the member and list it when the receptionist completes the five steps', async ({ page }) => {
+  // Arrange: nombre y documento unicos, porque la BD conserva lo de corridas anteriores
+  const nombre = `Miembro E2E ${randomUUID().slice(0, 8)}`;
+  const documento = documentoUnico();
   await page.goto('/admin/miembros');
-  await expect(page.getByRole('heading', { name: 'Miembros', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Nuevo miembro', exact: true }).click();
+  // Con la lista vacia, el estado vacio repite el boton "Nuevo miembro"; el de la
+  // cabecera esta siempre y va primero.
+  await page.getByRole('button', { name: 'Nuevo miembro', exact: true }).first().click();
 
-  await page.getByLabel('Nombre completo *').fill('Miembro de prueba E2E');
+  // Act: los obligatorios del paso 1, el valor del plan en el 3 y los terminos en el 5
+  await page.getByLabel('Nombre completo *').fill(nombre);
   await page.getByLabel('Número documento *').fill(documento);
   await page.getByLabel('Teléfono / WhatsApp *').fill('3001234567');
   await page.getByRole('button', { name: 'Siguiente →' }).click();
-  await expect(page.getByText('Paso 2 de 5')).toBeVisible();
-
   await page.getByRole('button', { name: 'Siguiente →' }).click();
-  await expect(page.getByText('Paso 3 de 5')).toBeVisible();
-  await page.getByLabel('Valor total del plan *').fill('50000');
-
+  await page.getByLabel('Valor total del plan *').fill('90000');
   await page.getByRole('button', { name: 'Siguiente →' }).click();
-  await expect(page.getByText('Paso 4 de 5')).toBeVisible();
   await page.getByRole('button', { name: 'Siguiente →' }).click();
-  await expect(page.getByText('Paso 5 de 5')).toBeVisible();
-
   await page.getByLabel(/Acepto los términos y condiciones/).check();
   await page.getByLabel(/Autorizo el uso de mis datos/).check();
   await page.getByRole('button', { name: 'Crear miembro' }).click();
 
-  await expect(page.getByRole('status')).toContainText('Miembro creado exitosamente.');
-  expect(miembroEnviado).toMatchObject({
-    nombre: 'Miembro de prueba E2E',
-    documento,
-    telefono: '3001234567',
-    valor_total: '50000',
-    acepto_terminos: true,
-    autorizo_datos: true,
-  });
+  // Assert: el aviso de exito, el QR con los datos del miembro y su fila en la lista
+  await expect(page.getByRole('status').filter({ hasText: 'Miembro creado exitosamente.' })).toBeVisible();
+  await expect(page.getByRole('dialog', { name: '¡Miembro creado exitosamente!' })).toContainText(`Documento: ${documento}`);
+  await expect(page.getByRole('row').filter({ hasText: nombre })).toContainText(documento);
 });
