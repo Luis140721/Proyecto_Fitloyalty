@@ -15,49 +15,6 @@ import Modal from '../components/Modal';
 import Ripple from '../components/Ripple';
 import QRCode from 'qrcode';
 
-// Componente personalizado para input de fecha con formato automático DD/MM/YYYY
-function DateInputWithAutoFormat({ value, onChange, placeholder, ...props }) {
-  const formatDateString = (input) => {
-    // Remover todos los caracteres que no sean dígitos
-    const cleaned = input.replace(/\D/g, '');
-    
-    // Limitar a 8 dígitos máximo
-    const truncated = cleaned.slice(0, 8);
-    
-    // Aplicar formato DD/MM/YYYY
-    let formatted = '';
-    if (truncated.length > 0) {
-      formatted += truncated.slice(0, 2);
-    }
-    if (truncated.length > 2) {
-      formatted += '/' + truncated.slice(2, 4);
-    }
-    if (truncated.length > 4) {
-      formatted += '/' + truncated.slice(4, 8);
-    }
-    
-    return formatted;
-  };
-
-  const handleChange = (e) => {
-    const rawValue = e.target.value;
-    const formatted = formatDateString(rawValue);
-    onChange(formatted);
-  };
-
-  return (
-    <input
-      {...props}
-      type="text"
-      value={value}
-      onChange={handleChange}
-      placeholder={placeholder || "DD/MM/YYYY"}
-      maxLength={10}
-      inputMode="numeric"
-    />
-  );
-}
-
 /** Mensaje de error bajo un campo. No renderiza nada si no hay error. */
 function ErrorCampo({ msg }) {
   if (!msg) return null;
@@ -163,17 +120,6 @@ function convertToISODate(dateString) {
   
   const [day, month, year] = parts;
   return `${year}-${month}-${day}`;
-}
-
-// Función para convertir formato ISO a DD/MM/YYYY
-function convertFromISODate(isoDate) {
-  if (!isoDate || isoDate.length !== 10) return isoDate;
-  
-  const parts = isoDate.split('-');
-  if (parts.length !== 3) return isoDate;
-  
-  const [year, month, day] = parts;
-  return `${day}/${month}/${year}`;
 }
 
 /* Duracion de cada plan, en dias. Lo que no este aqui dura un mes. */
@@ -445,28 +391,6 @@ export default function MiembrosPage() {
     setFiltro(nuevoFiltro);
     const includeInactive = nuevoFiltro === 'desactivados';
     load(q, includeInactive);
-  };
-
-  // Desactivar miembro (soft delete)
-  const desactivar = async (id) => {
-    try {
-      await api.delete(`/admin/miembros/${id}`);
-      setConfirmDeactivate(null);
-      load(q, filtro === 'desactivados' ? true : false);
-    } catch (err) {
-      setError(err.message || 'No se pudo desactivar el miembro.');
-    }
-  };
-
-  // Eliminar miembro permanentemente (hard delete)
-  const eliminarPermanentemente = async (id) => {
-    try {
-      await api.delete(`/admin/miembros/${id}/permanent`);
-      setConfirmDelete(null);
-      load(q, filtro === 'desactivados' ? true : false);
-    } catch (err) {
-      setError(err.message || 'No se pudo eliminar el miembro permanentemente.');
-    }
   };
 
   const askDeactivate = (m) => setConfirmDeactivate(m);
