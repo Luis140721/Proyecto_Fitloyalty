@@ -118,4 +118,18 @@ describe('PATCH /api/admin/staff/:id: the audit trail', () => {
       detalle: { eventos: ['NOMBRE_CAMBIADO'], antes: { nombre: 'Ana Recepcion' }, despues: { nombre: 'Ana Maria' } },
     })]);
   });
+
+  test('should answer 503 and keep the account as it was when the audit row cannot be saved', async () => {
+    // Arrange: la BD falla justo al guardar la auditoria
+    mockBd.fallaCon = /INSERT INTO auditoria/;
+
+    // Act
+    const r = await editar(ANA, { activo: false });
+
+    // Assert
+    expect(r.status).toBe(503);
+    expect(r.body.code).toBe('DB_UNREACHABLE');
+    expect(usuario(ANA).activo).toBe(true);
+    expect(mockBd.auditoria).toEqual([]);
+  });
 });

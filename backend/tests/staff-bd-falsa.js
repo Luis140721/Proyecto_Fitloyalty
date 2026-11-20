@@ -11,9 +11,12 @@
  *    Por defecto, el esquema local: con fecha_creacion y sin la columna
  *    legacy `rol` de Neon.
  *
+ * Transacciones simplificadas: BEGIN guarda una copia de las tablas, ROLLBACK
+ * la restaura y COMMIT la descarta. No hay aislamiento entre conexiones.
+ *
  * Lo que este fake NO ve: no interpreta los filtros del SQL (decide la
- * vigencia de una invitacion con su propio codigo) ni las transacciones (no
- * hay ROLLBACK). Eso lo cubre la capa BD contra PostgreSQL real.
+ * vigencia de una invitacion con su propio codigo) ni la concurrencia. Eso lo
+ * cubre la capa BD contra PostgreSQL real.
  */
 const ROLES = { 1: 'ADMINISTRADOR', 2: 'RECEPCIONISTA', 3: 'ENTRENADOR' };
 
@@ -38,9 +41,21 @@ function crearBdFalsa() {
   };
   const filaPersonal = (u) => ({ id_usuario: u.id_usuario, nombre: u.nombre, email: u.email, id_rol: u.id_rol, activo: u.activo, rol: rolNombre(u.id_rol), es_dueno: esDueno(u) });
 
+  const TABLAS = ['usuarios', 'invitaciones', 'auditoria'];
+  let copia = null;
+
   async function query(sql, params = []) {
     if (bd.fallaCon && bd.fallaCon.test(sql)) throw new Error('conexion perdida');
-    if (/^\s*(BEGIN|COMMIT|ROLLBACK)\s*$/.test(sql)) return { rows: [] };
+    if (/^\s*BEGIN\s*$/.test(sql)) {
+      copia = structuredClone(Object.fromEntries(TABLAS.map((t) => [t, bd[t]])));
+      return { rows: [] };
+    }
+    if (/^\s*ROLLBACK\s*$/.test(sql)) {
+      if (copia) TABLAS.forEach((t) => { bd[t] = copia[t]; });
+      copia = null;
+      return { rows: [] };
+    }
+    if (/^\s*COMMIT\s*$/.test(sql)) { copia = null; return { rows: [] }; }
     if (/information_schema/.test(sql)) return { rows: [{ ...bd.esquema }] };
     if (/SELECT id_gimnasio, activo, trial_ends_at FROM gimnasio/.test(sql)) return { rows: delGimnasio(params[0]) };
     if (/SELECT nombre FROM gimnasio/.test(sql)) return { rows: delGimnasio(params[0]).map(({ nombre }) => ({ nombre })) };
