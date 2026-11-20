@@ -7,7 +7,7 @@
  * routes/auth.js: forgot-password, verify-reset-code y reset-password.
  */
 import { describe, expect, test, vi, beforeEach, afterEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import ForgotPasswordPage from '../src/pages/ForgotPasswordPage';
 import { renderWithProviders } from './renderWithProviders';
 
@@ -179,6 +179,113 @@ describe('ForgotPasswordPage: la contrasena nueva', () => {
     // Assert
     expect(mockPost).toHaveBeenLastCalledWith('/auth/reset-password', { resetToken: 'token-de-reseteo', password: 'clave2026' });
     expect(await screen.findByRole('link', { name: 'Ir al login' })).toHaveAttribute('href', '/login');
+  });
+});
+
+// Semana 8 (angulo Front): ramas que el reporte de cobertura marcaba sin cubrir.
+describe('ForgotPasswordPage: ramas sin cubrir de la semana 8', () => {
+  test('should say the backend is in demo mode when the code is shown for that reason', async () => {
+    // Arrange: SHOW_DEV_CODE_IN_UI=true en el backend (routes/auth.js)
+    mockPost = apiQueResponde({
+      '/auth/forgot-password': async () => ({ data: { message: 'Si el correo está registrado, te enviamos un código.', showCodeInUI: true, devCode: '771204', devCodeReason: 'demo-mode' } }),
+    });
+    const { user } = abrir();
+
+    // Act
+    await pedirCodigo(user);
+
+    // Assert
+    const aviso = screen.getByText(/Modo demo:/).closest('[role="status"]');
+    expect(aviso).toHaveTextContent('Tu código es 771204 (visible porque el backend está en modo demo)');
+    expect(aviso).not.toHaveTextContent('Resend no pudo entregar');
+  });
+
+  test('should show the API error and keep the new password step when the password cannot be saved', async () => {
+    // Arrange: el token de reseteo vencio entre el paso 2 y el 3
+    mockPost = apiQueResponde({
+      '/auth/reset-password': async () => { throw { status: 400, code: 'RESET_TOKEN_INVALID', message: 'El enlace de recuperación venció. Pide un código nuevo.' }; },
+    });
+    const { user } = abrir();
+    await pedirCodigo(user);
+    await user.click(casilla(1));
+    await user.paste('482913');
+    await user.click(screen.getByRole('button', { name: 'Verificar código' }));
+    await screen.findByText('Paso 3 de 3 — Nueva clave');
+    await user.type(screen.getByLabelText('Nueva contraseña'), 'clave2026');
+
+    // Act
+    await user.click(screen.getByRole('button', { name: 'Guardar nueva contraseña' }));
+
+    // Assert
+    expect(await screen.findByRole('alert')).toHaveTextContent('El enlace de recuperación venció. Pide un código nuevo.');
+    expect(screen.getByLabelText('Nueva contraseña')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Ir al login' })).not.toBeInTheDocument();
+  });
+
+  test('should move between the boxes with the arrows and stop at the ends when the person uses the keyboard', async () => {
+    // Arrange
+    const { user } = abrir();
+    await pedirCodigo(user);
+    await user.click(casilla(1));
+
+    // Act y Assert: en la primera casilla la flecha izquierda no sale del codigo
+    await user.keyboard('{ArrowLeft}');
+    expect(casilla(1)).toHaveFocus();
+    await user.keyboard('{ArrowRight}{ArrowRight}');
+    expect(casilla(3)).toHaveFocus();
+    await user.keyboard('{ArrowLeft}');
+    expect(casilla(2)).toHaveFocus();
+
+    // Act y Assert: en la ultima casilla la flecha derecha se queda ahi
+    await user.click(casilla(6));
+    await user.keyboard('{ArrowRight}');
+    expect(casilla(6)).toHaveFocus();
+  });
+
+  test('should leave the boxes empty and not fail when the pasted text has no digits', async () => {
+    // Arrange: un fallo dentro del handler del pegado solo se ve en la consola
+    const errores = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { user } = abrir();
+    await pedirCodigo(user);
+    await user.click(casilla(1));
+
+    // Act
+    await user.paste('código: ABCDEF');
+
+    // Assert
+    expect(valoresDelCodigo()).toBe('');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(errores).not.toHaveBeenCalled();
+  });
+  // En Android el teclado suele mandar key 'Unidentified': el digito llega por
+  // onChange y no por onKeyDown. user-event siempre manda teclas, asi que aqui
+  // se usa fireEvent.change, como el autollenado del navegador.
+  test('should spread the code over the boxes when the phone autofills it into the first box', async () => {
+    // Arrange: el primer campo tiene autocomplete=one-time-code y admite 6 caracteres
+    const { user } = abrir();
+    await pedirCodigo(user);
+    await waitFor(() => expect(casilla(1)).toHaveFocus());
+
+    // Act
+    fireEvent.change(casilla(1), { target: { value: '482913' } });
+
+    // Assert
+    expect(valoresDelCodigo()).toBe('482913');
+    await waitFor(() => expect(casilla(6)).toHaveFocus());
+  });
+
+  test('should move to the next box when a phone keyboard writes a digit without key events', async () => {
+    // Arrange: al abrir el paso 2 la pagina enfoca la primera casilla
+    const { user } = abrir();
+    await pedirCodigo(user);
+    await waitFor(() => expect(casilla(1)).toHaveFocus());
+
+    // Act
+    fireEvent.change(casilla(2), { target: { value: '7' } });
+
+    // Assert
+    expect(casilla(2)).toHaveValue('7');
+    expect(casilla(3)).toHaveFocus();
   });
 });
 
