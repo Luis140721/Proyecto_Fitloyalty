@@ -4,6 +4,15 @@ Prueban la app completa desde el navegador. `pnpm test` levanta el backend real 
 
 - `tests/login.spec.js`: inicio de sesión. Simula el API con `page.route`.
 - `tests/register-gym.spec.js`: registro de gimnasio. Usa el backend real y la BD de pruebas.
+- `tests/checkin.spec.js`: check-in de un miembro por documento (plan vigente, vencido, congelado y documento que no existe). Backend real y BD de pruebas.
+- `tests/checkin-tiempos.spec.js`: defectos de tiempos del check-in (doble envío y red lenta), con respuestas retrasadas por `page.route`.
+
+## Sesión y datos
+
+- La sesión se prepara una sola vez por corrida, como en la guía «Authentication» de Playwright: `tests/auth.setup.js` es el proyecto `setup` de `playwright.config.js`, del que dependen los demás. Crea por API un gimnasio nuevo con su dueño, escribe el token en `localStorage` (el front no usa cookies) y guarda el estado del navegador en `e2e/playwright/.auth/user.json`, que está en `.gitignore`.
+- Los archivos que necesitan la sesión la cargan con `test.use({ storageState: SESION })` (`tests/support/entorno.js`). Los del login y el registro no la cargan: prueban justamente eso.
+- Los datos de cada test se crean por API con el fixture `request` y valores únicos (`tests/support/datos.js`): los tests corren en paralelo sobre el mismo gimnasio y la BD conserva lo de corridas anteriores. Por la UI solo va lo que el test prueba.
+- `tests/support/checkin-page.js` es el objeto de página del check-in (locators y pasos, sin aserciones) y `tests/support/red.js` retrasa o retiene respuestas y cuenta peticiones.
 
 ## Requisitos
 
@@ -26,7 +35,11 @@ pnpm test                               # levanta backend y frontend y corre los
 pnpm run db:down                        # destruye la BD de pruebas y sus datos
 ```
 
-Al arrancar, el backend aplica las migraciones de `backend/migrations`, así que la BD vacía queda lista sin pasos extra. Para ver el detalle de un fallo: `pnpm exec playwright show-report`.
+Al arrancar, el backend aplica las migraciones de `backend/migrations`, así que la BD vacía queda lista sin pasos extra.
+
+Para ver el detalle de un fallo: `pnpm report` (abre el reporte HTML). En el CI (`CI` definida) un test que falla se reintenta una vez y ese reintento graba la traza (`trace: 'on-first-retry'`); en el reporte, el test fallido enlaza su **Trace**. En local no hay reintentos: para grabar la traza usa `pnpm exec playwright test --trace on`. Un test que pasa solo al reintentar sale como *flaky*: es una tarea pendiente, no un test aprobado (`--fail-on-flaky-tests` hace fallar la corrida).
+
+Para medir la estabilidad: `pnpm exec playwright test --repeat-each=5`.
 
 ## Por qué no se usa la BD de desarrollo
 
