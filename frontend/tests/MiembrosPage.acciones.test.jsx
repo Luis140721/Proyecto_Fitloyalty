@@ -485,6 +485,20 @@ describe('MiembrosPage: cancelar el alta', () => {
   });
 });
 
+describe('MiembrosPage: el calendario', () => {
+  test('should show the months of the date picker in Spanish', async () => {
+    // Arrange
+    const { user } = await abrirAlta();
+
+    // Act
+    await user.click(campo('Fecha nacimiento'));
+
+    // Assert
+    expect(await screen.findByRole('option', { name: 'noviembre' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'November' })).not.toBeInTheDocument();
+  });
+});
+
 describe('MiembrosPage: sin miembros', () => {
   test('should open the wizard from the empty list', async () => {
     // Arrange
