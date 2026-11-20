@@ -171,6 +171,19 @@ describe('GET /api/admin/staff/:id/auditoria: the history of an account', () => 
     ]);
   });
 
+  test('should answer 400 without querying the audit when the id is not a number', async () => {
+    // Arrange: en PostgreSQL real, el id NaN haria fallar la consulta (503); la BD falsa responderia 404
+    const consulta = jest.spyOn(mockBd, 'query');
+
+    // Act
+    const r = await historial('abc');
+
+    // Assert
+    expect(r.status).toBe(400);
+    expect(r.body.code).toBe('VALIDATION_ERROR');
+    expect(consulta.mock.calls.some(([sql]) => /FROM auditoria|WHERE id_usuario = \$1 AND id_gimnasio = \$2/.test(sql))).toBe(false);
+  });
+
   test('should answer 404 STAFF_NOT_FOUND when the account belongs to another gym', async () => {
     // Arrange: una cuenta del gimnasio 9 con su propia fila de auditoria
     mockBd.usuarios.push({ id_usuario: 5, id_gimnasio: 9, nombre: 'Otro Gym', email: 'otro@gym.co', id_rol: 2, activo: false });
