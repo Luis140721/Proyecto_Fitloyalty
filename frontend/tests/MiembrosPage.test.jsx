@@ -11,7 +11,7 @@
  * filas de la tabla.
  */
 import { describe, expect, test, vi, beforeAll, beforeEach, afterEach, afterAll } from 'vitest';
-import { act, screen, within, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, within, waitFor } from '@testing-library/react';
 import MiembrosPage from '../src/pages/MiembrosPage';
 import { renderWithProviders } from './renderWithProviders';
 
@@ -305,5 +305,29 @@ describe('MiembrosPage: tiempos (semana 7, parte de Daniel)', () => {
     // Assert: la lista vieja no reemplaza a la nueva
     expect(screen.getByRole('row', { name: /Sofía Gómez/ })).toBeInTheDocument();
     expect(screen.getByRole('row', { name: /Ana Pérez/ })).toBeInTheDocument();
+  });
+
+  test('should not create the member when the second click of a double click on Siguiente lands on Crear miembro', async () => {
+    // Arrange: los terminos ya estan marcados y la recepcion volvio al paso 4
+    const { user } = abrirMiembros();
+    await screen.findByRole('row', { name: /Ana Pérez/ });
+    await user.click(screen.getByRole('button', { name: 'Nuevo miembro' }));
+    await user.type(screen.getByLabelText(/^Nombre completo/), 'Sofía Gómez');
+    await user.type(screen.getByLabelText(/^Número documento/), '1033444555');
+    await user.type(screen.getByLabelText(/^Teléfono \/ WhatsApp/), '3201112233');
+    for (let paso = 2; paso <= 5; paso += 1) await user.click(botonSiguiente());
+    await user.click(screen.getByRole('checkbox', { name: /Acepto los términos/ }));
+    await user.click(screen.getByRole('checkbox', { name: /Autorizo el uso de mis datos/ }));
+    await user.click(screen.getByRole('button', { name: '← Anterior' }));
+
+    // Act: un doble clic en el mismo sitio. El primero (detail 1) en "Siguiente →";
+    // el segundo (detail 2), en el mismo tick, cae en "Crear miembro", que aparecio
+    // ahi. En el navegador pasa con la pagina desplazada hasta el final.
+    fireEvent.click(botonSiguiente(), { detail: 1 });
+    fireEvent.click(screen.getByRole('button', { name: 'Crear miembro' }), { detail: 2 });
+
+    // Assert: llega a los terminos y no envia nada hasta un clic de verdad en "Crear miembro"
+    expect(screen.getByText('Paso 5 de 5')).toBeInTheDocument();
+    expect(mockPost).not.toHaveBeenCalled();
   });
 });

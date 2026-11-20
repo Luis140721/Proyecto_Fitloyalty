@@ -38,23 +38,34 @@ test.describe('doble envio', () => {
     expect(await miembrosConDocumento(request, documento)).toHaveLength(1);
   });
 
-  test('should wait for Crear miembro when the receptionist double-clicks Siguiente on step 4', async ({ page, request }) => {
+  // Con la pagina desplazada hasta el final, el paso 5 (mas bajo que el 4) hace que
+  // el navegador suba el desplazamiento: todo baja y "Crear miembro" queda justo
+  // bajo el puntero, donde cae el segundo clic. Sin desplazar, ese clic cae en el
+  // fondo de la pagina. En la suite en paralelo pasaba a veces, segun lo larga que
+  // estuviera la lista del gimnasio compartido; aqui se fija: lista vacia (stub de
+  // GET /api/admin/miembros) y la pagina abajo del todo.
+  test('should wait for Crear miembro when the receptionist double-clicks Siguiente on step 4 at the bottom of the page', async ({ page, request }) => {
     // Arrange: los terminos ya estan marcados y la recepcion volvio al paso 4 a revisar algo
+    await page.route((url) => url.pathname.endsWith(RUTA_MIEMBROS), (route) => (route.request().method() === 'GET'
+      ? route.fulfill({ json: { miembros: [], total: 0, page: 0, pageSize: 100 } })
+      : route.fallback()));
     const documento = documentoUnico();
     const alta = new AltaMiembroPage(page);
     await alta.abrirAlta();
     await alta.llenarAlta({ nombre: nombreUnico(), documento });
     await alta.anterior.click();
+    await page.mouse.wheel(0, 10_000);
+    await expect.poll(() => page.evaluate(() => Math.ceil(window.scrollY + window.innerHeight) >= document.documentElement.scrollHeight)).toBe(true);
+    await expect(alta.siguiente).toBeInViewport();
     const soltarRespuesta = await retenerRespuestas(page, 'POST', RUTA_MIEMBROS);
     const posts = peticionesA(page, 'POST', RUTA_MIEMBROS);
 
-    // Act: el doble clic de alguien con prisa. El segundo clic no cae en "Crear
-    // miembro": el paso 5 es mas bajo que el 4 y la fila de botones sube
+    // Act: el doble clic de alguien con prisa
     await alta.siguiente.dblclick();
 
     // Assert: llega al paso 5 y el alta espera a que pulsen "Crear miembro". Con el
-    // defecto el primer clic ya enviaba el formulario (ver "Siguiente del paso 4")
-    // y el boton quedaba en "Creando miembro..."
+    // defecto el segundo clic enviaba el formulario y el boton quedaba en
+    // "Creando miembro..."
     await expect(alta.paso).toHaveText('Paso 5 de 5');
     await expect(alta.botonCrear).toBeEnabled();
     expect(posts).toHaveLength(0);
