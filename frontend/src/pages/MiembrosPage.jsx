@@ -402,17 +402,28 @@ export default function MiembrosPage() {
   const guardarRipple = Ripple({ opacity: 0.30 });
   const desactivarRipple = Ripple({ opacity: 0.30 });
 
+  /*
+   * Numero de la ultima carga pedida. Con la red lenta las respuestas pueden
+   * llegar en desorden: si la carga inicial respondia despues de la recarga que
+   * sigue a un alta, su lista (sin el miembro nuevo) reemplazaba a la buena.
+   * Ahora solo cuenta la respuesta de la ultima carga pedida.
+   */
+  const ultimaCargaRef = useRef(0);
+
   const load = async (query = '', includeInactive = false) => {
+    const carga = ++ultimaCargaRef.current;
     setLoading(true);
     try {
       const { data } = await api.get('/admin/miembros', { 
         params: { q: query, pageSize: 100, includeInactive } 
       });
+      if (carga !== ultimaCargaRef.current) return;
       setItems(data.miembros);
     } catch (err) {
+      if (carga !== ultimaCargaRef.current) return;
       setError(err.message || 'Error al cargar miembros.');
     } finally {
-      setLoading(false);
+      if (carga === ultimaCargaRef.current) setLoading(false);
     }
   };
 
@@ -1486,8 +1497,15 @@ export default function MiembrosPage() {
                 Paso {SECCIONES.indexOf(activeSection) + 1} de {SECCIONES.length}
               </div>
               
+              {/* Cada boton con su key: sin ella React reutilizaba el mismo
+                  <button> y, durante el clic en "Siguiente" del paso 4, le
+                  cambiaba el tipo a "submit"; el navegador enviaba entonces el
+                  formulario con un solo clic (los terminos salian en rojo, o el
+                  miembro se creaba si ya estaban marcados). Con la key se monta
+                  un boton nuevo y el del clic sale del formulario. */}
               {activeSection !== 'terminos' ? (
                 <button
+                  key="siguiente"
                   type="button"
                   className="btn btn-secondary"
                   onClick={() => {
@@ -1499,6 +1517,7 @@ export default function MiembrosPage() {
                 </button>
               ) : (
                 <button
+                  key="crear"
                   type="submit"
                   className="btn btn-primary"
                   disabled={submitting}
