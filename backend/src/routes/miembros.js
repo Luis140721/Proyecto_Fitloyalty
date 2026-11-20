@@ -47,6 +47,17 @@ const MENSAJE_VALOR_PLAN = 'El valor del plan no puede pasar de 99.999.999,99';
 const cabeEnLaColumna = (n, etiqueta) => [(texto) => [...texto].length <= n, { message: `${etiqueta} admite máximo ${n} caracteres` }];
 const valorQueCabe = () => [(texto) => !(parseFloat(texto) > MAX_VALOR_PLAN), { message: MENSAJE_VALOR_PLAN }];
 
+// El id de un miembro en la URL: un entero escrito completo que cabe en
+// miembro.id_miembro, INTEGER (hasta 2147483647). Sin esto, un id como "abc"
+// llegaba a PostgreSQL (500 con su mensaje en las rutas del plan) y uno como
+// 2147483648 tambien (22003, y la ruta respondia 503 "intenta de nuevo").
+const ID_MAXIMO = 2147483647;
+const esIdDeMiembro = (texto) => /^\d+$/.test(String(texto)) && Number(texto) <= ID_MAXIMO;
+function idDeMiembro(texto) {
+  if (!esIdDeMiembro(texto)) throw new AppError(400, 'Id inválido', 'VALIDATION_ERROR');
+  return Number(texto);
+}
+
 // Clave secreta para cifrar QR (en producción debería estar en variables de entorno)
 const QR_ENCRYPTION_KEY = process.env.QR_ENCRYPTION_KEY || 'FitLoyalty2024SecretKey';
 
@@ -616,8 +627,7 @@ router.get(
   requireActiveTrial(pool),
   asyncHandler(async (req, res) => {
     const gymId = req.user.gymId;
-    const id = parseInt(req.params.id, 10);
-    if (!Number.isFinite(id)) throw new AppError(400, 'Id invalido', 'VALIDATION_ERROR');
+    const id = idDeMiembro(req.params.id);
 
     try {
       const { rows } = await pool.query(
@@ -650,8 +660,7 @@ router.put(
   asyncHandler(async (req, res) => {
     const parsed = parse(updateSchema, req.body);
     if (!parsed.ok) throw new AppError(parsed.status, parsed.error, 'VALIDATION_ERROR', { issues: parsed.issues });
-    const id = parseInt(req.params.id, 10);
-    if (!Number.isFinite(id)) throw new AppError(400, 'Id invalido', 'VALIDATION_ERROR');
+    const id = idDeMiembro(req.params.id);
 
     const campos = [];
     const params = [];
@@ -785,10 +794,6 @@ const planSchema = z.object({
   referencia_pago: z.string().max(80).optional().or(z.literal('')),
   proxima_fecha_cobro: z.string().optional().or(z.literal('')),
 });
-
-// El id del miembro en las rutas del plan: un entero escrito completo. Sin esto
-// un id como "abc" llegaba a PostgreSQL, que respondia 500 con su mensaje.
-const esIdDeMiembro = (texto) => /^\d+$/.test(String(texto));
 
 router.get(
   '/admin/miembros/:id/plan',

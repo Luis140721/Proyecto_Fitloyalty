@@ -305,8 +305,10 @@ describeConBd('restricciones de gimnasio, usuario y miembro', () => {
 
     // PostgreSQL frente a MySQL: id_miembro es INTEGER (hasta 2147483647). MySQL
     // compara 2147483648 y no encuentra la fila; PostgreSQL rechaza el valor.
-    // Hallazgo sin corregir: GET y DELETE /admin/miembros/2147483648 responden 503
-    // DB_UNREACHABLE en vez de 404, porque parseInt + Number.isFinite lo dejan pasar.
+    // Hallazgo: /admin/miembros/2147483648 respondia 503 DB_UNREACHABLE, porque
+    // parseInt + Number.isFinite lo dejan pasar. GET y PUT /:id y las rutas del
+    // plan ya responden 400 "Id inválido" (miembros-id-rango.test.js); DELETE,
+    // /permanent, /congelar y /descongelar siguen sin corregir.
     test('buscar un id que no cabe en INTEGER es un error en PostgreSQL, no una fila vacia', async () => {
       const gym = await crearGimnasio(tx.cliente);
       const BUSCAR = 'SELECT id_miembro FROM miembro WHERE id_miembro = $1 AND id_gimnasio = $2';

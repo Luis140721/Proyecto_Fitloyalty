@@ -176,7 +176,7 @@ describe('GET /api/admin/miembros/:id: one member of the gym', () => {
 
     // Assert
     esJson(r, 400);
-    expect(r.body).toEqual({ error: 'Id invalido', code: 'VALIDATION_ERROR' });
+    expect(r.body).toEqual({ error: 'Id inválido', code: 'VALIDATION_ERROR' });
     expect(mockLecturas).toBe(0);
   });
 });
