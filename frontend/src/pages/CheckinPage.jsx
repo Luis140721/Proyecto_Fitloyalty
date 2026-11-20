@@ -54,9 +54,20 @@ export default function CheckinPage() {
   const knownIdsRef = useRef(new Set());
   const [frameFlash, setFrameFlash] = useState(null); 
 
+  // Cada carga del historial lleva un numero, en el orden en que se pide. Con
+  // la red lenta las respuestas pueden llegar en otro orden: la carga inicial,
+  // calculada antes de un ingreso, llegaba despues de la recarga de ese ingreso
+  // y lo borraba de "Ingresos de hoy". Solo se muestra una respuesta mas nueva
+  // que la que ya esta en pantalla.
+  const ultimaCargaPedidaRef = useRef(0);
+  const cargaEnPantallaRef = useRef(0);
+
   const loadRecent = async () => {
+    const carga = ++ultimaCargaPedidaRef.current;
     try {
       const { data } = await api.get('/admin/checkin', { params: { limit: 20 } });
+      if (carga < cargaEnPantallaRef.current) return false;
+      cargaEnPantallaRef.current = carga;
       const next = data.checkins || [];
       const previousIds = knownIdsRef.current;
       const newOnTop = next.length > 0 && previousIds.size > 0 && !previousIds.has(next[0].id_checkin);
@@ -67,6 +78,7 @@ export default function CheckinPage() {
       next.forEach((c) => previousIds.add(c.id_checkin));
       return newOnTop;
     } catch (err) {
+      if (carga < cargaEnPantallaRef.current) return false;
       setError(err.message || 'No se pudo cargar el historial.');
       return false;
     }
@@ -152,7 +164,7 @@ export default function CheckinPage() {
         vibrate([200, 100, 200]); // Patrón de vibración de error para el celular
         ultimoCodigoRef.current = null;
         setCodigo('');
-        await loadRecent();
+        loadRecent();
         return; // Detiene el flujo para bloquear la entrada
       }
       // --- FIN BLOQUEO ---
@@ -169,7 +181,8 @@ export default function CheckinPage() {
       if (fbType === 'success') vibrate(80);
       marcarActividad();
       setCodigo('');
-      await loadRecent();
+      // Sin await: el historial se recarga aparte y el siguiente QR no lo espera.
+      loadRecent();
     } catch (err) {
       // El interceptor de api.js ya normalizo el error: el status viene en
       // err.status (buildError), no en err.response.
@@ -191,6 +204,9 @@ export default function CheckinPage() {
   // aunque haya texto en el campo del QR.
   const submit = async (e, porDocumento = false) => {
     e.preventDefault();
+    // Un segundo Enter con el primer ingreso en camino no envia otro: el boton
+    // se deshabilita, pero el campo del documento sigue aceptando Enter.
+    if (enviandoRef.current) return;
     setError(''); setFeedback(null);
     const payload = { metodo };
     if (codigo && !porDocumento) {
@@ -205,6 +221,7 @@ export default function CheckinPage() {
       return;
     }
 
+    enviandoRef.current = true;
     setSubmitting(true);
     try {
       const { data } = await api.post('/admin/checkin', payload);
@@ -219,7 +236,7 @@ export default function CheckinPage() {
         vibrate([200, 100, 200]);
         ultimoCodigoRef.current = null;
         setCodigo(''); setDocumento('');
-        await loadRecent();
+        loadRecent();
         return;
       }
       // --- FIN BLOQUEO ---
@@ -237,12 +254,15 @@ export default function CheckinPage() {
       if (fbType === 'success') vibrate(80);
       marcarActividad();
       setCodigo(''); setDocumento('');
-      await loadRecent();
+      // Sin await: el ingreso ya termino y el siguiente miembro no espera al
+      // historial, que con la red lenta puede tardar segundos.
+      loadRecent();
     } catch (err) {
       setError(err.message || 'No se pudo registrar el check-in.');
       setFeedback({ type: 'error', msg: err.message || 'Ingreso denegado', advertencia: true });
       setFrameFlash({ type: 'error', key: Date.now() });
     } finally {
+      enviandoRef.current = false;
       setSubmitting(false);
       prepararSiguiente();
     }

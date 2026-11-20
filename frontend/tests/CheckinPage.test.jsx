@@ -10,9 +10,13 @@
  *
  * html5-qrcode abre la camara: el doble guarda el callback de lectura para que
  * el test "lea" un QR.
+ *
+ * Semana 7: los defectos de tiempos que encontraron los E2E de
+ * e2e/tests/checkin-tiempos.spec.js, aqui sin red ni backend (promesas que se
+ * resuelven cuando el test quiere).
  */
 import { describe, expect, test, vi, beforeEach, afterEach } from 'vitest';
-import { act, screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import CheckinPage from '../src/pages/CheckinPage';
 import { renderWithProviders } from './renderWithProviders';
 
@@ -316,5 +320,97 @@ describe('CheckinPage: la cámara', () => {
     // Assert
     expect(escaner.cerrado).toBe(true);
     expect(screen.getByRole('button', { name: 'Activar cámara' })).toBeInTheDocument();
+  });
+});
+
+/** Promesa que el test resuelve cuando quiere: la respuesta "llega" en ese momento. */
+function pendiente() {
+  let resolver;
+  const promesa = new Promise((r) => { resolver = r; });
+  return { promesa, resolver };
+}
+
+const INGRESO_CARLOS = { id_checkin: 91, fecha_hora: '2026-10-28T14:00:00.000Z', metodo: 'MANUAL', valido: true, id_miembro: 2, nombre: 'Carlos Ruiz', documento: '79123456', codigo_qr: 'QR-CARLOS' };
+
+describe('CheckinPage: tiempos (semana 7)', () => {
+  test('should send a single check-in when Enter is pressed twice while the first one is on its way', async () => {
+    // Arrange: el POST no responde todavia
+    mockPost = vi.fn(() => new Promise(() => {}));
+    const { user } = abrirCheckin();
+
+    // Act
+    await user.type(campoDocumento(), '79123456{Enter}{Enter}');
+
+    // Assert
+    expect(mockPost).toHaveBeenCalledTimes(1);
+  });
+
+  test('should send a single check-in when Registrar is double-clicked while the first one is on its way', async () => {
+    // Arrange
+    mockPost = vi.fn(() => new Promise(() => {}));
+    const { user } = abrirCheckin();
+    await user.type(campoDocumento(), '79123456');
+
+    // Act
+    await user.dblClick(screen.getByRole('button', { name: 'Registrar' }));
+
+    // Assert
+    expect(mockPost).toHaveBeenCalledTimes(1);
+  });
+
+  test('should enable Registrar again when the check-in is done and the history is still loading', async () => {
+    // Arrange: la primera carga llega; la recarga despues del ingreso no
+    mockGet = vi.fn()
+      .mockImplementationOnce(async () => ({ data: { checkins: [INGRESO_ANA] } }))
+      .mockImplementation(() => new Promise(() => {}));
+    const { user } = abrirCheckin();
+    await screen.findByText('Ana Pérez');
+
+    // Act
+    await user.type(campoDocumento(), '79123456{Enter}');
+
+    // Assert: el ingreso ya termino, el siguiente miembro no espera al historial.
+    // El boton se busca con sus dos textos para que el fallo diga "disabled".
+    expect(await aviso()).toHaveTextContent('Ingreso registrado.');
+    const boton = screen.getByRole('button', { name: /^(Registrar|Validando\.\.\.)$/ });
+    expect(boton).toBeEnabled();
+    expect(boton).toHaveAccessibleName('Registrar');
+  });
+
+  test('should read the next QR with the camera while the history is still loading', async () => {
+    // Arrange: la recarga del historial despues del primer ingreso no llega
+    mockGet = vi.fn()
+      .mockImplementationOnce(async () => ({ data: { checkins: [INGRESO_ANA] } }))
+      .mockImplementation(() => new Promise(() => {}));
+    const { user } = abrirCheckin();
+    await screen.findByText('Ana Pérez');
+    await user.click(screen.getByRole('button', { name: 'Activar cámara' }));
+    await act(async () => escaner.leer('QR-CARLOS'));
+    await aviso();
+
+    // Act: otro miembro pasa su QR
+    await act(async () => escaner.leer('QR-ANA'));
+
+    // Assert
+    expect(mockPost).toHaveBeenCalledTimes(2);
+    expect(mockPost).toHaveBeenLastCalledWith('/admin/checkin', { metodo: 'QR', codigo: 'QR-ANA' });
+  });
+
+  test('should keep the newest history when the first load answers after the reload of a check-in', async () => {
+    // Arrange: la carga inicial tarda; la recarga del ingreso ya trae a Carlos
+    const cargaInicial = pendiente();
+    mockGet = vi.fn()
+      .mockImplementationOnce(() => cargaInicial.promesa)
+      .mockImplementation(async () => ({ data: { checkins: [INGRESO_CARLOS, INGRESO_ANA] } }));
+    const { user } = abrirCheckin();
+    await user.type(campoDocumento(), '79123456{Enter}');
+    const ingresos = screen.getByRole('list', { name: 'Ingresos de hoy' });
+    await within(ingresos).findByText('Carlos Ruiz');
+
+    // Act: llega la carga inicial, calculada antes del ingreso de Carlos
+    await act(async () => cargaInicial.resolver({ data: { checkins: [INGRESO_ANA] } }));
+
+    // Assert
+    expect(within(ingresos).getByText('Carlos Ruiz')).toBeInTheDocument();
   });
 });
