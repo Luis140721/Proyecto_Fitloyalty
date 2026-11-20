@@ -105,6 +105,18 @@ describe('AuthProvider: al abrir la app', () => {
     expect(mockGet).toHaveBeenCalledWith('/auth/me');
   });
 
+  test('should read the role from rol_nombre when /auth/me sends neither role nor rol', async () => {
+    // Arrange
+    localStorage.setItem(TOKEN_KEY, TOKEN_VIGENTE);
+    mockGet = vi.fn(async () => ({ data: { user: { ...ANA, role: undefined, rol_nombre: 'ADMINISTRADOR' }, gym: GIMNASIO } }));
+
+    // Act
+    abrirApp();
+
+    // Assert: sin rol_nombre quedaria como receptionist
+    expect(await sesionAbierta('Sesión de Ana Pérez como admin en Gimnasio Central')).toBeInTheDocument();
+  });
+
   test.each([401, 403, 404])('should drop the saved token when /auth/me answers %i', async (status) => {
     // Arrange
     localStorage.setItem(TOKEN_KEY, TOKEN_VIGENTE);
@@ -205,6 +217,23 @@ describe('AuthProvider: entrar y salir', () => {
     expect(await screen.findByText('No se pudo: Credenciales incorrectas')).toBeInTheDocument();
     expect(screen.getByText('Sin sesión')).toBeInTheDocument();
     expect(localStorage.getItem(TOKEN_KEY)).toBeNull();
+  });
+
+  test('should tell the server and close the session without a notice when the person signs out', async () => {
+    // Arrange
+    const { user } = abrirApp();
+    await user.click(await screen.findByRole('button', { name: 'Entrar' }));
+    await sesionAbierta();
+    mockPost = vi.fn(async () => ({ data: { ok: true } }));
+
+    // Act
+    await user.click(screen.getByRole('button', { name: 'Salir' }));
+
+    // Assert
+    expect(await screen.findByText('Sin sesión')).toBeInTheDocument();
+    expect(mockPost).toHaveBeenCalledWith('/auth/logout');
+    expect(localStorage.getItem(TOKEN_KEY)).toBeNull();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
   test('should close the session and forget the activity even when POST /auth/logout fails', async () => {
@@ -334,5 +363,33 @@ describe('useAuth', () => {
     // Act y Assert
     expect(() => render(<SinProvider />)).toThrow('useAuth debe usarse dentro de <AuthProvider>');
     console.error.mockRestore();
+  });
+});
+
+describe('AuthProvider: los minutos de VITE_INACTIVIDAD_MIN', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  test.each([
+    ['5', 6, 'Tu sesión se cerró tras 5 minutos sin actividad. Inicia sesión de nuevo.'],
+    ['1', 2, 'Tu sesión se cerró tras 1 minuto sin actividad. Inicia sesión de nuevo.'],
+    ['0', 31, 'Tu sesión se cerró tras 30 minutos sin actividad. Inicia sesión de nuevo.'],
+  ])('should close the session with the right notice when the variable is "%s" and %i minutes pass', async (valor, minutosSinUso, aviso) => {
+    // Arrange: la variable se lee al cargar el modulo, por eso se vuelve a importar
+    vi.stubEnv('VITE_INACTIVIDAD_MIN', valor);
+    vi.resetModules();
+    const { AuthProvider: Proveedor } = await import('../src/context/AuthContext');
+    const { ErrorProvider: Avisos } = await import('../src/components/ErrorBanner');
+    localStorage.setItem(TOKEN_KEY, TOKEN_VIGENTE);
+    localStorage.setItem(ACTIVIDAD_KEY, String(AHORA.getTime() - minutosSinUso * MINUTO));
+
+    // Act
+    render(<MemoryRouter><Avisos><Proveedor><p>Panel</p></Proveedor></Avisos></MemoryRouter>);
+
+    // Assert
+    expect(await screen.findByRole('alert')).toHaveTextContent(aviso);
+    expect(localStorage.getItem(TOKEN_KEY)).toBeNull();
   });
 });

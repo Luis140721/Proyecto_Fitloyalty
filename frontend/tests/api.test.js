@@ -185,6 +185,17 @@ describe('api.js: el error que reciben las pantallas', () => {
     expect(err).toMatchObject({ status: 0, code: 'ERR_CANCELED', message: 'canceled', isNetwork: true });
   });
 
+  test('should use UNKNOWN and a generic message when a request without answer has no code and no message', async () => {
+    // Arrange: falla sin respuesta, sin codigo y sin texto (no es de red)
+    api.defaults.adapter = sinRespuesta(undefined, '');
+
+    // Act
+    const err = await errorDe(() => api.get('/admin/dashboard'));
+
+    // Assert
+    expect(err).toMatchObject({ status: 0, code: 'UNKNOWN', message: 'Error desconocido', isNetwork: true });
+  });
+
   test.each([
     [null, 'Error desconocido'],
     ['Escribe el documento.', 'Escribe el documento.'],
@@ -217,6 +228,19 @@ describe('api.js: la sesion que vence en medio del uso', () => {
     expect(err.status).toBe(401);
     expect(getToken()).toBeNull();
     expect(avisos).toEqual([{ code: 'ACCOUNT_DISABLED' }]);
+  });
+
+  test('should warn AuthContext without a code when the 401 of the current token brings none', async () => {
+    // Arrange: AuthContext muestra entonces "Tu sesion expiro" y no "cuenta desactivada"
+    setToken('token-vigente');
+    api.defaults.adapter = fallaCon(401, { error: 'No autorizado.' });
+
+    // Act
+    await errorDe(() => api.get('/admin/miembros'));
+
+    // Assert
+    expect(getToken()).toBeNull();
+    expect(avisos).toEqual([{ code: null }]);
   });
 
   test.each([
@@ -265,5 +289,29 @@ describe('api.js: la sesion que vence en medio del uso', () => {
     // Assert
     expect(getToken()).toBe('token-nuevo');
     expect(avisos).toEqual([]);
+  });
+});
+
+describe('api.js: a que backend apunta', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  test.each([
+    ['https://fitloyalty-api.onrender.com/api', 'fitloyalty.vercel.app'],
+    ['http://localhost:3001/api', 'localhost'],
+  ])('should point to %s when the front runs on %s without VITE_API_BASE', async (esperado, host) => {
+    // Arrange: la URL se decide al cargar el modulo, por eso se vuelve a importar
+    vi.stubEnv('VITE_API_BASE', '');
+    vi.stubGlobal('window', { location: { hostname: host } });
+    vi.resetModules();
+
+    // Act
+    const { api: cliente } = await import('../src/api');
+
+    // Assert
+    expect(cliente.defaults.baseURL).toBe(esperado);
   });
 });
