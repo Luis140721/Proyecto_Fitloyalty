@@ -192,4 +192,17 @@ describe('GET /api/admin/staff/:id/auditoria: the history of an account', () => 
     expect(r.body.code).toBe(code);
     expect(r.body).not.toHaveProperty('auditoria');
   });
+
+  test('should answer 503 DB_UNREACHABLE and log the error when the history query fails', async () => {
+    // Arrange: la BD falla al leer la auditoria
+    mockBd.fallaCon = /FROM auditoria a/;
+
+    // Act
+    const r = await historial(ANA);
+
+    // Assert
+    expect(r.status).toBe(503);
+    expect(r.body.code).toBe('DB_UNREACHABLE');
+    expect(console.error).toHaveBeenCalledWith('[GET /admin/staff/:id/auditoria] Error:', 'conexion perdida');
+  });
 });
