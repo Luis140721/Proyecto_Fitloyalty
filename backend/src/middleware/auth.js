@@ -74,10 +74,10 @@ async function authenticate(req, res, next) {
     console.error('[authenticate] Error leyendo al usuario:', err.code, err.message);
     return next(new AppError(503, 'No pudimos validar tu sesión. Intenta de nuevo.', 'DB_UNREACHABLE'));
   }
-  if (actual && (!actual.activo || actual.id_gimnasio !== payload.gymId)) {
+  if (!actual || !actual.activo || actual.id_gimnasio !== payload.gymId) {
     return res.status(401).json({ error: 'Tu cuenta está desactivada o ya no pertenece a este gimnasio.', code: 'ACCOUNT_DISABLED' });
   }
-  req.user = { ...payload, role: mapRol(actual?.rol_nombre) };
+  req.user = { ...payload, role: mapRol(actual.rol_nombre) };
   return next();
 }
 
