@@ -432,15 +432,20 @@ export default function CheckinPage() {
         <article className="table-card" style={{ padding: 0, alignSelf: 'flex-start' }}>
           <div style={{ padding: '20px 24px 8px' }}>
             <div className="checkin-feed__head">
-              <h3>Ingresos de hoy</h3>
+              <h3 id="checkin-ingresos-titulo">Ingresos de hoy</h3>
               <span className="checkin-feed__live anim-pulse">EN VIVO</span>
             </div>
           </div>
-          <div style={{ padding: '8px 24px 24px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {/* Lista con nombre: el lector de pantalla la anuncia como "Ingresos de hoy" y cuenta las filas. */}
+          <div
+            role="list"
+            aria-labelledby="checkin-ingresos-titulo"
+            style={{ padding: '8px 24px 24px', display: 'flex', flexDirection: 'column', gap: 12 }}
+          >
             {recent.map((c, idx) => {
               const denied = c.advertencia || c.denegado;
               return (
-                <div className={`checkin-tile ${denied ? 'checkin-tile--denied' : ''}`} key={c.id_checkin}>
+                <div role="listitem" className={`checkin-tile ${denied ? 'checkin-tile--denied' : ''}`} key={c.id_checkin}>
                   <span className={`avatar ${denied ? 'avatar-error' : 'avatar-primary'}`}>{initialsOf(c.nombre)}</span>
                   <div className="checkin-tile__meta">
                     <strong>{c.nombre}</strong>
