@@ -195,6 +195,36 @@ describe('ConfigPage: guardar', () => {
     await waitFor(() => expect(mockPut).toHaveBeenCalledWith('/admin/config', expect.objectContaining({ dias_recordatorio_default: 10, dias_prueba: 7 })));
   });
 
+  test.each([
+    ['Días antes del vencimiento', 'dias_recordatorio_default', 7],
+    ['Alerta amarilla (días sin venir)', 'umbral_alerta_amarilla', 1],
+  ])('should save the default of "%s" when the field is left empty', async (nombre, clave, defecto) => {
+    // Arrange
+    const { user } = abrirConfig();
+    await cargada();
+    await user.clear(campo(nombre));
+
+    // Act
+    await user.click(guardar());
+
+    // Assert
+    await waitFor(() => expect(mockPut).toHaveBeenCalledWith('/admin/config', expect.objectContaining({ [clave]: defecto })));
+  });
+
+  test('should check the rule with the minimum 2 when the red alert is left empty', async () => {
+    // Arrange: la amarilla vale 7 y la roja vacia se guardaria como 2
+    const { user } = abrirConfig();
+    await cargada();
+    await user.clear(campo('Alerta roja (días sin venir)'));
+
+    // Act
+    await user.click(guardar());
+
+    // Assert
+    expect(screen.getByRole('alert')).toHaveTextContent('La alerta roja debe ser mayor que la amarilla.');
+    expect(mockPut).not.toHaveBeenCalled();
+  });
+
   test('should turn off the WhatsApp notice when the field is left empty', async () => {
     // Arrange
     const { user } = abrirConfig();

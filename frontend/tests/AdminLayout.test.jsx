@@ -171,6 +171,8 @@ describe('AdminLayout: el menu lateral', () => {
     ['admin', ['Dashboard', 'Miembros', 'Check-in', 'Equipo', 'Configuración'], 'Administrador'],
     ['receptionist', ['Miembros', 'Check-in'], 'Recepción'],
     ['trainer', [], 'Entrenador'],
+    // Un rol que el front no conoce (el backend manda rol_4 para un id_rol nuevo) se muestra tal cual.
+    ['rol_4', [], 'rol_4'],
     [undefined, ['Miembros', 'Check-in'], 'Recepción'],
   ])('should show only the allowed sections when the role is %s', (rol, secciones, nombreRol) => {
     // Arrange

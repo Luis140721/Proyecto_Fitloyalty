@@ -152,6 +152,17 @@ describe('UserAvatar', () => {
     expect(within(ficha()).getByText('AP')).toBeInTheDocument();
   });
 
+  test('should describe the photo as Avatar when the person has a photo but no name', async () => {
+    // Arrange
+    sesion = { ...sesion, user: { id: 4, role: 'admin', photoUrl: 'https://cdn.example/sin-nombre.jpg' } };
+
+    // Act
+    abrirEncabezado();
+
+    // Assert
+    expect(screen.getByRole('img', { name: 'Avatar' })).toHaveAttribute('src', 'https://cdn.example/sin-nombre.jpg');
+  });
+
   test('should show a question mark as initials when the person has no name', async () => {
     // Arrange
     sesion = { ...sesion, user: { id: 4, role: 'admin' } };

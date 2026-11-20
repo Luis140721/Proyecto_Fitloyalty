@@ -165,6 +165,21 @@ describe('MenuNotificaciones: lo que se hace con un aviso', () => {
     expect(panel()).toBeInTheDocument();
   });
 
+  test('should ignore other keys and open WhatsApp when Space is pressed on the WhatsApp button', async () => {
+    // Arrange
+    const abrir = vi.spyOn(window, 'open').mockReturnValue(null);
+    const { user } = await abrirCampana();
+    within(avisoDe(RIESGO.titulo)).getByTitle('Escribirle a Luisa Gómez por WhatsApp').focus();
+
+    // Act y Assert: una letra no hace nada
+    await user.keyboard('a');
+    expect(abrir).not.toHaveBeenCalled();
+
+    // Act y Assert: la barra espaciadora abre el chat, como Enter
+    await user.keyboard(' ');
+    expect(abrir).toHaveBeenCalledWith(`https://wa.me/573001112233?text=${encodeURIComponent(RIESGO.mensaje)}`, '_blank', 'noopener,noreferrer');
+  });
+
   test('should say that the sending was not recorded when the API fails after opening WhatsApp', async () => {
     // Arrange
     vi.spyOn(window, 'open').mockReturnValue(null);
