@@ -9,7 +9,7 @@ const ConnectionParameters = require('pg/lib/connection-parameters');
 const { exigirBdDePruebas } = require('../../../e2e/guardia-bd.cjs');
 
 const VALIDA = 'postgres://fitloyalty_test:fitloyalty_test@127.0.0.1:5433/fitloyalty_test';
-const exigir = (url) => exigirBdDePruebas(url, 'TEST_DATABASE_URL');
+const exigir = (url) => exigirBdDePruebas(url, 'DATABASE_URL');
 
 const ACEPTADAS = [
   VALIDA,
@@ -77,7 +77,7 @@ describe('exigirBdDePruebas', () => {
 
   test('el mensaje dice la forma esperada', () => {
     expect(() => exigir(ATAQUE_CLAVE)).toThrow(
-      'TEST_DATABASE_URL debe tener la forma postgres://usuario:clave@127.0.0.1:5433/nombre_test (solo se admite ?sslmode=)',
+      'DATABASE_URL debe tener la forma postgres://usuario:clave@127.0.0.1:5433/nombre_test (solo se admite ?sslmode=)',
     );
   });
 
@@ -88,7 +88,7 @@ describe('exigirBdDePruebas', () => {
     } catch (err) {
       mensaje = err.message;
     }
-    expect(mensaje).toContain('TEST_DATABASE_URL');
+    expect(mensaje).toContain('DATABASE_URL');
     expect(mensaje).toContain('127.0.0.1:5432/fitloyalty');
     expect(mensaje).not.toContain('usuario_dev');
     expect(mensaje).not.toContain('clave_dev');
@@ -107,15 +107,18 @@ describe('exigirBdDePruebas', () => {
 
 describe('redes de tests/integracion/bd-pruebas.js', () => {
   const ENV_ORIGINAL = process.env;
+  const URL_DEL_PROCESO = globalThis.DATABASE_URL_DEL_PROCESO;
 
   beforeEach(() => {
     process.env = { ...ENV_ORIGINAL };
     // Cada test fija la que necesita, tambien cuando la suite corre con BD.
-    delete process.env.TEST_DATABASE_URL;
+    delete process.env.DATABASE_URL;
+    delete globalThis.DATABASE_URL_DEL_PROCESO;
   });
 
   afterEach(() => {
     process.env = ENV_ORIGINAL;
+    globalThis.DATABASE_URL_DEL_PROCESO = URL_DEL_PROCESO;
   });
 
   const cargarBdPruebas = () => {
@@ -135,14 +138,32 @@ describe('redes de tests/integracion/bd-pruebas.js', () => {
     return pool;
   };
 
-  test('al cargarse con TEST_DATABASE_URL pasa la URL por la guardia', () => {
-    process.env.TEST_DATABASE_URL = 'postgres://u:c@127.0.0.1:5432/fitloyalty';
+  test('la DATABASE_URL del entorno del proceso pasa por la guardia al cargarse', () => {
+    globalThis.DATABASE_URL_DEL_PROCESO = 'postgres://u:c@127.0.0.1:5432/fitloyalty';
 
     expect(cargarBdPruebas).toThrow('el puerto no es 5433');
   });
 
+  // La de backend/.env llega a process.env cuando algo carga dotenv, pero no es
+  // la del entorno del proceso: los tests de integracion se saltan.
+  test('una DATABASE_URL que solo cargo dotenv no activa los tests de integracion', () => {
+    process.env.DATABASE_URL = 'postgres://dev:dev@127.0.0.1:5432/fitloyalty';
+
+    const { describeConBd } = cargarBdPruebas();
+
+    expect(describeConBd).toBe(describe.skip);
+  });
+
+  test('entorno-del-proceso.js guarda la DATABASE_URL antes de que corra el test', () => {
+    process.env.DATABASE_URL = VALIDA;
+
+    jest.isolateModules(() => require('./entorno-del-proceso'));
+
+    expect(globalThis.DATABASE_URL_DEL_PROCESO).toBe(VALIDA);
+  });
+
   test('con una URL valida, el pool de la app la usa en lugar de la DATABASE_URL de desarrollo', () => {
-    process.env.TEST_DATABASE_URL = VALIDA;
+    globalThis.DATABASE_URL_DEL_PROCESO = VALIDA;
     process.env.DATABASE_URL = 'postgres://dev:dev@127.0.0.1:5432/fitloyalty';
     process.env.DB_SSL = 'true';
 

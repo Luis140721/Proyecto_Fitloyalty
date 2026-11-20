@@ -7,7 +7,7 @@
  * Codigos: 23502 NOT NULL · 22001 texto mas largo que la columna · 23505 UNIQUE
  * · 23503 llave foranea · 22003 numero fuera del rango de la columna.
  *
- * Sin TEST_DATABASE_URL se salta.
+ * Sin DATABASE_URL en el entorno del proceso se salta.
  */
 const { describeConBd, prepararBdDePruebas } = require('./bd-pruebas');
 const {

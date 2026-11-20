@@ -3,7 +3,7 @@
  *
  * Lista permitida de la BD de pruebas, la misma para los E2E
  * (playwright.config.js, E2E_DATABASE_URL) y para los tests de integracion del
- * backend (backend/tests/integracion, TEST_DATABASE_URL). Solo pasa la BD de
+ * backend (backend/tests/integracion, DATABASE_URL). Solo pasa la BD de
  * pruebas local, el servicio db-test de e2e/docker-compose.yml: la de
  * desarrollo (5432 o 5434), Neon y Render se rechazan antes de levantar nada.
  * Sus tests estan en backend/tests/integracion/guardia-bd.test.js.
