@@ -133,3 +133,33 @@ describe('PATCH /api/admin/staff/:id: the audit trail', () => {
     expect(mockBd.auditoria).toEqual([]);
   });
 });
+
+describe('GET /api/admin/staff/:id/auditoria: the history of an account', () => {
+  const T1 = new Date('2026-11-19T14:00:00.000Z');
+  const T2 = new Date('2026-11-19T14:05:00.000Z');
+  const historial = (id) => request(app).get(`/api/admin/staff/${id}/auditoria`).set('Authorization', `Bearer ${tokenDe(LUIS)}`);
+
+  beforeEach(() => {
+    // Solo se finge la fecha: los timers reales siguen para que supertest funcione.
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate', 'setTimeout', 'setInterval', 'clearTimeout', 'clearInterval', 'queueMicrotask'] });
+  });
+  afterEach(() => jest.useRealTimers());
+
+  test('should list the history of the account, newest first, with who made each change', async () => {
+    // Arrange: Luis desactiva a Ana y la reactiva cinco minutos despues
+    jest.setSystemTime(T1);
+    await editar(ANA, { activo: false });
+    jest.setSystemTime(T2);
+    await editar(ANA, { activo: true });
+
+    // Act
+    const r = await historial(ANA);
+
+    // Assert
+    expect(r.status).toBe(200);
+    expect(r.body.auditoria).toEqual([
+      { fecha: T2.toISOString(), responsable: 'Luis Admin', eventos: ['REACTIVADA'], antes: { activo: false }, despues: { activo: true } },
+      { fecha: T1.toISOString(), responsable: 'Luis Admin', eventos: ['DESACTIVADA'], antes: { activo: true }, despues: { activo: false } },
+    ]);
+  });
+});

@@ -133,6 +133,15 @@ function crearBdFalsa() {
       bd.invitaciones.find((i) => i.id_invitacion === params[1]).fecha_aceptacion = new Date();
       return { rows: [] };
     }
+    // Historial de una cuenta: sus filas de auditoria, la mas reciente primero, con el nombre del responsable.
+    if (/FROM auditoria a[\s\S]*WHERE a\.tabla_afectada = 'usuario' AND a\.id_registro = \$1 AND a\.id_gimnasio = \$2/.test(sql)) {
+      return {
+        rows: bd.auditoria
+          .filter((f) => f.tabla_afectada === 'usuario' && f.id_registro === params[0] && f.id_gimnasio === params[1])
+          .sort((x, y) => (y.fecha_evento - x.fecha_evento) || (y.id_auditoria - x.id_auditoria))
+          .map((f) => ({ fecha_evento: f.fecha_evento, detalle: f.detalle, responsable: bd.usuarios.find((u) => u.id_usuario === f.id_usuario)?.nombre ?? null })),
+      };
+    }
     if (/INSERT INTO auditoria/.test(sql)) {
       const columnas = sql.match(/INSERT INTO auditoria \(([^)]+)\)/)[1].split(',').map((c) => c.trim());
       // fecha_evento la pone la BD por defecto; detalle es JSONB, asi que se guarda ya interpretado.
