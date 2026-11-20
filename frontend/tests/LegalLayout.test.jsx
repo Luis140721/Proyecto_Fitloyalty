@@ -37,7 +37,7 @@ describe('LegalLayout', () => {
     // Act
     abrirMarco();
 
-    // Assert
+    // Assert: sin subtitulo no hay texto que buscar, asi que se mira que su parrafo no exista
     expect(screen.queryByText(/Última actualización/)).not.toBeInTheDocument();
     expect(document.querySelector('.legal-hero__lead')).toBeNull();
   });
