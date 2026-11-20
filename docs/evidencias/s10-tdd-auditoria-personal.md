@@ -33,20 +33,30 @@ Se marca cada caso al terminar su ciclo. Los casos que aparezcan en el camino se
 
 **Servicio** (`backend/src/lib/auditoria-personal.js`, función pura `cambiosDeCuenta(antes, despues)`):
 
-- [ ] desactivar → `{ eventos: ['DESACTIVADA'], antes: { activo: true }, despues: { activo: false } }`
-- [ ] reactivar → `REACTIVADA`
-- [ ] cambio de rol → `ROL_CAMBIADO` con el rol de antes y el de después
-- [ ] sin cambios → `null`
-- [ ] cambio de nombre → `NOMBRE_CAMBIADO`; varios cambios a la vez → todos los eventos en una sola entrada
+- [x] varios cambios a la vez → todos los eventos en una sola entrada (ciclo 4)
+- [x] cambio de nombre → `NOMBRE_CAMBIADO` (ciclo 5)
+- [x] sin cambios → `null` (lo cubre el resguardo «sin cambio real» del endpoint)
 
 **Endpoint** (`PATCH /api/admin/staff/:id` y `GET /api/admin/staff/:id/auditoria`, con la BD falsa `backend/tests/staff-bd-falsa.js`):
 
-- [ ] el PATCH que desactiva escribe la fila con el responsable, el gimnasio y el detalle
-- [ ] un PATCH sin cambio real no escribe fila
-- [ ] un PATCH rechazado (403) no escribe fila
-- [ ] si falla la auditoría: 503 y la cuenta queda como estaba
-- [ ] `GET …/auditoria`: el historial, el más reciente primero, con el nombre del responsable
-- [ ] `GET …/auditoria` de una cuenta de otro gimnasio: 404
+- [x] el PATCH que desactiva escribe la fila con el responsable, el gimnasio y el detalle (ciclo 1)
+- [x] reactivar → `REACTIVADA` (ciclo 2)
+- [x] cambio de rol → `ROL_CAMBIADO` con el rol de antes y el de después (ciclo 3)
+- [x] el PATCH que cambia el nombre deja `NOMBRE_CAMBIADO` (ciclo 6)
+- [x] si falla la auditoría: 503 y la cuenta queda como estaba (ciclo 7)
+- [x] `GET …/auditoria`: el historial, el más reciente primero, con el nombre del responsable (ciclo 8)
+- [x] `GET …/auditoria` de una cuenta de otro gimnasio: 404 (ciclo 9)
+- [x] un PATCH rechazado (403) o sin cambio real no escribe fila (resguardo: ya pasaba al escribirlo)
+
+**Casos que aparecieron en el camino:**
+
+- [x] `GET …/auditoria` solo para admin y con el periodo de prueba vigente: 403 y 402 (ciclo 10)
+- [x] `GET …/auditoria` con la BD caída: 503 (ciclo 11)
+- [x] el rol de antes de un entrenador (`id_rol` 3) salía vacío, porque `ID_ROL` no lo tiene (ciclo 12)
+- [ ] **Incidencia:** el orden del historial lo decide el `ORDER BY` del SQL, y la BD falsa ordena por su cuenta. El mutante que invierte el orden sobrevive; lo cubre la capa BD.
+- [ ] **Incidencia:** `GET …/auditoria` con un id no numérico responde 404 (la cuenta `NaN` no existe), no 400 como el PATCH. Queda así a propósito.
+
+Los criterios 1 a 8 tienen al menos un test cada uno.
 
 ## Reparto por capa
 
