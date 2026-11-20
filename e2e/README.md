@@ -16,6 +16,8 @@ Prueban la app completa desde el navegador. `pnpm test` levanta el backend real 
 - Los archivos que necesitan la sesión la cargan con `test.use({ storageState: SESION })` (`tests/support/entorno.js`). Los del login y el registro no la cargan: prueban justamente eso.
 - Los datos de cada test se crean por API con el fixture `request` y valores únicos (`tests/support/datos.js`): los tests corren en paralelo sobre el mismo gimnasio y la BD conserva lo de corridas anteriores. Por la UI solo va lo que el test prueba.
 - `tests/support/checkin-page.js` y `tests/support/alta-miembro-page.js` son los objetos de página del check-in y del alta de miembros (locators y pasos, sin aserciones). `tests/support/red.js` retrasa o retiene las respuestas de una ruta y cuenta peticiones.
+- Las ayudas de `datos.js` mandan `Connection: close`: el `request` de Playwright reutiliza la conexión y el backend la cierra a los 5 s sin uso, y una llamada que sale justo entonces termina en «socket hang up».
+- `tests/support/bd.js` abre una transacción en la BD de pruebas que retiene los INSERT de miembros de un gimnasio (bloquea su fila con `FOR UPDATE`). Lo usa el test de las altas simultáneas para que las dos peticiones lleguen al INSERT a la vez, sin depender de la velocidad del equipo. Usa el `pg` del backend y la misma guardia de la config.
 
 ## Requisitos
 
