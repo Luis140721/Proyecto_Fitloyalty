@@ -26,6 +26,7 @@ const { generateToken, hashToken } = require('../lib/invitations');
 const { z } = require('zod');
 const { formatZodError } = require('../lib/validators');
 const { sqlIdDueno } = require('../lib/auth-helpers');
+const { cambiosDeCuenta } = require('../lib/auditoria-personal');
 
 const router = express.Router();
 
@@ -464,19 +465,17 @@ router.patch(
     }
     if (!actualizado) throw new AppError(404, 'Usuario no encontrado en este gimnasio.', 'STAFF_NOT_FOUND');
 
-    // HU-04, criterio 4: desactivar, reactivar y cambiar el rol quedan en auditoria con el responsable.
-    const reactiva = activo === true && !actual.activo;
-    const cambiaRol = rol !== undefined && ID_ROL[rol] !== actual.id_rol;
-    if (desactiva || reactiva || cambiaRol) {
-      const rolAntes = Object.keys(ID_ROL).find((k) => ID_ROL[k] === actual.id_rol);
+    // HU-04, criterio 4: el cambio queda en auditoria con el responsable.
+    const rolAntes = Object.keys(ID_ROL).find((k) => ID_ROL[k] === actual.id_rol);
+    const detalle = cambiosDeCuenta(
+      { activo: actual.activo, rol: rolAntes },
+      { activo: activo ?? actual.activo, rol: rol ?? rolAntes }
+    );
+    if (detalle) {
       await pool.query(
         `INSERT INTO auditoria (id_gimnasio, tabla_afectada, id_registro, accion, id_usuario, detalle)
          VALUES ($1, $2, $3, $4, $5, $6)`,
-        [gymId, 'usuario', id, 'UPDATE', req.user.id, JSON.stringify(desactiva
-          ? { eventos: ['DESACTIVADA'], antes: { activo: true }, despues: { activo: false } }
-          : reactiva
-            ? { eventos: ['REACTIVADA'], antes: { activo: false }, despues: { activo: true } }
-            : { eventos: ['ROL_CAMBIADO'], antes: { rol: rolAntes }, despues: { rol } })]
+        [gymId, 'usuario', id, 'UPDATE', req.user.id, JSON.stringify(detalle)]
       );
     }
 
