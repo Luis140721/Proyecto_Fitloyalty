@@ -58,6 +58,19 @@ function idDeMiembro(texto) {
   return Number(texto);
 }
 
+// La BD no responde: un error de red de Node, una de las clases de conexion de
+// PostgreSQL (08, 57P01 a 57P03 y 53300) o lo que pg lanza sin codigo cuando se
+// corta la conexion o el pool no la consigue a tiempo. Solo eso es 503 "intenta
+// de nuevo"; cualquier otro error (un dato, una columna, un fallo del codigo) es
+// real y sigue al errorHandler (500).
+const CODIGOS_DE_RED = new Set(['ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT', 'EPIPE', 'ENOTFOUND', 'EHOSTUNREACH', 'ENETUNREACH', 'EAI_AGAIN']);
+const PG_SIN_CONEXION = /Connection terminated|timeout exceeded when trying to connect|Client has encountered a connection error/i;
+function esErrorDeConexion(err) {
+  const codigo = err && err.code;
+  if (codigo) return CODIGOS_DE_RED.has(codigo) || /^08/.test(codigo) || /^57P0[1-3]$/.test(codigo) || codigo === '53300';
+  return PG_SIN_CONEXION.test((err && err.message) || '');
+}
+
 // Clave secreta para cifrar QR (en producción debería estar en variables de entorno)
 const QR_ENCRYPTION_KEY = process.env.QR_ENCRYPTION_KEY || 'FitLoyalty2024SecretKey';
 
@@ -829,6 +842,7 @@ router.get(
       );
       return res.json({ plan: rows[0] || null, congelaciones });
     } catch (err) {
+      if (!esErrorDeConexion(err)) throw err;
       console.error('[GET /admin/miembros/:id/plan] Error:', err.message);
       throw new AppError(503, 'No pudimos cargar el plan. Intenta de nuevo.', 'DB_UNREACHABLE');
     }
@@ -1048,7 +1062,7 @@ router.put(
         plan = rows[0];
       }
     } catch (err) {
-      if (err instanceof AppError) throw err;
+      if (err instanceof AppError || !esErrorDeConexion(err)) throw err;
       console.error('[PUT /admin/miembros/:id/plan] Error:', err.message);
       throw new AppError(503, 'No pudimos guardar el plan. Intenta de nuevo.', 'DB_UNREACHABLE');
     }
