@@ -5,8 +5,8 @@ import { crearGimnasio, documentoUnico, enviarAlta, miembrosConDocumento, nombre
 import { SESION } from './support/entorno.js';
 import { RUTA_MIEMBROS, peticionesA, retenerRespuestas, retrasarRespuestas } from './support/red.js';
 
-// Defectos de tiempos del alta de miembro (Parte 3 de la semana 7, parte de
-// Daniel). Con el backend local todo responde en milisegundos, asi que la red
+// Defectos de tiempos del alta de miembro (Parte 3 de la semana 7). Con el
+// backend local todo responde en milisegundos, asi que la red
 // lenta se provoca con page.route, reteniendo o retrasando respuestas: sin eso
 // estos tests pasarian aunque el defecto existiera.
 test.use({ storageState: SESION });
@@ -82,9 +82,9 @@ test.describe('doble envio', () => {
   // veces llegaban una detras de otra y el test.fail() pasaba, lo que hace fallar
   // la suite. Por eso la BD retiene los INSERT de un gimnasio propio hasta que las
   // dos peticiones estan esperando (una condicion, no un tiempo) y entonces las
-  // suelta. Queda como fallo esperado hasta que se corrija la incidencia.
+  // suelta. Queda como fallo esperado hasta que se corrija la incidencia #87.
   test.fail('should keep a single member when two requests create the same document at the same time', {
-    annotation: { type: 'issue', description: 'Incidencia por crear: texto en el PR (carrera en POST /api/admin/miembros)' },
+    annotation: { type: 'issue', description: 'https://github.com/Luis140721/Proyecto_Fitloyalty/issues/87' },
   }, async ({ request }) => {
     // Arrange: un gimnasio solo para este test, con sus altas retenidas antes del INSERT
     const gimnasio = await crearGimnasio(request);

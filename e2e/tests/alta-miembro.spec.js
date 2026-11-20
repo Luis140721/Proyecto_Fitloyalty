@@ -4,7 +4,7 @@ import { crearMiembro, documentoUnico, miembrosConDocumento, nombreUnico } from 
 import { SESION } from './support/entorno.js';
 
 // Alta de un miembro por el asistente de 5 pasos de /admin/miembros (flujo
-// critico de Daniel), contra el backend real y la BD de pruebas. La sesion del
+// critico), contra el backend real y la BD de pruebas. La sesion del
 // dueno es la que guardo auth.setup.js, asi que el test no pasa por el login ni
 // simula el API: si el POST /api/admin/miembros se rompe, estos tests lo ven.
 // Lo que el test necesita de antes (un miembro con ese documento) se crea por API.

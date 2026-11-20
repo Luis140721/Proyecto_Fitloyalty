@@ -4,8 +4,8 @@ import { crearMiembro, documentoUnico, nombreUnico } from './support/datos.js';
 import { SESION } from './support/entorno.js';
 import { RUTA_MIEMBROS } from './support/red.js';
 
-// Semana 5, capa E2E (parte de Daniel, cubierta por Luis): estados de la lista y
-// del alta de miembros que el backend real no da cuando uno quiere. Con
+// Semana 5, capa E2E: estados de la lista y del alta de miembros que el
+// backend real no da cuando uno quiere. Con
 // page.route se reemplaza SOLO /api/admin/miembros; la sesion (auth.setup.js),
 // /auth/me y la configuracion del gimnasio siguen yendo al backend real.
 //

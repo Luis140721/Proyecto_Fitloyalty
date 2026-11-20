@@ -7,7 +7,7 @@ Prueban la app completa desde el navegador. `pnpm test` levanta el backend real 
 - `tests/checkin.spec.js`: check-in de un miembro por documento (plan vigente, vencido, congelado y documento que no existe). Backend real y BD de pruebas.
 - `tests/checkin-tiempos.spec.js`: defectos de tiempos del check-in (doble envío y red lenta), con respuestas retrasadas por `page.route`.
 - `tests/alta-miembro.spec.js`: alta de un miembro con el asistente de 5 pasos (caso feliz, documento repetido y correo que rechaza el servidor). Backend real y BD de pruebas.
-- `tests/alta-miembro-tiempos.spec.js`: defectos de tiempos del alta (doble clic en «Crear miembro» y en «Siguiente →», dos altas simultáneas con el mismo documento y red lenta). El de las altas simultáneas está marcado con `test.fail()` mientras siga abierta su incidencia.
+- `tests/alta-miembro-tiempos.spec.js`: defectos de tiempos del alta (doble clic en «Crear miembro» y en «Siguiente →», dos altas simultáneas con el mismo documento y red lenta). El de las altas simultáneas está marcado con `test.fail()` mientras siga abierta su incidencia, la [#87](https://github.com/Luis140721/Proyecto_Fitloyalty/issues/87).
 - `tests/miembros-api-simulada.spec.js`: estados de la lista y del alta que el backend real no da cuando uno quiere (API caído, lista vacía, error de validación). Simula solo `/api/admin/miembros` con `page.route`; cada test anota qué doble usa.
 
 ## Sesión y datos

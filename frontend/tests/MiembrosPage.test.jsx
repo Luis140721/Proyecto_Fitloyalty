@@ -272,7 +272,7 @@ describe('MiembrosPage: alta con el asistente de 5 pasos', () => {
   });
 });
 
-describe('MiembrosPage: tiempos (semana 7, parte de Daniel)', () => {
+describe('MiembrosPage: tiempos (semana 7)', () => {
   test('should keep the new member in the list when the first load answers after the reload of the alta', async () => {
     // Arrange: la carga inicial tarda; la recarga despues del alta ya trae a Sofia
     const SOFIA = { id_miembro: 3, nombre: 'Sofía Gómez', documento: '1033444555', telefono: '3201112233', codigo_qr: 'QR-SOFIA', activo: true };
