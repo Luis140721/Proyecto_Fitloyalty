@@ -8,12 +8,14 @@
  * banner de errores es el real.
  *
  * Se llama AuthProvider.test.jsx para no chocar con AuthContext.test.jsx de la
- * semana 8 (PR #78): alla estan el 403, el 404 y el fallo de red de /auth/me, y
- * aqui no se repiten.
+ * semana 8 (PR #78), y no repite lo que ese archivo prueba: el 403, el 404 y el
+ * fallo de red de /auth/me, el rol desde rol_nombre (ADMINISTRADOR,
+ * RECEPCIONISTA, ENTRENADOR o vacio), la inactividad y el token vencido al
+ * abrir, los avisos de cuenta desactivada y de sesion expirada, salir y entrar.
  */
 import { describe, expect, test, vi, beforeEach, afterEach } from 'vitest';
 import { useState } from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { AuthProvider, useAuth } from '../src/context/AuthContext';
@@ -90,38 +92,19 @@ describe('AuthProvider: al abrir la app', () => {
     expect(mockGet).not.toHaveBeenCalled();
   });
 
-  test.each([
-    ['ADMINISTRADOR', 'admin'],
-    ['recepcionista', 'receptionist'],
-    ['ENTRENADOR', 'trainer'],
-    ['', 'receptionist'],
-    ['coach', 'coach'],
-  ])('should normalize the role "%s" of /auth/me to %s when the saved token is still valid', async (rol, normalizado) => {
-    // Arrange
+  test('should keep a role the front does not know as it comes when /auth/me sends it in rol', async () => {
+    // Arrange: el #78 prueba los roles conocidos, que llegan en rol_nombre
     localStorage.setItem(TOKEN_KEY, TOKEN_VIGENTE);
-    mockGet = vi.fn(async () => ({ data: { user: { ...ANA, role: undefined, rol }, gym: GIMNASIO } }));
+    mockGet = vi.fn(async () => ({ data: { user: { ...ANA, role: undefined, rol: 'coach' }, gym: GIMNASIO } }));
 
     // Act
     abrirApp();
 
     // Assert
-    expect(await sesionAbierta(`Sesión de Ana Pérez como ${normalizado} en Gimnasio Central`)).toBeInTheDocument();
+    expect(await sesionAbierta('Sesión de Ana Pérez como coach en Gimnasio Central')).toBeInTheDocument();
     expect(mockGet).toHaveBeenCalledWith('/auth/me');
   });
 
-  test('should read the role from rol_nombre when /auth/me sends neither role nor rol', async () => {
-    // Arrange
-    localStorage.setItem(TOKEN_KEY, TOKEN_VIGENTE);
-    mockGet = vi.fn(async () => ({ data: { user: { ...ANA, role: undefined, rol_nombre: 'ADMINISTRADOR' }, gym: GIMNASIO } }));
-
-    // Act
-    abrirApp();
-
-    // Assert: sin rol_nombre quedaria como receptionist
-    expect(await sesionAbierta('Sesión de Ana Pérez como admin en Gimnasio Central')).toBeInTheDocument();
-  });
-
-  // 403, 404 y el fallo de red estan en AuthContext.test.jsx (semana 8); aqui solo el 401.
   test('should drop the saved token when /auth/me answers 401', async () => {
     // Arrange
     localStorage.setItem(TOKEN_KEY, TOKEN_VIGENTE);
@@ -133,21 +116,6 @@ describe('AuthProvider: al abrir la app', () => {
     // Assert
     expect(await screen.findByText('Sin sesión')).toBeInTheDocument();
     expect(localStorage.getItem(TOKEN_KEY)).toBeNull();
-  });
-
-  test('should close the session with the inactivity notice when the last activity is older than 30 minutes', async () => {
-    // Arrange: cerro el navegador hace 31 minutos con la sesion abierta
-    localStorage.setItem(TOKEN_KEY, TOKEN_VIGENTE);
-    localStorage.setItem(ACTIVIDAD_KEY, String(AHORA.getTime() - 31 * MINUTO));
-
-    // Act
-    abrirApp();
-
-    // Assert
-    expect(await screen.findByRole('alert')).toHaveTextContent('Tu sesión se cerró tras 30 minutos sin actividad. Inicia sesión de nuevo.');
-    expect(screen.getByText('Sin sesión')).toBeInTheDocument();
-    expect(localStorage.getItem(TOKEN_KEY)).toBeNull();
-    expect(localStorage.getItem(ACTIVIDAD_KEY)).toBeNull();
   });
 
   test('should keep the session when the last activity is less than 30 minutes old', async () => {
@@ -163,22 +131,10 @@ describe('AuthProvider: al abrir la app', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
-  test('should close the session as expired when the saved token is past its exp', async () => {
-    // Arrange
-    localStorage.setItem(TOKEN_KEY, jwt({ sub: 1, exp: Math.floor(AHORA.getTime() / 1000) - 60 }));
-
-    // Act
-    abrirApp();
-
-    // Assert
-    expect(await screen.findByRole('alert')).toHaveTextContent('Tu sesión expiró. Inicia sesión de nuevo.');
-    expect(screen.getByText('Sin sesión')).toBeInTheDocument();
-  });
 });
 
 describe('AuthProvider: entrar y salir', () => {
   test.each([
-    ['Entrar', '/auth/login', { email: 'ana@gym.co', password: 'clave1234' }],
     ['Registrar gimnasio', '/auth/signup', { gymName: 'Gimnasio Central', ownerEmail: 'ana@gym.co' }],
     ['Aceptar invitación', '/auth/accept-invite', { token: 'token-invitacion', password: 'clave1234' }],
   ])('should save the token, start the activity clock and show the user when %s succeeds', async (boton, ruta, cuerpo) => {
@@ -209,23 +165,6 @@ describe('AuthProvider: entrar y salir', () => {
     expect(await screen.findByText('No se pudo: Credenciales incorrectas')).toBeInTheDocument();
     expect(screen.getByText('Sin sesión')).toBeInTheDocument();
     expect(localStorage.getItem(TOKEN_KEY)).toBeNull();
-  });
-
-  test('should tell the server and close the session without a notice when the person signs out', async () => {
-    // Arrange
-    const { user } = abrirApp();
-    await user.click(await screen.findByRole('button', { name: 'Entrar' }));
-    await sesionAbierta();
-    mockPost = vi.fn(async () => ({ data: { ok: true } }));
-
-    // Act
-    await user.click(screen.getByRole('button', { name: 'Salir' }));
-
-    // Assert
-    expect(await screen.findByText('Sin sesión')).toBeInTheDocument();
-    expect(mockPost).toHaveBeenCalledWith('/auth/logout');
-    expect(localStorage.getItem(TOKEN_KEY)).toBeNull();
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
   test('should close the session and forget the activity even when POST /auth/logout fails', async () => {
@@ -287,21 +226,6 @@ describe('AuthProvider: con la sesion abierta', () => {
     await sesionAbierta();
     return pantalla;
   }
-
-  test.each([
-    ['ACCOUNT_DISABLED', 'Tu cuenta fue desactivada o cambió de gimnasio. Habla con el administrador.'],
-    [null, 'Tu sesión expiró. Inicia sesión de nuevo.'],
-  ])('should close the session with the right notice when an API call reports the session ended with code %s', async (code, aviso) => {
-    // Arrange
-    await conSesion();
-
-    // Act: lo que dispara api.js cuando una peticion con el token vigente vuelve 401
-    fireEvent(window, new CustomEvent('fitloyalty:sesion-expirada', { detail: { code } }));
-
-    // Assert
-    expect(await screen.findByRole('alert')).toHaveTextContent(aviso);
-    expect(screen.getByText('Sin sesión')).toBeInTheDocument();
-  });
 
   test('should close the session when 30 minutes pass without activity and the tab becomes visible again', async () => {
     // Arrange
