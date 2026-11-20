@@ -74,17 +74,20 @@ function decryptQrCode(encrypted) {
 
 const createSchema = z.object({
   // Datos personales
-  nombre:     z.string().min(2, 'El nombre es requerido'),
+  // Los .max() son los largos de las columnas (VARCHAR) de miembro: con uno mas
+  // la BD rechaza el INSERT y el API respondia 500 DB_UNREACHABLE (hallazgo de
+  // la integracion de la semana 6, restricciones-miembro.test.js).
+  nombre:     z.string().min(2, 'El nombre es requerido').max(100, 'El nombre admite maximo 100 caracteres'),
   tipo_documento: z.enum(['CC', 'TI', 'NIT', 'CE', 'PP']).default('CC'),
-  documento: z.string().min(4, 'El documento es requerido'),
+  documento: z.string().min(4, 'El documento es requerido').max(20, 'El documento admite maximo 20 caracteres'),
   fecha_nacimiento: z.string().optional(),
   // El select de genero puede quedar en "Seleccionar...", que llega como
   // cadena vacia: se traduce a "sin dato" en vez de romper la validacion.
   genero: z.enum(['Masculino', 'Femenino', 'Otro', 'Prefiero no decir'])
     .optional()
     .or(z.literal('').transform(() => undefined)),
-  telefono:  z.string().min(7, 'El telefono es requerido'),
-  email:     z.string().email().optional().or(z.literal('').transform(() => undefined)),
+  telefono:  z.string().min(7, 'El telefono es requerido').max(20, 'El telefono admite maximo 20 caracteres'),
+  email:     z.string().email().max(150).optional().or(z.literal('').transform(() => undefined)),
   direccion: z.string().optional(),
   // Salud y emergencia
   contacto_emergencia: z.string().optional(),
@@ -140,10 +143,10 @@ const vacioANull = (schema) =>
   z.literal('').transform(() => null).or(schema.optional()).nullable();
 
 const updateSchema = z.object({
-  nombre:    z.string().min(2).optional(),
-  documento: z.string().min(3).optional(),
-  telefono:  z.string().min(7).optional(),
-  email:     z.string().email().optional().or(z.literal('').transform(() => null)).nullable(),
+  nombre:    z.string().min(2).max(100).optional(),
+  documento: z.string().min(3).max(20).optional(),
+  telefono:  z.string().min(7).max(20).optional(),
+  email:     z.string().email().max(150).optional().or(z.literal('').transform(() => null)).nullable(),
   activo:    z.boolean().optional(),
   qr_imagen: z.string().optional(),
 
