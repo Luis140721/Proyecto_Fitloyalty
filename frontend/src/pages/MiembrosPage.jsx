@@ -1556,6 +1556,13 @@ export default function MiembrosPage() {
                   type="submit"
                   className="btn btn-primary"
                   disabled={submitting}
+                  /* El segundo clic de un doble clic en "Siguiente →" del paso 4
+                     puede caer aqui: con la pagina desplazada hasta el final, el
+                     paso 5 es mas bajo, el navegador sube el desplazamiento y este
+                     boton queda justo bajo el puntero. event.detail cuenta los
+                     clics seguidos (1 en un clic normal, 0 con el teclado), asi
+                     que solo se ignora el segundo de un doble clic. */
+                  onClick={(e) => { if (e.detail > 1) e.preventDefault(); }}
                 >
                   {submitting ? 'Creando miembro...' : 'Crear miembro'}
                 </button>
