@@ -26,7 +26,8 @@ vi.mock('../src/api', () => ({
     delete: (...a) => mockDelete(...a),
   },
 }));
-vi.mock('../src/context/AuthContext', () => ({ useAuth: () => ({ user: { id: 1, role: 'admin' } }) }));
+let rol;
+vi.mock('../src/context/AuthContext', () => ({ useAuth: () => ({ user: { id: 1, role: rol } }) }));
 vi.mock('qrcode', () => ({ default: { toDataURL: async () => 'data:image/png;base64,UVI=' } }));
 
 // Fila de la lista y registro completo de GET /api/admin/miembros/:id.
@@ -90,6 +91,7 @@ afterAll(() => {
 });
 
 beforeEach(() => {
+  rol = 'admin';
   plan = { ...PLAN };
   congelaciones = [];
   mockGet = apiQueResponde();
@@ -321,6 +323,61 @@ describe('MiembrosPage: el plan y el cobro', () => {
     expect(await within(ficha()).findByText('Plan actualizado.')).toBeInTheDocument();
     const nuevas = mockGet.mock.calls.slice(llamadasAntes).map(([u]) => u);
     expect(nuevas).toEqual(expect.arrayContaining(['/admin/miembros/1/plan', '/admin/miembros']));
+  });
+});
+
+describe('MiembrosPage: los errores de la ficha', () => {
+  test('should explain that the plan could not be loaded and hide the plan editor', async () => {
+    // Arrange
+    const getNormal = apiQueResponde();
+    mockGet = vi.fn(async (url) => {
+      if (url === '/admin/miembros/1/plan') throw { status: 503, message: 'Sin base' };
+      return getNormal(url);
+    });
+    const { user } = renderWithProviders(<MiembrosPage />, { route: '/admin/miembros' });
+
+    // Act
+    await user.click(await screen.findByRole('row', { name: /Ana Pérez/ }));
+
+    // Assert
+    expect(await within(ficha()).findByText('No pudimos cargar el plan de este miembro.')).toBeInTheDocument();
+    expect(within(ficha()).queryByRole('heading', { name: 'Plan y cobro' })).not.toBeInTheDocument();
+  });
+
+  test('should show the API error when the plan cannot be saved', async () => {
+    // Arrange
+    mockPut = vi.fn(async () => { throw { status: 400, code: 'VALIDATION_ERROR', message: 'La fecha de fin no es valida.' }; });
+    const { user } = await abrirFichaDeAna();
+
+    // Act
+    await user.click(within(ficha()).getByRole('button', { name: 'Guardar plan' }));
+
+    // Assert
+    expect(await within(ficha()).findByText('La fecha de fin no es valida.')).toBeInTheDocument();
+  });
+
+  test('should show the API error when the contract cannot be sent', async () => {
+    // Arrange
+    mockPost = vi.fn(async () => { throw { status: 503, code: 'WHATSAPP_DOWN', message: 'WhatsApp no responde.' }; });
+    const { user } = await abrirFichaDeAna();
+
+    // Act
+    await user.click(within(ficha()).getByRole('button', { name: 'Enviar contrato' }));
+
+    // Assert
+    expect(await within(ficha()).findByRole('alert')).toHaveTextContent('WhatsApp no responde.');
+  });
+
+  test('should tell the reception that only the admin can freeze the membership', async () => {
+    // Arrange
+    rol = 'receptionist';
+
+    // Act
+    await abrirFichaDeAna();
+
+    // Assert
+    expect(within(ficha()).getByText('Solo el administrador puede congelar o descongelar la membresía.')).toBeInTheDocument();
+    expect(within(ficha()).queryByRole('button', { name: 'Congelar membresía' })).not.toBeInTheDocument();
   });
 });
 

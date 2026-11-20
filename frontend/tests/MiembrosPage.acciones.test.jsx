@@ -225,6 +225,109 @@ describe('MiembrosPage: el alta con todos los datos', () => {
   });
 });
 
+describe('MiembrosPage: las reglas del asistente', () => {
+  test('should not accept a birth date in the future', async () => {
+    // Arrange
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 10, 19, 10, 0, 0));
+    const { user } = await abrirAlta();
+    await user.type(campo(/^Nombre completo/), 'Sofía Gómez');
+    await user.type(campo(/^Número documento/), '1033444555');
+    await user.type(campo(/^Teléfono \/ WhatsApp/), '3201112233');
+    await user.type(campo('Fecha nacimiento'), '01012030');
+
+    // Act
+    await user.click(siguiente());
+
+    // Assert
+    expect(screen.getByText('La fecha de nacimiento no puede ser futura.')).toBeInTheDocument();
+    expect(screen.getByText('Paso 1 de 5')).toBeInTheDocument();
+  });
+
+  test('should explain that the emergency phone needs 10 digits and stay on step 2', async () => {
+    // Arrange
+    const { user } = await abrirAlta();
+    await user.type(campo(/^Nombre completo/), 'Sofía Gómez');
+    await user.type(campo(/^Número documento/), '1033444555');
+    await user.type(campo(/^Teléfono \/ WhatsApp/), '3201112233');
+    await user.click(siguiente());
+    await user.type(campo('Teléfono emergencia'), '310999887');
+
+    // Act
+    await user.click(siguiente());
+
+    // Assert
+    expect(screen.getByText('Debe tener 10 dígitos (escribiste 9).')).toBeInTheDocument();
+    expect(campo(/^Teléfono emergencia/)).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByText('Paso 2 de 5')).toBeInTheDocument();
+  });
+
+  test('should not let the payment of today be higher than the plan and clear the notice when it is fixed', async () => {
+    // Arrange
+    const { user } = await abrirAlta();
+    await user.type(campo(/^Nombre completo/), 'Sofía Gómez');
+    await user.type(campo(/^Número documento/), '1033444555');
+    await user.type(campo(/^Teléfono \/ WhatsApp/), '3201112233');
+    await user.click(siguiente());
+    await user.click(siguiente());
+    await user.clear(campo(/^Valor total del plan/));
+    await user.type(campo(/^Valor total del plan/), '90000');
+    await user.type(campo(/^Valor pagado hoy/), '100000');
+
+    // Act y Assert: el plan vale 90 000
+    await user.click(siguiente());
+    expect(screen.getByText('Lo pagado no puede superar el valor del plan.')).toBeInTheDocument();
+    expect(screen.getByText('Paso 3 de 5')).toBeInTheDocument();
+
+    // Act y Assert: al corregir se va el error de ese campo
+    await user.clear(campo(/^Valor pagado hoy/));
+    await user.type(campo(/^Valor pagado hoy/), '90000');
+    expect(screen.queryByText('Lo pagado no puede superar el valor del plan.')).not.toBeInTheDocument();
+    await user.click(siguiente());
+    expect(screen.getByText('Paso 4 de 5')).toBeInTheDocument();
+  });
+
+  test('should still open the wizard and create the member when the gym prices and the QR image fail', async () => {
+    // Arrange: sin configuracion de precios y sin poder guardar la imagen del QR
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const getNormal = apiQueResponde();
+    mockGet = vi.fn(async (url, opciones) => {
+      if (url === '/admin/config') throw { status: 503, message: 'Sin configuracion' };
+      return getNormal(url, opciones);
+    });
+    mockPut = vi.fn(async () => { throw { status: 413, message: 'Imagen muy grande' }; });
+
+    // Act
+    await crearASofia();
+
+    // Assert
+    expect(screen.getByRole('status')).toHaveTextContent('Miembro creado exitosamente.');
+    expect(console.error).toHaveBeenCalledWith('No se pudo cargar la configuración del gimnasio:', expect.anything());
+    expect(console.error).toHaveBeenCalledWith('No se pudo guardar la imagen del QR:', expect.anything());
+  });
+});
+
+describe('MiembrosPage: los filtros', () => {
+  test.each([
+    ['Vence pronto', { vencePronto: true }],
+    ['En riesgo', { enRiesgo: true }],
+    ['Congelado', { congelada: true }],
+  ])('should show only the members of the tab %s', async (pestana, marca) => {
+    // Arrange
+    miembros = [ANA, { ...JULIO, nombre: 'Julio Mora', activo: true, ...marca }];
+    const { user } = abrirMiembros();
+    await screen.findByRole('row', { name: /Julio Mora/ });
+
+    // Act
+    await user.click(screen.getByRole('tab', { name: new RegExp(`^${pestana}`) }));
+
+    // Assert
+    expect(screen.getByRole('tab', { name: new RegExp(`^${pestana}`) })).toHaveAttribute('aria-selected', 'true');
+    expect(filaDe('Julio Mora')).toBeInTheDocument();
+    expect(screen.queryByRole('row', { name: /Ana Pérez/ })).not.toBeInTheDocument();
+  });
+});
+
 describe('MiembrosPage: el miembro recien creado', () => {
   test('should open WhatsApp with the phone and a welcome message from the notice of the new member', async () => {
     // Arrange y Act
