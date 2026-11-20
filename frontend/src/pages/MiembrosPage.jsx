@@ -96,6 +96,10 @@ function CampoFecha({ value, onChange, placeholder, anosAtras = 100, ...props })
       }}
       value={value}
       dateFormat="dd/MM/yyyy"
+      /* Sin esto, al teclear el primer digito react-datepicker leia "1" como
+         el dia 1 del mes actual y el campo se quedaba en 01/11/2026. Asi solo
+         acepta una fecha escrita completa (DD/MM/AAAA). */
+      strictParsing
       placeholderText={placeholder || 'DD/MM/YYYY'}
       className="field-input"
       showMonthDropdown
