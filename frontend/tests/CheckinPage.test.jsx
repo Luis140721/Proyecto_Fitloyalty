@@ -396,6 +396,30 @@ describe('CheckinPage: tiempos (semana 7)', () => {
     expect(mockPost).toHaveBeenLastCalledWith('/admin/checkin', { metodo: 'QR', codigo: 'QR-ANA' });
   });
 
+  // La guarda de la camara (enviandoRef en el callback de lectura): una lectura
+  // con otro ingreso en camino se descarta sin tocar la memoria del ultimo QR.
+  // Sin ella, el QR de Ana quedaba como "recien leido" y la camara, que lo lee
+  // 10 veces por segundo, lo ignoraba mientras Ana siguiera frente a ella.
+  test('should register the QR read while the previous check-in was on its way once that check-in is done', async () => {
+    // Arrange: el ingreso de Carlos no responde hasta que el test quiera
+    const ingresoCarlos = pendiente();
+    mockPost = vi.fn()
+      .mockImplementationOnce(() => ingresoCarlos.promesa)
+      .mockImplementation(async () => registrado());
+    const { user } = abrirCheckin();
+    await user.click(screen.getByRole('button', { name: 'Activar cámara' }));
+    await act(async () => escaner.leer('QR-CARLOS'));
+
+    // Act: la camara ve el QR de Ana con Carlos en camino, Carlos termina y Ana sigue frente a la camara
+    await act(async () => escaner.leer('QR-ANA'));
+    await act(async () => ingresoCarlos.resolver(registrado()));
+    await aviso();
+    await act(async () => escaner.leer('QR-ANA'));
+
+    // Assert
+    expect(mockPost.mock.calls.map(([, cuerpo]) => cuerpo.codigo)).toEqual(['QR-CARLOS', 'QR-ANA']);
+  });
+
   test('should keep the newest history when the first load answers after the reload of a check-in', async () => {
     // Arrange: la carga inicial tarda; la recarga del ingreso ya trae a Carlos
     const cargaInicial = pendiente();
