@@ -162,4 +162,17 @@ describe('GET /api/admin/staff/:id/auditoria: the history of an account', () => 
       { fecha: T1.toISOString(), responsable: 'Luis Admin', eventos: ['DESACTIVADA'], antes: { activo: true }, despues: { activo: false } },
     ]);
   });
+
+  test('should answer 404 STAFF_NOT_FOUND when the account belongs to another gym', async () => {
+    // Arrange: una cuenta del gimnasio 9 con su propia fila de auditoria
+    mockBd.usuarios.push({ id_usuario: 5, id_gimnasio: 9, nombre: 'Otro Gym', email: 'otro@gym.co', id_rol: 2, activo: false });
+    mockBd.auditoria.push({ id_auditoria: 1, id_gimnasio: 9, tabla_afectada: 'usuario', id_registro: 5, accion: 'UPDATE', id_usuario: 6, detalle: { eventos: ['DESACTIVADA'] }, fecha_evento: T1 });
+
+    // Act
+    const r = await historial(5);
+
+    // Assert
+    expect(r.status).toBe(404);
+    expect(r.body.code).toBe('STAFF_NOT_FOUND');
+  });
 });

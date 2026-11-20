@@ -133,6 +133,9 @@ function crearBdFalsa() {
       bd.invitaciones.find((i) => i.id_invitacion === params[1]).fecha_aceptacion = new Date();
       return { rows: [] };
     }
+    if (/SELECT id_usuario FROM usuario WHERE id_usuario = \$1 AND id_gimnasio = \$2/.test(sql)) {
+      return { rows: bd.usuarios.filter((u) => u.id_usuario === params[0] && u.id_gimnasio === params[1]).map(({ id_usuario }) => ({ id_usuario })) };
+    }
     // Historial de una cuenta: sus filas de auditoria, la mas reciente primero, con el nombre del responsable.
     if (/FROM auditoria a[\s\S]*WHERE a\.tabla_afectada = 'usuario' AND a\.id_registro = \$1 AND a\.id_gimnasio = \$2/.test(sql)) {
       return {
