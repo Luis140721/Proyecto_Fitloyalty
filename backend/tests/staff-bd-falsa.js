@@ -22,6 +22,7 @@ function crearBdFalsa() {
     gimnasios: [{ id_gimnasio: 7, nombre: 'Gym Demo', activo: true, trial_ends_at: null, id_dueno: 1 }],
     usuarios: [{ id_usuario: 1, id_gimnasio: 7, nombre: 'Luis Admin', email: 'luis@gym.co', id_rol: 1, activo: true, fecha_creacion: new Date('2026-01-01T00:00:00Z') }],
     invitaciones: [],
+    auditoria: [],
     esquema: { rol_exists: false, roles_exists: false, has_fecha_creacion: true, has_ultimo_acceso: false, has_rol_column: false },
     fallaCon: null,
   };
@@ -111,6 +112,15 @@ function crearBdFalsa() {
     }
     if (/UPDATE invitacion_staff\s+SET fecha_aceptacion/.test(sql)) {
       bd.invitaciones.find((i) => i.id_invitacion === params[1]).fecha_aceptacion = new Date();
+      return { rows: [] };
+    }
+    if (/INSERT INTO auditoria/.test(sql)) {
+      const columnas = sql.match(/INSERT INTO auditoria \(([^)]+)\)/)[1].split(',').map((c) => c.trim());
+      // fecha_evento la pone la BD por defecto; detalle es JSONB, asi que se guarda ya interpretado.
+      const fila = { id_auditoria: bd.auditoria.length + 1, fecha_evento: new Date() };
+      columnas.forEach((c, n) => { fila[c] = params[n]; });
+      if (typeof fila.detalle === 'string') fila.detalle = JSON.parse(fila.detalle);
+      bd.auditoria.push(fila);
       return { rows: [] };
     }
     throw new Error('Consulta inesperada: ' + sql.trim().slice(0, 60));
