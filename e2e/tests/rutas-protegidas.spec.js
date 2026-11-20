@@ -70,9 +70,9 @@ test('should show the gym panel when the saved session is valid', async ({ page,
   await expect(page.getByText(gymName)).toBeVisible();
 });
 
-// Los dos casos siguientes solo los puede ver el backend: el token tiene la
-// forma de uno bueno y no esta vencido para el reloj del front, o lo esta, pero
-// el front lo descubre recien cuando /api/auth/me responde 401.
+// Los casos siguientes solo los puede ver el backend. El token tiene la forma de
+// uno bueno, y el front lo descarta recien cuando /api/auth/me responde 401: por
+// la firma, porque el usuario ya no existe o porque vencio.
 test('should drop a token with a forged signature and show the login', async ({ page, request }) => {
   // Arrange: los datos de una cuenta real, firmados con otro secreto
   const { token } = await crearCuenta(request);
@@ -84,6 +84,24 @@ test('should drop a token with a forged signature and show the login', async ({ 
   // Assert
   await expect(page).toHaveURL(/\/login$/);
   await expect(page.getByRole('heading', { name: 'Bienvenido de vuelta' })).toBeVisible();
+  expect(await tokenGuardado(page)).toBeNull();
+});
+
+test('should drop the session of a deleted account and say why', async ({ page, request }) => {
+  // Arrange: la cuenta existia al iniciar sesion y se elimina despues
+  const { token } = await crearCuenta(request);
+  const borrado = await request.delete(`${API}/auth/account`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { password: 'clave1234' },
+  });
+  expect(borrado.status(), 'la cuenta debe eliminarse por API').toBe(200);
+
+  // Act: el token sigue bien firmado y vigente, pero su usuario ya no existe
+  await abrirConToken(page, token, '/admin/miembros');
+
+  // Assert
+  await expect(page).toHaveURL(/\/login$/);
+  await expect(page.getByRole('alert')).toContainText('Tu cuenta fue desactivada o cambió de gimnasio');
   expect(await tokenGuardado(page)).toBeNull();
 });
 
