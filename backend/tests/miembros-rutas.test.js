@@ -398,11 +398,12 @@ describe('POST /api/admin/miembros: creating a member', () => {
     expect(insertMiembro()).toBeUndefined();
   });
 
+  // El resto del API responde 503 cuando la BD falla; el INSERT del miembro tambien.
   test.each([
-    ['the member insert fails', /INSERT INTO miembro/, 500],
-    ['the plan insert fails', /INSERT INTO plan_cobro/, 503],
-    ['the duplicate check fails', /SELECT id_miembro FROM miembro/, 503],
-  ])('should answer DB_UNREACHABLE when %s', async (_caso, patron, status) => {
+    ['the member insert fails', /INSERT INTO miembro/],
+    ['the plan insert fails', /INSERT INTO plan_cobro/],
+    ['the duplicate check fails', /SELECT id_miembro FROM miembro/],
+  ])('should answer 503 DB_UNREACHABLE when %s', async (_caso, patron) => {
     // Arrange
     altaSinDuplicados();
     mockReglas.unshift([patron, falla()]);
@@ -411,7 +412,7 @@ describe('POST /api/admin/miembros: creating a member', () => {
     const r = await pedir('post', '/admin/miembros').send(ANA);
 
     // Assert
-    expect(r.status).toBe(status);
+    expect(r.status).toBe(503);
     expect(r.body.code).toBe('DB_UNREACHABLE');
   });
 });
