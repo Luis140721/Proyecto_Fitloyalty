@@ -11,6 +11,8 @@
  *   ctaLabel    {string}  Texto del boton de accion (opcional).
  *   onCta       {func}    Handler del boton. El CTA solo se muestra si
  *                         hay ctaLabel Y onCta.
+ *   ctaIcono    {string}  Icono del boton. Default 'add' (crear algo); por
+ *                         ejemplo 'refresh' para reintentar.
  *   className   {string}  Clases extra.
  *
  * Uso:
@@ -33,6 +35,7 @@ export default function EmptyState({
   descripcion,
   ctaLabel,
   onCta,
+  ctaIcono = 'add',
   className = '',
 }) {
   const clases = ['empty-state', className].filter(Boolean).join(' ');
@@ -46,7 +49,7 @@ export default function EmptyState({
       {descripcion && <p className="empty-state__desc">{descripcion}</p>}
       {ctaLabel && typeof onCta === 'function' && (
         <button type="button" className="btn btn-primary btn-sm empty-state__cta" onClick={onCta}>
-          <span className="material-symbols-outlined icon" aria-hidden="true">add</span>
+          <span className="material-symbols-outlined icon" aria-hidden="true">{ctaIcono}</span>
           {ctaLabel}
         </button>
       )}

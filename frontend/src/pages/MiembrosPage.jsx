@@ -304,6 +304,9 @@ export default function MiembrosPage() {
   const [enviandoContrato, setEnviandoContrato] = useState(false);
   const [editInfo, setEditInfo] = useState('');
   const [error, setError] = useState('');
+  // Por que no se pudo traer la lista. Va aparte de `error` (alta, desactivar...)
+  // para que una carga buena lo quite sin borrar otros avisos.
+  const [errorCarga, setErrorCarga] = useState('');
   const [info, setInfo] = useState('');
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -419,9 +422,10 @@ export default function MiembrosPage() {
       });
       if (carga !== ultimaCargaRef.current) return;
       setItems(data.miembros);
+      setErrorCarga('');
     } catch (err) {
       if (carga !== ultimaCargaRef.current) return;
-      setError(err.message || 'Error al cargar miembros.');
+      setErrorCarga(err.message || 'Error al cargar miembros.');
     } finally {
       if (carga === ultimaCargaRef.current) setLoading(false);
     }
@@ -1013,6 +1017,31 @@ export default function MiembrosPage() {
     desactivados: items.filter(m => !m.activo).length,
   }), [items]);
 
+  /*
+   * Lo que se ve en la tabla y en las tarjetas cuando no hay filas. Si la
+   * ultima carga fallo no se sabe si el gimnasio tiene miembros: antes salia
+   * "Sin miembros que mostrar" con el API caido. Ahora se dice que no se
+   * pudieron cargar y se ofrece reintentar con la misma busqueda y filtro.
+   */
+  const sinFilas = errorCarga ? (
+    <EmptyState
+      icono="cloud_off"
+      titulo="No pudimos cargar los miembros"
+      descripcion="Revisa la conexión y vuelve a intentarlo."
+      ctaLabel="Reintentar"
+      ctaIcono="refresh"
+      onCta={() => load(q, filtro === 'desactivados')}
+    />
+  ) : (
+    <EmptyState
+      icono="group_off"
+      titulo="Sin miembros que mostrar"
+      descripcion="No hay miembros que coincidan con el filtro actual."
+      ctaLabel="Nuevo miembro"
+      onCta={() => setOpen(true)}
+    />
+  );
+
   return (
     <PageTransition>
       <header className="admin-page-head">
@@ -1040,6 +1069,12 @@ export default function MiembrosPage() {
         </div>
       </header>
 
+      {errorCarga && (
+        <div className="alert alert-error anim-scale-in" role="alert">
+          <span className="material-symbols-outlined icon" aria-hidden="true">error</span>
+          <span>{errorCarga}</span>
+        </div>
+      )}
       {error && (
         <div className="alert alert-error anim-scale-in" role="alert">
           <span className="material-symbols-outlined icon" aria-hidden="true">error</span>
@@ -1582,13 +1617,7 @@ export default function MiembrosPage() {
               {!loading && filtrados.length === 0 && (
                 <tr>
                   <td colSpan={6} style={{ padding: 24 }}>
-                    <EmptyState
-                      icono="group_off"
-                      titulo="Sin miembros que mostrar"
-                      descripcion="No hay miembros que coincidan con el filtro actual."
-                      ctaLabel="Nuevo miembro"
-                      onCta={() => setOpen(true)}
-                    />
+                    {sinFilas}
                   </td>
                 </tr>
               )}
@@ -1675,13 +1704,7 @@ export default function MiembrosPage() {
             En escritorio se muestra la tabla original; CSS decide cual se ve. */}
         <div className="miembros-cards">
           {filtrados.length === 0 && !loading && (
-            <EmptyState
-              icono="group_off"
-              titulo="Sin miembros que mostrar"
-              descripcion="No hay miembros que coincidan con el filtro actual."
-              ctaLabel="Nuevo miembro"
-              onCta={() => setOpen(true)}
-            />
+            sinFilas
           )}
           {filtrados.map((m) => {
             const initials = (m.nombre || '?').split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase();
