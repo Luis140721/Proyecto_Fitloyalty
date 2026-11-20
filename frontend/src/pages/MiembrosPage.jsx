@@ -1137,12 +1137,14 @@ export default function MiembrosPage() {
                   <label className="field">
                     <span className="field-label">Teléfono emergencia</span>
                     <input
-                      className="field-input"
+                      className={`field-input${formErrors.telefono_emergencia ? ' field-input--error' : ''}`}
                       value={form.telefono_emergencia}
                       onChange={(e) => handleFormChange('telefono_emergencia', e.target.value)}
                       placeholder="3001234567"
                       inputMode="numeric"
+                      aria-invalid={formErrors.telefono_emergencia ? 'true' : undefined}
                     />
+                    <ErrorCampo msg={formErrors.telefono_emergencia} />
                   </label>
                 </div>
                 <label className="field">
@@ -1215,30 +1217,35 @@ export default function MiembrosPage() {
                       placeholder="Calculada automáticamente"
                       readOnly
                     />
+                    <ErrorCampo msg={formErrors.fecha_fin} />
                   </label>
                   <label className="field">
                     <span className="field-label">Valor total del plan *</span>
                     <input
-                      className="field-input"
+                      className={`field-input${formErrors.valor_total ? ' field-input--error' : ''}`}
                       type="number"
                       required value={form.valor_total}
                       onChange={(e) => handleFormChange('valor_total', e.target.value)}
                       placeholder="0.00"
                       step="0.01"
+                      aria-invalid={formErrors.valor_total ? 'true' : undefined}
                     />
+                    <ErrorCampo msg={formErrors.valor_total} />
                   </label>
                 </div>
                 <div className="auth-form-row">
                   <label className="field">
                     <span className="field-label">Valor pagado hoy</span>
                     <input
-                      className="field-input"
+                      className={`field-input${formErrors.valor_pagado ? ' field-input--error' : ''}`}
                       type="number"
                       value={form.valor_pagado}
                       onChange={(e) => handleFormChange('valor_pagado', e.target.value)}
                       placeholder="0.00"
                       step="0.01"
+                      aria-invalid={formErrors.valor_pagado ? 'true' : undefined}
                     />
+                    <ErrorCampo msg={formErrors.valor_pagado} />
                   </label>
                   <label className="field">
                     <span className="field-label">Estado del pago</span>
