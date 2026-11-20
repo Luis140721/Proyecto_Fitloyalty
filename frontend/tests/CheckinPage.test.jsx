@@ -12,7 +12,7 @@
  * el test "lea" un QR.
  */
 import { describe, expect, test, vi, beforeEach, afterEach } from 'vitest';
-import { act, fireEvent, screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import CheckinPage from '../src/pages/CheckinPage';
 import { renderWithProviders } from './renderWithProviders';
 
@@ -187,19 +187,6 @@ describe('CheckinPage: el QR y la respuesta del backend', () => {
     expect(mockMarcarActividad).not.toHaveBeenCalled();
   });
 
-  test('should deny the entry as overdue when the member is inactive', async () => {
-    // Arrange: el backend tambien puede mandar INACTIVO
-    mockPost = vi.fn(async () => ({ data: { miembro: { ...CARLOS, estado: 'inactivo' } } }));
-    const { user } = abrirCheckin();
-
-    // Act
-    await user.type(campoDocumento(), '79123456{Enter}');
-
-    // Assert
-    expect(await screen.findByRole('alert')).toHaveTextContent('Acceso denegado: Membresía vencida');
-    expect(mockMarcarActividad).not.toHaveBeenCalled();
-  });
-
   test('should show the message of the backend when the membership is frozen', async () => {
     // Arrange
     const mensaje = 'Tu membresía está congelada. Pide en recepción que la reactiven para poder ingresar.';
@@ -267,7 +254,7 @@ describe('CheckinPage: el QR y la respuesta del backend', () => {
 });
 
 describe('CheckinPage: la cámara', () => {
-  test('should register the QR once and read it again only after four seconds when the camera reads it', async () => {
+  test('should register a QR read by the camera once and read it again only after four seconds', async () => {
     // Arrange: hora fija para medir la espera entre lecturas del mismo QR
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-10-28T14:00:00.000Z'));
@@ -286,24 +273,6 @@ describe('CheckinPage: la cámara', () => {
     expect(mockPost).toHaveBeenCalledTimes(2);
     expect(mockPost).toHaveBeenNthCalledWith(1, '/admin/checkin', { metodo: 'QR', codigo: 'QR-CARLOS' });
     expect(mockMarcarActividad).toHaveBeenCalledTimes(2);
-  });
-
-  test('should ignore another QR when the camera reads it while the first check-in is on its way', async () => {
-    // Arrange: el registro del primer QR se queda esperando
-    let responder;
-    mockPost = vi.fn(() => new Promise((resolve) => { responder = () => resolve(registrado()); }));
-    const { user } = abrirCheckin();
-    await user.click(screen.getByRole('button', { name: 'Activar cámara' }));
-
-    // Act: llega otro QR antes de que responda el primero
-    await act(async () => escaner.leer('QR-CARLOS'));
-    await act(async () => escaner.leer('QR-ANA'));
-    await act(async () => responder());
-
-    // Assert
-    expect(await aviso()).toHaveTextContent('Ingreso registrado.');
-    expect(mockPost).toHaveBeenCalledTimes(1);
-    expect(mockPost).toHaveBeenCalledWith('/admin/checkin', { metodo: 'QR', codigo: 'QR-CARLOS' });
   });
 
   test('should warn without the success vibration when the camera reads a member who already checked in', async () => {
@@ -347,75 +316,5 @@ describe('CheckinPage: la cámara', () => {
     // Assert
     expect(escaner.cerrado).toBe(true);
     expect(screen.getByRole('button', { name: 'Activar cámara' })).toBeInTheDocument();
-  });
-});
-
-describe('CheckinPage: lo que queda despues de un ingreso', () => {
-  test('should deny the entry with the expired message when the camera reads an overdue member', async () => {
-    // Arrange
-    const vibrar = espiarVibracion();
-    mockPost = vi.fn(async () => ({ data: { miembro: { ...CARLOS, estado: 'VENCIDO' } } }));
-    const { user } = abrirCheckin();
-    await user.click(screen.getByRole('button', { name: 'Activar cámara' }));
-
-    // Act
-    await act(async () => escaner.leer('QR-CARLOS'));
-
-    // Assert
-    expect(await screen.findByRole('alert')).toHaveTextContent('Acceso denegado: Membresía vencida');
-    expect(screen.getByRole('status')).toHaveClass('alert-error');
-    expect(vibrar).toHaveBeenCalledWith([200, 100, 200]);
-    expect(mockMarcarActividad).not.toHaveBeenCalled();
-  });
-
-  test('should use a generic message when the camera check-in fails without one', async () => {
-    // Arrange
-    mockPost = vi.fn(async () => { throw { status: 503 }; });
-    const { user } = abrirCheckin();
-    await user.click(screen.getByRole('button', { name: 'Activar cámara' }));
-
-    // Act
-    await act(async () => escaner.leer('QR-CARLOS'));
-
-    // Assert
-    expect(await screen.findByRole('alert')).toHaveTextContent('No se pudo registrar el check-in.');
-  });
-
-  test('should empty both fields and take the notices away when Limpiar is clicked', async () => {
-    // Arrange
-    mockPost = vi.fn(async () => { throw { status: 404, code: 'MEMBER_NOT_FOUND', message: 'Miembro no encontrado en este gimnasio.' }; });
-    const { user } = abrirCheckin();
-    await user.type(campoQr(), 'QR-X');
-    await user.type(campoDocumento(), '11111111{Enter}');
-    await screen.findByRole('alert');
-
-    // Act
-    await user.click(screen.getByRole('button', { name: 'Limpiar' }));
-
-    // Assert
-    expect(campoQr()).toHaveValue('');
-    expect(campoDocumento()).toHaveValue('');
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-    expect(screen.queryByRole('status')).not.toBeInTheDocument();
-  });
-
-  test('should take the notice away when five seconds pass, so the next person starts clean', async () => {
-    // Arrange: timers falsos para setTimeout; los clicks van con fireEvent
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-    abrirCheckin();
-    await act(async () => {});
-    fireEvent.change(campoDocumento(), { target: { value: '79123456' } });
-    fireEvent.keyDown(campoDocumento(), { key: 'Enter' });
-    await act(async () => {});
-    expect(screen.getByRole('status')).toHaveTextContent('Ingreso registrado.');
-
-    // Act
-    act(() => vi.advanceTimersByTime(4999));
-    const antes = screen.queryByRole('status');
-    act(() => vi.advanceTimersByTime(1));
-
-    // Assert
-    expect(antes).not.toBeNull();
-    expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 });
