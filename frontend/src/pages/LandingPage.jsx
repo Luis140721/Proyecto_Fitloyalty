@@ -161,7 +161,7 @@ export default function LandingPage() {
           <div className="hero-cta">
             <Link className="btn btn-primary btn-lg" to="/register-owner">
               Empieza gratis 14 días
-              <span className="material-symbols-outlined icon">arrow_forward</span>
+              <span className="material-symbols-outlined icon" aria-hidden="true">arrow_forward</span>
             </Link>
             <Link className="btn btn-secondary btn-lg" to="/login">
               Ya tengo cuenta
@@ -200,7 +200,7 @@ export default function LandingPage() {
         <div className="pain-grid">
           {PAINS.map((p, i) => (
             <article className="pain-card" key={i}>
-              <div className="x"><span className="material-symbols-outlined icon">{p.icon}</span></div>
+              <div className="x"><span className="material-symbols-outlined icon" aria-hidden="true">{p.icon}</span></div>
               <h3>{p.title}</h3>
               <p>{p.text}</p>
             </article>
@@ -225,7 +225,7 @@ export default function LandingPage() {
               key={i}
             >
               <div className="solution-card__icon">
-                <span className="material-symbols-outlined icon">{s.icon}</span>
+                <span className="material-symbols-outlined icon" aria-hidden="true">{s.icon}</span>
               </div>
               <h3>{s.title}</h3>
               <p>{s.text}</p>
@@ -275,7 +275,7 @@ export default function LandingPage() {
               </div>
               <ul className="pricing-list">
                 {p.features.map((f, j) => (
-                  <li key={j}><span className="material-symbols-outlined icon">check</span>{f}</li>
+                  <li key={j}><span className="material-symbols-outlined icon" aria-hidden="true">check</span>{f}</li>
                 ))}
               </ul>
               <button
@@ -330,7 +330,7 @@ export default function LandingPage() {
           onClick={() => navigate('/register-owner')}
         >
           Empezar gratis 14 días
-          <span className="material-symbols-outlined icon">arrow_forward</span>
+          <span className="material-symbols-outlined icon" aria-hidden="true">arrow_forward</span>
         </button>
       </section>
 
