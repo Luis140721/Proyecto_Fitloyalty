@@ -495,6 +495,26 @@ router.patch(
 );
 
 // ---------------------------------------------------------------------------
+// GET /api/admin/staff/:id/auditoria   (HU-04, criterio 4: historial de la cuenta)
+// ---------------------------------------------------------------------------
+router.get(
+  '/admin/staff/:id/auditoria',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const id = Number(req.params.id);
+    const { rows } = await pool.query(
+      `SELECT a.fecha_evento, a.detalle, u.nombre AS responsable
+         FROM auditoria a
+         LEFT JOIN usuario u ON u.id_usuario = a.id_usuario
+        WHERE a.tabla_afectada = 'usuario' AND a.id_registro = $1 AND a.id_gimnasio = $2
+        ORDER BY a.fecha_evento DESC, a.id_auditoria DESC`,
+      [id, req.user.gymId]
+    );
+    return res.json({ auditoria: rows.map((f) => ({ fecha: f.fecha_evento, responsable: f.responsable, ...f.detalle })) });
+  })
+);
+
+// ---------------------------------------------------------------------------
 // GET /api/auth/accept-invite/:token   (preview publico)
 // ---------------------------------------------------------------------------
 router.get('/auth/accept-invite/:token', asyncHandler(async (req, res) => {
