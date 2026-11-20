@@ -11,7 +11,8 @@
  * guardado, no solo la respuesta. Lo que el #69 ya cubre de notificacion (el
  * aviso de acceso bloqueado y su llave sin CASCADE), lo que cubre el #73 de
  * envio_mensaje (el registro del envio) y lo que plan-cobro.test.js (#83) ya
- * prueba de plan_cobro y de ULTIMO_PLAN no se repite.
+ * prueba de plan_cobro no se repite. Del #83 se toma ULTIMO_PLAN como fragmento;
+ * aqui se prueba la ruta que lo usa (GET /lookup).
  *
  * Codigos: 23502 NOT NULL · 22001 texto mas largo que la columna · 22003
  * numero fuera de NUMERIC(10,2) · 23514 CHECK · 23505 UNIQUE · 23503 llave foranea.
@@ -466,6 +467,22 @@ describeConBd('plan_cobro, congelacion_plan, notificacion y envio_mensaje contra
       expect(r.body.congelaciones.every((c) => c.congelada_por === admin.nombre)).toBe(true);
       const creadas = await tx.cliente.query('SELECT id_congelacion FROM congelacion_plan WHERE id_miembro = $1 ORDER BY creada_en DESC LIMIT 5', [miembro.id_miembro]);
       expect(r.body.congelaciones.map((c) => c.id_congelacion)).toEqual(creadas.rows.map((c) => c.id_congelacion));
+    });
+
+    // plan-cobro.test.js (#83) prueba el fragmento ULTIMO_PLAN directo; aqui va la
+    // ruta que lo usa, con su respuesta, contra la BD real.
+    test('GET /lookup trae el ultimo plan vigente del miembro (DISTINCT ON con su ORDER BY)', async () => {
+      // Arrange: dos planes vigentes con el mismo vencimiento; gana el de id mayor
+      const miembro = await crearMiembro(tx.cliente, gym.id_gimnasio);
+      await crearPlan(tx.cliente, miembro, { fecha_fin: '2026-06-01', estado_pago: 'PAGADO' });
+      await crearPlan(tx.cliente, miembro, { fecha_fin: '2026-06-01', estado_pago: 'PARCIAL', tipo_plan: 'ANUAL' });
+
+      // Act
+      const r = await pedir('get', `/admin/miembros/lookup?documento=${miembro.documento}`);
+
+      // Assert
+      expect(r.status).toBe(200);
+      expect(r.body.membresia).toMatchObject({ estado: 'PARCIAL', plan: 'Anual' });
     });
 
     test('POST /:id/congelar marca el plan desde hoy y abre la congelacion; la segunda vez responde 409', async () => {
