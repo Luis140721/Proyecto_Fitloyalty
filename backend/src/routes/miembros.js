@@ -72,6 +72,11 @@ function decryptQrCode(encrypted) {
   }
 }
 
+// El mensaje por defecto de zod es "Invalid email" y el front lo muestra tal
+// cual. Es el mismo texto del formulario (MiembrosPage.jsx, EMAIL_RE), que
+// deja pasar correos que zod rechaza, como "ana..perez@correo.co".
+const CORREO_INVALIDO = 'Este correo no tiene un formato válido.';
+
 const createSchema = z.object({
   // Datos personales
   nombre:     z.string().min(2, 'El nombre es requerido'),
@@ -84,7 +89,7 @@ const createSchema = z.object({
     .optional()
     .or(z.literal('').transform(() => undefined)),
   telefono:  z.string().min(7, 'El telefono es requerido'),
-  email:     z.string().email().optional().or(z.literal('').transform(() => undefined)),
+  email:     z.string().email(CORREO_INVALIDO).optional().or(z.literal('').transform(() => undefined)),
   direccion: z.string().optional(),
   // Salud y emergencia
   contacto_emergencia: z.string().optional(),
@@ -143,7 +148,7 @@ const updateSchema = z.object({
   nombre:    z.string().min(2).optional(),
   documento: z.string().min(3).optional(),
   telefono:  z.string().min(7).optional(),
-  email:     z.string().email().optional().or(z.literal('').transform(() => null)).nullable(),
+  email:     z.string().email(CORREO_INVALIDO).optional().or(z.literal('').transform(() => null)).nullable(),
   activo:    z.boolean().optional(),
   qr_imagen: z.string().optional(),
 
