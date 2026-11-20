@@ -452,7 +452,7 @@ router.patch(
 
     // HU-04, criterio 4: el cambio y su fila de auditoria (con el responsable)
     // van en la misma transaccion: si la auditoria no se guarda, no hay cambio.
-    const rolAntes = Object.keys(ID_ROL).find((k) => ID_ROL[k] === actual.id_rol);
+    const rolAntes = { 1: 'ADMINISTRADOR', 2: 'RECEPCIONISTA', 3: 'ENTRENADOR' }[actual.id_rol];
     const detalle = cambiosDeCuenta(
       { activo: actual.activo, rol: rolAntes, nombre: actual.nombre },
       { activo: activo ?? actual.activo, rol: rol ?? rolAntes, nombre: nombre ?? actual.nombre }
