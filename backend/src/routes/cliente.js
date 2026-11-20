@@ -7,11 +7,12 @@
  *   POST /login        -> documento + PIN -> JWT de cliente (30 dias)
  *   GET  /me           -> datos del miembro autenticado
  *   PUT  /me           -> actualizar telefono, email, contacto de emergencia
- *   GET  /qr           -> { codigo, imagenBase64 } para mostrar el QR
+ *   GET  /qr           -> { codigo, imagenDataUrl, dinamico } para mostrar el QR
  *   GET  /membresia    -> plan vigente (plan_cobro activo)
  *   GET  /asistencia   -> ultimos check-ins del miembro (default 20)
  *   GET  /gamificacion -> hitos alcanzados + disponibles + puntos totales
  *   GET  /retos        -> retos activos en el gimnasio del miembro
+ *   POST /retos/:id/unirse -> inscribe al miembro en un reto (si es elegible)
  *   POST /logout       -> cierre de sesion (cliente borra el token)
  *
  * Autenticacion:
@@ -34,6 +35,9 @@ const { authenticate, requireClient } = require('../middleware/auth');
 const asyncHandler = require('../lib/asyncHandler');
 const { AppError } = require('../lib/errors');
 const { generarTokenCliente, miembroSeguro } = require('../lib/auth-helpers');
+const { datosParaApp } = require('../lib/qr-dinamico');
+const { esElegible, ETIQUETAS, HOY } = require('../lib/segmentos');
+const { sincronizarEstados, recalcularParticipacion } = require('../lib/retos');
 
 const router = express.Router();
 
@@ -229,8 +233,10 @@ router.get('/qr', asyncHandler(async (req, res) => {
   const gymId     = req.user.gymId;
   try {
     const { rows } = await pool.query(
-      `SELECT codigo_qr, qr_imagen FROM miembro
-        WHERE id_miembro = $1 AND id_gimnasio = $2 AND activo = TRUE`,
+      `SELECT m.id_miembro, m.codigo_qr, m.qr_imagen, g.qr_dinamico_obligatorio
+         FROM miembro m
+         JOIN gimnasio g ON g.id_gimnasio = m.id_gimnasio
+        WHERE m.id_miembro = $1 AND m.id_gimnasio = $2 AND m.activo = TRUE`,
       [idMiembro, gymId]
     );
     if (rows.length === 0) throw new AppError(404, 'Miembro no encontrado', 'MEMBER_NOT_FOUND');
@@ -238,6 +244,10 @@ router.get('/qr', asyncHandler(async (req, res) => {
     if (!codigo_qr) throw new AppError(404, 'Aun no tienes un QR asignado.', 'QR_NOT_ASSIGNED');
 
     return res.json({
+      // QR dinamico: la app calcula sola el codigo de cada 30 s (lib/qr-dinamico.js).
+      dinamico: datosParaApp(rows[0].id_miembro, codigo_qr),
+      // true si el gimnasio ya no acepta el QR fijo.
+      solo_dinamico: rows[0].qr_dinamico_obligatorio === true,
       codigo: codigo_qr,
       // La BD guarda base64 crudo; el front espera el data URL completo.
       imagenDataUrl: qr_imagen
@@ -415,6 +425,56 @@ router.get('/retos', asyncHandler(async (req, res) => {
     if (err instanceof AppError) throw err;
     console.error('[GET /cliente/retos] Error:', err.message);
     throw new AppError(503, 'No pudimos cargar los retos. Intenta de nuevo.', 'DB_UNREACHABLE');
+  }
+}));
+
+// ---------------------------------------------------------------------------
+// POST /api/cliente/retos/:id/unirse
+// El miembro se inscribe en un reto vigente (o programado) de su gimnasio si
+// cae en el segmento elegible. Los ingresos que ya hizo dentro de las fechas
+// del reto cuentan.
+// ---------------------------------------------------------------------------
+router.post('/retos/:id/unirse', asyncHandler(async (req, res) => {
+  const idMiembro = req.user.idMiembro;
+  const gymId     = req.user.gymId;
+  const idReto = Number.parseInt(req.params.id, 10);
+  if (!Number.isInteger(idReto) || idReto <= 0 || String(idReto) !== String(req.params.id)) {
+    throw new AppError(400, 'Id de reto invalido.', 'VALIDATION_ERROR');
+  }
+  try {
+    await sincronizarEstados(pool, gymId);
+    const { rows } = await pool.query(
+      `SELECT id_reto, nombre, segmento_elegible, estado
+         FROM reto
+        WHERE id_reto = $1 AND id_gimnasio = $2 AND activo = TRUE
+          AND estado IN ('ACTIVO', 'PROGRAMADO') AND fecha_fin >= ${HOY}`,
+      [idReto, gymId]
+    );
+    const reto = rows[0];
+    if (!reto) throw new AppError(404, 'Ese reto ya no está disponible.', 'NOT_FOUND');
+
+    if (!(await esElegible(pool, gymId, idMiembro, reto.segmento_elegible))) {
+      throw new AppError(403,
+        `Este reto es solo para: ${ETIQUETAS[reto.segmento_elegible] || reto.segmento_elegible}.`,
+        'RETO_NO_ELEGIBLE');
+    }
+
+    const { rows: nuevo } = await pool.query(
+      `INSERT INTO reto_miembro (id_reto, id_miembro) VALUES ($1, $2)
+       ON CONFLICT (id_reto, id_miembro) DO NOTHING
+       RETURNING id_reto_miembro`,
+      [idReto, idMiembro]
+    );
+    if (nuevo.length === 0) throw new AppError(409, 'Ya estás inscrito en este reto.', 'RETO_YA_INSCRITO');
+
+    const { fila } = await recalcularParticipacion(pool, {
+      idRetoMiembro: nuevo[0].id_reto_miembro, idReto, idMiembro, gymId,
+    });
+    return res.status(201).json({ message: `Te uniste al reto «${reto.nombre}».`, participacion: fila });
+  } catch (err) {
+    if (err instanceof AppError) throw err;
+    console.error('[POST /cliente/retos/unirse] Error:', err.message);
+    throw new AppError(503, 'No pudimos inscribirte en el reto. Intenta de nuevo.', 'DB_UNREACHABLE');
   }
 }));
 

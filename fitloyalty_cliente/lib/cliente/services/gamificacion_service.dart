@@ -3,6 +3,7 @@
 // Capa de red para la pantalla "Mis logros" y "Retos activos".
 //   - resumen:    GET /api/cliente/gamificacion
 //   - listarRetos: GET /api/cliente/retos
+//   - unirseAReto: POST /api/cliente/retos/:id/unirse
 
 import '../models/gamificacion.dart';
 import 'api_client.dart';
@@ -29,5 +30,9 @@ class GamificacionService {
     return raw
         .map((e) => Reto.fromJson(e as Map<String, dynamic>))
         .toList(growable: false);
+  }
+
+  Future<void> unirseAReto(int idReto) async {
+    await _api.post('/cliente/retos/$idReto/unirse');
   }
 }

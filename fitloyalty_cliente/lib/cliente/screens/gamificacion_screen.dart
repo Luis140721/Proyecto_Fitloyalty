@@ -310,6 +310,24 @@ class _GamificacionScreenState extends State<GamificacionScreen> {
               ],
             ],
           ),
+          if (!r.participa && !r.completado) ...[
+            const SizedBox(height: 10),
+            Align(
+              alignment: Alignment.centerRight,
+              child: FilledButton.icon(
+                icon: const Icon(Icons.flag, size: 16),
+                label: const Text('Unirme'),
+                onPressed: () async {
+                  final messenger = ScaffoldMessenger.of(context);
+                  final error = await context.read<PerfilProvider>().unirseAReto(r.idReto);
+                  if (!mounted) return;
+                  messenger.showSnackBar(
+                    SnackBar(content: Text(error ?? 'Te uniste a «${r.nombre}». Tus visitas ya cuentan.')),
+                  );
+                },
+              ),
+            ),
+          ],
           if (r.participa && r.meta != null && r.checkinsAcumulados != null && !r.completado) ...[
             const SizedBox(height: 12),
             Row(

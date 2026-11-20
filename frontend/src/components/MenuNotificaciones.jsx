@@ -20,6 +20,7 @@ const ETIQUETA_TIPO = {
   'por-vencer': 'Renueva',
   riesgo: 'En riesgo',
   'acceso-bloqueado': 'Bloqueado',
+  'reto-completado': 'Reto',
 };
 
 export default function MenuNotificaciones() {
@@ -70,12 +71,13 @@ export default function MenuNotificaciones() {
     };
   }, [abierto]);
 
-  // Marca un acceso bloqueado como visto y lo quita de la lista.
+  // Marca un acceso bloqueado o un reto completado como visto y lo quita de la lista.
   const marcarVisto = async (aviso, e) => {
     e.stopPropagation();
     setAvisos((prev) => prev.filter((a) => a.id !== aviso.id));
     try {
-      await api.post(`/admin/notificaciones/acceso-bloqueado/${aviso.idNotificacion}/leida`);
+      const ruta = aviso.tipo === 'reto-completado' ? 'reto' : 'acceso-bloqueado';
+      await api.post(`/admin/notificaciones/${ruta}/${aviso.idNotificacion}/leida`);
     } catch (_) {
       cargar(); // si no se pudo guardar, vuelve a aparecer
     }
