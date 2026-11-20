@@ -13,6 +13,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import AuthPanel from '../components/AuthPanel';
 import { api } from '../api';
+import { borrarDigito, codigoCompleto, limpiarCodigo, repartirCodigo } from '../lib/codigoRecuperacion';
 
 const STEPS = [
   { id: 1, title: 'Tu correo',     desc: 'Te enviaremos un código de 6 dígitos.' },
@@ -41,19 +42,15 @@ export default function ForgotPasswordPage() {
   }, [step]);
 
   const fillFromDigits = (raw) => {
-    const pasted = String(raw ?? '').replace(/\D/g, '').slice(0, 6);
-    if (!pasted) return;
-    const digits = Array(6).fill('');
-    for (let i = 0; i < pasted.length; i++) digits[i] = pasted[i];
-    setCodeDigits(digits);
-    const focusIdx = Math.min(pasted.length, 5);
-    queueMicrotask(() => codeRefs.current[focusIdx]?.focus());
+    const repartido = repartirCodigo(raw);
+    if (!repartido) return;
+    setCodeDigits(repartido.digitos);
+    queueMicrotask(() => codeRefs.current[repartido.foco]?.focus());
     setError('');
   };
 
   const handleCodePaste = (e) => {
-    const text = e.clipboardData?.getData('text') ?? '';
-    const pasted = text.replace(/\D/g, '').slice(0, 6);
+    const pasted = limpiarCodigo(e.clipboardData?.getData('text'));
     if (!pasted) return;
     e.preventDefault();
     fillFromDigits(pasted);
@@ -78,16 +75,9 @@ export default function ForgotPasswordPage() {
   const handleCodeKey = (idx, e) => {
     if (e.key === 'Backspace' || e.key === 'Delete') {
       e.preventDefault();
-      setCodeDigits((prev) => {
-        const next = [...prev];
-        if (next[idx]) {
-          next[idx] = '';
-        } else if (idx > 0) {
-          next[idx - 1] = '';
-          queueMicrotask(() => codeRefs.current[idx - 1]?.focus());
-        }
-        return next;
-      });
+      const borrado = borrarDigito(codeDigits, idx);
+      setCodeDigits(borrado.digitos);
+      if (borrado.foco !== idx) queueMicrotask(() => codeRefs.current[borrado.foco]?.focus());
       setError('');
       return;
     }
@@ -136,8 +126,8 @@ export default function ForgotPasswordPage() {
   const verifyCode = async (e) => {
     e.preventDefault();
     setError(''); setInfo('');
+    if (!codigoCompleto(codeDigits)) { setError('El código debe tener 6 dígitos'); return; }
     const code = codeDigits.join('');
-    if (code.length !== 6) { setError('El código debe tener 6 dígitos'); return; }
     setSubmitting(true);
     try {
       const { data } = await api.post('/auth/verify-reset-code', {
