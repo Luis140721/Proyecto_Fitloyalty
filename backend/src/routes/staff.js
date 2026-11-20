@@ -502,6 +502,11 @@ router.get(
   authenticate,
   asyncHandler(async (req, res) => {
     const id = Number(req.params.id);
+    const { rows: cuenta } = await pool.query(
+      'SELECT id_usuario FROM usuario WHERE id_usuario = $1 AND id_gimnasio = $2',
+      [id, req.user.gymId]
+    );
+    if (cuenta.length === 0) throw new AppError(404, 'Usuario no encontrado en este gimnasio.', 'STAFF_NOT_FOUND');
     const { rows } = await pool.query(
       `SELECT a.fecha_evento, a.detalle, u.nombre AS responsable
          FROM auditoria a
