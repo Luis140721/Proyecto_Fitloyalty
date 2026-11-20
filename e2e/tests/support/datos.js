@@ -25,12 +25,15 @@ export const PLAN_VENCIDO = { tipo_plan: 'MENSUAL', fecha_inicio: '2020-01-01', 
 /** Documento de 10 digitos que no existe en el gimnasio. */
 export const documentoUnico = () => String(randomInt(1_000_000_000, 10_000_000_000));
 
-/** Alta de un miembro con su plan (plan_cobro), como la hace la recepcion. */
-export async function crearMiembro(request, plan = PLAN_VIGENTE) {
-  const sufijo = randomUUID().slice(0, 8);
-  const nombre = `Miembro E2E ${sufijo}`;
-  const documento = documentoUnico();
-  const respuesta = await request.post(`${API_URL}/admin/miembros`, {
+/** Nombre unico de miembro: la BD conserva lo de corridas anteriores. */
+export const nombreUnico = () => `Miembro E2E ${randomUUID().slice(0, 8)}`;
+
+/**
+ * POST /admin/miembros con su plan (plan_cobro), como la hace la recepcion. No
+ * revisa la respuesta: es para los tests que la revisan ellos mismos.
+ */
+export function enviarAlta(request, { nombre = nombreUnico(), documento = documentoUnico(), plan = PLAN_VIGENTE } = {}) {
+  return request.post(`${API_URL}/admin/miembros`, {
     headers: conSesion(),
     data: {
       nombre,
@@ -40,14 +43,32 @@ export async function crearMiembro(request, plan = PLAN_VIGENTE) {
       valor_total: '90000',
       valor_pagado: '90000',
       estado_pago: 'PAGADO',
-      referencia_pago: `E2E-${sufijo}`,
+      referencia_pago: `E2E-${documento}`,
       acepto_terminos: true,
       autorizo_datos: true,
     },
   });
+}
+
+/** Alta de un miembro con su plan; falla si el backend no responde 201. */
+export async function crearMiembro(request, plan = PLAN_VIGENTE) {
+  const nombre = nombreUnico();
+  const documento = documentoUnico();
+  const respuesta = await enviarAlta(request, { nombre, documento, plan });
   expect(respuesta.status(), await respuesta.text()).toBe(201);
   const { miembro } = await respuesta.json();
   return { id: miembro.id_miembro, nombre, documento };
+}
+
+/** Miembros activos del gimnasio con ese documento (la busqueda de la lista). */
+export async function miembrosConDocumento(request, documento) {
+  const respuesta = await request.get(`${API_URL}/admin/miembros`, {
+    headers: conSesion(),
+    params: { q: documento, pageSize: 100 },
+  });
+  expect(respuesta.status(), await respuesta.text()).toBe(200);
+  const { miembros } = await respuesta.json();
+  return miembros.filter((m) => m.documento === documento);
 }
 
 /** Congela el plan vigente del miembro desde hoy (RQF-04). */
