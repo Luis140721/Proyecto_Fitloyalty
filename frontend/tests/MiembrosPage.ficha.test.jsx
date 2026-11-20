@@ -169,6 +169,18 @@ describe('MiembrosPage: la ficha del miembro', () => {
     })));
   });
 
+  test('should close the file with the X of the dialog without saving', async () => {
+    // Arrange
+    const { user } = await abrirFichaDeAna();
+
+    // Act
+    await user.click(within(ficha()).getByRole('button', { name: 'Cerrar' }));
+
+    // Assert
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(mockPut).not.toHaveBeenCalled();
+  });
+
   test('should close the file without saving when the person clicks Cancelar', async () => {
     // Arrange
     const { user } = await abrirFichaDeAna();
@@ -272,6 +284,28 @@ describe('MiembrosPage: el plan y el cobro', () => {
     // Assert
     expect(within(ficha()).getByText('Lo pagado no puede superar el valor del plan.')).toBeInTheDocument();
     expect(mockPut).not.toHaveBeenCalled();
+  });
+
+  test('should save the price, method, reference and dates that the person types in the plan', async () => {
+    // Arrange
+    const { user } = await abrirFichaDeAna();
+    const ficha_ = within(ficha());
+
+    // Act
+    await user.clear(ficha_.getByRole('textbox', { name: /^Inicio/ }));
+    await user.type(ficha_.getByRole('textbox', { name: /^Inicio/ }), '05102026');
+    await user.clear(ficha_.getByRole('textbox', { name: /^Vence/ }));
+    await user.type(ficha_.getByRole('textbox', { name: /^Vence/ }), '04112026');
+    await user.clear(ficha_.getByRole('spinbutton', { name: 'Valor del plan' }));
+    await user.type(ficha_.getByRole('spinbutton', { name: 'Valor del plan' }), '95000');
+    await user.selectOptions(ficha_.getByRole('combobox', { name: 'Método de pago' }), 'NEQUI');
+    await user.type(ficha_.getByRole('textbox', { name: 'Referencia o comprobante' }), 'NQ-778');
+    await user.click(ficha_.getByRole('button', { name: 'Guardar plan' }));
+
+    // Assert
+    await waitFor(() => expect(mockPut).toHaveBeenCalledWith('/admin/miembros/1/plan', expect.objectContaining({
+      fecha_inicio: '2026-10-05', fecha_fin: '2026-11-04', valor_total: 95000, metodo_pago: 'NEQUI', referencia_pago: 'NQ-778',
+    })));
   });
 
   test('should confirm and reload the plan and the list when the plan is saved', async () => {

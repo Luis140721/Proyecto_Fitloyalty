@@ -163,6 +163,34 @@ describe('MiembrosPage: el alta con todos los datos', () => {
     expect(screen.getByText('Paso 3 de 5')).toBeInTheDocument();
   });
 
+  test('should take the start date typed by hand, recalculate the end and keep the payment state chosen by the person', async () => {
+    // Arrange
+    const { user } = await abrirAlta();
+    await user.type(campo(/^Nombre completo/), 'Sofía Gómez');
+    await user.type(campo(/^Número documento/), '1033444555');
+    await user.type(campo(/^Teléfono \/ WhatsApp/), '3201112233');
+    await user.click(siguiente());
+    await user.click(siguiente());
+
+    // Act: paso 3, el plan empieza el 1 de diciembre y lo paga a medias
+    await user.clear(campo(/^Fecha inicio/));
+    await user.type(campo(/^Fecha inicio/), '01122026');
+    await user.clear(campo(/^Valor total del plan/));
+    await user.type(campo(/^Valor total del plan/), '100000');
+    await user.selectOptions(campo('Estado del pago'), 'PARCIAL');
+    await user.click(siguiente());
+    await user.click(siguiente());
+    await user.click(screen.getByRole('checkbox', { name: /Acepto los términos/ }));
+    await user.click(screen.getByRole('checkbox', { name: /Autorizo el uso de mis datos/ }));
+    await user.click(screen.getByRole('button', { name: 'Crear miembro' }));
+
+    // Assert
+    await screen.findByRole('dialog', { name: '¡Miembro creado exitosamente!' });
+    expect(mockPost).toHaveBeenCalledWith('/admin/miembros', expect.objectContaining({
+      fecha_inicio: '2026-12-01', fecha_fin: '2026-12-31', proxima_fecha_cobro: '2027-01-01', valor_total: '100000', estado_pago: 'PARCIAL',
+    }));
+  });
+
   test('should stay on the current step and mark its errors when a later tab is clicked with the step empty', async () => {
     // Arrange
     const { user } = await abrirAlta();
@@ -252,6 +280,24 @@ describe('MiembrosPage: desactivar y eliminar', () => {
     // Assert
     expect(await screen.findByRole('alert')).toHaveTextContent('No pudimos desactivar al miembro.');
     expect(filaDe('Ana Pérez')).toBeInTheDocument();
+  });
+
+  test('should close the confirmations with the X of the dialog without touching the member', async () => {
+    // Arrange
+    const { user } = abrirMiembros();
+    await screen.findByRole('row', { name: /Ana Pérez/ });
+
+    // Act y Assert: la confirmacion de desactivar
+    await user.click(within(filaDe('Ana Pérez')).getByRole('button', { name: 'Desactivar a Ana Pérez' }));
+    await user.click(within(screen.getByRole('dialog', { name: 'Desactivar miembro' })).getByRole('button', { name: 'Cerrar' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+    // Act y Assert: la de eliminar para siempre
+    await user.click(screen.getByRole('tab', { name: /Desactivados/ }));
+    await user.click(within(await screen.findByRole('row', { name: /Julio Mora/ })).getByRole('button', { name: 'Eliminar permanentemente a Julio Mora' }));
+    await user.click(within(screen.getByRole('dialog', { name: 'Eliminar miembro permanentemente' })).getByRole('button', { name: 'Cerrar' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(mockDelete).not.toHaveBeenCalled();
   });
 
   test('should keep the member when the deactivation is canceled', async () => {

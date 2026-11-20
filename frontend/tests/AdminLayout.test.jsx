@@ -205,6 +205,18 @@ describe('AdminLayout: el menu lateral', () => {
     expect(menuLateral()).not.toHaveClass('open');
   });
 
+  test('should close the side menu when the dark background is clicked', async () => {
+    // Arrange
+    const { user, container } = abrirPanel();
+    await user.click(screen.getByRole('button', { name: 'Abrir menú' }));
+
+    // Act: el fondo oscuro es decorativo (aria-hidden), se toca por su clase
+    await user.click(container.querySelector('.admin-overlay'));
+
+    // Assert
+    expect(menuLateral()).not.toHaveClass('open');
+  });
+
   test('should take the person to the section when a link of the side menu is clicked', async () => {
     // Arrange
     const { user } = abrirPanel('/admin/miembros');

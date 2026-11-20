@@ -208,6 +208,32 @@ describe('ConfigPage: guardar', () => {
     await waitFor(() => expect(mockPut).toHaveBeenCalledWith('/admin/config', expect.objectContaining({ dias_aviso_vencimiento: 0 })));
   });
 
+  test('should send the six plan prices that the admin types as numbers', async () => {
+    // Arrange
+    const { user } = abrirConfig();
+    await cargada();
+    const precios = [
+      [/^Plan Mensual/, '95000', 'plan_mensual_valor'],
+      [/^Plan Trimestral/, '250000', 'plan_trimestral_valor'],
+      [/^Plan Semestral/, '470000', 'plan_semestral_valor'],
+      [/^Plan Anual/, '880000', 'plan_anual_valor'],
+      [/^Clases Sueltas/, '16000', 'plan_clases_suelta_valor'],
+      [/^Plan Ilimitado/, '125000', 'plan_ilimitado_valor'],
+    ];
+
+    // Act
+    for (const [nombre, valor] of precios) {
+      await user.clear(campo(nombre));
+      await user.type(campo(nombre), valor);
+    }
+    await user.click(guardar());
+
+    // Assert
+    await waitFor(() => expect(mockPut).toHaveBeenCalledWith('/admin/config', expect.objectContaining(
+      Object.fromEntries(precios.map(([, valor, clave]) => [clave, Number(valor)])),
+    )));
+  });
+
   test('should show the API error and keep the values when saving fails', async () => {
     // Arrange
     mockPut = vi.fn(async () => { throw { status: 400, code: 'VALIDATION_ERROR', message: 'Los días de recordatorio deben estar entre 1 y 30.' }; });
