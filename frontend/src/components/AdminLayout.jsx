@@ -93,7 +93,8 @@ export default function AdminLayout({ children }) {
         onClick={() => setSidebarOpen(false)}
         aria-hidden="true"
       />
-      <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      {/* Sidebar cierra el menu con onNavigate (boton Cerrar, enlaces y salir). */}
+      <Sidebar open={sidebarOpen} onNavigate={() => setSidebarOpen(false)} />
 
       <div className="admin-main">
         <header className="admin-header">
