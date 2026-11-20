@@ -9,8 +9,9 @@
  * llaves foraneas, con el codigo de PostgreSQL) y sus consultas: las rutas de
  * routes/miembros.js corren contra la BD real y los tests miran lo que quedo
  * guardado, no solo la respuesta. Lo que el #69 ya cubre de notificacion (el
- * aviso de acceso bloqueado y su llave sin CASCADE) y lo que cubre el #73 de
- * envio_mensaje (el registro del envio) no se repite.
+ * aviso de acceso bloqueado y su llave sin CASCADE), lo que cubre el #73 de
+ * envio_mensaje (el registro del envio) y lo que plan-cobro.test.js (#83) ya
+ * prueba de plan_cobro y de ULTIMO_PLAN no se repite.
  *
  * Codigos: 23502 NOT NULL · 22001 texto mas largo que la columna · 22003
  * numero fuera de NUMERIC(10,2) · 23514 CHECK · 23505 UNIQUE · 23503 llave foranea.
@@ -45,15 +46,18 @@ const TABLAS = ['plan_cobro', 'congelacion_plan', 'notificacion', 'envio_mensaje
 // Columnas NOT NULL, menos los id. Las que tienen valor por defecto tambien
 // rechazan un NULL explicito.
 const NO_NULOS = [
-  ['plan_cobro', 'id_miembro'], ['plan_cobro', 'id_gimnasio'], ['plan_cobro', 'tipo_plan'], ['plan_cobro', 'fecha_inicio'],
-  ['plan_cobro', 'fecha_fin'], ['plan_cobro', 'valor_total'], ['plan_cobro', 'valor_pagado'], ['plan_cobro', 'estado_pago'],
-  ['plan_cobro', 'activo'], ['plan_cobro', 'fecha_creacion'],
+  ['plan_cobro', 'id_miembro'], ['plan_cobro', 'id_gimnasio'], ['plan_cobro', 'valor_pagado'], ['plan_cobro', 'fecha_creacion'],
   ['congelacion_plan', 'id_plan_cobro'], ['congelacion_plan', 'id_miembro'], ['congelacion_plan', 'id_gimnasio'],
   ['congelacion_plan', 'fecha_inicio'], ['congelacion_plan', 'creada_en'],
   ['notificacion', 'id_gimnasio'], ['notificacion', 'tipo'], ['notificacion', 'titulo'], ['notificacion', 'mensaje'],
   ['notificacion', 'leida'], ['notificacion', 'fecha_creacion'],
   ['envio_mensaje', 'id_gimnasio'], ['envio_mensaje', 'id_miembro'], ['envio_mensaje', 'id_canal'],
   ['envio_mensaje', 'mensaje_copiado'], ['envio_mensaje', 'estado'], ['envio_mensaje', 'fecha_envio'],
+];
+// Estas las prueba plan-cobro.test.js (#83): aqui solo entran en la comparacion con la BD.
+const NO_NULOS_EN_PLAN_COBRO_TEST = [
+  ['plan_cobro', 'tipo_plan'], ['plan_cobro', 'fecha_inicio'], ['plan_cobro', 'fecha_fin'], ['plan_cobro', 'valor_total'],
+  ['plan_cobro', 'estado_pago'], ['plan_cobro', 'activo'],
 ];
 
 // Columnas VARCHAR(n) de texto libre: n cabe y n+1 no.
@@ -66,9 +70,10 @@ const LARGOS_CON_CHECK = [
   ['notificacion', 'tipo', 30], ['envio_mensaje', 'estado', 20],
 ];
 
-// [tabla, columna, valores que admite el CHECK, nombre del CHECK]
+// [tabla, columna, valores que admite el CHECK, nombre del CHECK]. El de
+// plan_cobro.tipo_plan lo prueba plan-cobro.test.js (#83), que acepta cada valor y
+// rechaza otro; de metodo_pago y estado_pago el #83 solo prueba el rechazo.
 const CHECKS = [
-  ['plan_cobro', 'tipo_plan', ['MENSUAL', 'TRIMESTRAL', 'SEMESTRAL', 'ANUAL', 'CLASES_SUELTAS', 'ILIMITADO', 'OTRO'], 'chk_tipo_plan'],
   ['plan_cobro', 'metodo_pago', ['EFECTIVO', 'TRANSFERENCIA', 'TARJETA', 'PSE', 'NEQUI', 'DAVIPLATA', 'OTRO'], 'chk_metodo_pago'],
   ['plan_cobro', 'estado_pago', ['PENDIENTE', 'PAGADO', 'PARCIAL'], 'chk_estado_pago'],
   ['notificacion', 'tipo', ['ALERTA', 'RETO', 'CAMPANA', 'SISTEMA'], 'notificacion_tipo_check'],
@@ -182,7 +187,7 @@ describeConBd('plan_cobro, congelacion_plan, notificacion y envio_mensaje contra
       const id = (t, c) => `${t}.${c}`;
       const LLAVES = ['plan_cobro.id_plan_cobro', 'congelacion_plan.id_congelacion', 'notificacion.id_notificacion', 'envio_mensaje.id_envio'];
       const noNulas = columnas.filter((c) => c.is_nullable === 'NO' && !LLAVES.includes(id(c.tabla, c.columna)));
-      expect(noNulas.map((c) => id(c.tabla, c.columna)).sort()).toEqual(NO_NULOS.map(([t, c]) => id(t, c)).sort());
+      expect(noNulas.map((c) => id(c.tabla, c.columna)).sort()).toEqual([...NO_NULOS, ...NO_NULOS_EN_PLAN_COBRO_TEST].map(([t, c]) => id(t, c)).sort());
       const varchar = columnas.filter((c) => c.data_type === 'character varying');
       expect(varchar.map((c) => `${id(c.tabla, c.columna)}(${c.largo})`).sort())
         .toEqual([...LARGOS, ...LARGOS_CON_CHECK].map(([t, c, n]) => `${id(t, c)}(${n})`).sort());
@@ -230,31 +235,32 @@ describeConBd('plan_cobro, congelacion_plan, notificacion y envio_mensaje contra
       expect(err).toMatchObject({ code: '23514', constraint: restriccion });
     });
 
-    test('plan_cobro: valor_total y valor_pagado admiten hasta 99999999.99 y rechazan 100000000 (22003)', async () => {
+    // valor_total en NUMERIC(10,2) lo prueba plan-cobro.test.js (#83).
+    test('plan_cobro.valor_pagado admite hasta 99999999.99 y rechaza 100000000 (22003)', async () => {
       // Arrange: NUMERIC(10,2). En MySQL con el modo estricto apagado el valor se
       // recortaria a 99999999.99 con un warning; PostgreSQL siempre lo rechaza.
       const fila = await filaValida('plan_cobro');
 
       // Act
       const { rows } = await tx.cliente.query(...insertar('plan_cobro', { ...fila, valor_total: '99999999.99', valor_pagado: '99999999.99' }));
-      const total = await errorDe(tx.cliente, ...insertar('plan_cobro', { ...fila, valor_total: '100000000' }));
       const pagado = await errorDe(tx.cliente, ...insertar('plan_cobro', { ...fila, valor_pagado: '100000000' }));
 
       // Assert
-      expect([rows[0].valor_total, rows[0].valor_pagado]).toEqual(['99999999.99', '99999999.99']);
-      expect([total.code, pagado.code]).toEqual(['22003', '22003']);
+      expect(rows[0].valor_pagado).toBe('99999999.99');
+      expect(pagado.code).toBe('22003');
     });
 
-    test('plan_cobro: el valor se redondea a 2 decimales y los valores por defecto quedan como dice la migracion', async () => {
-      // Arrange
+    // El redondeo de los centavos lo prueba plan-cobro.test.js (#83).
+    test('plan_cobro: los valores por defecto quedan como dice la migracion', async () => {
+      // Arrange: solo lo que la tabla exige
       const fila = await filaValida('plan_cobro');
 
       // Act
-      const { rows } = await tx.cliente.query(...insertar('plan_cobro', { ...fila, valor_total: '1234.565' }));
+      const { rows } = await tx.cliente.query(...insertar('plan_cobro', fila));
 
       // Assert
       expect(rows[0]).toMatchObject({
-        valor_total: '1234.57', valor_pagado: '0.00', metodo_pago: 'EFECTIVO', estado_pago: 'PENDIENTE',
+        valor_total: '0.00', valor_pagado: '0.00', metodo_pago: 'EFECTIVO', estado_pago: 'PENDIENTE',
         activo: true, activar_recordatorio: false, dias_recordatorio: 7, congelado_desde: null,
       });
     });
@@ -288,7 +294,8 @@ describeConBd('plan_cobro, congelacion_plan, notificacion y envio_mensaje contra
       expect(err).toMatchObject({ code: '23514', constraint: restriccion });
     });
 
-    test('borrar al miembro borra su plan y sus congelaciones (ON DELETE CASCADE)', async () => {
+    // Que el miembro se lleva sus planes lo prueba plan-cobro.test.js (#83); aqui, sus congelaciones.
+    test('borrar al miembro borra las congelaciones de su plan (ON DELETE CASCADE)', async () => {
       // Arrange
       const fila = await filaValida('congelacion_plan');
       await tx.cliente.query(...insertar('congelacion_plan', fila));
@@ -298,11 +305,10 @@ describeConBd('plan_cobro, congelacion_plan, notificacion y envio_mensaje contra
 
       // Assert
       const { rows } = await tx.cliente.query(
-        `SELECT (SELECT COUNT(*) FROM plan_cobro WHERE id_miembro = $1)::int AS planes,
-                (SELECT COUNT(*) FROM congelacion_plan WHERE id_miembro = $1)::int AS congelaciones`,
-        [fila.id_miembro],
+        'SELECT COUNT(*)::int AS congelaciones FROM congelacion_plan WHERE id_plan_cobro = $1',
+        [fila.id_plan_cobro],
       );
-      expect(rows[0]).toEqual({ planes: 0, congelaciones: 0 });
+      expect(rows[0]).toEqual({ congelaciones: 0 });
     });
 
     test('borrar al usuario que congelo deja la congelacion sin responsable (ON DELETE SET NULL)', async () => {
@@ -460,20 +466,6 @@ describeConBd('plan_cobro, congelacion_plan, notificacion y envio_mensaje contra
       expect(r.body.congelaciones.every((c) => c.congelada_por === admin.nombre)).toBe(true);
       const creadas = await tx.cliente.query('SELECT id_congelacion FROM congelacion_plan WHERE id_miembro = $1 ORDER BY creada_en DESC LIMIT 5', [miembro.id_miembro]);
       expect(r.body.congelaciones.map((c) => c.id_congelacion)).toEqual(creadas.rows.map((c) => c.id_congelacion));
-    });
-
-    test('GET /lookup trae el ultimo plan vigente del miembro (DISTINCT ON con su ORDER BY)', async () => {
-      // Arrange: dos planes vigentes con el mismo vencimiento; gana el de id mayor
-      const miembro = await crearMiembro(tx.cliente, gym.id_gimnasio);
-      await crearPlan(tx.cliente, miembro, { fecha_fin: '2026-06-01', estado_pago: 'PAGADO' });
-      await crearPlan(tx.cliente, miembro, { fecha_fin: '2026-06-01', estado_pago: 'PARCIAL', tipo_plan: 'ANUAL' });
-
-      // Act
-      const r = await pedir('get', `/admin/miembros/lookup?documento=${miembro.documento}`);
-
-      // Assert
-      expect(r.status).toBe(200);
-      expect(r.body.membresia).toMatchObject({ estado: 'PARCIAL', plan: 'Anual' });
     });
 
     test('POST /:id/congelar marca el plan desde hoy y abre la congelacion; la segunda vez responde 409', async () => {
