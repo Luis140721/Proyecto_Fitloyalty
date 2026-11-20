@@ -365,10 +365,6 @@ describe('POST /api/auth/signup: gym and owner in one transaction', () => {
     ['saving the owner fails', /^INSERT INTO usuario/, undefined, 'conexion perdida'],
     ['setting id_dueno fails with an error other than a missing column', /^UPDATE gimnasio SET id_dueno/, '23503', 'viola la llave foranea gimnasio_id_dueno_fkey'],
     ['saving the default config fails', /^INSERT INTO configuracion_gimnasio/, undefined, 'conexion perdida'],
-    // Documenta el comportamiento actual (defecto reportado): si dos registros con
-    // el mismo correo pasan el chequeo a la vez, el segundo choca con el UNIQUE de
-    // usuario.email y recibe 500 en lugar de 409 USER_EMAIL_TAKEN.
-    ['a concurrent signup took the owner email after the check (23505)', /^INSERT INTO usuario/, '23505', 'duplicate key value violates unique constraint "usuario_email_key"'],
   ])('should roll back everything, log the error and answer 500 when %s', async (_caso, consulta, code, mensaje) => {
     // Dobles: fake de la BD que falla en esa consulta y spy en console.error.
     // Verifica estado (nada confirmado, conexion liberada) y comportamiento (el
@@ -386,6 +382,26 @@ describe('POST /api/auth/signup: gym and owner in one transaction', () => {
     expect(mockBd.confirmadas).toEqual([]);
     expect(mockBd.liberadas).toBe(1);
     expect(console.error).toHaveBeenCalledWith('[POST /auth/signup] Error:', mensaje, expect.any(String));
+  });
+
+  test('should answer 409 USER_EMAIL_TAKEN in the contract and roll back when a concurrent signup took the owner email after the check (23505)', async () => {
+    // Doble: fake de la BD donde el chequeo no ve el correo, pero otro registro lo
+    // guarda antes que este INSERT y PostgreSQL responde con el UNIQUE de
+    // usuario.email. Verifica la salida (el mismo 409 que da el chequeo, no un
+    // 500) y el estado (nada confirmado, conexion liberada).
+    // Arrange
+    mockBd = bdDeRegistro({ antes: [[/^INSERT INTO usuario/, falla('23505', 'duplicate key value violates unique constraint "usuario_email_key"', { constraint: 'usuario_email_key' })]] });
+
+    // Act
+    const r = await registrar();
+
+    // Assert
+    expect(r.status).toBe(409);
+    expect(r.headers['content-type']).toMatch(/^application\/json/);
+    expect(r.body).toEqual({ error: 'Ya existe un usuario con ese correo.', code: 'USER_EMAIL_TAKEN' });
+    expect(mockBd.tx).toBe('deshecha');
+    expect(mockBd.confirmadas).toEqual([]);
+    expect(mockBd.liberadas).toBe(1);
   });
 });
 
