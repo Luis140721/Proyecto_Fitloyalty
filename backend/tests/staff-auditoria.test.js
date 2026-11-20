@@ -175,4 +175,21 @@ describe('GET /api/admin/staff/:id/auditoria: the history of an account', () => 
     expect(r.status).toBe(404);
     expect(r.body.code).toBe('STAFF_NOT_FOUND');
   });
+
+  test.each([
+    ['a receptionist asks for it', () => jwt.sign({ id: ANA, role: 'receptionist', gymId: 7 }, SECRETO, { expiresIn: '1h' }), 403, 'FORBIDDEN'],
+    ['the gym trial has ended', () => { mockBd.gimnasios[0].trial_ends_at = new Date(Date.now() - 1000); return tokenDe(LUIS); }, 402, 'TRIAL_EXPIRED'],
+  ])('should not show the history when %s', async (_caso, prepararToken, status, code) => {
+    // Arrange: Ana ya tiene una fila en su historial
+    await editar(ANA, { activo: false });
+    const token = prepararToken();
+
+    // Act
+    const r = await request(app).get(`/api/admin/staff/${ANA}/auditoria`).set('Authorization', `Bearer ${token}`);
+
+    // Assert
+    expect(r.status).toBe(status);
+    expect(r.body.code).toBe(code);
+    expect(r.body).not.toHaveProperty('auditoria');
+  });
 });
