@@ -74,64 +74,42 @@ describe('PATCH /api/admin/staff/:id: the audit trail', () => {
     expect(usuario(ANA).activo).toBe(false);
   });
 
-  test('should record who reactivated the account when an admin reactivates an inactive receptionist', async () => {
-    // Arrange
-    usuario(ANA).activo = false;
-
-    // Act
-    const r = await editar(ANA, { activo: true });
-
-    // Assert
-    expect(r.status).toBe(200);
-    expect(mockBd.auditoria).toEqual([expect.objectContaining({
-      id_registro: ANA,
-      id_usuario: LUIS,
+  test.each([
+    {
+      caso: 'an admin reactivates an inactive receptionist',
+      preparar: () => { usuario(ANA).activo = false; },
+      objetivo: ANA, cambios: { activo: true },
       detalle: { eventos: ['REACTIVADA'], antes: { activo: false }, despues: { activo: true } },
-    })]);
-  });
-
-  test('should record the old and the new role when an admin changes the role of a receptionist', async () => {
-    // Arrange: Ana es recepcionista
-
-    // Act
-    const r = await editar(ANA, { rol: 'ADMINISTRADOR' });
-
-    // Assert
-    expect(r.status).toBe(200);
-    expect(mockBd.auditoria).toEqual([expect.objectContaining({
-      id_registro: ANA,
-      id_usuario: LUIS,
+    },
+    {
+      caso: 'an admin changes the role of a receptionist',
+      preparar: () => {},
+      objetivo: ANA, cambios: { rol: 'ADMINISTRADOR' },
       detalle: { eventos: ['ROL_CAMBIADO'], antes: { rol: 'RECEPCIONISTA' }, despues: { rol: 'ADMINISTRADOR' } },
-    })]);
-  });
-
-  test('should record ENTRENADOR as the old role when an admin changes the role of a trainer', async () => {
-    // Arrange: una cuenta de entrenador (id_rol 3), que ROL_EXPR conoce pero ID_ROL no
-    mockBd.usuarios.push({ id_usuario: 4, id_gimnasio: 7, nombre: 'Leo Entrenador', email: 'leo@gym.co', id_rol: 3, activo: true });
-
-    // Act
-    const r = await editar(4, { rol: 'RECEPCIONISTA' });
-
-    // Assert
-    expect(r.status).toBe(200);
-    expect(mockBd.auditoria).toEqual([expect.objectContaining({
-      id_registro: 4,
+    },
+    {
+      // Una cuenta de entrenador (id_rol 3), que ROL_EXPR conoce pero ID_ROL no.
+      caso: 'an admin changes the role of a trainer',
+      preparar: () => { mockBd.usuarios.push({ id_usuario: 4, id_gimnasio: 7, nombre: 'Leo Entrenador', email: 'leo@gym.co', id_rol: 3, activo: true }); },
+      objetivo: 4, cambios: { rol: 'RECEPCIONISTA' },
       detalle: { eventos: ['ROL_CAMBIADO'], antes: { rol: 'ENTRENADOR' }, despues: { rol: 'RECEPCIONISTA' } },
-    })]);
-  });
-
-  test('should record the old and the new name when an admin renames a receptionist', async () => {
-    // Arrange: Ana se llama «Ana Recepcion»
+    },
+    {
+      caso: 'an admin renames a receptionist',
+      preparar: () => {},
+      objetivo: ANA, cambios: { nombre: '  Ana Maria  ' },
+      detalle: { eventos: ['NOMBRE_CAMBIADO'], antes: { nombre: 'Ana Recepcion' }, despues: { nombre: 'Ana Maria' } },
+    },
+  ])('should record what changed, before and after, when $caso', async ({ preparar, objetivo, cambios, detalle }) => {
+    // Arrange
+    preparar();
 
     // Act
-    const r = await editar(ANA, { nombre: '  Ana Maria  ' });
+    const r = await editar(objetivo, cambios);
 
     // Assert
     expect(r.status).toBe(200);
-    expect(mockBd.auditoria).toEqual([expect.objectContaining({
-      id_registro: ANA,
-      detalle: { eventos: ['NOMBRE_CAMBIADO'], antes: { nombre: 'Ana Recepcion' }, despues: { nombre: 'Ana Maria' } },
-    })]);
+    expect(mockBd.auditoria).toEqual([expect.objectContaining({ id_registro: objetivo, id_usuario: LUIS, detalle })]);
   });
 
   test.each([
