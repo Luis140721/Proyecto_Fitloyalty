@@ -65,6 +65,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 /** Abre el asistente con la lista ya cargada. */
@@ -244,6 +245,64 @@ describe('MiembrosPage: las reglas del asistente', () => {
     expect(screen.getByText('Paso 1 de 5')).toBeInTheDocument();
   });
 
+  test.each([
+    ['the name has one letter', { nombre: 'A' }, /^Nombre completo/, 'El nombre es demasiado corto.'],
+    ['the document has four digits', { documento: '1234' }, /^Número documento/, 'El documento parece incompleto.'],
+    ['the email has no domain', { email: 'sofia@correo' }, /^Email/, 'Este correo no tiene un formato válido.'],
+    ['the birth date does not exist', { nacimiento: '31021990' }, null, 'Fecha incompleta o inexistente. Usa DD/MM/AAAA.'],
+    ['the birth date has day 00', { nacimiento: '00051990' }, null, 'Fecha incompleta o inexistente. Usa DD/MM/AAAA.'],
+  ])('should stay on step 1 and explain it when %s', async (_caso, cambios, etiqueta, mensaje) => {
+    // Arrange
+    const datos = { nombre: 'Sofía Gómez', documento: '1033444555', ...cambios };
+    const { user } = await abrirAlta();
+    await user.type(campo(/^Nombre completo/), datos.nombre);
+    await user.type(campo(/^Número documento/), datos.documento);
+    await user.type(campo(/^Teléfono \/ WhatsApp/), '3201112233');
+    if (datos.email) await user.type(campo(/^Email/), datos.email);
+    if (datos.nacimiento) await user.type(campo(/^Fecha nacimiento/), datos.nacimiento);
+
+    // Act
+    await user.click(siguiente());
+
+    // Assert
+    expect(screen.getByText(mensaje)).toBeInTheDocument();
+    if (etiqueta) expect(campo(etiqueta)).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByText('Paso 1 de 5')).toBeInTheDocument();
+  });
+
+  test.each([
+    ['the start date is empty', async (user) => user.clear(campo(/^Fecha inicio/)), null, 'Indica cuándo empieza el plan.'],
+    ['the start date does not exist', async (user) => {
+      await user.clear(campo(/^Fecha inicio/));
+      await user.type(campo(/^Fecha inicio/), '31022026');
+    }, null, 'Fecha incompleta o inexistente. Usa DD/MM/AAAA.'],
+    ['the price is negative', async (user) => {
+      await user.clear(campo(/^Valor total del plan/));
+      await user.type(campo(/^Valor total del plan/), '-5000');
+    }, /^Valor total del plan/, 'El valor no puede ser negativo.'],
+    ['the payment of today is negative', async (user) => {
+      await user.clear(campo(/^Valor pagado hoy/));
+      await user.type(campo(/^Valor pagado hoy/), '-5000');
+    }, /^Valor pagado hoy/, 'El valor no puede ser negativo.'],
+  ])('should stay on step 3 and explain it when %s', async (_caso, cambiar, etiqueta, mensaje) => {
+    // Arrange
+    const { user } = await abrirAlta();
+    await user.type(campo(/^Nombre completo/), 'Sofía Gómez');
+    await user.type(campo(/^Número documento/), '1033444555');
+    await user.type(campo(/^Teléfono \/ WhatsApp/), '3201112233');
+    await user.click(siguiente());
+    await user.click(siguiente());
+    await cambiar(user);
+
+    // Act
+    await user.click(siguiente());
+
+    // Assert
+    expect(screen.getByText(mensaje)).toBeInTheDocument();
+    if (etiqueta) expect(campo(etiqueta)).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByText('Paso 3 de 5')).toBeInTheDocument();
+  });
+
   test('should stay on step 2 and ask for 10 digits when the emergency phone is incomplete', async () => {
     // Arrange
     const { user } = await abrirAlta();
@@ -326,9 +385,53 @@ describe('MiembrosPage: los filtros', () => {
     expect(filaDe('Julio Mora')).toBeInTheDocument();
     expect(screen.queryByRole('row', { name: /Ana Pérez/ })).not.toBeInTheDocument();
   });
+  test('should show only the members without notices when the tab Al día is chosen', async () => {
+    // Arrange
+    miembros = [ANA, { ...JULIO, activo: true, vencido: true }];
+    const { user } = abrirMiembros();
+    await screen.findByRole('row', { name: /Julio Mora/ });
+
+    // Act
+    await user.click(screen.getByRole('tab', { name: /^Al día/ }));
+
+    // Assert
+    expect(filaDe('Ana Pérez')).toBeInTheDocument();
+    expect(screen.queryByRole('row', { name: /Julio Mora/ })).not.toBeInTheDocument();
+  });
+
+  test('should search among the deactivated members when the tab Desactivados is open', async () => {
+    // Arrange
+    const { user } = abrirMiembros();
+    await screen.findByRole('row', { name: /Ana Pérez/ });
+    await user.click(screen.getByRole('tab', { name: /^Desactivados/ }));
+    await screen.findByRole('row', { name: /Julio Mora/ });
+
+    // Act
+    await user.type(screen.getByRole('textbox', { name: 'Buscar miembros' }), 'Julio');
+    await user.click(screen.getByRole('button', { name: 'Buscar' }));
+
+    // Assert
+    await waitFor(() => expect(mockGet).toHaveBeenLastCalledWith('/admin/miembros', { params: { q: 'Julio', pageSize: 100, includeInactive: true } }));
+  });
 });
 
 describe('MiembrosPage: el miembro recien creado', () => {
+  test('should copy the image of the QR and say it can be pasted in WhatsApp when the browser allows it', async () => {
+    // Arrange: un navegador con ClipboardItem (user-event ya simula el portapapeles)
+    vi.stubGlobal('ClipboardItem', class { constructor(datos) { this.datos = datos; } });
+    vi.stubGlobal('fetch', vi.fn(async () => ({ blob: async () => new Blob(['QR'], { type: 'image/png' }) })));
+    const avisar = vi.spyOn(window, 'alert').mockImplementation(() => {});
+    const descargar = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    const { user } = await crearASofia();
+
+    // Act
+    await user.click(screen.getByRole('button', { name: 'Copiar QR' }));
+
+    // Assert
+    await waitFor(() => expect(avisar).toHaveBeenCalledWith('Imagen del QR copiada al portapapeles. Ahora puedes pegarla en WhatsApp.'));
+    expect(fetch).toHaveBeenCalledWith('data:image/png;base64,UVI=');
+    expect(descargar).not.toHaveBeenCalled();
+  });
   test('should offer WhatsApp with the phone and a welcome message when the member is created', async () => {
     // Arrange y Act
     await crearASofia();
