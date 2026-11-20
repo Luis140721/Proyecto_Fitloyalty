@@ -1,10 +1,9 @@
 import { defineConfig, devices } from '@playwright/test';
 import { exigirBdDePruebas } from './guardia-bd.cjs';
+import { API_URL } from './tests/support/entorno.js';
 
 const FRONT_PORT = process.env.FRONT_PORT ?? '5173';
 const FRONT_URL = `http://localhost:${FRONT_PORT}`;
-// Puerto fijo: los mocks de login.spec.js interceptan http://localhost:3001/api/**.
-const API_URL = 'http://localhost:3001/api';
 
 // BD de pruebas desechable (servicio db-test de e2e/docker-compose.yml). Las
 // credenciales son de prueba, no secretos. Se puede cambiar con E2E_DATABASE_URL.
@@ -24,13 +23,20 @@ exigirBdDePruebas(DATABASE_URL, 'E2E_DATABASE_URL');
 export default defineConfig({
   testDir: './tests',
   timeout: 30_000,
-  retries: 0,
-  reporter: [['list'], ['html', { open: 'never' }]],
   use: {
     baseURL: FRONT_URL,
-    trace: 'retain-on-failure',
+    // Guarda la traza solo cuando un test falla y se reintenta: se abre con "pnpm report"
+    trace: 'on-first-retry',
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  // Lista en la terminal + reporte HTML que abres cuando quieras con "pnpm report"
+  reporter: [['list'], ['html', { open: 'never' }]],
+  retries: process.env.CI ? 1 : 0,
+  projects: [
+    // Inicia sesion una sola vez por corrida y la guarda (tests/auth.setup.js). Los
+    // archivos que la necesitan la cargan con test.use({ storageState: SESION }).
+    { name: 'setup', testMatch: /.*\.setup\.js/ },
+    { name: 'chromium', use: { ...devices['Desktop Chrome'] }, dependencies: ['setup'] },
+  ],
   // Levanta el backend real y el frontend. Un test puede simular el API con
   // page.route (como login.spec.js) o usar el backend real contra la BD de pruebas.
   webServer: [
