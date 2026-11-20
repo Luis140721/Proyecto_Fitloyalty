@@ -89,4 +89,19 @@ describe('PATCH /api/admin/staff/:id: the audit trail', () => {
       detalle: { eventos: ['REACTIVADA'], antes: { activo: false }, despues: { activo: true } },
     })]);
   });
+
+  test('should record the old and the new role when an admin changes the role of a receptionist', async () => {
+    // Arrange: Ana es recepcionista
+
+    // Act
+    const r = await editar(ANA, { rol: 'ADMINISTRADOR' });
+
+    // Assert
+    expect(r.status).toBe(200);
+    expect(mockBd.auditoria).toEqual([expect.objectContaining({
+      id_registro: ANA,
+      id_usuario: LUIS,
+      detalle: { eventos: ['ROL_CAMBIADO'], antes: { rol: 'RECEPCIONISTA' }, despues: { rol: 'ADMINISTRADOR' } },
+    })]);
+  });
 });
