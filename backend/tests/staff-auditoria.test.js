@@ -105,6 +105,21 @@ describe('PATCH /api/admin/staff/:id: the audit trail', () => {
     })]);
   });
 
+  test('should record ENTRENADOR as the old role when an admin changes the role of a trainer', async () => {
+    // Arrange: una cuenta de entrenador (id_rol 3), que ROL_EXPR conoce pero ID_ROL no
+    mockBd.usuarios.push({ id_usuario: 4, id_gimnasio: 7, nombre: 'Leo Entrenador', email: 'leo@gym.co', id_rol: 3, activo: true });
+
+    // Act
+    const r = await editar(4, { rol: 'RECEPCIONISTA' });
+
+    // Assert
+    expect(r.status).toBe(200);
+    expect(mockBd.auditoria).toEqual([expect.objectContaining({
+      id_registro: 4,
+      detalle: { eventos: ['ROL_CAMBIADO'], antes: { rol: 'ENTRENADOR' }, despues: { rol: 'RECEPCIONISTA' } },
+    })]);
+  });
+
   test('should record the old and the new name when an admin renames a receptionist', async () => {
     // Arrange: Ana se llama «Ana Recepcion»
 
