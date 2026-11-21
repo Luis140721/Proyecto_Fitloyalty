@@ -9,7 +9,22 @@ const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 
 const mockQuery = jest.fn();
-jest.mock('../src/db/db', () => ({ query: (...a) => mockQuery(...a) }));
+// El check-in busca el ingreso repetido e inserta con un cliente del pool, en
+// una transaccion (#80). El cliente usa la misma base falsa; BEGIN, COMMIT,
+// ROLLBACK y el bloqueo no devuelven filas. mockCliente guarda lo que paso por
+// el cliente, en orden.
+const mockCliente = [];
+const mockSinFilas = /^(BEGIN|COMMIT|ROLLBACK)$|pg_advisory_xact_lock/;
+jest.mock('../src/db/db', () => ({
+  query: (...a) => mockQuery(...a),
+  connect: async () => ({
+    query: (sql, ...r) => {
+      mockCliente.push(sql);
+      return mockSinFilas.test(sql) ? Promise.resolve({ rows: [] }) : mockQuery(sql, ...r);
+    },
+    release: () => { mockCliente.push('release'); },
+  }),
+}));
 
 process.env.JWT_SECRET = 'secreto-de-pruebas';
 
@@ -50,9 +65,18 @@ const call = async (method, url, tk, body) => {
 
 beforeEach(() => {
   mockQuery.mockReset();
+  mockCliente.length = 0;
   jest.spyOn(console, 'error').mockImplementation(() => {});
 });
 afterEach(() => jest.restoreAllMocks());
+
+/** Lo que paso por el cliente de la transaccion, con el SQL resumido. */
+const pasosDelCliente = () => mockCliente.map((s) => {
+  if (s === "SELECT pg_advisory_xact_lock(hashtext('checkin'), $1)") return 'bloqueo del miembro';
+  if (/INSERT INTO checkin/i.test(s)) return 'inserta';
+  if (/FROM checkin/i.test(s)) return 'busca el repetido';
+  return s;
+});
 
 const manana = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
 const ANA = { id_miembro: 12, nombre: 'Ana', documento: '123', codigo_qr: 'QR-ANA', qr_imagen: null };
@@ -155,6 +179,22 @@ describe('POST /api/admin/checkin: registro y permisos', () => {
     const r = await call('POST', '/api/admin/checkin', RECEP, { documento: '123' });
     expect(r.status).toBe(503);
     expect(r.body.code).toBe('DB_UNREACHABLE');
+    expect(pasosDelCliente()).toEqual(['BEGIN', 'bloqueo del miembro', 'busca el repetido', 'inserta', 'ROLLBACK', 'release']);
+  });
+
+  // #80: la carrera en si se prueba contra PostgreSQL, en
+  // tests/integracion/checkin-concurrente.test.js. Aqui, el orden de las consultas.
+  test('busca el repetido e inserta en una transaccion, despues del bloqueo del miembro', async () => {
+    preparar();
+    const r = await call('POST', '/api/admin/checkin', RECEP, { documento: '123' });
+    expect(r.status).toBe(201);
+    expect(pasosDelCliente()).toEqual(['BEGIN', 'bloqueo del miembro', 'busca el repetido', 'inserta', 'COMMIT', 'release']);
+  });
+
+  test('si ya hay un ingreso en la ventana, confirma la transaccion sin insertar', async () => {
+    preparar({ repetido: [{ id_checkin: 9, fecha_hora: new Date(), metodo: 'QR' }] });
+    await call('POST', '/api/admin/checkin', RECEP, { documento: '123' });
+    expect(pasosDelCliente()).toEqual(['BEGIN', 'bloqueo del miembro', 'busca el repetido', 'COMMIT', 'release']);
   });
 
   test('un token de miembro (app movil) no puede hacer check-in: 403', async () => {

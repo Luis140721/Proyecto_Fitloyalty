@@ -153,7 +153,7 @@ describe('passwordStrength', () => {
     ['6 characters with uppercase and numbers', 3, 'Abc123'],
     ['10 characters with uppercase and numbers', 4, 'Abcdefgh12'],
     ['12 characters with every kind', 4, 'Abcdefgh123!'],
-  ])('should score %s as level %i', (_caso, nivel, password) => {
+  ])('should rate a password of %s as level %i when its strength is measured', (_caso, nivel, password) => {
     // Arrange: la contraseña viene del caso
 
     // Act

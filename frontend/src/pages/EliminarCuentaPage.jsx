@@ -48,7 +48,7 @@ export default function EliminarCuentaPage() {
       </ul>
       <div className="legal-callout">
         <div className="legal-callout__title">
-          <span className="material-symbols-outlined">warning</span>
+          <span className="material-symbols-outlined" aria-hidden="true">warning</span>
           Acción irreversible
         </div>
         <p>
@@ -79,7 +79,7 @@ export default function EliminarCuentaPage() {
           <h2>Cuenta eliminada</h2>
           <div className="legal-callout">
             <div className="legal-callout__title">
-              <span className="material-symbols-outlined">check_circle</span>
+              <span className="material-symbols-outlined" aria-hidden="true">check_circle</span>
               Datos borrados
             </div>
             <p>
@@ -90,7 +90,7 @@ export default function EliminarCuentaPage() {
           </div>
           <div style={{ marginTop: 24 }}>
             <Link to="/" className="btn btn-primary">
-              <span className="material-symbols-outlined icon">home</span>
+              <span className="material-symbols-outlined icon" aria-hidden="true">home</span>
               Volver al inicio
             </Link>
           </div>
@@ -102,7 +102,7 @@ export default function EliminarCuentaPage() {
             <form onSubmit={onSubmit} className="legal-delete-form" noValidate>
               {error && (
                 <div className="alert alert-error" role="alert" style={{ marginBottom: 16 }}>
-                  <span className="material-symbols-outlined icon">error</span>
+                  <span className="material-symbols-outlined icon" aria-hidden="true">error</span>
                   <span>{error}</span>
                 </div>
               )}
@@ -148,7 +148,7 @@ export default function EliminarCuentaPage() {
                   disabled={submitting || !confirm || !password}
                   style={{ background: 'var(--error)', borderColor: 'var(--error)' }}
                 >
-                  <span className="material-symbols-outlined icon">delete_forever</span>
+                  <span className="material-symbols-outlined icon" aria-hidden="true">delete_forever</span>
                   {submitting ? 'Procesando...' : 'Eliminar cuenta definitivamente'}
                 </button>
                 <button
@@ -163,7 +163,7 @@ export default function EliminarCuentaPage() {
           ) : (
             <div className="legal-callout">
               <div className="legal-callout__title">
-                <span className="material-symbols-outlined">login</span>
+                <span className="material-symbols-outlined" aria-hidden="true">login</span>
                 Inicia sesión para eliminar tu cuenta
               </div>
               <p>

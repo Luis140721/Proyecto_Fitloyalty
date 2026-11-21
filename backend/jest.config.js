@@ -11,6 +11,9 @@
 module.exports = {
   testEnvironment: 'node',
   testMatch: ['<rootDir>/tests/**/*.test.js'],
+  // Guarda la DATABASE_URL del entorno del proceso antes de que un test cargue
+  // dotenv: la de backend/.env no activa los tests de integracion.
+  setupFiles: ['<rootDir>/tests/integracion/entorno-del-proceso.js'],
   clearMocks: true,
   collectCoverageFrom: [
     'src/lib/**/*.js',

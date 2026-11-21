@@ -77,12 +77,12 @@ export default function MenuPerfil() {
           <div className="menu-perfil__acciones">
             {esAdmin && (
               <Link to="/admin/config" className="btn btn-secondary btn-sm" onClick={() => setAbierto(false)}>
-                <span className="material-symbols-outlined icon">settings</span>
+                <span className="material-symbols-outlined icon" aria-hidden="true">settings</span>
                 Configuración
               </Link>
             )}
             <button className="btn btn-ghost btn-sm" onClick={logout}>
-              <span className="material-symbols-outlined icon">logout</span>
+              <span className="material-symbols-outlined icon" aria-hidden="true">logout</span>
               Cerrar sesión
             </button>
           </div>

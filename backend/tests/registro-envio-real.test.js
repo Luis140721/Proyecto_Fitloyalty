@@ -1,106 +1,37 @@
 /**
  * RQF-09 contra una base de datos real (issue #24).
  *
- * Levanta los routers reales de notificaciones y de miembros sobre la base de
- * TEST_DATABASE_URL y los llama por HTTP. Comprueba las filas que quedan en
+ * Levanta los routers reales de notificaciones y de miembros sobre la BD de
+ * pruebas y los llama por HTTP. Comprueba las filas que quedan en
  * envio_mensaje y canal_comunicacion (incluido que cinco envios a la vez en un
  * gimnasio sin canal crean uno solo y que un canal inactivo no se usa) y que
  * el borrado permanente de un miembro al que se le escribio funciona.
  *
- * Sirve con las dos formas de crear la base:
- *   - ConsultasDB/Query_Inicial_Crear_Tablas.sql (el esquema de produccion)
- *   - las migraciones de backend/migrations (Docker, node src/db/migrate.js)
+ * La conexion es la de los tests de integracion (tests/integracion/bd-pruebas.js):
+ *   - Sin DATABASE_URL en el entorno del proceso se salta entera (asi queda en
+ *     el job backend del CI); la DATABASE_URL de backend/.env no la activa.
+ *   - Solo acepta la BD de pruebas local (127.0.0.1:5433, BD terminada en
+ *     _test), revisa antes de conectarse el destino que pg va a usar de verdad
+ *     y aplica las migraciones de backend/migrations.
+ *   - Crea sus propios gimnasios y al final borra todo lo que creo, tabla por
+ *     tabla, de las hijas a gimnasio.
  *
- * Seguridad:
- *   - Sin TEST_DATABASE_URL se salta entera (asi queda en CI); solo corren las
- *     pruebas de la guardia, que no se conectan a nada.
- *   - Se niega a correr si la conexion no va a localhost o 127.0.0.1. Mira el
- *     destino tal como lo calcula pg, no el hostname de la URL: pg obedece
- *     ?host= en la query, y db.js reescribe la URL al quitar sslmode.
- *   - Crea sus propios gimnasios y al final borra todo lo que creo. En el
- *     esquema de ConsultasDB las FK no tienen ON DELETE CASCADE, asi que se
- *     borra tabla por tabla, de las hijas a gimnasio.
+ * Uso (desde la raiz, con db-test levantada):
  *
- * Uso (desde backend/):
- *
- *   TEST_DATABASE_URL=postgres://postgres:...@127.0.0.1:55433/fl_consultas \
- *   npx jest tests/registro-envio-real.test.js
+ *   DATABASE_URL=postgres://fitloyalty_test:fitloyalty_test@127.0.0.1:5433/fitloyalty_test \
+ *   pnpm --dir backend run test:integracion
  */
 const crypto = require('crypto');
 const express = require('express');
 const jwt = require('jsonwebtoken');
-const ConnectionParameters = require('pg/lib/connection-parameters');
+// La guardia de la BD de pruebas y la DATABASE_URL del entorno del proceso:
+// ver tests/integracion/bd-pruebas.js.
+const { describeConBd, prepararBdDePruebas } = require('./integracion/bd-pruebas');
 
-const HOSTS_LOCALES = ['localhost', '127.0.0.1', '::1', '[::1]'];
+// El secreto con el que esta prueba firma sus tokens. Solo vale en este archivo.
+process.env.JWT_SECRET = 'prueba-real-local';
 
-/**
- * Lanza si la conexion no va a una base local. `config` es una URL o la
- * configuracion que recibe pg; el host sale del mismo parser que usa pg (con
- * ?host= en la query y las variables PG*), no de new URL.
- */
-function exigirBaseLocal(config) {
-  const { host } = new ConnectionParameters(typeof config === 'string' ? { connectionString: config } : config);
-  if (!HOSTS_LOCALES.includes(host)) {
-    throw new Error(`Me niego: TEST_DATABASE_URL lleva a "${host}" y esta prueba solo corre contra una base local (localhost o 127.0.0.1).`);
-  }
-}
-
-const URL_PRUEBA = process.env.TEST_DATABASE_URL;
-let poolReal;
-if (URL_PRUEBA) {
-  exigirBaseLocal(URL_PRUEBA);
-  // db.js lee DATABASE_URL al cargarse: se fija antes para que la ruta use la
-  // base de prueba y no la de .env.
-  process.env.DATABASE_URL = URL_PRUEBA;
-  process.env.DB_SSL = 'false';
-  process.env.JWT_SECRET = 'prueba-real-local';
-  poolReal = require('../src/db/db');
-  // Lo que db.js le paso a pg, por si al reescribir la URL cambio el destino.
-  exigirBaseLocal(poolReal.options);
-}
-
-describe('guardia de la base de pruebas', () => {
-  test.each([
-    'postgres://u:c@127.0.0.1:55433/fl_consultas',
-    'postgres://u:c@localhost/fl_consultas',
-    'postgres://u:c@[::1]:55433/fl_consultas',
-  ])('acepta una base local: %s', (url) => {
-    expect(() => exigirBaseLocal(url)).not.toThrow();
-  });
-
-  test.each([
-    ['una base remota', 'postgres://u:c@ep-algo.us-east-2.aws.neon.tech/neondb'],
-    ['?host= remoto con hostname local', 'postgres://u:c@127.0.0.1:55433/fl_consultas?host=ep-algo.neon.tech'],
-    ['?host= de socket', 'postgres:///fl_consultas?host=/tmp'],
-    ['varios hosts', 'postgres://u:c@127.0.0.1,ep-x.neon.tech:5432/fl_consultas'],
-    ['un socket codificado como host', 'postgres://u:c@%2Fvar%2Frun%2Fpostgresql:5432/fl_consultas'],
-  ])('rechaza %s', (_caso, url) => {
-    expect(() => exigirBaseLocal(url)).toThrow(/Me niego/);
-  });
-
-  test('rechaza una URL que db.js reescribe hacia otro host al quitar sslmode', () => {
-    // Para new URL y para pg lo de despues de # no cuenta, pero db.js quita
-    // "sslmode=disable#" y deja "?&host=...", que pg si obedece.
-    const url = 'postgres://u:c@127.0.0.1:55433/fl_consultas?sslmode=disable#&host=ep-algo.neon.tech';
-    expect(() => exigirBaseLocal(url)).not.toThrow();
-    const antes = { url: process.env.DATABASE_URL, ssl: process.env.DB_SSL };
-    let pool;
-    try {
-      process.env.DATABASE_URL = url;
-      process.env.DB_SSL = 'false';
-      jest.isolateModules(() => { pool = require('../src/db/db'); });
-      expect(() => exigirBaseLocal(pool.options)).toThrow(/Me niego: .*ep-algo\.neon\.tech/);
-    } finally {
-      if (antes.url === undefined) delete process.env.DATABASE_URL; else process.env.DATABASE_URL = antes.url;
-      if (antes.ssl === undefined) delete process.env.DB_SSL; else process.env.DB_SSL = antes.ssl;
-      if (pool) pool.end();
-    }
-  });
-});
-
-const describeReal = URL_PRUEBA ? describe : describe.skip;
-
-describeReal('RQF-09 contra la base real: POST /api/admin/notificaciones/enviado', () => {
+describeConBd('RQF-09 contra la base real: POST /api/admin/notificaciones/enviado', () => {
   let pool, server, base, establecerBusquedaPersonal;
   const gimnasios = [];
   // gymA: Ana (con alerta), Carla, la recepcionista y una administradora;
@@ -155,7 +86,7 @@ describeReal('RQF-09 contra la base real: POST /api/admin/notificaciones/enviado
   }
 
   beforeAll(async () => {
-    pool = poolReal;
+    pool = await prepararBdDePruebas();
     ({ establecerBusquedaPersonal } = require('../src/middleware/auth'));
     const notifRouter = require('../src/routes/notificaciones');
     const miembrosRouter = require('../src/routes/miembros');
@@ -204,7 +135,7 @@ describeReal('RQF-09 contra la base real: POST /api/admin/notificaciones/enviado
     await new Promise((resolve) => {
       server = app.listen(0, () => { base = `http://127.0.0.1:${server.address().port}`; resolve(); });
     });
-  });
+  }, 60_000);
 
   afterAll(async () => {
     if (establecerBusquedaPersonal) establecerBusquedaPersonal(null);
