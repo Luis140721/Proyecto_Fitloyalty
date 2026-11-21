@@ -102,3 +102,17 @@ Se aplicó con `migrate.js` en las dos bases y después se corrió dos veces má
 - Los gimnasios sin NIT, dirección o correo registrados salen sin esos datos; el contrato no se bloquea por eso, solo si no hay ni teléfono ni correo para PQR.
 - El panel no tiene un botón de vista previa: el endpoint existe, pero la pantalla solo tiene «Enviar contrato».
 - Las condiciones de `TerminosPage` cambiaron (suspensión, responsabilidad, modificaciones, jurisdicción): son compromisos de FitLoyalty con los gimnasios y conviene que Luis los confirme.
+
+## Ajustes del verificador del #102 (rama `feat/rqnf-16-ley2300`, 2026-11-21)
+
+Las observaciones de RQNF-18 que se corrigieron junto con RQNF-16 (ver `docs/evidencias/rqnf-16-ley-2300.md`). Por estos cambios el contrato pasa a la **versión v3** (`backend/src/lib/mensajes.js:148-153`): las entregas viejas conservan su texto y su versión en `contrato_enviado`.
+
+| Obs. | Qué pasaba | Qué se hizo | Dónde | Prueba |
+|---|---|---|---|---|
+| 4 | Si el menor no tenía teléfono del representante, el contrato se enviaba al teléfono del menor | El contrato de un menor solo va al teléfono de su representante; si no lo tiene, 400 «… El contrato no se envia al telefono del menor» y no se envía nada | `backend/src/routes/admin-contrato.js:59-77`, `:100-106` | `ley2300-preferencias.test.js` («(4) …»: 400 y WhatsApp sin llamar) |
+| 8 | La cláusula 12 decía que solo llegarían mensajes publicitarios autorizados, pero el sistema no lo aplicaba | Con RQNF-16 es verdad, y la cláusula (ahora «Datos personales y mensajes») dice si el miembro aceptó mensajes comerciales y por qué canales, el horario y la frecuencia de todos los mensajes (también los avisos) y cómo cancelarlos (app, enlace al final de cada mensaje comercial o recepción) | `mensajes.js:421-434`; los datos salen de la autorización vigente (`mensajes.js:276-284`) | `ley2300-preferencias.test.js` («(8) …»: «no» y «sí, por WhatsApp y correo») |
+| 9 | Sin plan no había cláusula 4, así que la numeración se corría y las referencias a las cláusulas 6, 8 y 11 apuntaban mal | Sin plan, la cláusula 4 («Precio total y forma de pago») sigue existiendo con un texto que lo explica; siempre hay 15 cláusulas | `mensajes.js:363-369` | `ley2300-preferencias.test.js` («(9) …»: 15 cláusulas, la 6 es Congelamiento, la 8 Terminación y la 11 PQR) |
+| 10 | La cláusula 10 no incluía las demás obligaciones legales del gimnasio | Agrega «y por las demás obligaciones que le impone la ley» | `mensajes.js:408-414` | `ley2300-preferencias.test.js` («(10) … cláusula 10») |
+| 10 | Para un menor, la cláusula 15 decía «Aceptaste» | Dice «Tu representante legal, <nombre>, aceptó las condiciones del gimnasio en tu nombre el …» (y, sin constancia, que el representante debe confirmarlas en recepción) | `mensajes.js:447-462` | `ley2300-preferencias.test.js` («(10) … cláusula 15», con el caso del adulto) |
+
+Pruebas que cambiaron: `legal-real.test.js` compara la versión de las entregas con `CONTRATO_VERSION` (v3) en vez de `'v2'`. Todas pasan sin base y contra `fl_consultas` y `fl_migraciones` (602 de 602).
