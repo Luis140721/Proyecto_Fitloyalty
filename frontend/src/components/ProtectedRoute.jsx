@@ -8,7 +8,9 @@ export default function ProtectedRoute({ roles, children }) {
   // 1) Mientras revalidamos la sesión, mostrar spinner. NUNCA redirigir a /login
   //    aquí, porque si guardamos token en localStorage todavía estamos logueados.
   if (loading && !ready) {
-    return <div className="boot-shell"><div className="spinner" /></div>;
+    // role="status" y su nombre: el lector de pantalla anuncia la carga y los
+    // tests lo encuentran con getByRole.
+    return <div className="boot-shell"><div className="spinner" role="status" aria-label="Cargando" /></div>;
   }
 
   // 2) Tras revalidar: si NO hay user (token inválido/expirado), a login.
