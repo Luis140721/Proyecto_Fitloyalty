@@ -180,11 +180,15 @@ export function CasillaMensajesComerciales({ checked, onChange, canales = [], on
     const nuevos = CANALES_COMERCIALES.map((x) => x.valor)
       .filter((x) => (x === c ? valor : marcado(x)));
     onCanales(nuevos);
+    // Sin ningun canal no hay aceptacion: se apaga con el ultimo.
+    if (checked && nuevos.length === 0) onChange(false);
   };
+  // El texto dice «por los canales que marco»: no se marca ninguno solo. Para
+  // aceptar hay que marcar antes al menos un canal.
+  const sinCanal = !canales || canales.length === 0;
   const activar = (valor) => {
+    if (valor && sinCanal) return;
     onChange(valor);
-    // Para aceptar hace falta un canal: si no hay, se propone WhatsApp.
-    if (valor && (!canales || canales.length === 0)) onCanales(['WHATSAPP']);
   };
   return (
     <div style={{ background: 'var(--surface-container-low)', borderRadius: 'var(--radius)', padding: 12, marginBottom: 12 }}>
@@ -195,6 +199,7 @@ export function CasillaMensajesComerciales({ checked, onChange, canales = [], on
           aria-checked={Boolean(checked)}
           checked={Boolean(checked)}
           onChange={(e) => activar(e.target.checked)}
+          disabled={!checked && sinCanal}
           style={{ marginTop: 4 }}
           aria-describedby="texto-autorizacion-MENSAJES_COMERCIALES"
         />
@@ -204,26 +209,27 @@ export function CasillaMensajesComerciales({ checked, onChange, canales = [], on
           {menor && <span style={{ display: 'block', marginTop: 4, color: 'var(--on-surface-variant)' }}>El miembro es menor de edad: esta decisión la toma su representante legal.</span>}
         </span>
       </label>
-      {checked && (
-        <div style={{ display: 'flex', gap: 16, marginLeft: 26, marginBottom: 6 }} role="group" aria-label="Canales autorizados">
-          {CANALES_COMERCIALES.map((c) => (
-            <label key={c.valor} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
-              <input
-                type="checkbox"
-                checked={marcado(c.valor)}
-                onChange={(e) => alternarCanal(c.valor, e.target.checked)}
-              />
-              {c.etiqueta}
-            </label>
-          ))}
-        </div>
-      )}
+      {/* Los canales se ven siempre: primero se marcan, luego se acepta. */}
+      <div style={{ display: 'flex', gap: 16, marginLeft: 26, marginBottom: 6 }} role="group" aria-label="Canales autorizados">
+        {CANALES_COMERCIALES.map((c) => (
+          <label key={c.valor} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+            <input
+              type="checkbox"
+              checked={marcado(c.valor)}
+              onChange={(e) => alternarCanal(c.valor, e.target.checked)}
+            />
+            {c.etiqueta}
+          </label>
+        ))}
+      </div>
       <p className="field-hint" style={{ margin: 0 }}>
         {checked
           ? (canales && canales.length > 0
             ? 'Recibirá campañas y mensajes de retención solo por los canales marcados y en el horario de la Ley 2300.'
             : 'Marca al menos un canal o apaga los mensajes comerciales.')
-          : 'Sin esta aceptación no recibe campañas ni mensajes de retención. Los avisos de su plan (vencimiento) sí le llegan.'}
+          : (sinCanal
+            ? 'Para registrar la aceptación, marca primero los canales que el miembro elige. Sin ella no recibe campañas ni mensajes de retención; los avisos de su plan (vencimiento) sí le llegan.'
+            : 'Sin esta aceptación no recibe campañas ni mensajes de retención. Los avisos de su plan (vencimiento) sí le llegan.')}
       </p>
       {aviso && (
         <div className="alert alert-warning" role="status" style={{ marginTop: 10, marginBottom: 0 }}>

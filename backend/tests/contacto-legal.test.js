@@ -1,8 +1,9 @@
 /**
  * RQNF-16: reglas de la Ley 2300 de 2023 (lib/contacto-legal.js).
  *
- *   - festivos de Colombia calculados (fijos, Ley 51 de 1983 y Pascua), con
- *     las listas completas de 2026 y 2027;
+ *   - festivos de Colombia calculados (fijos, Ley 51 de 1983, Pascua y, desde
+ *     2026, la Virgen de Chiquinquirá de la Ley 2578), con las listas
+ *     completas de 2026 y 2027 (19 cada año);
  *   - horario: bordes de lunes a viernes (7:00 a. m. a 7:00 p. m.), del sabado
  *     (8:00 a. m. a 3:00 p. m.), domingos y festivos, y el siguiente horario
  *     permitido;
@@ -24,20 +25,36 @@ const {
 const co = (texto) => new Date(`${texto.replace(' ', 'T')}:00-05:00`);
 
 describe('festivos de Colombia', () => {
-  test('2026: los 18 festivos', () => {
+  test('2026: los 19 festivos (con la Virgen de Chiquinquirá, lunes 13 de julio)', () => {
     expect([...festivosColombia(2026).keys()]).toEqual([
       '2026-01-01', '2026-01-12', '2026-03-23', '2026-04-02', '2026-04-03', '2026-05-01',
-      '2026-05-18', '2026-06-08', '2026-06-15', '2026-06-29', '2026-07-20', '2026-08-07',
-      '2026-08-17', '2026-10-12', '2026-11-02', '2026-11-16', '2026-12-08', '2026-12-25',
+      '2026-05-18', '2026-06-08', '2026-06-15', '2026-06-29', '2026-07-13', '2026-07-20',
+      '2026-08-07', '2026-08-17', '2026-10-12', '2026-11-02', '2026-11-16', '2026-12-08',
+      '2026-12-25',
     ]);
   });
 
-  test('2027: los 18 festivos', () => {
+  test('2027: los 19 festivos (con la Virgen de Chiquinquirá, lunes 12 de julio)', () => {
     expect([...festivosColombia(2027).keys()]).toEqual([
       '2027-01-01', '2027-01-11', '2027-03-22', '2027-03-25', '2027-03-26', '2027-05-01',
-      '2027-05-10', '2027-05-31', '2027-06-07', '2027-07-05', '2027-07-20', '2027-08-07',
-      '2027-08-16', '2027-10-18', '2027-11-01', '2027-11-15', '2027-12-08', '2027-12-25',
+      '2027-05-10', '2027-05-31', '2027-06-07', '2027-07-05', '2027-07-12', '2027-07-20',
+      '2027-08-07', '2027-08-16', '2027-10-18', '2027-11-01', '2027-11-15', '2027-12-08',
+      '2027-12-25',
     ]);
+  });
+
+  test('Virgen de Chiquinquirá (Ley 2578 de 2026): 9 de julio al lunes siguiente, solo desde 2026', () => {
+    expect(festivo('2026-07-09')).toBeNull();                   // jueves
+    expect(festivo('2026-07-13')).toBe('Virgen de Chiquinquirá');
+    expect(festivo('2027-07-12')).toBe('Virgen de Chiquinquirá');
+    expect(festivo('2030-07-15')).toBe('Virgen de Chiquinquirá'); // el 9 cae martes
+    expect(festivo('2025-07-14')).toBeNull();                   // antes de la ley no lo era
+    // 2025: sin Chiquinquirá, y San Pedro y el Sagrado Corazón cayeron el
+    // mismo lunes 30 de junio, así que son 17 días festivos.
+    expect(festivosColombia(2025).size).toBe(17);
+    expect(festivo('2025-06-30')).not.toBeNull();
+    // un lunes festivo: el martes siguiente a las 7:00 es el siguiente horario
+    expect(siguienteHorarioPermitido(co('2026-07-11 16:00')).toISOString()).toBe(co('2026-07-14 07:00').toISOString());
   });
 
   test.each([

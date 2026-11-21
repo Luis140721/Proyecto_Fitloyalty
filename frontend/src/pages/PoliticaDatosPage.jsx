@@ -208,7 +208,7 @@ export default function PoliticaDatosPage() {
           Solo lo hace de lunes a viernes de 7:00 a. m. a 7:00 p. m. y los sábados de 8:00 a. m. a
           3:00 p. m., hora de Colombia; nunca los domingos ni los días festivos (artículo 3). Los
           festivos se calculan cada año (fijos, los que la Ley 51 de 1983 traslada al lunes y los que
-          dependen de la Semana Santa). Fuera de ese horario, una campaña queda programada para el
+          dependen de la Semana Santa y, desde 2026, la Virgen de Chiquinquirá). Fuera de ese horario, una campaña queda programada para el
           siguiente horario permitido y el panel lo informa.
         </li>
         <li>

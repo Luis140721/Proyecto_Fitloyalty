@@ -38,7 +38,10 @@
  *     19 de marzo, 29 de junio, 15 de agosto, 12 de octubre, 1 y 11 de noviembre;
  *   - los que dependen de la Pascua: jueves y viernes santos (sin traslado),
  *     Ascension (+39 dias), Corpus Christi (+60) y Sagrado Corazon (+68), los
- *     tres trasladados al lunes.
+ *     tres trasladados al lunes;
+ *   - desde 2026, la Virgen de Chiquinquira: 9 de julio trasladado al lunes
+ *     siguiente (Ley 2578 del 1 de junio de 2026, segun Wikipedia; conviene
+ *     confirmar su vigencia en el texto oficial de la ley).
  */
 
 const ZONA = 'America/Bogota';
@@ -211,7 +214,10 @@ function festivosColombia(anio) {
     [alLunesSiguiente(f(11, 11)), 'Independencia de Cartagena'],
     [f(12, 8), 'Día de la Inmaculada Concepción'],
     [f(12, 25), 'Navidad'],
-  ].sort(([a], [b]) => a.localeCompare(b));
+  ];
+  // Ley 2578 de 2026: el 9 de julio, corrido al lunes siguiente, desde 2026.
+  if (anio >= 2026) lista.push([alLunesSiguiente(f(7, 9)), 'Virgen de Chiquinquirá']);
+  lista.sort(([a], [b]) => a.localeCompare(b));
   const mapa = new Map(lista);
   cacheFestivos.set(anio, mapa);
   return mapa;
@@ -259,7 +265,7 @@ function siguienteHorarioPermitido(instante) {
   if (dentroDeHorario(desde)) return desde;
   const c = enColombia(desde);
   const minutos = c.hora * 60 + c.minuto;
-  // Con 18 festivos al año y dos domingos, nunca hacen falta mas de unos dias.
+  // Con 19 festivos al año y dos domingos, nunca hacen falta mas de unos dias.
   for (let i = 0; i < 15; i += 1) {
     const fecha = sumarDias(c.fecha, i);
     const ventana = ventanaDelDia(fecha);

@@ -124,6 +124,11 @@ describeReal('RQNF-16 contra la base real', () => {
      VALUES ($1, $2, 'MENSAJES_COMERCIALES', TRUE, 'v2', 'APP', $3::varchar(20)[])`,
     [idMiembro, gymId, canales]
   );
+  const planVencido = async (idMiembro, gymId, { venceEn = -2 } = {}) => (await uno(
+    `INSERT INTO plan_cobro (id_miembro, id_gimnasio, tipo_plan, fecha_inicio, fecha_fin, activo)
+     VALUES ($1, $2, 'MENSUAL', CURRENT_DATE + ($3::int - 30), CURRENT_DATE + $3::int, TRUE) RETURNING id_plan_cobro`,
+    [idMiembro, gymId, venceEn]
+  )).id_plan_cobro;
   const comerciales = (idMiembro) => todas(
     `SELECT otorgada, canal, version_texto, registrada_por, canales_autorizados
        FROM autorizacion_miembro WHERE id_miembro = $1 AND tipo = 'MENSAJES_COMERCIALES'
@@ -343,6 +348,55 @@ describeReal('RQNF-16 contra la base real', () => {
     });
   });
 
+  // ======================================== RQF-09: clase y frecuencia (real)
+  describe('POST /notificaciones/enviado contra la base real', () => {
+    const enviar = (idMiembro, tipo, mensaje = 'Hola') =>
+      llamar('POST', '/api/admin/notificaciones/enviado', tkRecepA, { idMiembro, tipo, mensaje });
+    let idCanal;
+    beforeAll(async () => {
+      idCanal = (await uno("INSERT INTO canal_comunicacion (id_gimnasio, tipo, activo) VALUES ($1, 'WHATSAPP', TRUE) RETURNING id_canal", [gymA])).id_canal;
+    });
+
+    test('tipo vencida con el plan al dia: no es aviso, es comercial, y sin aceptacion es 409', async () => {
+      const id = await crearMiembro(gymA, 'Plan Al Dia');
+      await planVencido(id, gymA, { venceEn: 40 });
+      const r = await enviar(id, 'vencida', 'Te extrañamos, vuelve con 20% de descuento');
+      expect(r.status).toBe(409);
+      expect(r.body.details).toMatchObject({ motivo: 'NO_AUTORIZA', clase: 'COMERCIAL', aviso_no_confirmado: true });
+      expect((await uno('SELECT count(*)::int AS n FROM envio_mensaje WHERE id_miembro = $1', [id])).n).toBe(0);
+      // por vencer en 3 dias (el gimnasio avisa a 7 por defecto): si es aviso
+      const otro = await crearMiembro(gymA, 'Vence Pronto');
+      await planVencido(otro, gymA, { venceEn: 3 });
+      expect((await enviar(otro, 'por-vencer')).body).toMatchObject({ clase: 'AVISO' });
+    });
+
+    test('un envio FALLIDO de hoy no cuenta en la frecuencia', async () => {
+      const id = await crearMiembro(gymA, 'Con Fallido');
+      await planVencido(id, gymA);
+      await pool.query(
+        `INSERT INTO envio_mensaje (id_gimnasio, id_miembro, id_canal, mensaje_copiado, estado, fecha_envio)
+         VALUES ($1, $2, $3, 'No salio', 'FALLIDO', ($4::timestamptz AT TIME ZONE current_setting('TimeZone')))`,
+        [gymA, id, idCanal, co('2026-11-17 08:00')]
+      );
+      const r = await enviar(id, 'vencida');
+      expect(r.status).toBe(201);
+      expect(r.body.clase).toBe('AVISO');
+    });
+
+    test('un aviso automatico de vencimiento de hoy si cuenta: 409 FRECUENCIA', async () => {
+      const id = await crearMiembro(gymA, 'Con Aviso Automatico');
+      const plan = await planVencido(id, gymA);
+      await pool.query(
+        `INSERT INTO alerta_vencimiento_enviada (id_miembro, id_plan_cobro, dias_restantes, enviado_at)
+         VALUES ($1, $2, 0, ($3::timestamptz AT TIME ZONE current_setting('TimeZone')))`,
+        [id, plan, co('2026-11-17 09:00')]
+      );
+      const r = await enviar(id, 'vencida');
+      expect(r.status).toBe(409);
+      expect(r.body.details).toMatchObject({ motivo: 'FRECUENCIA', clase: 'AVISO' });
+    });
+  });
+
   // ================================================================= campanas
   describe('campanas con la Ley 2300', () => {
     let ana, beto, carla, dani;
@@ -362,6 +416,8 @@ describeReal('RQNF-16 contra la base real', () => {
       await aceptar(ana, gymB, ['WHATSAPP', 'EMAIL']);
       await aceptar(beto, gymB, ['EMAIL']);
       await aceptar(dani, gymB, ['WHATSAPP']);
+      // El plan de Dani vencio hace 2 dias: su aviso 'vencida' es un aviso de verdad.
+      await planVencido(dani, gymB);
     });
 
     test('solo la reciben quienes aceptaron por ese canal; los demas quedan OMITIDO con su motivo', async () => {

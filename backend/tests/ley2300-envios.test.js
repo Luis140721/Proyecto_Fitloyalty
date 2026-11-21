@@ -44,7 +44,12 @@ afterAll(() => new Promise((resolve) => {
   server.close(() => resolve());
 }));
 
-function prepararBD({ comercial = null, contactos = [] } = {}) {
+/** Plan vencido hace 2 dias: confirma un aviso 'vencida'. */
+const VENCIDO = { sin_plan: false, congelada: false, vencida: true, dias_para_vencer: -2 };
+const VENCE_EN_3 = { sin_plan: false, congelada: false, vencida: false, dias_para_vencer: 3 };
+const AL_DIA = { sin_plan: false, congelada: false, vencida: false, dias_para_vencer: 40 };
+
+function prepararBD({ comercial = null, contactos = [], plan = VENCIDO, diasAviso = 7, bloqueo = true } = {}) {
   const estado = { envios: [] };
   mockQuery.mockReset();
   mockQuery.mockImplementation(async (sql, params = []) => {
@@ -52,6 +57,11 @@ function prepararBD({ comercial = null, contactos = [] } = {}) {
     if (/^(BEGIN|COMMIT|ROLLBACK)$/.test(s)) return { rows: [] };
     if (/pg_advisory_xact_lock/.test(s)) return { rows: [] };
     if (/^SELECT id_miembro, nombre FROM miembro/.test(s)) return { rows: [{ id_miembro: 12, nombre: 'Ana Gomez' }] };
+    // RQNF-16: plan del miembro, dias de aviso del gimnasio y aviso de ingreso bloqueado.
+    if (/LEFT JOIN .* pc ON pc\.id_miembro = m\.id_miembro/.test(s)) return { rows: plan ? [plan] : [] };
+    if (/FROM config_gimnasio/.test(s)) return { rows: [{ recordatorio_cobro_activo: true, dias_recordatorio_default: diasAviso }] };
+    if (/FROM configuracion_gimnasio/.test(s)) return { rows: [] };
+    if (/^SELECT 1 FROM notificacion/.test(s)) return { rows: bloqueo ? [{}] : [] };
     if (/FROM autorizacion_miembro a/.test(s)) {
       return { rows: comercial ? [{ id_miembro: 12, otorgada: comercial.otorgada, canales_autorizados: comercial.canales, canal: 'APP', version_texto: 'v2', fecha: co('2026-11-01 09:00') }] : [] };
     }
@@ -112,8 +122,12 @@ describe('mensajes comerciales (en riesgo, reto completado o sin tipo)', () => {
 });
 
 describe('avisos del plan (vencida, por vencer, acceso bloqueado)', () => {
-  test.each(['vencida', 'por-vencer', 'acceso-bloqueado'])('%s sin aceptacion comercial: 201, sin enlace de baja', async (tipo) => {
-    const estado = prepararBD();
+  test.each([
+    ['vencida', VENCIDO],
+    ['por-vencer', VENCE_EN_3],
+    ['acceso-bloqueado', VENCIDO],
+  ])('%s confirmado por el plan, sin aceptacion comercial: 201, sin enlace de baja', async (tipo, plan) => {
+    const estado = prepararBD({ plan });
     const r = await enviar({ tipo, antesDeAbrir: true });
     expect(r.status).toBe(201);
     expect(r.body).toMatchObject({ clase: 'AVISO', mensaje: 'Hola Ana' });
@@ -124,6 +138,35 @@ describe('avisos del plan (vencida, por vencer, acceso bloqueado)', () => {
     prepararBD();
     const r = await enviar({ tipo: 'vencida', canal: 'EMAIL' });
     expect(r.body.details).toMatchObject({ motivo: 'CANAL_NO_AUTORIZADO', clase: 'AVISO' });
+  });
+});
+
+describe('la clase la confirma el servidor, no el tipo que manda el panel', () => {
+  test.each([
+    ['vencida con el plan al dia', 'vencida', { plan: AL_DIA }],
+    ['vencida sin plan', 'vencida', { plan: { sin_plan: true, congelada: false, vencida: false, dias_para_vencer: null } }],
+    ['vencida con la membresia congelada', 'vencida', { plan: { ...VENCIDO, congelada: true } }],
+    ['por vencer en 40 dias (el gimnasio avisa a 7)', 'por-vencer', { plan: AL_DIA }],
+    ['por vencer en 3 dias con aviso a 2', 'por-vencer', { plan: VENCE_EN_3, diasAviso: 2 }],
+    ['por vencer pero ya vencido', 'por-vencer', { plan: VENCIDO }],
+    ['acceso bloqueado sin aviso de bloqueo en 24 h', 'acceso-bloqueado', { plan: VENCIDO, bloqueo: false }],
+    ['acceso bloqueado con el plan al dia', 'acceso-bloqueado', { plan: AL_DIA }],
+  ])('%s: se trata como COMERCIAL y sin aceptacion es 409 NO_AUTORIZA', async (_, tipo, opciones) => {
+    const estado = prepararBD(opciones);
+    const r = await enviar({ tipo, mensaje: 'Te extrañamos, vuelve con 20% de descuento' });
+    expect(r.status).toBe(409);
+    expect(r.body.details).toMatchObject({ motivo: 'NO_AUTORIZA', clase: 'COMERCIAL', aviso_no_confirmado: true });
+    expect(r.body.error).toMatch(/no es un aviso del plan sino un mensaje comercial/);
+    expect(estado.envios).toHaveLength(0);
+  });
+
+  test('si no se confirma pero el miembro acepto mensajes comerciales, sale como COMERCIAL y con el enlace de baja', async () => {
+    const estado = prepararBD({ plan: AL_DIA, comercial: ACEPTA_WA });
+    const r = await enviar({ tipo: 'vencida', antesDeAbrir: true });
+    expect(r.status).toBe(201);
+    expect(r.body.clase).toBe('COMERCIAL');
+    expect(r.body.mensaje).toMatch(/\/baja\//);
+    expect(estado.envios).toHaveLength(1);
   });
 });
 

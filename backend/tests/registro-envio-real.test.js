@@ -195,6 +195,15 @@ describeReal('RQF-09 contra la base real: POST /api/admin/notificaciones/enviado
       [ana, gymA]
     ));
     await pool.query("INSERT INTO canal_comunicacion (id_gimnasio, tipo, activo) VALUES ($1, 'WHATSAPP', FALSE)", [gymC]);
+    // RQNF-16: Beto, Carla y Dora reciben avisos 'vencida'; el servidor solo
+    // los acepta como aviso si el plan de verdad vencio (hace 2 dias).
+    for (const [idM, idG] of [[beto, gymB], [carla, gymA], [dora, gymC]]) {
+      await pool.query(
+        `INSERT INTO plan_cobro (id_miembro, id_gimnasio, tipo_plan, fecha_inicio, fecha_fin, activo)
+         VALUES ($1, $2, 'MENSUAL', CURRENT_DATE - 32, CURRENT_DATE - 2, TRUE)`,
+        [idM, idG]
+      );
+    }
     // RQNF-16: Ana acepto mensajes comerciales por WhatsApp (el de "en riesgo" lo es).
     await pool.query(
       `INSERT INTO autorizacion_miembro (id_miembro, id_gimnasio, tipo, otorgada, version_texto, canal, canales_autorizados)
@@ -228,7 +237,7 @@ describeReal('RQF-09 contra la base real: POST /api/admin/notificaciones/enviado
     }
     if (!pool) return;
     if (gimnasios.length > 0) {
-      for (const tabla of ['notificacion', 'envio_mensaje', 'canal_comunicacion', 'alerta_abandono', 'autorizacion_miembro', 'miembro', 'usuario', 'gimnasio']) {
+      for (const tabla of ['notificacion', 'envio_mensaje', 'canal_comunicacion', 'alerta_abandono', 'autorizacion_miembro', 'plan_cobro', 'miembro', 'usuario', 'gimnasio']) {
         await pool.query(`DELETE FROM ${tabla} WHERE id_gimnasio = ANY($1::int[])`, [gimnasios]);
       }
     }

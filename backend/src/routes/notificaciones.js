@@ -335,6 +335,10 @@ router.post(
 // completado o sin tipo) es comercial: ademas pide que el miembro haya
 // aceptado mensajes comerciales por ese canal. Si no se puede, responde 409
 // CONTACTO_NO_PERMITIDO con el motivo y no guarda nada.
+//
+// La clase no se cree del `tipo` que manda el panel (claseDelEnvio): un aviso
+// solo es aviso si el plan del miembro de verdad esta en esa situacion. Si no
+// (p. ej. tipo 'vencida' con un plan al dia), se trata como COMERCIAL.
 const envioSchema = z.object({
   idMiembro: z.coerce.number().int().positive(),
   canal: z.enum(['WHATSAPP', 'EMAIL']).default('WHATSAPP'),
@@ -389,6 +393,56 @@ async function canalDelGimnasio(client, gymId, tipo) {
   return nuevo[0].id_canal;
 }
 
+/**
+ * RQNF-16: la clase del envio la decide el servidor. Un tipo de aviso
+ * ('vencida', 'por-vencer'/'vencimiento', 'acceso-bloqueado') solo se acepta
+ * como AVISO si el ultimo plan del miembro lo confirma, con las mismas reglas
+ * de la campana del panel:
+ *   - vencida: el plan vencio (fecha_fin < hoy) y no esta congelado;
+ *   - por vencer: vence entre hoy y los dias de aviso del gimnasio, sin congelar;
+ *   - acceso bloqueado: hay un aviso de ingreso bloqueado de las ultimas 24 h
+ *     y el miembro sigue sin poder entrar (vencido, sin plan o congelado).
+ * Si no se confirma, es COMERCIAL (pide la aceptacion de mensajes comerciales).
+ * Devuelve { clase, pedida }.
+ */
+async function claseDelEnvio({ tipo, idMiembro, gymId }) {
+  const pedida = clasificarTipo(tipo);
+  if (pedida !== 'AVISO') return { clase: 'COMERCIAL', pedida };
+  const t = String(tipo).toLowerCase();
+  const { rows } = await pool.query(
+    `SELECT (pc.id_miembro IS NULL) AS sin_plan,
+            (pc.congelado_desde IS NOT NULL) AS congelada,
+            (pc.fecha_fin IS NOT NULL AND pc.fecha_fin < CURRENT_DATE) AS vencida,
+            CASE WHEN pc.fecha_fin IS NULL THEN NULL ELSE (pc.fecha_fin - CURRENT_DATE)::int END AS dias_para_vencer
+       FROM miembro m
+       LEFT JOIN ${ULTIMO_PLAN} pc ON pc.id_miembro = m.id_miembro
+      WHERE m.id_miembro = $1 AND m.id_gimnasio = $2`,
+    [idMiembro, gymId]
+  );
+  const p = rows[0];
+  let confirmado = false;
+  if (p && t === 'vencida') {
+    confirmado = p.vencida === true && p.congelada !== true;
+  } else if (p && (t === 'por-vencer' || t === 'vencimiento')) {
+    const { diasAviso } = await leerUmbrales(gymId);
+    confirmado = p.congelada !== true && p.dias_para_vencer !== null
+      && p.dias_para_vencer >= 0 && p.dias_para_vencer <= diasAviso;
+  } else if (p && t === 'acceso-bloqueado') {
+    const sinAcceso = p.sin_plan === true || p.vencida === true || p.congelada === true || p.dias_para_vencer === null;
+    if (sinAcceso) {
+      const { rows: bloqueo } = await pool.query(
+        `SELECT 1 FROM notificacion
+          WHERE id_gimnasio = $1 AND id_miembro = $2 AND tipo = $3 AND titulo = $4
+            AND fecha_creacion > NOW() - INTERVAL '24 hours'
+          LIMIT 1`,
+        [gymId, idMiembro, TIPO_ACCESO_BLOQUEADO, TITULO_ACCESO_BLOQUEADO]
+      );
+      confirmado = bloqueo.length > 0;
+    }
+  }
+  return { clase: confirmado ? 'AVISO' : 'COMERCIAL', pedida };
+}
+
 router.post(
   '/admin/notificaciones/enviado',
   authenticate,
@@ -398,7 +452,6 @@ router.post(
     if (!r.success) throw new AppError(400, formatZodError(r.error), 'VALIDATION_ERROR');
     const { idMiembro, canal, tipo, mensaje, idAlerta, antesDeAbrir } = r.data;
     const gymId = req.user.gymId;
-    const clase = clasificarTipo(tipo);
 
     // Todo dentro del try: si la base no responde (tambien al pedir la
     // conexion), la respuesta es 503 y no un 500 generico.
@@ -409,6 +462,9 @@ router.post(
         [idMiembro, gymId]
       );
       if (existe.length === 0) throw new AppError(404, 'Miembro no encontrado.', 'MEMBER_NOT_FOUND');
+
+      // RQNF-16: el servidor confirma si de verdad es un aviso del plan.
+      const { clase, pedida } = await claseDelEnvio({ tipo, idMiembro, gymId });
 
       // La alerta tiene que ser de ese miembro y de este gimnasio.
       if (idAlerta) {
@@ -428,9 +484,13 @@ router.post(
       await bloquearContacto(client, idMiembro);
       const decision = await evaluarContacto(client, { miembro: existe[0], gymId, canal, clase, instante });
       if (!decision.puede) {
-        throw new AppError(409, decision.mensaje, 'CONTACTO_NO_PERMITIDO', {
+        const noConfirmado = pedida === 'AVISO' && clase === 'COMERCIAL';
+        throw new AppError(409, noConfirmado
+          ? `${decision.mensaje} (El plan del miembro no está ${String(tipo).toLowerCase() === 'vencida' ? 'vencido' : 'en esa situación'}, así que el mensaje no es un aviso del plan sino un mensaje comercial.)`
+          : decision.mensaje, 'CONTACTO_NO_PERMITIDO', {
           motivo: decision.motivo,
           clase,
+          aviso_no_confirmado: noConfirmado,
           siguiente: decision.siguiente ? decision.siguiente.toISOString() : null,
         });
       }

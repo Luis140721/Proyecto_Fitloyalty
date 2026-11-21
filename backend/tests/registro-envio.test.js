@@ -98,6 +98,10 @@ function prepararBD({ miembro = { id_miembro: 12, nombre: 'Ana' }, canales = [],
     if (/FROM autorizacion_miembro a/.test(s)) {
       return { rows: [{ id_miembro: params[0][0], otorgada: true, canales_autorizados: ['WHATSAPP', 'EMAIL'], canal: 'PANEL', version_texto: 'v2', fecha: new Date('2026-11-01T15:00:00Z') }] };
     }
+    // RQNF-16: el servidor confirma el aviso con el plan (aqui, vencido hace 2 dias).
+    if (/LEFT JOIN .* pc ON pc\.id_miembro = m\.id_miembro/.test(s)) {
+      return { rows: [{ sin_plan: false, congelada: false, vencida: true, dias_para_vencer: -2 }] };
+    }
     if (/FROM miembro/.test(s)) {
       if (fallaMiembro) throw new Error('caida');
       return { rows: miembro ? [miembro] : [] };
