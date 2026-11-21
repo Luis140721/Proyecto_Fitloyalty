@@ -58,38 +58,6 @@ const PERIODOS_HORAS = [
 
 const horaTexto = (h) => `${String(h).padStart(2, '0')}:00`;
 
-function Sparkline({ data, color = '#7C5CE6' }) {
-  if (!data || data.length === 0) return null;
-  const w = 600, h = 220, pad = 8;
-  const max = Math.max(...data.map((d) => d.value), 1);
-  const stepX = (w - pad * 2) / Math.max(1, data.length - 1);
-  const points = data.map((d, i) => {
-    const x = pad + i * stepX;
-    const y = h - pad - (d.value / max) * (h - pad * 2);
-    return [x, y];
-  });
-  const path = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p[0].toFixed(2)} ${p[1].toFixed(2)}`).join(' ');
-  const fill = `${path} L ${points[points.length - 1][0].toFixed(2)} ${h - pad} L ${points[0][0].toFixed(2)} ${h - pad} Z`;
-
-  return (
-    <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="chart-svg">
-      <defs>
-        <linearGradient id="grad-spark" x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.40" />
-          <stop offset="100%" stopColor={color} stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <path d={fill} fill="url(#grad-spark)" />
-      <path d={path} fill="none" stroke={color} strokeWidth="2.5" strokeLinejoin="round" />
-      {points.map(([x, y], i) => (
-        <circle key={i} cx={x} cy={y} r="3" fill={color}>
-          <title>{data[i].label}: {data[i].value}</title>
-        </circle>
-      ))}
-    </svg>
-  );
-}
-
 /**
  * BarsWeekly: barras verticales por dia de la semana.
  *

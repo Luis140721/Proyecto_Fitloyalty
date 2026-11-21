@@ -26,8 +26,10 @@ vi.mock('../src/api', () => ({
     delete: (...a) => mockDelete(...a),
   },
 }));
-vi.mock('../src/context/AuthContext', () => ({ useAuth: () => ({ user: { id: 1, role: 'admin' } }) }));
-vi.mock('qrcode', () => ({ default: { toDataURL: async () => 'data:image/png;base64,UVI=' } }));
+let rol;
+vi.mock('../src/context/AuthContext', () => ({ useAuth: () => ({ user: { id: 1, role: rol } }) }));
+let dibujarQr;
+vi.mock('qrcode', () => ({ default: { toDataURL: (...a) => dibujarQr(...a) } }));
 
 // Fila de la lista y registro completo de GET /api/admin/miembros/:id.
 const ANA = { id_miembro: 1, nombre: 'Ana Pérez', documento: '1020304050', telefono: '3001234567', email: 'ana@correo.co', codigo_qr: 'QR-ANA', activo: true, whatsapp: null };
@@ -90,6 +92,8 @@ afterAll(() => {
 });
 
 beforeEach(() => {
+  rol = 'admin';
+  dibujarQr = async () => 'data:image/png;base64,UVI=';
   plan = { ...PLAN };
   congelaciones = [];
   mockGet = apiQueResponde();
@@ -131,6 +135,96 @@ describe('MiembrosPage: la ficha del miembro', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
+  // Reemplaza 16 campos tecla por tecla: con toda la suite en paralelo se acerca a los 5 s por defecto.
+  test('should send every field when the person changes the whole file', async () => {
+    // Arrange
+    const { user } = await abrirFichaDeAna();
+    const ficha_ = within(ficha());
+    const reemplazar = async (etiqueta, texto) => {
+      const el = ficha_.getByLabelText(etiqueta);
+      await user.clear(el);
+      await user.type(el, texto);
+    };
+
+    // Act
+    await reemplazar('Nombre completo', 'Ana María Pérez');
+    await reemplazar('Documento', '1020304051');
+    await reemplazar('Email', 'anamaria@correo.co');
+    await user.selectOptions(ficha_.getByLabelText('Tipo de documento'), 'CE');
+    await reemplazar('Fecha de nacimiento', '1991-06-18');
+    await user.selectOptions(ficha_.getByLabelText('Género'), 'Otro');
+    await reemplazar('Ciudad', 'Cali');
+    await reemplazar('Dirección', 'Carrera 7 # 8-9');
+    await reemplazar('Contacto de emergencia', 'Pedro Pérez');
+    await reemplazar('Teléfono de emergencia', '3120000000');
+    await reemplazar('Condiciones médicas', 'Asma');
+    await reemplazar('Alergias', 'Polen');
+    await user.selectOptions(ficha_.getByLabelText('Objetivo'), 'Resistencia');
+    await user.selectOptions(ficha_.getByLabelText('Nivel de experiencia'), 'Avanzado');
+    await reemplazar('Observaciones', 'Prefiere las clases de la tarde');
+    await user.click(ficha_.getByRole('checkbox', { name: 'Miembro activo' }));
+    await user.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+
+    // Assert
+    await waitFor(() => expect(mockPut).toHaveBeenCalledWith('/admin/miembros/1', expect.objectContaining({
+      nombre: 'Ana María Pérez', documento: '1020304051', email: 'anamaria@correo.co', tipo_documento: 'CE',
+      fecha_nacimiento: '1991-06-18', genero: 'Otro', ciudad: 'Cali', direccion: 'Carrera 7 # 8-9',
+      contacto_emergencia: 'Pedro Pérez', telefono_emergencia: '3120000000', condiciones_medicas: 'Asma', alergias: 'Polen',
+      objetivo: 'Resistencia', nivel_experiencia: 'Avanzado', observaciones: 'Prefiere las clases de la tarde', activo: false,
+    })));
+  }, 15000);
+
+  test('should send the empty email so the API clears it when the person deletes it in the file', async () => {
+    // Arrange
+    const { user } = await abrirFichaDeAna();
+
+    // Act
+    await user.clear(within(ficha()).getByRole('textbox', { name: 'Email' }));
+    await user.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+
+    // Assert: el updateSchema del backend convierte '' en null
+    expect(await screen.findByRole('status')).toHaveTextContent('Miembro actualizado.');
+    expect(mockPut.mock.calls[0][1]).toHaveProperty('email', '');
+  });
+
+  test('should still show the code as text when the QR image cannot be drawn', async () => {
+    // Arrange
+    dibujarQr = async () => { throw new Error('Canvas no disponible'); };
+
+    // Act
+    await abrirFichaDeAna();
+
+    // Assert
+    expect(within(ficha()).queryByRole('img', { name: 'Código QR de Ana Pérez' })).not.toBeInTheDocument();
+    expect(within(ficha()).getByText('QR-ANA')).toBeInTheDocument();
+    expect(within(ficha()).getByRole('button', { name: 'Copiar código' })).toBeInTheDocument();
+    expect(within(ficha()).getByText('PARCIAL')).toBeInTheDocument();
+  });
+
+  test('should close the file without saving when the X of the dialog is clicked', async () => {
+    // Arrange
+    const { user } = await abrirFichaDeAna();
+
+    // Act
+    await user.click(within(ficha()).getByRole('button', { name: 'Cerrar' }));
+
+    // Assert
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(mockPut).not.toHaveBeenCalled();
+  });
+
+  test('should close the file without saving when the person clicks Cancelar', async () => {
+    // Arrange
+    const { user } = await abrirFichaDeAna();
+
+    // Act
+    await user.click(screen.getByRole('button', { name: 'Cancelar' }));
+
+    // Assert
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(mockPut).not.toHaveBeenCalled();
+  });
+
   test('should keep the file open with the API error when saving fails', async () => {
     // Arrange
     mockPut = vi.fn(async () => { throw { status: 409, code: 'DUPLICATE_DOCUMENT', message: 'Ya existe un miembro con ese documento.' }; });
@@ -161,12 +255,12 @@ describe('MiembrosPage: la ficha del miembro', () => {
 });
 
 describe('MiembrosPage: el plan y el cobro', () => {
-  test('should run in the time zone where new Date() moves the API date one day back', () => {
-    // Control: si la zona no quedo fijada, los tests de fechas no probarian nada
+  test('should move the API date one day back when new Date() reads it in this zone (control of the zone)', () => {
+    // Act y Assert (control): si la zona no quedo fijada, los tests de fechas no probarian nada
     expect(new Date(PLAN.fecha_inicio).toLocaleDateString('es-CO')).toBe('30/9/2026');
   });
 
-  test('should show and save the plan dates of the API without moving them one day in Colombia', async () => {
+  test('should show and save the plan dates without moving them one day when the browser is in Colombia', async () => {
     // Arrange
     const { user } = await abrirFichaDeAna();
 
@@ -224,6 +318,67 @@ describe('MiembrosPage: el plan y el cobro', () => {
     expect(mockPut).not.toHaveBeenCalled();
   });
 
+  test('should save the price, method, reference and dates when the person types them in the plan', async () => {
+    // Arrange
+    const { user } = await abrirFichaDeAna();
+    const ficha_ = within(ficha());
+
+    // Act
+    await user.clear(ficha_.getByRole('textbox', { name: /^Inicio/ }));
+    await user.type(ficha_.getByRole('textbox', { name: /^Inicio/ }), '05102026');
+    await user.clear(ficha_.getByRole('textbox', { name: /^Vence/ }));
+    await user.type(ficha_.getByRole('textbox', { name: /^Vence/ }), '04112026');
+    await user.clear(ficha_.getByRole('spinbutton', { name: 'Valor del plan' }));
+    await user.type(ficha_.getByRole('spinbutton', { name: 'Valor del plan' }), '95000');
+    await user.selectOptions(ficha_.getByRole('combobox', { name: 'Método de pago' }), 'NEQUI');
+    await user.type(ficha_.getByRole('textbox', { name: 'Referencia o comprobante' }), 'NQ-778');
+    await user.click(ficha_.getByRole('button', { name: 'Guardar plan' }));
+
+    // Assert
+    await waitFor(() => expect(mockPut).toHaveBeenCalledWith('/admin/miembros/1/plan', expect.objectContaining({
+      fecha_inicio: '2026-10-05', fecha_fin: '2026-11-04', valor_total: 95000, metodo_pago: 'NEQUI', referencia_pago: 'NQ-778',
+    })));
+  });
+
+  test.each([
+    ['the start date does not exist', { inicio: '31022026' }, 'La fecha de inicio no es valida. Usa DD/MM/AAAA.'],
+    ['the end date does not exist', { vence: '31112026' }, 'La fecha de vencimiento no es valida. Usa DD/MM/AAAA.'],
+    ['the end is before the start', { vence: '30092026' }, 'El vencimiento no puede ser anterior al inicio.'],
+  ])('should not save the plan and explain it when %s', async (_caso, { inicio, vence }, mensaje) => {
+    // Arrange: el plan va del 01/10/2026 al 31/10/2026
+    const { user } = await abrirFichaDeAna();
+    const ficha_ = within(ficha());
+    if (inicio) {
+      await user.clear(ficha_.getByRole('textbox', { name: /^Inicio/ }));
+      await user.type(ficha_.getByRole('textbox', { name: /^Inicio/ }), inicio);
+    }
+    if (vence) {
+      await user.clear(ficha_.getByRole('textbox', { name: /^Vence/ }));
+      await user.type(ficha_.getByRole('textbox', { name: /^Vence/ }), vence);
+    }
+
+    // Act
+    await user.click(ficha_.getByRole('button', { name: 'Guardar plan' }));
+
+    // Assert
+    expect(ficha_.getByText(mensaje)).toBeInTheDocument();
+    expect(mockPut).not.toHaveBeenCalled();
+  });
+
+  test('should send 0 as the price and the payment when the person leaves them empty', async () => {
+    // Arrange
+    const { user } = await abrirFichaDeAna();
+    const ficha_ = within(ficha());
+    await user.clear(ficha_.getByRole('spinbutton', { name: 'Valor del plan' }));
+    await user.clear(ficha_.getByRole('spinbutton', { name: 'Valor pagado' }));
+
+    // Act
+    await user.click(ficha_.getByRole('button', { name: 'Guardar plan' }));
+
+    // Assert
+    await waitFor(() => expect(mockPut).toHaveBeenCalledWith('/admin/miembros/1/plan', expect.objectContaining({ valor_total: 0, valor_pagado: 0 })));
+  });
+
   test('should confirm and reload the plan and the list when the plan is saved', async () => {
     // Arrange
     const { user } = await abrirFichaDeAna();
@@ -239,8 +394,63 @@ describe('MiembrosPage: el plan y el cobro', () => {
   });
 });
 
+describe('MiembrosPage: los errores de la ficha', () => {
+  test('should explain it and hide the plan editor when the plan cannot be loaded', async () => {
+    // Arrange
+    const getNormal = apiQueResponde();
+    mockGet = vi.fn(async (url) => {
+      if (url === '/admin/miembros/1/plan') throw { status: 503, message: 'Sin base' };
+      return getNormal(url);
+    });
+    const { user } = renderWithProviders(<MiembrosPage />, { route: '/admin/miembros' });
+
+    // Act
+    await user.click(await screen.findByRole('row', { name: /Ana Pérez/ }));
+
+    // Assert
+    expect(await within(ficha()).findByText('No pudimos cargar el plan de este miembro.')).toBeInTheDocument();
+    expect(within(ficha()).queryByRole('heading', { name: 'Plan y cobro' })).not.toBeInTheDocument();
+  });
+
+  test('should show the API error when the plan cannot be saved', async () => {
+    // Arrange
+    mockPut = vi.fn(async () => { throw { status: 400, code: 'VALIDATION_ERROR', message: 'La fecha de fin no es valida.' }; });
+    const { user } = await abrirFichaDeAna();
+
+    // Act
+    await user.click(within(ficha()).getByRole('button', { name: 'Guardar plan' }));
+
+    // Assert
+    expect(await within(ficha()).findByText('La fecha de fin no es valida.')).toBeInTheDocument();
+  });
+
+  test('should show the API error when the contract cannot be sent', async () => {
+    // Arrange
+    mockPost = vi.fn(async () => { throw { status: 503, code: 'WHATSAPP_DOWN', message: 'WhatsApp no responde.' }; });
+    const { user } = await abrirFichaDeAna();
+
+    // Act
+    await user.click(within(ficha()).getByRole('button', { name: 'Enviar contrato' }));
+
+    // Assert
+    expect(await within(ficha()).findByRole('alert')).toHaveTextContent('WhatsApp no responde.');
+  });
+
+  test('should say that only the admin can freeze when the person is the reception', async () => {
+    // Arrange
+    rol = 'receptionist';
+
+    // Act
+    await abrirFichaDeAna();
+
+    // Assert
+    expect(within(ficha()).getByText('Solo el administrador puede congelar o descongelar la membresía.')).toBeInTheDocument();
+    expect(within(ficha()).queryByRole('button', { name: 'Congelar membresía' })).not.toBeInTheDocument();
+  });
+});
+
 describe('MiembrosPage: congelar la membresia', () => {
-  test('should freeze the membership with the reason after the user confirms', async () => {
+  test('should freeze the membership with the reason when the user confirms', async () => {
     // Arrange
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     mockPost = vi.fn(async () => ({ data: { message: 'Membresía congelada desde hoy.' } }));
@@ -290,7 +500,24 @@ describe('MiembrosPage: congelar la membresia', () => {
     expect(window.confirm).not.toHaveBeenCalled();
   });
 
-  test('should show the freeze error of the API', async () => {
+  test('should say día in singular and name who froze and unfroze when the history has them', async () => {
+    // Arrange: congelada desde ayer y una congelacion vieja de un dia, sin motivo
+    plan = { ...PLAN, congelado_desde: '2026-10-30T00:00:00.000Z', dias_congelado: 1 };
+    congelaciones = [
+      { id_congelacion: 7, fecha_inicio: '2026-09-01T00:00:00.000Z', fecha_fin: '2026-09-02T00:00:00.000Z', dias: 1, motivo: '', congelada_por: 'Ana Admin', descongelada_por: 'Luis Recepción' },
+      { id_congelacion: 8, fecha_inicio: '2026-10-30T00:00:00.000Z', fecha_fin: null, dias: null, motivo: null, congelada_por: null, descongelada_por: null },
+    ];
+
+    // Act
+    await abrirFichaDeAna();
+
+    // Assert
+    expect(within(ficha()).getByText(/Congelada desde el 30\/10\/2026 \(1 día\)\./)).toBeInTheDocument();
+    expect(within(ficha()).getByText('1/9/2026 → 2/9/2026 (1 día) · congeló Ana Admin, descongeló Luis Recepción')).toBeInTheDocument();
+    expect(within(ficha()).getByText('30/10/2026 → sigue congelada')).toBeInTheDocument();
+  });
+
+  test('should show the error of the API when the membership cannot be frozen', async () => {
     // Arrange
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     mockPost = vi.fn(async () => { throw { status: 409, code: 'ALREADY_FROZEN', message: 'La membresía ya está congelada.' }; });
@@ -305,7 +532,7 @@ describe('MiembrosPage: congelar la membresia', () => {
 });
 
 describe('MiembrosPage: el QR y el contrato', () => {
-  test('should copy the QR code and confirm it on the button', async () => {
+  test('should copy the QR code and confirm it on the button when Copiar is clicked', async () => {
     // Arrange
     const { user } = await abrirFichaDeAna();
     const escribir = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue();
@@ -357,7 +584,7 @@ describe('MiembrosPage: el QR y el contrato', () => {
 });
 
 describe('MiembrosPage: el aviso por WhatsApp de la lista', () => {
-  test('should open the chat with the message of the server and record it without opening the file', async () => {
+  test('should open the chat with the message of the server and record it without opening the file when WhatsApp is clicked', async () => {
     // Arrange
     const abrir = vi.spyOn(window, 'open').mockReturnValue(null);
     const { user } = renderWithProviders(<MiembrosPage />, { route: '/admin/miembros' });

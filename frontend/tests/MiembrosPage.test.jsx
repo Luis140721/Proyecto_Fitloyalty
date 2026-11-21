@@ -11,7 +11,7 @@
  * filas de la tabla.
  */
 import { describe, expect, test, vi, beforeAll, beforeEach, afterEach, afterAll } from 'vitest';
-import { screen, within, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, within, waitFor } from '@testing-library/react';
 import MiembrosPage from '../src/pages/MiembrosPage';
 import { renderWithProviders } from './renderWithProviders';
 
@@ -244,7 +244,7 @@ describe('MiembrosPage: alta con el asistente de 5 pasos', () => {
     expect(mockPost).not.toHaveBeenCalled();
   });
 
-  test('should create the member after the five steps and announce it in a status message', async () => {
+  test('should create the member and announce it in a status message when the five steps are completed', async () => {
     // Arrange: solo se fija la fecha (los timers siguen reales para user-event)
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date(2026, 9, 27, 10, 0, 0));
@@ -269,5 +269,65 @@ describe('MiembrosPage: alta con el asistente de 5 pasos', () => {
     expect(mockPut).toHaveBeenCalledWith('/admin/miembros/3', { qr_imagen: 'data:image/png;base64,UVI=' });
     expect(screen.getByRole('dialog', { name: '¡Miembro creado exitosamente!' })).toBeInTheDocument();
     expect(await screen.findByRole('row', { name: /Sofía Gómez/ })).toBeInTheDocument();
+  });
+});
+
+describe('MiembrosPage: tiempos (semana 7)', () => {
+  test('should keep the new member in the list when the first load answers after the reload of the alta', async () => {
+    // Arrange: la carga inicial tarda; la recarga despues del alta ya trae a Sofia
+    const SOFIA = { id_miembro: 3, nombre: 'Sofía Gómez', documento: '1033444555', telefono: '3201112233', codigo_qr: 'QR-SOFIA', activo: true };
+    let responderCargaInicial;
+    let cargasDeLaLista = 0;
+    const respondeAlDia = apiQueResponde();
+    mockGet = vi.fn((url, opciones) => {
+      cargasDeLaLista += url === '/admin/miembros' ? 1 : 0;
+      if (url === '/admin/miembros' && cargasDeLaLista === 1) {
+        return new Promise((resolve) => { responderCargaInicial = resolve; });
+      }
+      return respondeAlDia(url, opciones);
+    });
+    mockPost = vi.fn(async () => { miembros = [...miembros, SOFIA]; return { data: { miembro: SOFIA } }; });
+    const { user } = abrirMiembros();
+    // Mientras carga no hay estado vacio: el unico "Nuevo miembro" es el de la cabecera
+    await user.click(screen.getByRole('button', { name: 'Nuevo miembro' }));
+    await user.type(screen.getByLabelText(/^Nombre completo/), 'Sofía Gómez');
+    await user.type(screen.getByLabelText(/^Número documento/), '1033444555');
+    await user.type(screen.getByLabelText(/^Teléfono \/ WhatsApp/), '3201112233');
+    for (let paso = 2; paso <= 5; paso += 1) await user.click(botonSiguiente());
+    await user.click(screen.getByRole('checkbox', { name: /Acepto los términos/ }));
+    await user.click(screen.getByRole('checkbox', { name: /Autorizo el uso de mis datos/ }));
+    await user.click(screen.getByRole('button', { name: 'Crear miembro' }));
+    await screen.findByRole('row', { name: /Sofía Gómez/ });
+
+    // Act: llega la carga inicial, calculada antes del alta
+    await act(async () => responderCargaInicial({ data: { miembros: [ANA, CARLOS] } }));
+
+    // Assert: la lista vieja no reemplaza a la nueva
+    expect(screen.getByRole('row', { name: /Sofía Gómez/ })).toBeInTheDocument();
+    expect(screen.getByRole('row', { name: /Ana Pérez/ })).toBeInTheDocument();
+  });
+
+  test('should not create the member when the second click of a double click on Siguiente lands on Crear miembro', async () => {
+    // Arrange: los terminos ya estan marcados y la recepcion volvio al paso 4
+    const { user } = abrirMiembros();
+    await screen.findByRole('row', { name: /Ana Pérez/ });
+    await user.click(screen.getByRole('button', { name: 'Nuevo miembro' }));
+    await user.type(screen.getByLabelText(/^Nombre completo/), 'Sofía Gómez');
+    await user.type(screen.getByLabelText(/^Número documento/), '1033444555');
+    await user.type(screen.getByLabelText(/^Teléfono \/ WhatsApp/), '3201112233');
+    for (let paso = 2; paso <= 5; paso += 1) await user.click(botonSiguiente());
+    await user.click(screen.getByRole('checkbox', { name: /Acepto los términos/ }));
+    await user.click(screen.getByRole('checkbox', { name: /Autorizo el uso de mis datos/ }));
+    await user.click(screen.getByRole('button', { name: '← Anterior' }));
+
+    // Act: un doble clic en el mismo sitio. El primero (detail 1) en "Siguiente →";
+    // el segundo (detail 2), en el mismo tick, cae en "Crear miembro", que aparecio
+    // ahi. En el navegador pasa con la pagina desplazada hasta el final.
+    fireEvent.click(botonSiguiente(), { detail: 1 });
+    fireEvent.click(screen.getByRole('button', { name: 'Crear miembro' }), { detail: 2 });
+
+    // Assert: llega a los terminos y no envia nada hasta un clic de verdad en "Crear miembro"
+    expect(screen.getByText('Paso 5 de 5')).toBeInTheDocument();
+    expect(mockPost).not.toHaveBeenCalled();
   });
 });

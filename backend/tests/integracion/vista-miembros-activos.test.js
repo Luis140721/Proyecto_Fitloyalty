@@ -4,7 +4,7 @@
  * vive en la BD: filtra los activos, toma la ultima membresia con un JOIN
  * LATERAL ordenado por fecha_fin y trae el nombre del plan con un LEFT JOIN.
  *
- * Sin TEST_DATABASE_URL se salta.
+ * Sin DATABASE_URL en el entorno del proceso se salta.
  */
 const { describeConBd, prepararBdDePruebas } = require('./bd-pruebas');
 const { unico, crearGimnasio, crearMiembro, usarTransaccionPorTest } = require('./datos');

@@ -33,7 +33,7 @@ beforeEach(() => {
 afterEach(() => { delete window.history.length; });
 
 describe('NotFoundPage', () => {
-  test('should show the path that the user tried to open', () => {
+  test('should show the path when the user opens a route that does not exist', () => {
     // Act
     abrir404();
 
