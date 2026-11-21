@@ -88,6 +88,7 @@ class ApiClient {
         case 'GET':    resp = await http.get(uri, headers: headers).timeout(timeout); break;
         case 'POST':   resp = await http.post(uri, headers: headers, body: bodyStr).timeout(timeout); break;
         case 'PUT':    resp = await http.put(uri, headers: headers, body: bodyStr).timeout(timeout); break;
+        case 'PATCH':  resp = await http.patch(uri, headers: headers, body: bodyStr).timeout(timeout); break;
         case 'DELETE': resp = await http.delete(uri, headers: headers, body: bodyStr).timeout(timeout); break;
         default: throw ArgumentError('Metodo HTTP no soportado: $method');
       }
@@ -133,6 +134,9 @@ class ApiClient {
 
   Future<Map<String, dynamic>> put(String path, {Object? body, bool requireAuth = true}) =>
       _request(method: 'PUT', path: path, body: body, requireAuth: requireAuth);
+
+  Future<Map<String, dynamic>> patch(String path, {Object? body, bool requireAuth = true}) =>
+      _request(method: 'PATCH', path: path, body: body, requireAuth: requireAuth);
 
   Future<Map<String, dynamic>> delete(String path, {bool requireAuth = true}) =>
       _request(method: 'DELETE', path: path, requireAuth: requireAuth);
