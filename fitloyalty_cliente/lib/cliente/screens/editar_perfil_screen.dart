@@ -14,6 +14,8 @@ import '../providers/auth_provider.dart';
 import '../providers/perfil_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common.dart';
+import 'autorizaciones_screen.dart';
+import 'contrato_screen.dart';
 
 class EditarPerfilScreen extends StatefulWidget {
   const EditarPerfilScreen({super.key});
@@ -190,6 +192,15 @@ class _EditarPerfilScreenState extends State<EditarPerfilScreen> {
 
             const SizedBox(height: 22),
             _seccion('SALUD'),
+            // RQNF-17: los datos de salud son sensibles y opcionales.
+            const Padding(
+              padding: EdgeInsets.only(bottom: 10),
+              child: Text(
+                'Son datos sensibles y opcionales: solo se guardan si autorizaste su tratamiento en '
+                '«Mis autorizaciones» (al final de esta pantalla).',
+                style: TextStyle(fontSize: 12, color: AppColors.textMuted, height: 1.4),
+              ),
+            ),
             TextFormField(
               controller: _condicionesCtrl,
               decoration: const InputDecoration(
@@ -244,8 +255,43 @@ class _EditarPerfilScreenState extends State<EditarPerfilScreen> {
               const SizedBox(height: 16),
               ErrorBanner(mensaje: p.editError!),
             ],
+
+            // RQNF-17 y RQNF-18: autorizaciones y contrato del miembro.
+            const SizedBox(height: 26),
+            _seccion('PRIVACIDAD Y CONTRATO'),
+            _enlace(
+              icon: Icons.verified_user_outlined,
+              titulo: 'Mis autorizaciones',
+              subtitulo: 'Que autorizaste sobre tus datos y revocar la de datos de salud',
+              destino: const AutorizacionesScreen(),
+            ),
+            const SizedBox(height: 10),
+            _enlace(
+              icon: Icons.description_outlined,
+              titulo: 'Mi contrato',
+              subtitulo: 'Precio, vigencia, renovacion, congelamiento, terminacion y PQR',
+              destino: const ContratoScreen(),
+            ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _enlace({required IconData icon, required String titulo, required String subtitulo, required Widget destino}) {
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(16),
+      child: ListTile(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: AppColors.border),
+        ),
+        leading: Icon(icon, color: AppColors.primary),
+        title: Text(titulo, style: const TextStyle(fontWeight: FontWeight.w700)),
+        subtitle: Text(subtitulo, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+        trailing: const Icon(Icons.chevron_right, color: AppColors.textMuted),
+        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => destino)),
       ),
     );
   }
