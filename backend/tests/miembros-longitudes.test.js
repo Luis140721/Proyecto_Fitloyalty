@@ -8,8 +8,13 @@
  *
  * La regla ahora vive en el servicio (createSchema y updateSchema de
  * routes/miembros.js) y aqui se prueba en su valor limite con un pool falso:
- * el limite exacto pasa la validacion y uno mas responde 400 VALIDATION_ERROR
- * sin llegar a la BD. El test de integracion queda como red.
+ * el limite exacto pasa la validacion y uno mas responde 400 VALIDATION_ERROR,
+ * con el mensaje en español y sin llegar a la BD. El test de integracion queda
+ * como red.
+ *
+ * Los largos se cuentan en caracteres, como PostgreSQL, y no en unidades
+ * UTF-16 como .max() de zod: un nombre con un emoji que cabe en la columna
+ * tambien pasa.
  */
 const express = require('express');
 const jwt = require('jsonwebtoken');
@@ -86,51 +91,114 @@ function editar(body) {
 }
 
 const insertoMiembro = () => mockQuery.mock.calls.some(([sql]) => /INSERT INTO miembro/i.test(sql));
+const actualizoMiembro = () => mockQuery.mock.calls.some(([sql]) => /UPDATE miembro/i.test(sql));
 
-describe('POST /api/admin/miembros: largos de las columnas de miembro', () => {
-  it.each([
-    ['nombre', 100],
-    ['documento', 20],
-    ['telefono', 20],
-  ])('should accept %s with exactly %i characters', async (campo, largo) => {
-    const res = await crear(miembroValido({ [campo]: '1'.repeat(largo) }));
+// [campo, largo de la columna, como empieza el mensaje]. Los de miembro y el de
+// plan_cobro (referencia_pago) que escribe el alta.
+const LARGOS_ALTA = [
+  ['nombre', 100, 'El nombre'],
+  ['documento', 20, 'El documento'],
+  ['telefono', 20, 'El teléfono'],
+  ['contacto_emergencia', 100, 'El contacto de emergencia'],
+  ['telefono_emergencia', 20, 'El teléfono de emergencia'],
+  ['objetivo', 50, 'El objetivo'],
+  ['nivel_experiencia', 30, 'El nivel de experiencia'],
+  ['referencia_pago', 100, 'La referencia de pago'],
+];
 
+describe('POST /api/admin/miembros: largos de las columnas de miembro y plan_cobro', () => {
+  it.each(LARGOS_ALTA)('should create the member when %s has exactly %i characters', async (campo, largo) => {
+    // Arrange: pool falso (FAKE) del beforeEach; un valor en el limite exacto.
+    const body = miembroValido({ [campo]: '1'.repeat(largo) });
+
+    // Act
+    const res = await crear(body);
+
+    // Assert: estado (201) y comportamiento (el INSERT si se intento).
     expect(res.status).toBe(201);
     expect(insertoMiembro()).toBe(true);
   });
 
-  it.each([
-    ['nombre', 101],
-    ['documento', 21],
-    ['telefono', 21],
-  ])('should answer 400 and not touch the DB when %s has %i characters', async (campo, largo) => {
-    const res = await crear(miembroValido({ [campo]: '1'.repeat(largo) }));
-    const body = await res.json();
+  it.each(LARGOS_ALTA)(
+    'should answer 400 with a Spanish message and not touch the DB when %s has %i + 1 characters',
+    async (campo, largo, inicio) => {
+      // Arrange: pool falso (FAKE) del beforeEach; un caracter mas que la columna.
+      const body = miembroValido({ [campo]: '1'.repeat(largo + 1) });
 
+      // Act
+      const res = await crear(body);
+      const json = await res.json();
+
+      // Assert: estado (400 con el mensaje en español) y comportamiento (el
+      // INSERT que antes reventaba con 22001 ya ni se intenta).
+      expect(res.status).toBe(400);
+      expect(json.code).toBe('VALIDATION_ERROR');
+      expect(json.error).toBe(`${inicio} admite máximo ${largo} caracteres`);
+      expect(insertoMiembro()).toBe(false);
+    },
+  );
+
+  it('should answer 400 with a Spanish message when the email is longer than 150 characters', async () => {
+    // Arrange: pool falso (FAKE) del beforeEach; un correo valido de 151 caracteres.
+    const email = `${'a'.repeat(140)}@correo.com`;
+
+    // Act
+    const res = await crear(miembroValido({ email }));
+    const json = await res.json();
+
+    // Assert: estado y comportamiento. Antes decia «String must contain at most
+    // 150 character(s)».
     expect(res.status).toBe(400);
-    expect(body.code).toBe('VALIDATION_ERROR');
-    // Comportamiento: el INSERT que antes reventaba con 22001 ya ni se intenta.
+    expect(json.error).toBe('El correo admite máximo 150 caracteres');
     expect(insertoMiembro()).toBe(false);
   });
 
-  it('should answer 400 when the email is longer than 150 characters', async () => {
-    const email = `${'a'.repeat(140)}@correo.com`; // 151
-    const res = await crear(miembroValido({ email }));
+  it('should create the member when the name has emojis and fits the column in characters', async () => {
+    // Arrange: pool falso (FAKE) del beforeEach. 99 letras y un emoji son 100
+    // caracteres para PostgreSQL, pero 101 unidades UTF-16 para .max() de zod.
+    const nombre = `${'a'.repeat(99)}💪`;
 
-    expect(res.status).toBe(400);
-    expect(insertoMiembro()).toBe(false);
+    // Act
+    const res = await crear(miembroValido({ nombre }));
+
+    // Assert: estado (201) y comportamiento (el INSERT si se intento).
+    expect(res.status).toBe(201);
+    expect(insertoMiembro()).toBe(true);
   });
 });
 
 describe('PUT /api/admin/miembros/:id: los mismos largos al editar', () => {
   it.each([
-    ['nombre', 101],
-    ['documento', 21],
-    ['telefono', 21],
-  ])('should answer 400 without an UPDATE when %s has %i characters', async (campo, largo) => {
-    const res = await editar({ [campo]: '1'.repeat(largo) });
+    ['nombre', 100, 'El nombre'],
+    ['documento', 20, 'El documento'],
+    ['telefono', 20, 'El teléfono'],
+    ['contacto_emergencia', 100, 'El contacto de emergencia'],
+    ['objetivo', 50, 'El objetivo'],
+  ])('should answer 400 with a Spanish message and no UPDATE when %s has %i + 1 characters', async (campo, largo, inicio) => {
+    // Arrange: pool falso (FAKE) del beforeEach; un caracter mas que la columna.
+    const body = { [campo]: '1'.repeat(largo + 1) };
 
+    // Act
+    const res = await editar(body);
+    const json = await res.json();
+
+    // Assert: estado (400 en español) y comportamiento (sin UPDATE).
     expect(res.status).toBe(400);
-    expect(mockQuery.mock.calls.some(([sql]) => /UPDATE miembro/i.test(sql))).toBe(false);
+    expect(json.error).toBe(`${inicio} admite máximo ${largo} caracteres`);
+    expect(actualizoMiembro()).toBe(false);
+  });
+
+  it('should answer 400 with a Spanish message when the edited email is longer than 150 characters', async () => {
+    // Arrange: pool falso (FAKE) del beforeEach; un correo valido de 151 caracteres.
+    const email = `${'a'.repeat(140)}@correo.com`;
+
+    // Act
+    const res = await editar({ email });
+    const json = await res.json();
+
+    // Assert: estado y comportamiento.
+    expect(res.status).toBe(400);
+    expect(json.error).toBe('El correo admite máximo 150 caracteres');
+    expect(actualizoMiembro()).toBe(false);
   });
 });
