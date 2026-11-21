@@ -175,8 +175,20 @@ const updateSchema = z.object({
   app_acceso: z.boolean().optional(),
 });
 
+// El mensaje por defecto de zod para el correo es "Invalid email" y el front lo
+// muestra tal cual. Se cambia por el mismo texto del formulario (MiembrosPage.jsx,
+// EMAIL_RE), que deja pasar correos que zod rechaza, como "ana..perez@correo.co".
+// Va en parse() y no en cada .email() de los esquemas: vale para el alta y la
+// edicion, y un mensaje puesto en el esquema sigue ganando.
+const CORREO_INVALIDO = 'Este correo no tiene un formato válido.';
+
+function mensajesDeValidacion(issue, ctx) {
+  if (issue.code === 'invalid_string' && issue.validation === 'email') return { message: CORREO_INVALIDO };
+  return { message: ctx.defaultError };
+}
+
 function parse(schema, payload) {
-  const result = schema.safeParse(payload || {});
+  const result = schema.safeParse(payload || {}, { errorMap: mensajesDeValidacion });
   if (!result.success) return { ok: false, status: 400, error: formatZodError(result.error), issues: result.error.issues };
   return { ok: true, data: result.data };
 }

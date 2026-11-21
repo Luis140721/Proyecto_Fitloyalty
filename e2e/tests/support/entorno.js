@@ -11,3 +11,10 @@ export const SESION = path.join(path.dirname(fileURLToPath(import.meta.url)), '.
 
 // Clave del token en localStorage (frontend/src/api.js, TOKEN_KEY).
 export const CLAVE_TOKEN = 'fitloyalty_token';
+
+// BD de pruebas desechable (servicio db-test de e2e/docker-compose.yml). Las
+// credenciales son de prueba, no secretos. Se puede cambiar con E2E_DATABASE_URL.
+// 127.0.0.1 y no localhost: el contenedor solo escucha en IPv4 y en Windows Node
+// puede resolver localhost a ::1. La guardia (guardia-bd.cjs) la revisa antes de usarla.
+export const BD_PRUEBAS_URL =
+  process.env.E2E_DATABASE_URL ?? 'postgres://fitloyalty_test:fitloyalty_test@127.0.0.1:5433/fitloyalty_test';
