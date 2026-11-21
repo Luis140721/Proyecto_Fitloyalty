@@ -455,7 +455,7 @@ router.post(
         miembroRows = result.rows;
       } catch (dbErr) {
         console.error('[POST /admin/miembros] Error en INSERT de miembro:', dbErr);
-        throw new AppError(500, 'No pudimos crear el miembro. Intenta de nuevo.', 'DB_UNREACHABLE');
+        throw new AppError(503, 'No pudimos crear el miembro. Intenta de nuevo.', 'DB_UNREACHABLE');
       }
 
       const miembroId = miembroRows[0].id_miembro;
