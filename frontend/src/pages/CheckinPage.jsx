@@ -185,13 +185,23 @@ export default function CheckinPage() {
     }
   };
 
-  const submit = async (e) => {
+  // porDocumento: el Enter del campo de documento registra por documento
+  // aunque haya texto en el campo del QR.
+  const submit = async (e, porDocumento = false) => {
     e.preventDefault();
     setError(''); setFeedback(null);
     const payload = { metodo };
-    if (codigo) payload.codigo = codigo.trim();
-    else if (documento) payload.documento = documento.trim();
-    else { setError('Escribe el código QR o el documento.'); return; }
+    if (codigo && !porDocumento) {
+      payload.codigo = codigo.trim();
+    } else if (documento) {
+      payload.documento = documento.trim();
+      // Escribir el documento es un ingreso manual: el selector arranca en QR
+      // y sin esto el ingreso quedaba guardado como QR (RQNF-04).
+      if (metodo === 'QR') payload.metodo = 'MANUAL';
+    } else {
+      setError('Escribe el código QR o el documento.');
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -237,6 +247,10 @@ export default function CheckinPage() {
 
   const onScan = (e) => {
     if (e.key === 'Enter') { e.preventDefault(); submit(e); }
+  };
+
+  const onDocumentoKey = (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); submit(e, true); }
   };
 
   const registrarRipple = Ripple({ opacity: 0.35 });
@@ -360,6 +374,7 @@ export default function CheckinPage() {
                   className="field-input"
                   value={documento}
                   onChange={(e) => setDocumento(e.target.value)}
+                  onKeyDown={onDocumentoKey}
                   placeholder="79123456"
                   inputMode="numeric"
                 />

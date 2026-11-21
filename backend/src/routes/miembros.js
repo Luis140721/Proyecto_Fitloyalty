@@ -28,6 +28,11 @@ const { z } = require('zod');
 const { formatZodError, largoEnCaracteres } = require('../lib/validators');
 const { ULTIMO_PLAN } = require('../lib/planes');
 const { telefonoWhatsapp, mensajeParaMiembro, enPalabras } = require('../lib/mensajes');
+const {
+  esMenorDeEdad, fechaNacimientoValida, representanteSchema, datosRepresentante,
+  CAMPOS_REPRESENTANTE, leerVigentes, leerHistorial, otorgada, registrarAutorizacion,
+  resumenAutorizaciones, edadEnAnios,
+} = require('../lib/autorizaciones');
 const { sendMemberQR } = require('../lib/email');
 const { sendWhatsAppQR } = require('../lib/whatsapp'); // <-- NUEVO: Importado el servicio de WhatsApp
 const QRCode = require('qrcode');
@@ -121,6 +126,17 @@ const createSchema = z.object({
   // Términos
   acepto_terminos: z.boolean().default(false),
   autorizo_datos: z.boolean().default(false),
+  // RQNF-17: autorizacion expresa, separada y opcional para los datos
+  // sensibles. Sin ella no se guardan condiciones_medicas ni alergias.
+  autorizo_datos_sensibles: z.boolean().default(false),
+  // Representante legal: obligatorio si el miembro es menor de edad
+  // (validarMenorEnAlta, abajo).
+  representante_nombre:         z.string().max(100).nullable().optional(),
+  representante_tipo_documento: z.string().max(10).nullable().optional(),
+  representante_documento:      z.string().max(20).nullable().optional(),
+  representante_parentesco:     z.string().max(40).nullable().optional(),
+  representante_telefono:       z.string().max(20).nullable().optional(),
+  autoriza_representante: z.boolean().default(false),
   activo: z.boolean().default(true),
   qr_imagen: z.string().optional(), // Imagen del QR en base64
   // Contrasena para la app movil del cliente. Si viene vacia/null, no se
@@ -128,7 +144,40 @@ const createSchema = z.object({
   // Se guarda hasheada con bcrypt en password_hash.
   password: z.string().min(6, 'La contrasena debe tener minimo 6 caracteres').optional().or(z.literal('').transform(() => undefined)),
   app_acceso: z.boolean().default(true),
-});
+}).superRefine(validarMenorEnAlta);
+
+/**
+ * RQNF-17 (Decreto 1377 de 2013, art. 12): si el miembro es menor de edad,
+ * los datos de su representante legal y la autorizacion de este son
+ * obligatorios. Tambien rechaza una fecha de nacimiento mal escrita o futura,
+ * que de otro modo haria pasar a un menor por adulto.
+ */
+function validarMenorEnAlta(d, ctx) {
+  if (d.fecha_nacimiento && !fechaNacimientoValida(d.fecha_nacimiento)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['fecha_nacimiento'],
+      message: 'La fecha de nacimiento no es válida: usa AAAA-MM-DD y una fecha que no sea futura.',
+    });
+    return;
+  }
+  if (!esMenorDeEdad(d)) return;
+  const rep = representanteSchema.safeParse(datosRepresentante(d));
+  if (!rep.success) rep.error.issues.forEach((issue) => ctx.addIssue(issue));
+  if (!d.autoriza_representante) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['autoriza_representante'],
+      message: 'El miembro es menor de edad: falta la autorización de su representante legal.',
+    });
+  }
+}
+
+/** Codigo de error: si falla algo del menor, el front lo distingue. */
+function codigoValidacion(issues = []) {
+  const delMenor = issues.some((i) => [...CAMPOS_REPRESENTANTE, 'autoriza_representante'].includes(i.path?.[0]));
+  return delMenor ? 'REPRESENTANTE_REQUERIDO' : 'VALIDATION_ERROR';
+}
 
 /**
  * Campos editables de un miembro.
@@ -148,7 +197,7 @@ const createSchema = z.object({
  * opcionales.
  */
 const vacioANull = (schema) =>
-  schema.optional().or(z.literal('').transform(() => null)).nullable();
+  z.literal('').transform(() => null).or(schema.optional()).nullable();
 
 const updateSchema = z.object({
   nombre:    nombreConLimite(z.string().min(2)).optional(),
@@ -184,7 +233,39 @@ const updateSchema = z.object({
   // app_acceso: booleano para apagar/encender acceso a la app del miembro.
   password: z.string().min(6, 'La contrasena debe tener minimo 6 caracteres').optional(),
   app_acceso: z.boolean().optional(),
+
+  // RQNF-17: autorizaciones y representante legal. No son columnas sueltas:
+  // las procesa actualizarConAutorizaciones (abajo), que deja constancia en
+  // autorizacion_miembro.
+  //   autorizo_datos_sensibles: true otorga, false revoca y borra los datos.
+  //   autoriza_representante:   true registra la autorizacion del
+  //                             representante (obligatoria para un menor).
+  autorizo_datos_sensibles:     z.boolean().optional(),
+  autoriza_representante:       z.boolean().optional(),
+  representante_nombre:         vacioANull(z.string().max(100)),
+  representante_tipo_documento: vacioANull(z.string().max(10)),
+  representante_documento:      vacioANull(z.string().max(20)),
+  representante_parentesco:     vacioANull(z.string().max(40)),
+  representante_telefono:       vacioANull(z.string().max(20)),
 });
+
+/** Claves de updateSchema que no son columnas de miembro. */
+const NO_COLUMNAS = new Set(['autorizo_datos_sensibles', 'autoriza_representante']);
+
+/**
+ * ¿La edicion toca algo de RQNF-17? Entonces hay que mirar el estado actual
+ * del miembro (edad, representante, autorizaciones) dentro de una
+ * transaccion. Si no, la edicion sigue el camino simple de siempre.
+ */
+function tocaAutorizaciones(d) {
+  return d.autorizo_datos_sensibles !== undefined
+    || d.autoriza_representante !== undefined
+    || CAMPOS_REPRESENTANTE.some((k) => d[k] !== undefined)
+    || d.condiciones_medicas !== undefined
+    || d.alergias !== undefined
+    || (d.fecha_nacimiento !== undefined && d.fecha_nacimiento !== null)
+    || d.tipo_documento === 'TI';
+}
 
 function parse(schema, payload) {
   const result = schema.safeParse(payload || {});
@@ -245,6 +326,155 @@ function calcularProximaFechaCobro(fechaFin) {
   const proxima = new Date(fin);
   proxima.setDate(proxima.getDate() + 1); // Un día después de que vence
   return proxima.toISOString().split('T')[0];
+}
+
+/**
+ * RQNF-17: prueba de las autorizaciones del alta (Decreto 1377, arts. 7 y 8).
+ * Se guarda una fila por cada autorizacion, otorgada o no, con la version del
+ * texto, el canal PANEL y el usuario que registro al miembro. Si es menor, las
+ * da su representante y se guarda ademas la autorizacion de este con la foto
+ * de sus datos.
+ */
+async function registrarAutorizacionesAlta(db, { idMiembro, gymId, usuario, data, menor, rep }) {
+  const base = { idMiembro, gymId, canal: 'PANEL', registradaPor: usuario };
+  const porRepresentante = menor ? { otorgada_por: 'REPRESENTANTE_LEGAL' } : null;
+  const filas = [];
+  filas.push(await registrarAutorizacion(db, { ...base, tipo: 'TERMINOS', otorgada: data.acepto_terminos, detalle: porRepresentante }));
+  filas.push(await registrarAutorizacion(db, { ...base, tipo: 'TRATAMIENTO_DATOS', otorgada: data.autorizo_datos, detalle: porRepresentante }));
+  filas.push(await registrarAutorizacion(db, { ...base, tipo: 'DATOS_SENSIBLES', otorgada: data.autorizo_datos_sensibles, detalle: porRepresentante }));
+  if (menor) {
+    filas.push(await registrarAutorizacion(db, {
+      ...base,
+      tipo: 'REPRESENTANTE_MENOR',
+      otorgada: true,
+      detalle: { ...rep, edad_miembro: edadEnAnios(data.fecha_nacimiento) },
+    }));
+  }
+  return filas;
+}
+
+/** Normaliza un texto para comparar datos del representante. */
+const norm = (v) => (v === null || v === undefined ? '' : String(v).trim());
+
+/**
+ * PUT con cambios de RQNF-17 (autorizacion de datos sensibles, edad,
+ * representante o datos de salud). Corre en una transaccion con el miembro
+ * bloqueado:
+ *   - Si al final el miembro es menor de edad, el representante tiene que
+ *     quedar completo (zod) y su autorizacion registrada; si sus datos
+ *     cambian, se pide de nuevo.
+ *   - autorizo_datos_sensibles: true otorga, false revoca; cada cambio deja
+ *     una fila en el historial.
+ *   - Si al final no hay autorizacion de datos sensibles, condiciones_medicas
+ *     y alergias quedan en NULL (tambien las que venian de antes de RQNF-17).
+ * Devuelve { miembro, autorizaciones, sensiblesBorrados, revocada }.
+ */
+async function actualizarConAutorizaciones(client, { id, gymId, usuario, d }) {
+  const { rows: actualRows } = await client.query(
+    `SELECT id_miembro, tipo_documento, to_char(fecha_nacimiento, 'YYYY-MM-DD') AS fecha_nacimiento,
+            condiciones_medicas, alergias,
+            representante_nombre, representante_tipo_documento, representante_documento,
+            representante_parentesco, representante_telefono
+       FROM miembro WHERE id_miembro = $1 AND id_gimnasio = $2
+       FOR UPDATE`,
+    [id, gymId]
+  );
+  if (actualRows.length === 0) throw new AppError(404, 'Miembro no encontrado', 'MEMBER_NOT_FOUND');
+  const actual = actualRows[0];
+  const vigentes = await leerVigentes(client, id, gymId);
+
+  if (d.fecha_nacimiento && !fechaNacimientoValida(d.fecha_nacimiento)) {
+    throw new AppError(400, 'La fecha de nacimiento no es válida: usa AAAA-MM-DD y una fecha que no sea futura.', 'VALIDATION_ERROR');
+  }
+
+  const final = {
+    tipo_documento: d.tipo_documento !== undefined ? d.tipo_documento : actual.tipo_documento,
+    fecha_nacimiento: d.fecha_nacimiento !== undefined ? d.fecha_nacimiento : actual.fecha_nacimiento,
+  };
+  for (const k of CAMPOS_REPRESENTANTE) final[k] = d[k] !== undefined ? d[k] : actual[k];
+  const menor = esMenorDeEdad(final);
+  const base = { idMiembro: id, gymId, canal: 'PANEL', registradaPor: usuario };
+  const sets = {};
+
+  if (menor) {
+    const rep = representanteSchema.safeParse(datosRepresentante(final));
+    if (!rep.success) {
+      throw new AppError(400, rep.error.issues[0].message, 'REPRESENTANTE_REQUERIDO', { issues: rep.error.issues });
+    }
+    const cambio = CAMPOS_REPRESENTANTE.some((k) => d[k] !== undefined && norm(d[k]) !== norm(actual[k]));
+    const falta = !otorgada(vigentes, 'REPRESENTANTE_MENOR') || cambio;
+    if (falta && d.autoriza_representante !== true) {
+      throw new AppError(400, cambio
+        ? 'Cambiaron los datos del representante legal: marca de nuevo su autorización.'
+        : 'El miembro es menor de edad: falta la autorización de su representante legal.', 'REPRESENTANTE_REQUERIDO');
+    }
+    if (falta) {
+      await registrarAutorizacion(client, {
+        ...base,
+        tipo: 'REPRESENTANTE_MENOR',
+        otorgada: true,
+        detalle: { ...rep.data, edad_miembro: edadEnAnios(final.fecha_nacimiento) },
+      });
+    }
+    Object.assign(sets, rep.data);
+  } else {
+    for (const k of CAMPOS_REPRESENTANTE) if (d[k] !== undefined) sets[k] = d[k] === null ? null : norm(d[k]) || null;
+  }
+
+  // Datos sensibles.
+  const antes = otorgada(vigentes, 'DATOS_SENSIBLES');
+  let despues = antes;
+  if (d.autorizo_datos_sensibles !== undefined && d.autorizo_datos_sensibles !== antes) {
+    despues = d.autorizo_datos_sensibles;
+    await registrarAutorizacion(client, {
+      ...base,
+      tipo: 'DATOS_SENSIBLES',
+      otorgada: despues,
+      detalle: menor ? { otorgada_por: 'REPRESENTANTE_LEGAL' } : null,
+    });
+  }
+  let sensiblesBorrados = false;
+  if (despues) {
+    if (d.condiciones_medicas !== undefined) sets.condiciones_medicas = d.condiciones_medicas;
+    if (d.alergias !== undefined) sets.alergias = d.alergias;
+  } else {
+    sensiblesBorrados = Boolean(actual.condiciones_medicas || actual.alergias || d.condiciones_medicas || d.alergias);
+    sets.condiciones_medicas = null;
+    sets.alergias = null;
+  }
+
+  // El resto de campos, igual que el camino simple.
+  const campos = [];
+  const params = [];
+  for (const [k, v] of Object.entries(d)) {
+    if (v === undefined || NO_COLUMNAS.has(k) || k in sets) continue;
+    if (CAMPOS_REPRESENTANTE.includes(k) || k === 'condiciones_medicas' || k === 'alergias') continue;
+    if (k === 'password') {
+      params.push(await bcrypt.hash(String(v), 10));
+      campos.push(`password_hash = $${params.length}`, 'password_set_at = CURRENT_TIMESTAMP');
+      continue;
+    }
+    params.push(k === 'email' && v ? v.toLowerCase() : v);
+    campos.push(`${k} = $${params.length}`);
+  }
+  for (const [k, v] of Object.entries(sets)) {
+    params.push(v);
+    campos.push(`${k} = $${params.length}`);
+  }
+  params.push(id, gymId);
+  const { rows } = await client.query(
+    `UPDATE miembro SET ${campos.join(', ')}
+      WHERE id_miembro = $${params.length - 1} AND id_gimnasio = $${params.length}
+      RETURNING id_miembro, nombre, documento, telefono, email, codigo_qr, qr_imagen,
+                activo, fecha_registro, app_acceso,
+                (password_hash IS NOT NULL) AS password_asignada`,
+    params
+  );
+  const autorizaciones = resumenAutorizaciones(
+    await leerVigentes(client, id, gymId),
+    await leerHistorial(client, id, gymId, 20)
+  );
+  return { miembro: rows[0], autorizaciones, sensiblesBorrados, revocada: antes && !despues, menor };
 }
 
 // ---------------------------------------------------------------------------
@@ -372,8 +602,8 @@ router.post(
   requireActiveTrial(pool),
   asyncHandler(async (req, res) => {
     const parsed = parse(createSchema, req.body);
-    if (!parsed.ok) throw new AppError(parsed.status, parsed.error, 'VALIDATION_ERROR', { issues: parsed.issues });
-    
+    if (!parsed.ok) throw new AppError(parsed.status, parsed.error, codigoValidacion(parsed.issues), { issues: parsed.issues });
+
     const data = parsed.data;
     const gymId = req.user.gymId;
 
@@ -411,17 +641,36 @@ router.post(
       // todavia sin contrasena (no podra loguearse a la app hasta que se asigne).
       const password_hash = data.password ? await bcrypt.hash(data.password, 10) : null;
 
+      // RQNF-17: sin la autorizacion de datos sensibles, las condiciones
+      // medicas y las alergias no se guardan (quedan en NULL). Los datos del
+      // representante solo se guardan si el miembro es menor (ya validados).
+      const menor = esMenorDeEdad(data);
+      const sensibles = data.autorizo_datos_sensibles === true;
+      const sensiblesDescartados = !sensibles && Boolean(data.condiciones_medicas || data.alergias);
+      const rep = menor ? representanteSchema.parse(datosRepresentante(data)) : datosRepresentante({});
+
+      const valorTotal = parseFloat(data.valor_total) || 0;
+      const valorPagado = parseFloat(data.valor_pagado) || 0;
+
+      // Miembro, plan y autorizaciones van en una transaccion: o queda todo
+      // (incluida la prueba de cada autorizacion) o no queda nada.
       let miembroRows;
+      let autorizaciones;
+      const client = await pool.connect();
       try {
-        const result = await pool.query(
+        await client.query('BEGIN');
+        const result = await client.query(
           `INSERT INTO miembro (
             id_gimnasio, nombre, tipo_documento, documento, fecha_nacimiento, genero,
             telefono, email, direccion,
             contacto_emergencia, telefono_emergencia, condiciones_medicas, alergias,
             objetivo, nivel_experiencia, observaciones,
             acepto_terminos, autorizo_datos, codigo_qr, qr_imagen,
-            password_hash, password_set_at, app_acceso
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
+            password_hash, password_set_at, app_acceso,
+            representante_nombre, representante_tipo_documento, representante_documento,
+            representante_parentesco, representante_telefono
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23,
+                    $24, $25, $26, $27, $28)
           RETURNING id_miembro, nombre, documento, telefono, email, codigo_qr, qr_imagen,
                     activo, fecha_registro, app_acceso,
                     (password_hash IS NOT NULL) AS password_asignada`,
@@ -437,8 +686,8 @@ router.post(
             data.direccion || null,
             data.contacto_emergencia || null,
             data.telefono_emergencia || null,
-            data.condiciones_medicas || null,
-            data.alergias || null,
+            sensibles ? (data.condiciones_medicas || null) : null,
+            sensibles ? (data.alergias || null) : null,
             data.objetivo || null,
             data.nivel_experiencia || null,
             data.observaciones || null,
@@ -449,41 +698,53 @@ router.post(
             password_hash,
             password_hash ? new Date() : null,
             data.app_acceso !== false, // default true
+            rep.representante_nombre,
+            rep.representante_tipo_documento,
+            rep.representante_documento,
+            rep.representante_parentesco,
+            rep.representante_telefono,
           ]
         );
         miembroRows = result.rows;
+
+        await client.query(
+          `INSERT INTO plan_cobro (
+            id_miembro, id_gimnasio, tipo_plan, fecha_inicio, fecha_fin,
+            valor_total, valor_pagado, metodo_pago, referencia_pago, estado_pago,
+            proxima_fecha_cobro, activar_recordatorio, dias_recordatorio
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+          [
+            miembroRows[0].id_miembro,
+            gymId,
+            data.tipo_plan,
+            fechaInicio,
+            fechaFin,
+            valorTotal,
+            valorPagado,
+            data.metodo_pago,
+            data.referencia_pago || null,
+            estadoPago,
+            proximaFechaCobro,
+            data.activar_recordatorio,
+            data.dias_recordatorio
+          ]
+        );
+
+        autorizaciones = await registrarAutorizacionesAlta(client, {
+          idMiembro: miembroRows[0].id_miembro, gymId, usuario: req.user.id || null, data, menor, rep,
+        });
+        await client.query('COMMIT');
       } catch (dbErr) {
-        console.error('[POST /admin/miembros] Error en INSERT de miembro:', dbErr);
+        await client.query('ROLLBACK').catch(() => {});
+        if (dbErr instanceof AppError) throw dbErr;
+        if (dbErr.code === '23505') {
+          throw new AppError(409, 'Ya existe un miembro con ese documento, correo o código en este gimnasio (puede estar desactivado).', 'MEMBER_DUPLICATED');
+        }
+        console.error('[POST /admin/miembros] Error al guardar el miembro:', dbErr);
         throw new AppError(500, 'No pudimos crear el miembro. Intenta de nuevo.', 'DB_UNREACHABLE');
+      } finally {
+        client.release();
       }
-
-      const miembroId = miembroRows[0].id_miembro;
-
-      const valorTotal = parseFloat(data.valor_total) || 0;
-      const valorPagado = parseFloat(data.valor_pagado) || 0;
-
-      await pool.query(
-        `INSERT INTO plan_cobro (
-          id_miembro, id_gimnasio, tipo_plan, fecha_inicio, fecha_fin,
-          valor_total, valor_pagado, metodo_pago, referencia_pago, estado_pago,
-          proxima_fecha_cobro, activar_recordatorio, dias_recordatorio
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
-        [
-          miembroId,
-          gymId,
-          data.tipo_plan,
-          fechaInicio,
-          fechaFin,
-          valorTotal,
-          valorPagado,
-          data.metodo_pago,
-          data.referencia_pago || null,
-          estadoPago,
-          proximaFechaCobro,
-          data.activar_recordatorio,
-          data.dias_recordatorio
-        ]
-      );
 
       const { rows: gymRows } = await pool.query(
         'SELECT nombre FROM gimnasio WHERE id_gimnasio = $1',
@@ -526,9 +787,14 @@ router.post(
         }
       }
 
-      return res.status(201).json({ 
-        message: 'Miembro creado.', 
+      return res.status(201).json({
+        message: sensiblesDescartados
+          ? 'Miembro creado. No se guardaron las condiciones médicas ni las alergias porque no se autorizó el tratamiento de datos sensibles.'
+          : 'Miembro creado.',
         miembro: miembroRows[0],
+        autorizaciones,
+        datos_sensibles_descartados: sensiblesDescartados,
+        menor_de_edad: menor,
         qr_data: codigo_qr_cifrado,
         plan_cobro: {
           tipo_plan: data.tipo_plan,
@@ -611,12 +877,31 @@ router.get(
                 activo, fecha_registro, tipo_documento, fecha_nacimiento, genero,
                 codigo_pais_telefono, ciudad, direccion, contacto_emergencia,
                 telefono_emergencia, condiciones_medicas, alergias, objetivo,
-                nivel_experiencia, observaciones
+                nivel_experiencia, observaciones,
+                acepto_terminos, autorizo_datos,
+                representante_nombre, representante_tipo_documento, representante_documento,
+                representante_parentesco, representante_telefono
            FROM miembro WHERE id_miembro = $1 AND id_gimnasio = $2`,
         [id, gymId]
       );
       if (rows.length === 0) throw new AppError(404, 'Miembro no encontrado', 'MEMBER_NOT_FOUND');
-      return res.json({ miembro: rows[0] });
+      // RQNF-17: autorizaciones vigentes e historial, para la edicion.
+      const vigentes = await leerVigentes(pool, id, gymId);
+      const historial = await leerHistorial(pool, id, gymId, 20);
+      const m = rows[0];
+      const sensibles = otorgada(vigentes, 'DATOS_SENSIBLES');
+      return res.json({
+        miembro: {
+          ...m,
+          autorizo_datos_sensibles: sensibles,
+          menor_de_edad: esMenorDeEdad(m),
+          // Datos de salud guardados sin autorizacion separada (miembros de
+          // antes de RQNF-17): el panel lo avisa; se borran al guardar sin
+          // marcar la autorizacion.
+          datos_sensibles_sin_autorizacion: !sensibles && Boolean(m.condiciones_medicas || m.alergias),
+        },
+        autorizaciones: resumenAutorizaciones(vigentes, historial),
+      });
     } catch (err) {
       if (err instanceof AppError) throw err;
       console.error('[GET /admin/miembros/:id] Error:', err.message);
@@ -638,6 +923,37 @@ router.put(
     if (!parsed.ok) throw new AppError(parsed.status, parsed.error, 'VALIDATION_ERROR', { issues: parsed.issues });
     const id = parseInt(req.params.id, 10);
     if (!Number.isFinite(id)) throw new AppError(400, 'Id invalido', 'VALIDATION_ERROR');
+
+    // RQNF-17: si la edicion toca autorizaciones, edad, representante o datos
+    // de salud, va por la transaccion que lo valida y deja constancia.
+    if (tocaAutorizaciones(parsed.data)) {
+      let client;
+      try {
+        client = await pool.connect();
+        await client.query('BEGIN');
+        const r = await actualizarConAutorizaciones(client, {
+          id, gymId: req.user.gymId, usuario: req.user.id || null, d: parsed.data,
+        });
+        await client.query('COMMIT');
+        let message = 'Miembro actualizado.';
+        if (r.revocada) message = 'Miembro actualizado. Se revocó la autorización de datos sensibles y se borraron las condiciones médicas y las alergias.';
+        else if (r.sensiblesBorrados) message = 'Miembro actualizado. Sin autorización de datos sensibles no se guardan condiciones médicas ni alergias.';
+        return res.json({
+          message,
+          miembro: r.miembro,
+          autorizaciones: r.autorizaciones,
+          datos_sensibles_borrados: r.sensiblesBorrados,
+          menor_de_edad: r.menor,
+        });
+      } catch (err) {
+        if (client) await client.query('ROLLBACK').catch(() => {});
+        if (err instanceof AppError) throw err;
+        console.error('[PUT /admin/miembros/:id] Error:', err.message);
+        throw new AppError(503, 'No pudimos actualizar el miembro. Intenta de nuevo.', 'DB_UNREACHABLE');
+      } finally {
+        if (client) client.release();
+      }
+    }
 
     const campos = [];
     const params = [];
@@ -724,17 +1040,32 @@ router.delete(
     if (!Number.isFinite(id)) throw new AppError(400, 'Id invalido', 'VALIDATION_ERROR');
     const gymId = req.user.gymId;
 
+    let client;
     try {
-      const { rows } = await pool.query(
+      client = await pool.connect();
+      await client.query('BEGIN');
+      // envio_mensaje apunta al miembro sin ON DELETE CASCADE (en produccion y,
+      // desde la migracion 014, en Docker): sus envios (RQF-09) se borran antes,
+      // en la misma transaccion. Si el miembro no es de este gimnasio no se
+      // borra nada: el filtro por gimnasio y el ROLLBACK del 404 lo aseguran.
+      await client.query(
+        'DELETE FROM envio_mensaje WHERE id_miembro = $1 AND id_gimnasio = $2',
+        [id, gymId]
+      );
+      const { rows } = await client.query(
         'DELETE FROM miembro WHERE id_miembro = $1 AND id_gimnasio = $2 RETURNING id_miembro',
         [id, gymId]
       );
       if (rows.length === 0) throw new AppError(404, 'Miembro no encontrado', 'MEMBER_NOT_FOUND');
+      await client.query('COMMIT');
       return res.json({ message: 'Miembro eliminado permanentemente.' });
     } catch (err) {
+      if (client) await client.query('ROLLBACK').catch(() => {});
       if (err instanceof AppError) throw err;
       console.error('[DELETE /admin/miembros/:id/permanent] Error:', err.message);
       throw new AppError(503, 'No pudimos eliminar el miembro. Intenta de nuevo.', 'DB_UNREACHABLE');
+    } finally {
+      if (client) client.release();
     }
   })
 );

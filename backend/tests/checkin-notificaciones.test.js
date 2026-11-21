@@ -1,6 +1,8 @@
 /**
  * RQNF-07: pruebas de las rutas de check-in y de los avisos de la campana.
  * Complementan acceso-bloqueado.test.js (membresia vencida) y gamificacion.test.js.
+ * El registro de envios (POST /admin/notificaciones/enviado, RQF-09) se prueba
+ * en registro-envio.test.js.
  */
 const express = require('express');
 const crypto = require('crypto');
@@ -187,50 +189,5 @@ describe('GET /api/admin/checkin (historial)', () => {
     });
     const r = await call('GET', '/api/admin/checkin', RECEP);
     expect(r.status).toBe(503);
-  });
-});
-
-describe('POST /api/admin/notificaciones/enviado', () => {
-  const preparar2 = ({ existe = true, falla = false } = {}) => {
-    mockQuery.mockImplementation(async (sql) => {
-      if (/FROM miembro/i.test(sql)) return { rows: existe ? [{ nombre: 'Ana' }] : [] };
-      if (falla) throw new Error('caida');
-      return { rows: [], rowCount: 1 };
-    });
-  };
-
-  test('deja constancia del envio y de la notificacion: 201', async () => {
-    preparar2();
-    const r = await call('POST', '/api/admin/notificaciones/enviado', RECEP, { idMiembro: 12, canal: 'WHATSAPP', tipo: 'vencida' });
-    expect(r.status).toBe(201);
-    const envio = mockQuery.mock.calls.find(([s]) => /INSERT INTO envio_mensaje/i.test(s));
-    expect(envio[1]).toEqual([7, 12, 'WHATSAPP']);
-    const aviso = mockQuery.mock.calls.find(([s]) => /INSERT INTO notificacion/i.test(s));
-    expect(aviso[1][4]).toMatch(/Ana.*WHATSAPP.*vencida/);
-  });
-
-  test('el miembro debe ser del gimnasio del token: si no, 404 y no escribe nada', async () => {
-    preparar2({ existe: false });
-    const r = await call('POST', '/api/admin/notificaciones/enviado', RECEP, { idMiembro: 12 });
-    expect(r.status).toBe(404);
-    expect(mockQuery.mock.calls.some(([s]) => /INSERT/i.test(s))).toBe(false);
-    expect(mockQuery.mock.calls[0][1]).toEqual([12, 7]);
-  });
-
-  test('canal invalido: 400', async () => {
-    preparar2();
-    const r = await call('POST', '/api/admin/notificaciones/enviado', RECEP, { idMiembro: 12, canal: 'PALOMA' });
-    expect(r.status).toBe(400);
-  });
-
-  test('si la base falla al guardar: 503', async () => {
-    preparar2({ falla: true });
-    const r = await call('POST', '/api/admin/notificaciones/enviado', RECEP, { idMiembro: 12 });
-    expect(r.status).toBe(503);
-  });
-
-  test('token de miembro: 403', async () => {
-    const r = await call('POST', '/api/admin/notificaciones/enviado', MIEMBRO, { idMiembro: 12 });
-    expect(r.status).toBe(403);
   });
 });

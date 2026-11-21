@@ -2,73 +2,70 @@
  * routes/admin-contrato.js
  *
  * Endpoint para que un admin de gimnasio envie el contrato de
- * membresia al miembro via WhatsApp. El texto lo genera
- * lib/mensajes#contratoMembresia (prod-ready, con todas las
- * clausulas de blindaje juridico que el profe pidio).
+ * membresia al miembro via WhatsApp (RQF-13). El texto lo genera
+ * lib/mensajes#contratoMembresia con los datos reales de la base
+ * (lib/contrato.js): precio total, forma de pago, vigencia, renovacion,
+ * congelamiento, terminacion, datos del gimnasio y canal de PQR
+ * (RQNF-18, Ley 1480 de 2011).
  *
  *   POST /api/admin/miembros/:id/contrato/enviar
- *     body: { version?: 'v1' }
+ *     body: { version? }  (se ignora: se registra la version del texto que
+ *                          de verdad se genero, CONTRATO_VERSION)
  *     auth: admin o admin_gimnasio
  *     response: { ok, exito, contrato_id, mensaje }
+ *     409 CONTRACT_INCOMPLETE si a la base le falta algo que el contrato
+ *     tiene que informar (plan, precio, forma de pago, fechas).
  *
  *   GET  /api/admin/miembros/:id/contrato/preview
  *     auth: admin o admin_gimnasio
- *     response: { contrato: '...texto...' }
+ *     response: { contrato: '...texto...', secciones, faltantes }
  *     Solo muestra el texto, NO envia nada. Util para revisar antes
  *     de mandar.
  *
  *   GET  /api/admin/miembros/:id/contrato/historial
  *     auth: admin o admin_gimnasio
  *     response: { envios: [...] }
- *     Lista los envios previos (auditoria).
+ *     Lista las entregas previas (WhatsApp y app), con el texto entregado.
  *
  * Cada envio se registra en la tabla `contrato_enviado`
- * (migracion 008) para que el gym tenga constancia legal de que
- * entrego los terminos al miembro.
+ * (migraciones 008 y 020) para que el gym tenga constancia de que
+ * entrego los terminos al miembro y de que texto le entrego.
+ *
+ * Aislamiento: el miembro se busca con el gimnasio del token; si es de
+ * otro gimnasio la respuesta es 404, sin decir si existe.
  */
 
 const express = require('express');
 const { authenticate, authorize } = require('../middleware/auth');
 const asyncHandler = require('../lib/asyncHandler');
 const pool = require('../db/db');
-const { contratoMembresia, telefonoWhatsapp } = require('../lib/mensajes');
+const { telefonoWhatsapp, CONTRATO_VERSION } = require('../lib/mensajes');
+const { armarContrato } = require('../lib/contrato');
 const whatsapp = require('../lib/whatsapp');
 
 const router = express.Router({ mergeParams: true });
 
 // --- helpers ---------------------------------------------------------------
 
-async function loadMiembroParaContrato(idMiembro) {
-    const { rows } = await pool.query(`
-        SELECT m.id_miembro, m.nombre, m.telefono, m.documento, m.email,
-               m.id_gimnasio,
-               g.nombre AS gym_nombre, g.activo AS gym_activo,
-               pc.tipo_plan, pc.fecha_inicio, pc.fecha_fin,
-               pc.valor_total, pc.valor_pagado, pc.metodo_pago
-          FROM miembro m
-          JOIN gimnasio g ON g.id_gimnasio = m.id_gimnasio
-          LEFT JOIN LATERAL (
-            SELECT DISTINCT ON (id_miembro) id_miembro, tipo_plan, fecha_inicio,
-                   fecha_fin, valor_total, valor_pagado, metodo_pago, activo
-              FROM plan_cobro
-             WHERE id_miembro = m.id_miembro AND activo = TRUE
-             ORDER BY id_miembro, fecha_fin DESC NULLS LAST, id_plan_cobro DESC
-          ) pc ON pc.id_miembro = m.id_miembro
-         WHERE m.id_miembro = $1
-    `, [idMiembro]);
-    return rows[0] || null;
+function idValido(req, res) {
+    const idMiembro = parseInt(req.params.id, 10);
+    if (!Number.isFinite(idMiembro) || idMiembro <= 0) {
+        res.status(400).json({ ok: false, error: 'ID de miembro invalido' });
+        return null;
+    }
+    return idMiembro;
 }
 
-function armarContrato(m) {
-    return contratoMembresia({
-        nombre:       m.nombre,
-        gymNombre:    m.gym_nombre,
-        planTipo:     m.tipo_plan,
-        fechaInicio:  m.fecha_inicio,
-        fechaFin:     m.fecha_fin,
-        valorPagado:  m.valor_pagado ?? m.valor_total,
-        metodoPago:   m.metodo_pago,
-    });
+/**
+ * Telefono al que se manda el contrato. Si el miembro es menor de edad, el
+ * contrato es con su representante legal (RQNF-17): va a su telefono si lo
+ * tiene registrado.
+ */
+function telefonoDestino(fila) {
+    if (fila.es_menor && fila.representante_telefono) {
+        return { telefono: telefonoWhatsapp(fila.representante_telefono, fila.codigo_pais_telefono), a: 'representante' };
+    }
+    return { telefono: telefonoWhatsapp(fila.telefono, fila.codigo_pais_telefono), a: 'miembro' };
 }
 
 // --- POST enviar -----------------------------------------------------------
@@ -78,28 +75,32 @@ router.post(
     authenticate,
     authorize('admin', 'admin_gimnasio'),
     asyncHandler(async (req, res) => {
-        const idMiembro = parseInt(req.params.id, 10);
-        if (!Number.isFinite(idMiembro) || idMiembro <= 0) {
-            return res.status(400).json({ ok: false, error: 'ID de miembro invalido' });
-        }
+        const idMiembro = idValido(req, res);
+        if (!idMiembro) return;
 
-        const m = await loadMiembroParaContrato(idMiembro);
-        if (!m) {
+        const c = await armarContrato(pool, idMiembro, req.user.gymId);
+        if (!c) {
             return res.status(404).json({ ok: false, error: 'Miembro no encontrado' });
         }
-
-        // Verifica que el admin pertenezca al mismo gimnasio del miembro
-        if (req.user.gymId && req.user.gymId !== m.id_gimnasio) {
-            return res.status(403).json({ ok: false, error: 'No tienes acceso a este miembro' });
+        if (c.faltantes.length > 0) {
+            return res.status(409).json({
+                ok: false,
+                code: 'CONTRACT_INCOMPLETE',
+                error: `No se puede entregar el contrato: falta ${c.faltantes.join(', ')}.`,
+                faltantes: c.faltantes,
+            });
         }
 
-        const tel = telefonoWhatsapp(m.telefono);
+        const destino = telefonoDestino(c.fila);
+        const tel = destino.telefono;
         if (!tel) {
-            return res.status(400).json({ ok: false, error: 'El miembro no tiene un telefono valido' });
+            return res.status(400).json({ ok: false, error: destino.a === 'representante'
+                ? 'El representante legal no tiene un telefono valido'
+                : 'El miembro no tiene un telefono valido' });
         }
 
-        const texto = armarContrato(m);
-        const version = (req.body && req.body.version) || 'v1';
+        const texto = c.texto;
+        const version = CONTRATO_VERSION;
 
         // El cliente de WhatsApp es perezoso: se inicializa dentro de
         // sendWhatsAppText. Por eso NO se comprueba isWhatsAppReady() antes de
@@ -120,15 +121,16 @@ router.post(
                 : (err.message || 'Error desconocido al enviar WhatsApp');
         }
 
-        // Registrar auditoria
+        // Registrar auditoria, con el texto exacto que se intento entregar
+        // (migracion 020: canal y contenido).
         const audit = await pool.query(`
             INSERT INTO contrato_enviado
                 (id_miembro, id_gimnasio, enviado_por, telefono_destino,
-                 plantilla_version, exito, error_mensaje)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+                 plantilla_version, exito, error_mensaje, canal, contenido)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, 'WHATSAPP', $8)
             RETURNING id_contrato_enviado, creado_en
-        `, [m.id_miembro, m.id_gimnasio, req.user.id || null,
-            tel, version, exito, errorMensaje]);
+        `, [c.fila.id_miembro, c.fila.id_gimnasio, req.user.id || null,
+            tel, version, exito, errorMensaje, texto]);
 
         res.json({
             ok: true,
@@ -136,9 +138,11 @@ router.post(
             contrato_id: audit.rows[0].id_contrato_enviado,
             creado_en: audit.rows[0].creado_en,
             telefono: tel,
-            gimnasio_id: m.id_gimnasio,
+            destinatario: destino.a,
+            version,
+            gimnasio_id: c.fila.id_gimnasio,
             mensaje: exito
-                ? `Contrato enviado a ${tel}`
+                ? `Contrato enviado a ${tel}${destino.a === 'representante' ? ' (representante legal)' : ''}`
                 : noListo
                     ? 'El cliente de WhatsApp no esta autenticado. Pide a un admin que escanee el QR de autenticacion desde los logs del servidor (Render > Logs). Una vez escaneado, re-envia el contrato.'
                     : `No se pudo enviar. ${errorMensaje || 'Verifica que el cliente de WhatsApp este autenticado en el servidor.'}`,
@@ -155,23 +159,20 @@ router.get(
     authenticate,
     authorize('admin', 'admin_gimnasio'),
     asyncHandler(async (req, res) => {
-        const idMiembro = parseInt(req.params.id, 10);
-        if (!Number.isFinite(idMiembro) || idMiembro <= 0) {
-            return res.status(400).json({ ok: false, error: 'ID de miembro invalido' });
-        }
-        const m = await loadMiembroParaContrato(idMiembro);
-        if (!m) {
+        const idMiembro = idValido(req, res);
+        if (!idMiembro) return;
+        const c = await armarContrato(pool, idMiembro, req.user.gymId);
+        if (!c) {
             return res.status(404).json({ ok: false, error: 'Miembro no encontrado' });
         }
-        if (req.user.gymId && req.user.gymId !== m.id_gimnasio) {
-            return res.status(403).json({ ok: false, error: 'No tienes acceso a este miembro' });
-        }
-        const texto = armarContrato(m);
         res.json({
             ok: true,
-            miembro: { id: m.id_miembro, nombre: m.nombre, telefono: m.telefono },
-            contrato: texto,
-            longitud: texto.length,
+            miembro: { id: c.fila.id_miembro, nombre: c.fila.nombre, telefono: c.fila.telefono },
+            version: CONTRATO_VERSION,
+            contrato: c.texto,
+            secciones: c.secciones,
+            faltantes: c.faltantes,
+            longitud: c.texto.length,
         });
     })
 );
@@ -183,25 +184,24 @@ router.get(
     authenticate,
     authorize('admin', 'admin_gimnasio'),
     asyncHandler(async (req, res) => {
-        const idMiembro = parseInt(req.params.id, 10);
-        if (!Number.isFinite(idMiembro) || idMiembro <= 0) {
-            return res.status(400).json({ ok: false, error: 'ID de miembro invalido' });
-        }
-        const m = await loadMiembroParaContrato(idMiembro);
-        if (!m) {
+        const idMiembro = idValido(req, res);
+        if (!idMiembro) return;
+        const { rows: duenio } = await pool.query(
+            'SELECT id_miembro FROM miembro WHERE id_miembro = $1 AND id_gimnasio = $2',
+            [idMiembro, req.user.gymId]
+        );
+        if (duenio.length === 0) {
             return res.status(404).json({ ok: false, error: 'Miembro no encontrado' });
         }
-        if (req.user.gymId && req.user.gymId !== m.id_gimnasio) {
-            return res.status(403).json({ ok: false, error: 'No tienes acceso a este miembro' });
-        }
         const { rows } = await pool.query(`
-            SELECT id_contrato_enviado, telefono_destino, plantilla_version,
-                   exito, error_mensaje, creado_en, enviado_por
-              FROM contrato_enviado
-             WHERE id_miembro = $1
-             ORDER BY creado_en DESC
+            SELECT ce.id_contrato_enviado, ce.canal, ce.telefono_destino, ce.plantilla_version,
+                   ce.exito, ce.error_mensaje, ce.creado_en, ce.enviado_por, ce.contenido
+              FROM contrato_enviado ce
+              JOIN miembro m ON m.id_miembro = ce.id_miembro
+             WHERE ce.id_miembro = $1 AND m.id_gimnasio = $2 AND ce.id_gimnasio = $2
+             ORDER BY ce.creado_en DESC
              LIMIT 50
-        `, [idMiembro]);
+        `, [idMiembro, req.user.gymId]);
         res.json({ ok: true, total: rows.length, envios: rows });
     })
 );
