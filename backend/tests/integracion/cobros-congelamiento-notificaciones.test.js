@@ -10,9 +10,9 @@
  * routes/miembros.js corren contra la BD real y los tests miran lo que quedo
  * guardado, no solo la respuesta. Lo que el #69 ya cubre de notificacion (el
  * aviso de acceso bloqueado y su llave sin CASCADE), lo que cubre el #73 de
- * envio_mensaje (el registro del envio) y lo que plan-cobro.test.js (#83) ya
- * prueba de plan_cobro no se repite. Del #83 se toma ULTIMO_PLAN como fragmento;
- * aqui se prueba la ruta que lo usa (GET /lookup).
+ * envio_mensaje (el registro del envio) y lo que plan-cobro.test.js (#83,
+ * todavia sin fusionar) prueba de plan_cobro no se repite. El #83 prueba
+ * ULTIMO_PLAN como fragmento; aqui se prueba la ruta que lo usa (GET /lookup).
  *
  * Codigos: 23502 NOT NULL · 22001 texto mas largo que la columna · 22003
  * numero fuera de NUMERIC(10,2) · 23514 CHECK · 23505 UNIQUE · 23503 llave foranea.
@@ -577,14 +577,12 @@ describeConBd('plan_cobro, congelacion_plan, notificacion y envio_mensaje contra
     });
 
     // Red del hallazgo de los largos y los valores del alta: con las reglas del
-    // servicio (createSchema) estos casos ya no llegan a la BD. Nombre y
-    // documento los corrigio el #83; el resto, esta rama. Sin las reglas, los
-    // de miembro respondian 500 y los de plan_cobro 503, con el miembro ya
+    // servicio (createSchema) estos casos ya no llegan a la BD. Sin las reglas,
+    // los de miembro respondian 500 y los de plan_cobro 503, con el miembro ya
     // guardado y sin plan: por eso se cuenta que no quedo ningun miembro.
+    // Nombre, documento, telefono y email los acota el #83, con su propia red.
     const ANA_ALTA = { nombre: 'Ana', documento: 'CC12345', telefono: '3001234567' };
     test.each([
-      ['POST /admin/miembros con un nombre de 101 caracteres', 'post', () => '/admin/miembros', { nombre: 'x'.repeat(101), documento: 'CC12345', telefono: '3001234567' }],
-      ['POST /admin/miembros con un documento de 21 caracteres', 'post', () => '/admin/miembros', { nombre: 'Ana', documento: 'C'.repeat(21), telefono: '3001234567' }],
       ['POST /admin/miembros con un contacto de emergencia de 101 caracteres', 'post', () => '/admin/miembros', { ...ANA_ALTA, contacto_emergencia: 'x'.repeat(101) }],
       ['POST /admin/miembros con un telefono de emergencia de 21 caracteres', 'post', () => '/admin/miembros', { ...ANA_ALTA, telefono_emergencia: '3'.repeat(21) }],
       ['POST /admin/miembros con un objetivo de 51 caracteres', 'post', () => '/admin/miembros', { ...ANA_ALTA, objetivo: 'x'.repeat(51) }],

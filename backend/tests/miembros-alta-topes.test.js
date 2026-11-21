@@ -10,7 +10,7 @@
  *  - plan_cobro.referencia_pago VARCHAR(100) y valor_total y valor_pagado
  *    NUMERIC(10,2): 503, con el miembro ya guardado y sin plan.
  *
- * El #83 corrigio nombre, documento, telefono y email (su test es
+ * Nombre, documento, telefono y email los acota el #83 (su test es
  * miembros-longitudes.test.js); aqui va el resto. Ahora el servicio lo rechaza
  * con 400 VALIDATION_ERROR antes de escribir nada. Cada regla se prueba en su
  * valor limite: el maximo cabe y uno mas no.
