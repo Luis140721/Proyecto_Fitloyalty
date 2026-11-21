@@ -1,11 +1,28 @@
 # Estado: avance real de requisitos
 
-- **Fecha:** 2026-11-14 (actualizaciones tras las fusiones en `develop` del 18, el 19, el 20, el 25 y el 27 de octubre y el 13 y el 14 de noviembre; la medición inicial fue el 2026-10-16)
-- **Rama:** `docs/avance-2026-11-14` (PR hacia `develop`). Las anteriores fueron `docs/avance-2026-11-06` (PR #70), `docs/avance-2026-10-18` (PR #20), `docs/avance-2026-10-19` (PR #25), `docs/avance-2026-10-19-b` (PR #29), `docs/avance-2026-10-20` (PR #35) y `docs/avance-2026-10-25` (PR #44); la medición inicial se hizo en `docs/avance-requisitos` (PR #6, ya en `main`).
-- **Código verificado:** `develop` @ `b780cc9` para los requisitos de las actualizaciones (secciones siguientes); el resto, `main` @ `54b19fa`. El PR #5 (`8acab31`) solo agregó `CONTRIBUTING.md` y el check de nombre de rama al CI (sin cambios en el código de la app); se fusionó en esta rama y es la base de la evidencia del CI.
+- **Fecha:** 2026-11-20 (actualizaciones tras las fusiones en `develop` del 18, el 19, el 20, el 25 y el 27 de octubre y el 13, el 14 y el 20 de noviembre; la medición inicial fue el 2026-10-16)
+- **Rama:** `docs/avance-2026-11-20-legal` (PR hacia `develop`). Las anteriores fueron `docs/avance-2026-11-14` (PR #74), `docs/avance-2026-11-06` (PR #70), `docs/avance-2026-10-18` (PR #20), `docs/avance-2026-10-19` (PR #25), `docs/avance-2026-10-19-b` (PR #29), `docs/avance-2026-10-20` (PR #35) y `docs/avance-2026-10-25` (PR #44); la medición inicial se hizo en `docs/avance-requisitos` (PR #6, ya en `main`).
+- **Código verificado:** `develop` @ `907af1a` para los requisitos de las actualizaciones (secciones siguientes); el resto, `main` @ `54b19fa`. El PR #5 (`8acab31`) solo agregó `CONTRIBUTING.md` y el check de nombre de rama al CI (sin cambios en el código de la app); se fusionó en esta rama y es la base de la evidencia del CI.
 - **Base de la documentación:** por decisión de Luis, los archivos de Santiago del PR #4 (`docs/borrador-matriz-requisitos` @ `00cdcdb`), verificados y corregidos aquí.
 - **Copias de seguridad:** los originales de `Documentación/` están en `54b19fa` y los archivos de Santiago sin corregir en el commit `5db4e2a` de esta rama (o en `00cdcdb`). Ejemplo: `git show 00cdcdb:docs/avance-requisitos.xlsx > copia.xlsx`.
 - **Responsable de esta tarea:** agente ejecutor (Claude de Luis). Solo documentación y Excel; el reparto de las implementaciones está en `docs/plan-trabajo.md`.
+
+## Actualización del 2026-11-20
+
+**Entran tres requisitos legales nuevos (decisión de Luis del 2026-11-17) y el total pasa de 37 a 40. El avance queda en 88,8 % (35,5/40): RF 90,9 % y RNF 86,1 %.** Solo se marcó lo fusionado en `develop` (`907af1a`) y revisado por el verificador.
+
+| Req. | Antes | Ahora | PR | Evidencia y motivo |
+|---|---|---|---|---|
+| RQNF-16 | — | **Pendiente** | — | Ley 2300 de 2023 (arts. 2, 3 y 5): canales autorizados, horario de lunes a viernes de 7:00 a 19:00 y sábados de 8:00 a 15:00, sin domingos ni festivos, una vez al día y un solo canal por semana, y baja de los mensajes comerciales. Se desarrolla en la rama `feat/rqnf-16-ley2300`. |
+| RQNF-17 | — | **Implementado** | #102 | Autorización separada y opcional de los datos sensibles; datos y autorización del representante del menor; prueba de cada autorización con fecha, versión y canal (migración 019). 15 de 15 contra ConsultasDB y contra las migraciones. Revisión del verificador del 2026-11-20. |
+| RQNF-18 | — | **Implementado** | #102 | Contrato v2 con precio, forma de pago, vigencia, renovación, congelamiento, terminación, datos del gimnasio y PQR, sin las cláusulas abusivas de la v1; entregado por WhatsApp y en la app con constancia (migración 020). Revisión del verificador del 2026-11-20. |
+
+**También:**
+- **RQF-10 y RQF-12 siguen Pendientes.** El PR #100 de Santiago trae las campañas, los retos y un QR dinámico. Su verificador pidió cambios en RQF-12: el miembro no recibe el aviso como mensaje y no hay aviso cuando el reto se completa fuera del check-in. Por decisión de Luis se conserva el #100 y se completa en la rama `feat/rqf-12-completo`, con la bandeja de la app del #75, que se cerrará. El PR #101 (documentos de Santiago, sobre el #100) queda reemplazado por esta actualización.
+- **Observaciones del #102 en corrección** (rama `feat/rqnf-16-ley2300`): PUT con solo la casilla de datos sensibles da 503; un menor puede dejar de serlo sin constancia; falta registrar que se escuchó al menor (Decreto 1377, art. 12); la cláusula 12 del contrato depende de RQNF-16.
+- **RQNF-04:** por decisión de Luis, él hace las 3 sesiones en su equipo con una copia local (`develop`) y el miembro de prueba CC 79123456.
+- **RQNF-02:** Luis crea el monitor externo (UptimeRobot); se cuentan 7 días seguidos desde que arranque.
+- **Los textos legales** son una implementación técnica del equipo; conviene que los revise un abogado.
 
 ## Actualización del 2026-11-14
 
@@ -20,7 +37,7 @@
 - **RQF-09 cambia de módulo:** «Mensajes de retención» en vez de «Alertas de Abandono», por decisión de Luis, para distinguirlo de RQF-08.
 - **PR #71:** en «Editar miembro» y «Editar usuario» solo se podía escribir un carácter seguido, porque el foco saltaba al botón de cerrar del modal. Estaba en `main` desde el 20/08.
 - **Límites de RQF-09:** ENVIADO quiere decir que se abrió el mensaje en WhatsApp, no que se entregó; el canal se crea solo, sin pantalla de configuración; EMAIL se acepta pero nada lo envía; el borrado permanente de un miembro todavía puede fallar por otras tablas sin cascada (`notificacion.id_miembro`).
-- **RQNF-04 sigue Parcial:** Santiago hace las 3 sesiones. Por falta de Docker en su equipo las hace en producción, con un miembro de prueba (CC 79123456) y el frontend desplegado desde `hotfix/rqnf-04-checkin-manual`, que es la rama vieja `santiago` más el #56.
+- **RQNF-04 sigue Parcial:** Santiago iba a hacer las 3 sesiones; desde el 2026-11-17 las hace Luis. Por falta de Docker en su equipo las hace en producción, con un miembro de prueba (CC 79123456) y el frontend desplegado desde `hotfix/rqnf-04-checkin-manual`, que es la rama vieja `santiago` más el #56.
 - **Producción no tiene `develop`:** el frontend de Vercel se construía desde la rama `santiago` (septiembre) y el backend de Render también está desactualizado. Hasta hacer la release `develop` → `main` (PR #45) y configurar los dos para desplegar desde `main` (primero Render), lo fusionado en `develop` no llega a producción; del #56 solo está el hotfix.
 - **Pendientes nuevos, fuera del porcentaje:** `seed_dev.js` no llena `usuario.rol` y `/me` lee `rol` antes que `id_rol` (`auth-helpers.js:94`), así que la cuenta de desarrollo se ve como recepción; el frontend consulta `trial-status` sin sesión.
 
@@ -128,17 +145,18 @@ Solo se marcó lo que está fusionado en `develop` y revisado por el verificador
 
 | Alcance | RF | RNF | Global |
 |---|---:|---:|---:|
-| **Final (RQF-01..22, RQNF-01..15)** | 90,9 % (20 puntos de 22) | 90,0 % (13,5 puntos de 15) | **90,5 % (33,5 puntos de 37)** |
+| **Final (RQF-01..22, RQNF-01..18)** | 90,9 % (20 puntos de 22) | 86,1 % (15,5 puntos de 18) | **88,8 % (35,5 puntos de 40)** |
 | Solo original del docx (RQF-01..12, RQNF-01..08) | 83,3 % (10 puntos de 12) | 81,3 % (6,5 puntos de 8) | 82,5 % (16,5 puntos de 20) |
 
-Fórmula: (implementados + 0,5 × parciales) / total; los puntos son esa suma. El 2026-10-16 el avance era 62,2 % (23/37, la cifra conciliada con el verificador); RQF-22 suma 1 punto, y RQNF-05, RQF-07, RQF-02 y RQF-01 medio cada uno; el 2026-10-19 RQF-09 resta medio (issue #24) y RQNF-10 y RQF-06 suman medio cada uno; el 2026-10-20 RQF-11 suma 1 punto y RQF-14, RQF-13, RQF-04 y RQNF-07 medio cada uno; el 2026-10-25 RQNF-01 y RQNF-15 suman 1 punto cada uno y RQF-08 y RQNF-09 medio cada uno. El 2026-11-14, RQF-09 y RQNF-06 suman medio punto cada uno. **La meta del Excel es el 90 % (33,3 puntos, decisión de Luis del 2026-10-25) y ya está superada, con 33,5 puntos.** La del 80 % pedida para la entrega (29,6 puntos) ya está superada; ver la hoja «Trabajo pendiente». El PR #4 decía 80,5 % porque daba por implementados requisitos que el código no respalda y contaba aparte funciones que repetían otras (ver «Correcciones»).
+Fórmula: (implementados + 0,5 × parciales) / total; los puntos son esa suma. El 2026-10-16 el avance era 62,2 % (23/37, la cifra conciliada con el verificador); RQF-22 suma 1 punto, y RQNF-05, RQF-07, RQF-02 y RQF-01 medio cada uno; el 2026-10-19 RQF-09 resta medio (issue #24) y RQNF-10 y RQF-06 suman medio cada uno; el 2026-10-20 RQF-11 suma 1 punto y RQF-14, RQF-13, RQF-04 y RQNF-07 medio cada uno; el 2026-10-25 RQNF-01 y RQNF-15 suman 1 punto cada uno y RQF-08 y RQNF-09 medio cada uno. El 2026-11-14, RQF-09 y RQNF-06 suman medio punto cada uno. El 2026-11-20 entran RQNF-16, RQNF-17 y RQNF-18 (el total pasa a 40) y RQNF-17 y RQNF-18 suman un punto cada uno. **La meta del Excel es el 90 % (decisión de Luis del 2026-10-25): con 40 requisitos son 36 puntos; hay 35,5 y falta 0,5.** La del 80 % pedida para la entrega (29,6 puntos) ya está superada; ver la hoja «Trabajo pendiente». El PR #4 decía 80,5 % porque daba por implementados requisitos que el código no respalda y contaba aparte funciones que repetían otras (ver «Correcciones»).
 
 **Decisión de Luis aplicada (2026-10-16):** se retiraron RQF-23 (repetía RQF-08), RQF-24 (repetía RQF-05) y RQF-25 (repetía RQF-03 y es un defecto de seguridad), y RQF-26 (editar el perfil) se fusionó en RQF-15. La numeración queda consecutiva, sin renumerar. Con los cuatro, el avance habría sido 63,4 % (26 puntos de 41).
 
-**Ruta al 100 %** (hoja «Trabajo pendiente»; la meta del 90 % ya está superada):
-- La prueba de usabilidad (RQNF-04): Santiago hace las 3 sesiones → 91,9 %.
-- RQNF-02 necesita un monitor externo: Parcial con un día operativo completo medido e Implementado con 7 días seguidos al 99 % o más.
-- RQF-12 (retos) y RQF-10 (campañas) siguen Pendientes: 1 punto cada uno.
+**Ruta al 100 %** (hoja «Trabajo pendiente»):
+- RQF-12 y RQF-10: el PR #100 de Santiago, completado en `feat/rqf-12-completo` → 93,8 %.
+- RQNF-16 (Ley 2300): rama `feat/rqnf-16-ley2300` → 96,3 %.
+- RQNF-04: las 3 sesiones de Luis → 97,5 %.
+- RQNF-02: monitor externo, 7 días seguidos al 99 % o más → 100 %.
 
 ## Qué se hizo
 
