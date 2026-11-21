@@ -4,8 +4,8 @@ export default function PoliticaDatosPage() {
   return (
     <LegalLayout
       title="Política de tratamiento de datos personales"
-      subtitle="Política interna de FitLoyalty para el cumplimiento de la Ley 1581 de 2012, el Decreto 1377 de 2013 y las directrices de la Superintendencia de Industria y Comercio."
-      updated="17 de noviembre de 2026"
+      subtitle="Política interna de FitLoyalty para el cumplimiento de la Ley 1581 de 2012, el Decreto 1377 de 2013 (compilado en el Decreto 1074 de 2015), la Ley 2300 de 2023 y las directrices de la Superintendencia de Industria y Comercio."
+      updated="21 de noviembre de 2026"
     >
       <h2>1. Ámbito de aplicación</h2>
       <p>
@@ -57,19 +57,22 @@ export default function PoliticaDatosPage() {
         <li>
           <strong>Miembros:</strong> el gimnasio pide la autorización al registrar al miembro en el
           panel, con una casilla para cada una y su texto completo: la aceptación del contrato, el
-          tratamiento de datos y, de forma separada y opcional, los datos sensibles. FitLoyalty no
+          tratamiento de datos y, de forma separada y opcional, los datos sensibles y los mensajes
+          comerciales (sección 13). FitLoyalty no
           registra miembros directamente; solo el gimnasio lo hace.
         </li>
       </ul>
       <p>
         La autorización consta en un medio que permite consultarla después (artículo 7 del Decreto
-        1377 de 2013): la casilla del panel o de la app, con la constancia de la sección 7.
+        1377 de 2013, hoy artículo 2.2.2.25.2.4 del Decreto 1074 de 2015): la casilla del panel o de
+        la app, con la constancia de la sección 7.
       </p>
 
       <h2>5. Datos sensibles</h2>
       <p>
         Las condiciones médicas, las lesiones y las alergias son datos sensibles (artículo 5 de la
-        Ley 1581 de 2012). Según el artículo 6 de esa ley y el artículo 6 del Decreto 1377 de 2013:
+        Ley 1581 de 2012). Según el artículo 6 de esa ley y el artículo 6 del Decreto 1377 de 2013
+        (hoy artículo 2.2.2.25.2.3 del Decreto 1074 de 2015):
       </p>
       <ol>
         <li>Se le informa al titular, antes de pedir la autorización, que por tratarse de datos sensibles no está obligado a autorizar su tratamiento.</li>
@@ -83,29 +86,36 @@ export default function PoliticaDatosPage() {
       <p>
         El tratamiento de datos de menores de 18 años respeta su interés superior y sus derechos
         fundamentales (artículo 7 de la Ley 1581 de 2012). Según el artículo 12 del Decreto 1377 de
-        2013:
+        2013 (hoy artículo 2.2.2.25.2.9 del Decreto 1074 de 2015):
       </p>
       <ul>
-        <li>La autorización la da el representante legal del menor, después de escuchar al menor y valorar su opinión según su madurez.</li>
+        <li>
+          La autorización la da el representante legal del menor, después de escuchar al menor y
+          valorar su opinión según su madurez. El texto que el representante autoriza lo dice
+          expresamente (versión v2), y queda en la constancia.
+        </li>
         <li>
           La Plataforma exige, para registrar a un menor, el nombre, el tipo y número de documento,
           el parentesco y el teléfono de su representante, y su autorización. Si los datos del
           representante cambian, la autorización se pide de nuevo.
         </li>
-        <li>La autorización de datos sensibles de un menor solo la puede dar su representante; el menor sí puede revocarla desde la app.</li>
+        <li>La autorización de datos sensibles de un menor solo la puede dar su representante; el menor sí puede revocarla desde la app. Lo mismo con los mensajes comerciales: los acepta el representante y el menor puede cancelarlos.</li>
+        <li>Un menor solo deja de tratarse como menor con una fecha de nacimiento que muestre que cumplió 18 años; queda constancia del cambio.</li>
       </ul>
 
       <h2>7. Prueba de la autorización</h2>
       <p>
         El Responsable debe conservar prueba de la autorización (artículo 8 del Decreto 1377 de
-        2013). La Plataforma guarda, por cada autorización que se otorga o se revoca, una constancia
+        2013, hoy artículo 2.2.2.25.2.5 del Decreto 1074 de 2015). La Plataforma guarda, por cada
+        autorización que se otorga o se revoca, una constancia
         que no se modifica:
       </p>
       <ul>
         <li>el tipo de autorización y si se otorgó o no;</li>
         <li>la fecha y la hora;</li>
         <li>la versión del texto que se le mostró al titular;</li>
-        <li>el canal: el panel del gimnasio o la app del miembro;</li>
+        <li>el canal: el panel del gimnasio, la app del miembro o el enlace de baja de los mensajes comerciales;</li>
+        <li>en la de mensajes comerciales, los canales autorizados (WhatsApp, correo o los dos);</li>
         <li>el usuario del gimnasio que la registró y, si la dio el representante de un menor, la foto de sus datos en ese momento.</li>
       </ul>
       <p>
@@ -190,17 +200,37 @@ export default function PoliticaDatosPage() {
 
       <h2>13. Contacto con los titulares (Ley 2300 de 2023)</h2>
       <p>
-        Cuando el gimnasio contacta a sus miembros desde la Plataforma:
+        Cuando el gimnasio contacta a sus miembros desde la Plataforma (campañas, mensajes de
+        retención y avisos de vencimiento), la Plataforma aplica estas reglas antes de cada envío:
       </p>
       <ul>
         <li>
           Solo lo hace de lunes a viernes de 7:00 a. m. a 7:00 p. m. y los sábados de 8:00 a. m. a
-          3:00 p. m.; nunca los domingos ni los días festivos.
+          3:00 p. m., hora de Colombia; nunca los domingos ni los días festivos (artículo 3). Los
+          festivos se calculan cada año (fijos, los que la Ley 51 de 1983 traslada al lunes y los que
+          dependen de la Semana Santa). Fuera de ese horario, una campaña queda programada para el
+          siguiente horario permitido y el panel lo informa.
         </li>
-        <li>Solo usa los canales que el miembro autorizó.</li>
         <li>
-          Solo envía mensajes comerciales o publicitarios a quien los autorizó, y el miembro puede
-          darse de baja en cualquier momento; desde entonces no se le vuelven a enviar.
+          No contacta al mismo miembro más de una vez al día ni por varios canales en la misma
+          semana, de lunes a domingo (artículo 3). Cuenta los envíos de campañas, los mensajes del
+          panel y los avisos automáticos de vencimiento.
+        </li>
+        <li>
+          Los mensajes comerciales solo van por los canales que el miembro autorizó: WhatsApp,
+          correo o los dos (artículo 2). Los avisos del plan van por WhatsApp, como dice el contrato.
+        </li>
+        <li>
+          Solo envía mensajes comerciales o publicitarios (campañas, mensajes de retención,
+          felicitaciones de retos) a quien los aceptó de forma expresa; aceptarlos es opcional y no
+          condiciona la membresía (artículo 5). Sin una aceptación registrada, se entiende que el
+          miembro no los acepta. Los avisos del plan no son comerciales y no la necesitan.
+        </li>
+        <li>
+          El miembro puede cancelarlos en cualquier momento desde la app, con el enlace que va al
+          final de cada mensaje comercial (no pide iniciar sesión) o en recepción; desde entonces no
+          se le vuelven a enviar. Un miembro de una campaña al que no se le puede escribir queda
+          registrado como omitido, con el motivo.
         </li>
       </ul>
 

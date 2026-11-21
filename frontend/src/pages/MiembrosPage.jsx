@@ -15,7 +15,9 @@ import Modal from '../components/Modal';
 import Ripple from '../components/Ripple';
 import {
   RepresentanteCampos, CasillaAutorizacion, CasillaDatosSensibles, HistorialAutorizaciones,
+  CasillaMensajesComerciales,
 } from '../components/AutorizacionesMiembro';
+import { abrirWhatsappAutorizado } from '../lib/contactoWhatsapp';
 import { esMenor, edadEnAnios, isoADate, erroresRepresentante } from '../lib/autorizaciones';
 import QRCode from 'qrcode';
 
@@ -233,6 +235,9 @@ const empty = {
   representante_parentesco: '',
   representante_telefono: '',
   autoriza_representante: false,
+  // RQNF-16: mensajes comerciales (opcional, apagado por defecto).
+  acepta_mensajes_comerciales: false,
+  canales_comerciales: [],
   activo: true
 };
 
@@ -248,6 +253,9 @@ const CAMPOS_REPRESENTANTE = [
  */
 function payloadLegal(f, menor) {
   const p = { autorizo_datos_sensibles: Boolean(f.autorizo_datos_sensibles) };
+  // RQNF-16: aceptacion de mensajes comerciales y sus canales.
+  p.acepta_mensajes_comerciales = Boolean(f.acepta_mensajes_comerciales);
+  p.canales_comerciales = p.acepta_mensajes_comerciales ? (f.canales_comerciales || []) : [];
   if (!p.autorizo_datos_sensibles) {
     p.condiciones_medicas = '';
     p.alergias = '';
@@ -758,6 +766,8 @@ export default function MiembrosPage() {
         ...Object.fromEntries(CAMPOS_REPRESENTANTE.map((k) => [k, full[k] || ''])),
         autorizo_datos_sensibles: Boolean(full.autorizo_datos_sensibles),
         autoriza_representante: false,
+        acepta_mensajes_comerciales: Boolean(full.acepta_mensajes_comerciales),
+        canales_comerciales: full.canales_comerciales || [],
       });
       setAutorizacionesEdit(data.autorizaciones || null);
       if (full.codigo_qr) {
@@ -896,24 +906,27 @@ export default function MiembrosPage() {
     e.stopPropagation();                 // no abrir la ficha al mismo tiempo
     const w = m.whatsapp;
     if (!w?.telefono) return;
-    window.open(
-      `https://wa.me/${w.telefono}?text=${encodeURIComponent(w.mensaje || '')}`,
-      '_blank',
-      'noopener,noreferrer'
-    );
-    setContactados((prev) => new Set(prev).add(m.id_miembro));
     setAvisoEnvio('');
-    try {
-      // mensaje: el texto que se abrio en WhatsApp (va a mensaje_copiado).
-      await api.post('/admin/notificaciones/enviado', {
+    // RQNF-16 (Ley 2300 de 2023): se registra antes de abrir el chat; el
+    // servidor revisa el horario, la frecuencia y, si es de retencion, que el
+    // miembro haya aceptado mensajes comerciales. Si no, no se abre.
+    const r = await abrirWhatsappAutorizado(async () => {
+      // mensaje: el texto que se abre en WhatsApp (va a mensaje_copiado).
+      const { data } = await api.post('/admin/notificaciones/enviado', {
         idMiembro: m.id_miembro,
         canal: 'WHATSAPP',
         tipo: w.motivo,
         mensaje: w.mensaje,
+        antesDeAbrir: true,
       });
-    } catch (_) {
-      // El mensaje ya se abrio; solo se avisa que no quedo registrado.
-      setAvisoEnvio(`Se abrió WhatsApp, pero no pudimos registrar el envío a ${m.nombre}.`);
+      return `https://wa.me/${w.telefono}?text=${encodeURIComponent(data.mensaje || w.mensaje || '')}`;
+    });
+    if (r.ok) {
+      setContactados((prev) => new Set(prev).add(m.id_miembro));
+    } else {
+      setAvisoEnvio(r.error?.code === 'CONTACTO_NO_PERMITIDO'
+        ? `No se abrió WhatsApp: ${r.error.message}`
+        : `No se abrió WhatsApp porque no pudimos registrar el envío a ${m.nombre}. Intenta de nuevo.`);
     }
   };
 
@@ -1561,6 +1574,14 @@ export default function MiembrosPage() {
                   Datos sensibles (salud): {form.autorizo_datos_sensibles ? 'autorizados' : 'no autorizados'}.
                   {' '}Es opcional y se marca en «Salud y emergencia».
                 </p>
+                {/* RQNF-16: opcional; solo si el miembro lo acepta en ese momento. */}
+                <CasillaMensajesComerciales
+                  checked={form.acepta_mensajes_comerciales}
+                  onChange={(v) => handleFormChange('acepta_mensajes_comerciales', v)}
+                  canales={form.canales_comerciales}
+                  onCanales={(v) => handleFormChange('canales_comerciales', v)}
+                  menor={menorAlta}
+                />
               </div>
             )}
 
@@ -2263,6 +2284,18 @@ export default function MiembrosPage() {
               />
             </label>
           </div>
+          {/* RQNF-16 (Ley 2300 de 2023): el interruptor de mensajes comerciales.
+              Apagarlo y guardar da de baja al miembro; queda en el historial. */}
+          <CasillaMensajesComerciales
+            checked={editForm.acepta_mensajes_comerciales}
+            onChange={(v) => setEditForm((f) => ({ ...f, acepta_mensajes_comerciales: v }))}
+            canales={editForm.canales_comerciales}
+            onCanales={(v) => setEditForm((f) => ({ ...f, canales_comerciales: v }))}
+            menor={menorEdit}
+            aviso={editing?.acepta_mensajes_comerciales && !editForm.acepta_mensajes_comerciales
+              ? 'Al guardar, el miembro deja de recibir campañas y mensajes de retención. Queda constancia en el historial.'
+              : null}
+          />
           <details style={{ marginBottom: 8 }}>
             <summary className="field-label" style={{ cursor: 'pointer' }}>Historial de autorizaciones</summary>
             <HistorialAutorizaciones historial={autorizacionesEdit?.historial} />

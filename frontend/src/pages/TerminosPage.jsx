@@ -95,7 +95,8 @@ export default function TerminosPage() {
         </li>
         <li>
           Registrar los datos y la autorización del representante legal de cada miembro menor de
-          edad (artículo 7 de la Ley 1581 de 2012 y artículo 12 del Decreto 1377 de 2013).
+          edad (artículo 7 de la Ley 1581 de 2012 y artículo 12 del Decreto 1377 de 2013, hoy
+          artículo 2.2.2.25.2.9 del Decreto 1074 de 2015).
         </li>
       </ol>
 
