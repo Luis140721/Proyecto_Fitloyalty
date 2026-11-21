@@ -24,9 +24,10 @@ export default defineConfig({
         // atras" cae al inicio si no hay historial) ni LandingPage (sus botones
         // llevan al registro del gimnasio).
       ],
-      // Cierre de S2 a S4 (2026-11-19): el mayor entre el piso de la S4 (50%) y la cobertura
-      // real del CI (Linux), redondeada hacia abajo (run 44653040667). No puede bajar.
-      thresholds: { lines: 56, branches: 77, functions: 56, statements: 56 },
+      // Cierre de S5 a S8 (2026-11-20): en cada metrica, el mayor entre el piso de la S8 (80%)
+      // y la cobertura real del CI (Linux, LF, TZ=UTC), redondeada hacia abajo: lineas 84,36,
+      // sentencias 84,36, ramas 92,67 y funciones 95,16. No puede bajar.
+      thresholds: { lines: 84, branches: 92, functions: 95, statements: 84 },
     },
   },
 })

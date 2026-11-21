@@ -21,12 +21,15 @@ module.exports = {
     'src/routes/**/*.js',
     'src/jobs/**/*.js',
   ],
-  // Cierre de S2 a S4 (2026-11-19): el mayor entre el piso de la S4 (50%) y la
-  // cobertura real, redondeada hacia abajo. Se toma la menor entre el CI (run
-  // 44653040667) y Windows, que da unas decimas menos, para que nadie vea rojo
-  // en su equipo. Nunca baja (regla de trinquete del bootcamp).
+  // Cierre de S5 a S8 (2026-11-20): en cada metrica, el mayor entre el piso de
+  // la S8 (80%) y la cobertura real del CI, redondeada hacia abajo. Medida sobre
+  // chore/test-semana-01 con el #96, en Linux con Node 24: lineas 89,08,
+  // sentencias 88,64, ramas 83,64 y funciones 87,73. En Windows da menos
+  // (lineas 88,60, sentencias 88,25, ramas 83,41): alli `pnpm test` sale en rojo
+  // por el umbral de lineas aunque los tests pasen; la cifra que cuenta es la del
+  // CI. Nunca baja (regla de trinquete del bootcamp).
   coverageThreshold: {
-    global: { statements: 60, branches: 54, functions: 66, lines: 61 },
+    global: { statements: 88, branches: 83, functions: 87, lines: 89 },
   },
   // Evita que Jest intente transformar código nativo (bcrypt, pg) sin
   // necesidad. Cuando agreguemos tests sobre rutas reales, podemos cambiar
