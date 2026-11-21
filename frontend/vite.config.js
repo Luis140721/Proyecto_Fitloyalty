@@ -10,6 +10,9 @@ export default defineConfig({
     include: ['tests/**/*.test.{js,jsx}'],
     coverage: {
       provider: 'v8',
+      // Los de vitest por defecto mas json-summary: el job frontend del CI lee
+      // coverage/coverage-summary.json para dejar el resumen en la pagina del run.
+      reporter: ['text', 'html', 'clover', 'json', 'json-summary'],
       include: ['src/**/*.{js,jsx}'],
       exclude: [
         // Arranque: solo monta React en el DOM, no tiene logica de negocio.
