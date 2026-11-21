@@ -4,6 +4,8 @@
  *  - plan_cobro (migracion 004): el plan y los cobros del miembro.
  *  - congelacion_plan (010): el historial de congelamientos.
  *  - notificacion y envio_mensaje (014): los avisos y los envios por WhatsApp.
+ *    La 016 agrega notificacion.destinatario (GIMNASIO o MIEMBRO, la bandeja
+ *    de la app del miembro).
  *
  * Por cada tabla, sus restricciones (NOT NULL, largo, CHECK, NUMERIC, UNIQUE y
  * llaves foraneas, con el codigo de PostgreSQL) y sus consultas: las rutas de
@@ -54,7 +56,7 @@ const NO_NULOS = [
   ['congelacion_plan', 'id_plan_cobro'], ['congelacion_plan', 'id_miembro'], ['congelacion_plan', 'id_gimnasio'],
   ['congelacion_plan', 'fecha_inicio'], ['congelacion_plan', 'creada_en'],
   ['notificacion', 'id_gimnasio'], ['notificacion', 'tipo'], ['notificacion', 'titulo'], ['notificacion', 'mensaje'],
-  ['notificacion', 'leida'], ['notificacion', 'fecha_creacion'],
+  ['notificacion', 'leida'], ['notificacion', 'fecha_creacion'], ['notificacion', 'destinatario'],
   ['envio_mensaje', 'id_gimnasio'], ['envio_mensaje', 'id_miembro'], ['envio_mensaje', 'id_canal'],
   ['envio_mensaje', 'mensaje_copiado'], ['envio_mensaje', 'estado'], ['envio_mensaje', 'fecha_envio'],
 ];
@@ -66,7 +68,7 @@ const LARGOS = [
 // Columnas VARCHAR(n) con CHECK: solo admiten su lista, que se prueba abajo.
 const LARGOS_CON_CHECK = [
   ['plan_cobro', 'tipo_plan', 50], ['plan_cobro', 'metodo_pago', 30], ['plan_cobro', 'estado_pago', 20],
-  ['notificacion', 'tipo', 30], ['envio_mensaje', 'estado', 20],
+  ['notificacion', 'tipo', 30], ['notificacion', 'destinatario', 10], ['envio_mensaje', 'estado', 20],
 ];
 
 // [tabla, columna, valores que admite el CHECK, nombre del CHECK]
@@ -75,6 +77,7 @@ const CHECKS = [
   ['plan_cobro', 'metodo_pago', ['EFECTIVO', 'TRANSFERENCIA', 'TARJETA', 'PSE', 'NEQUI', 'DAVIPLATA', 'OTRO'], 'chk_metodo_pago'],
   ['plan_cobro', 'estado_pago', ['PENDIENTE', 'PAGADO', 'PARCIAL'], 'chk_estado_pago'],
   ['notificacion', 'tipo', ['ALERTA', 'RETO', 'CAMPANA', 'SISTEMA'], 'notificacion_tipo_check'],
+  ['notificacion', 'destinatario', ['GIMNASIO', 'MIEMBRO'], 'notificacion_destinatario_check'],
   ['envio_mensaje', 'estado', ['PENDIENTE', 'ENVIADO', 'FALLIDO'], 'envio_mensaje_estado_check'],
 ];
 
@@ -85,7 +88,7 @@ const RESTRICCIONES = [
   'ck_congelacion_fechas', 'ck_congelacion_dias',
   'congelacion_plan_id_plan_cobro_fkey', 'congelacion_plan_id_miembro_fkey', 'congelacion_plan_id_gimnasio_fkey',
   'congelacion_plan_congelada_por_fkey', 'congelacion_plan_descongelada_por_fkey',
-  'notificacion_tipo_check', 'notificacion_id_gimnasio_fkey', 'notificacion_id_usuario_fkey', 'notificacion_id_miembro_fkey',
+  'notificacion_tipo_check', 'notificacion_destinatario_check', 'notificacion_id_gimnasio_fkey', 'notificacion_id_usuario_fkey', 'notificacion_id_miembro_fkey',
   'envio_mensaje_estado_check', 'envio_mensaje_id_gimnasio_fkey', 'envio_mensaje_id_miembro_fkey', 'envio_mensaje_id_canal_fkey',
   'envio_mensaje_id_alerta_fkey', 'envio_mensaje_id_campana_fkey', 'envio_mensaje_id_plantilla_fkey', 'envio_mensaje_enviado_por_fkey',
 ];
