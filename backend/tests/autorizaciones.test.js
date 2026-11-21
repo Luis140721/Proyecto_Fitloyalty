@@ -143,7 +143,9 @@ describe('alta en el panel: POST /api/admin/miembros', () => {
     expect(m.representante_nombre).toBeNull();
 
     const a = porTipo(id);
-    expect(Object.keys(a).sort()).toEqual(['DATOS_SENSIBLES', 'TERMINOS', 'TRATAMIENTO_DATOS']);
+    expect(Object.keys(a).sort()).toEqual(['DATOS_SENSIBLES', 'MENSAJES_COMERCIALES', 'TERMINOS', 'TRATAMIENTO_DATOS']);
+    // RQNF-16: por defecto no acepta mensajes comerciales, y queda constancia.
+    expect(a.MENSAJES_COMERCIALES).toMatchObject({ otorgada: false, canales_autorizados: null, canal: 'PANEL' });
     expect(a.DATOS_SENSIBLES).toMatchObject({ otorgada: false, version_texto: 'v2', canal: 'PANEL', registrada_por: 21, id_gimnasio: GYM_A });
     expect(a.TERMINOS).toMatchObject({ otorgada: true, version_texto: 'v2', canal: 'PANEL' });
     expect(a.TRATAMIENTO_DATOS).toMatchObject({ otorgada: true });
@@ -282,10 +284,18 @@ describe('edicion en el panel: PUT /api/admin/miembros/:id', () => {
 
   test('una edicion sin campos de RQNF-17 sigue el camino simple (sin transaccion)', async () => {
     crearAdulto();
-    const r = await pedir('PUT', '/api/admin/miembros/50', RECEP_A, { nombre: 'Luis P.', fecha_nacimiento: '' });
+    const r = await pedir('PUT', '/api/admin/miembros/50', RECEP_A, { nombre: 'Luis P.' });
     expect(r.status).toBe(200);
     expect(mockBd.conexiones).toBe(0);
     expect(mockBd.miembros.get(50)).toMatchObject({ nombre: 'Luis P.', condiciones_medicas: 'Hipertension' });
+  });
+
+  test('vaciar la fecha de un adulto va por la transaccion, pero no borra sus datos de salud', async () => {
+    crearAdulto();
+    const r = await pedir('PUT', '/api/admin/miembros/50', RECEP_A, { nombre: 'Luis P.', fecha_nacimiento: '' });
+    expect(r.status).toBe(200);
+    expect(mockBd.conexiones).toBe(1);
+    expect(mockBd.miembros.get(50)).toMatchObject({ nombre: 'Luis P.', fecha_nacimiento: null, condiciones_medicas: 'Hipertension' });
   });
 
   test('menor: cambiar al representante exige marcar de nuevo su autorizacion', async () => {

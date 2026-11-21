@@ -4,13 +4,17 @@
  * RQNF-17: textos de las autorizaciones que se le muestran al miembro en el
  * alta y en la edicion, y el calculo de la edad para saber si es menor.
  *
- * Los textos son los de la version v1 de backend/src/lib/autorizaciones.js:
+ * Los textos son los de la version v2 de backend/src/lib/autorizaciones.js:
  * el backend guarda esa version como prueba de lo que se le mostro al
  * titular. Si se cambia una palabra aqui, hay que cambiarla alla y subir la
- * version.
+ * version (backend/tests/ley2300-preferencias.test.js compara los dos).
+ *
+ * v2: el texto del representante registra que escucho al menor (Decreto 1377
+ * de 2013, art. 12; Decreto 1074 de 2015, art. 2.2.2.25.2.9) y se agrega el
+ * de mensajes comerciales (RQNF-16, Ley 2300 de 2023).
  */
 
-export const VERSION_AUTORIZACIONES = 'v1';
+export const VERSION_AUTORIZACIONES = 'v2';
 
 export const TEXTOS_AUTORIZACION = {
   TERMINOS:
@@ -29,8 +33,16 @@ export const TEXTOS_AUTORIZACION = {
     + 'autorización en cualquier momento desde la app o en recepción, y entonces esos datos se borran.',
   REPRESENTANTE_MENOR:
     'Como representante legal del menor, autorizo el tratamiento de sus datos personales y acepto el contrato en '
-    + 'su nombre, respetando su interés superior y sus derechos fundamentales. Si se marca la autorización de datos '
-    + 'sensibles, la doy también como su representante.',
+    + 'su nombre, respetando su interés superior y sus derechos fundamentales. Antes de autorizar escuché al menor '
+    + 'y tuve en cuenta su opinión según su madurez, autonomía y capacidad para entender el asunto. Si se marca la '
+    + 'autorización de datos sensibles o la de mensajes comerciales, la doy también como su representante.',
+  MENSAJES_COMERCIALES:
+    'Acepto recibir del gimnasio mensajes comerciales y de publicidad (promociones, campañas y mensajes para que '
+    + 'vuelva a entrenar) por los canales que marco: WhatsApp, correo o los dos. Sé que no estoy obligado(a) a '
+    + 'aceptarlos y que mi membresía no depende de ello. Solo me escribirán de lunes a viernes de 7:00 a. m. a '
+    + '7:00 p. m. y los sábados de 8:00 a. m. a 3:00 p. m., nunca los domingos ni los festivos, no más de una vez '
+    + 'al día ni por varios canales en la misma semana. Puedo cancelarlos en cualquier momento desde la app, con el '
+    + 'enlace que va al final de cada mensaje comercial o en recepción (Ley 2300 de 2023).',
 };
 
 export const NOMBRES_AUTORIZACION = {

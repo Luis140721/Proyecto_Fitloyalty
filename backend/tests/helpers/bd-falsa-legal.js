@@ -134,6 +134,15 @@ function crearBdFalsa() {
     if (/FROM autorizacion_miembro a .* DISTINCT ON|SELECT DISTINCT ON \(a\.tipo\)/i.test(s)) {
       return { rows: vigentes(params[0], params[1]) };
     }
+    // RQNF-16: aceptacion de mensajes comerciales vigente de varios miembros.
+    if (/SELECT DISTINCT ON \(a\.id_miembro\).* FROM autorizacion_miembro a .*a\.tipo = 'MENSAJES_COMERCIALES'/i.test(s)) {
+      const rows = [];
+      for (const idM of params[0]) {
+        const v = vigentes(Number(idM), params[1]).find((a) => a.tipo === 'MENSAJES_COMERCIALES');
+        if (v) rows.push({ ...v, id_miembro: Number(idM) });
+      }
+      return { rows };
+    }
     if (/FROM autorizacion_miembro a LEFT JOIN usuario u .* ORDER BY a\.fecha DESC/i.test(s)) {
       const rows = bd.autorizaciones
         .filter((a) => a.id_miembro === params[0] && a.id_gimnasio === params[1])
@@ -157,6 +166,18 @@ function crearBdFalsa() {
       if (!m || m.id_gimnasio !== params[1]) return { rows: [] };
       const fecha = m.fecha_nacimiento ? new Date(`${m.fecha_nacimiento}T00:00:00`) : null;
       return { rows: [{ ...m, fecha_nacimiento: fecha }] };
+    }
+    // Edicion sin columnas que actualizar (ajuste del #102): se lee la fila.
+    if (/^SELECT id_miembro, nombre, documento, telefono, email, codigo_qr, qr_imagen, activo, fecha_registro, app_acceso, \(password_hash IS NOT NULL\) AS password_asignada FROM miembro WHERE id_miembro = \$1 AND id_gimnasio = \$2$/i.test(s)) {
+      const m = bd.miembros.get(params[0]);
+      return { rows: m && m.id_gimnasio === params[1] ? [devolverMiembro(m)] : [] };
+    }
+    // RQNF-16: miembro con su gimnasio, para /cliente/preferencias y /baja/:token.
+    if (/FROM miembro m INNER JOIN gimnasio g ON g\.id_gimnasio = m\.id_gimnasio WHERE m\.id_miembro = \$1 AND m\.id_gimnasio = \$2( FOR UPDATE OF m)?$/i.test(s)) {
+      const m = bd.miembros.get(params[0]);
+      if (!m || m.id_gimnasio !== params[1]) return { rows: [] };
+      const g = bd.gimnasios.get(m.id_gimnasio);
+      return { rows: [{ ...m, gym_nombre: g ? g.nombre : null }] };
     }
     if (/^UPDATE miembro SET/i.test(s)) {
       const idIdx = Number(/WHERE id_miembro = \$(\d+)/i.exec(s)[1]) - 1;
