@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../context/AuthContext';
@@ -34,6 +34,8 @@ export default function AcceptInvitePage() {
   const [confirm, setConfirm] = useState('');
   const [showPwd, setShowPwd] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const passwordRef = useRef(null);
+  const confirmRef = useRef(null);
 
   const score = strengthScore(password);
 
@@ -83,8 +85,9 @@ export default function AcceptInvitePage() {
     setFieldErrors(found);
     if (Object.keys(found).length > 0) {
       // Enfoca el primer campo con problema para no dejar al usuario buscando.
-      const first = document.querySelector('.field-input--error');
-      if (first) first.focus();
+      // Va por los errores recien encontrados: buscar .field-input--error aqui
+      // no sirve, porque React todavia no pinto esa clase.
+      (found.password ? passwordRef : confirmRef).current?.focus();
       return;
     }
     setSubmitting(true);
@@ -129,21 +132,21 @@ export default function AcceptInvitePage() {
 
           {error && (
             <div className="alert alert-error" role="alert">
-              <span className="material-symbols-outlined icon">error</span>
+              <span className="material-symbols-outlined icon" aria-hidden="true">error</span>
               <span>{error}</span>
             </div>
           )}
 
           {!token && (
             <div className="alert alert-warning">
-              <span className="material-symbols-outlined icon">warning</span>
+              <span className="material-symbols-outlined icon" aria-hidden="true">warning</span>
               <span>Esta URL no incluye un token de invitación. Pídele al dueño que te reenvíe el link.</span>
             </div>
           )}
 
           {token && loading && (
             <div className="alert alert-info" role="status">
-              <span className="material-symbols-outlined icon">hourglass_top</span>
+              <span className="material-symbols-outlined icon" aria-hidden="true">hourglass_top</span>
               <span>
                 Verificando tu invitación…
                 <br />
@@ -176,6 +179,7 @@ export default function AcceptInvitePage() {
                 <span className="field-label">Crea tu contraseña (mín. 6 caracteres, al menos un número)</span>
                 <div style={{ position: 'relative' }}>
                   <input
+                    ref={passwordRef}
                     className={`field-input${fieldErrors.password ? ' field-input--error' : ''}`}
                     type={showPwd ? 'text' : 'password'}
                     required minLength={6}
@@ -202,7 +206,7 @@ export default function AcceptInvitePage() {
                       cursor: 'pointer', borderRadius: 'var(--radius)',
                     }}
                   >
-                    <span className="material-symbols-outlined icon">{showPwd ? 'visibility_off' : 'visibility'}</span>
+                    <span className="material-symbols-outlined icon" aria-hidden="true">{showPwd ? 'visibility_off' : 'visibility'}</span>
                   </button>
                 </div>
                 <div className={`strength l-${score}`} aria-hidden="true">
@@ -210,12 +214,12 @@ export default function AcceptInvitePage() {
                 </div>
                 {fieldErrors.password ? (
                   <span className="field-error" id="err-password" role="alert">
-                    <span className="material-symbols-outlined icon">error</span>
+                    <span className="material-symbols-outlined icon" aria-hidden="true">error</span>
                     {fieldErrors.password}
                   </span>
                 ) : password.length >= 6 && /\d/.test(password) ? (
                   <span className="field-ok">
-                    <span className="material-symbols-outlined icon">check_circle</span>
+                    <span className="material-symbols-outlined icon" aria-hidden="true">check_circle</span>
                     Contraseña válida.
                   </span>
                 ) : (
@@ -226,6 +230,7 @@ export default function AcceptInvitePage() {
               <label className="field">
                 <span className="field-label">Confirma tu contraseña</span>
                 <input
+                  ref={confirmRef}
                   className={`field-input${fieldErrors.confirm ? ' field-input--error' : ''}`}
                   type={showPwd ? 'text' : 'password'}
                   required
@@ -241,12 +246,12 @@ export default function AcceptInvitePage() {
                 />
                 {fieldErrors.confirm ? (
                   <span className="field-error" id="err-confirm" role="alert">
-                    <span className="material-symbols-outlined icon">error</span>
+                    <span className="material-symbols-outlined icon" aria-hidden="true">error</span>
                     {fieldErrors.confirm}
                   </span>
                 ) : confirm && password === confirm ? (
                   <span className="field-ok">
-                    <span className="material-symbols-outlined icon">check_circle</span>
+                    <span className="material-symbols-outlined icon" aria-hidden="true">check_circle</span>
                     Coinciden.
                   </span>
                 ) : null}
@@ -261,7 +266,7 @@ export default function AcceptInvitePage() {
                 ) : (
                   <>
                     Crear cuenta y entrar
-                    <span className="material-symbols-outlined icon">arrow_forward</span>
+                    <span className="material-symbols-outlined icon" aria-hidden="true">arrow_forward</span>
                   </>
                 )}
               </button>

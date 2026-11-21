@@ -60,7 +60,7 @@ describe('LandingPage: los llamados a la accion', () => {
   test.each([
     ['Crear cuenta', '/register-owner'],
     ['Iniciar sesión', '/login'],
-  ])('should go to %s from the main menu', async (enlace, ruta) => {
+  ])('should go to %s when it is clicked in the main menu', async (enlace, ruta) => {
     // Arrange
     const { user } = abrirLanding();
 
@@ -71,7 +71,7 @@ describe('LandingPage: los llamados a la accion', () => {
     expect(await screen.findByText(`Ruta actual: ${ruta}`)).toBeInTheDocument();
   });
 
-  test('should point the menu entries to the sections of the page', () => {
+  test('should point each menu entry to its section when the page loads', () => {
     // Act
     abrirLanding();
 
@@ -84,7 +84,7 @@ describe('LandingPage: los llamados a la accion', () => {
 });
 
 describe('LandingPage: el contenido que decide la compra', () => {
-  test('should mark only the gym plan as recommended and list what each plan includes', () => {
+  test('should mark only the gym plan as recommended and list what each plan includes when the plans are shown', () => {
     // Act
     abrirLanding();
 
@@ -119,7 +119,7 @@ describe('LandingPage: el contenido que decide la compra', () => {
     ['Política de privacidad', '/legal/privacidad'],
     ['Política de datos', '/legal/datos'],
     ['Eliminar cuenta', '/legal/eliminar-cuenta'],
-  ])('should open %s from the footer', async (enlace, ruta) => {
+  ])('should open %s when it is clicked in the footer', async (enlace, ruta) => {
     // Arrange
     const { user } = abrirLanding();
 
@@ -132,7 +132,7 @@ describe('LandingPage: el contenido que decide la compra', () => {
 });
 
 describe('LandingPage: el boton de volver arriba', () => {
-  test('should stay hidden from the keyboard and screen readers until the page is scrolled down', () => {
+  test('should stay hidden from the keyboard and screen readers when the page is not scrolled down', () => {
     // Act
     abrirLanding();
 
@@ -142,7 +142,7 @@ describe('LandingPage: el boton de volver arriba', () => {
     expect(screen.getByTitle('Volver arriba')).toHaveAttribute('tabindex', '-1');
   });
 
-  test('should appear after one screen of scroll and take the user smoothly to the top', async () => {
+  test('should appear and take the user smoothly to the top when the page is scrolled one screen down', async () => {
     // Arrange
     const { user } = abrirLanding();
 

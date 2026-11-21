@@ -146,7 +146,7 @@ describe('ErrorBanner: cuantos avisos y cuanto duran', () => {
     expect(avisos()).toHaveLength(0);
   });
 
-  test('should close a banner by itself after six seconds unless it is persistent', () => {
+  test('should close the banner by itself when six seconds pass, unless it is persistent', () => {
     // Arrange
     vi.useFakeTimers();
     abrirPantalla();

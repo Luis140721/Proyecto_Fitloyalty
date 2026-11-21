@@ -15,48 +15,8 @@ import Modal from '../components/Modal';
 import Ripple from '../components/Ripple';
 import QRCode from 'qrcode';
 
-// Componente personalizado para input de fecha con formato automático DD/MM/YYYY
-function DateInputWithAutoFormat({ value, onChange, placeholder, ...props }) {
-  const formatDateString = (input) => {
-    // Remover todos los caracteres que no sean dígitos
-    const cleaned = input.replace(/\D/g, '');
-    
-    // Limitar a 8 dígitos máximo
-    const truncated = cleaned.slice(0, 8);
-    
-    // Aplicar formato DD/MM/YYYY
-    let formatted = '';
-    if (truncated.length > 0) {
-      formatted += truncated.slice(0, 2);
-    }
-    if (truncated.length > 2) {
-      formatted += '/' + truncated.slice(2, 4);
-    }
-    if (truncated.length > 4) {
-      formatted += '/' + truncated.slice(4, 8);
-    }
-    
-    return formatted;
-  };
-
-  const handleChange = (e) => {
-    const rawValue = e.target.value;
-    const formatted = formatDateString(rawValue);
-    onChange(formatted);
-  };
-
-  return (
-    <input
-      {...props}
-      type="text"
-      value={value}
-      onChange={handleChange}
-      placeholder={placeholder || "DD/MM/YYYY"}
-      maxLength={10}
-      inputMode="numeric"
-    />
-  );
-}
+// CampoFecha usa locale="es": sin registrarlo, el calendario sale en ingles.
+registerLocale('es', es);
 
 /** Mensaje de error bajo un campo. No renderiza nada si no hay error. */
 function ErrorCampo({ msg }) {
@@ -139,6 +99,10 @@ function CampoFecha({ value, onChange, placeholder, anosAtras = 100, ...props })
       }}
       value={value}
       dateFormat="dd/MM/yyyy"
+      /* Sin esto, al teclear el primer digito react-datepicker leia "1" como
+         el dia 1 del mes actual y el campo se quedaba en 01/11/2026. Asi solo
+         acepta una fecha escrita completa (DD/MM/AAAA). */
+      strictParsing
       placeholderText={placeholder || 'DD/MM/YYYY'}
       className="field-input"
       showMonthDropdown
@@ -163,17 +127,6 @@ function convertToISODate(dateString) {
   
   const [day, month, year] = parts;
   return `${year}-${month}-${day}`;
-}
-
-// Función para convertir formato ISO a DD/MM/YYYY
-function convertFromISODate(isoDate) {
-  if (!isoDate || isoDate.length !== 10) return isoDate;
-  
-  const parts = isoDate.split('-');
-  if (parts.length !== 3) return isoDate;
-  
-  const [year, month, day] = parts;
-  return `${day}/${month}/${year}`;
 }
 
 /* Duracion de cada plan, en dias. Lo que no este aqui dura un mes. */
@@ -460,28 +413,6 @@ export default function MiembrosPage() {
     setFiltro(nuevoFiltro);
     const includeInactive = nuevoFiltro === 'desactivados';
     load(q, includeInactive);
-  };
-
-  // Desactivar miembro (soft delete)
-  const desactivar = async (id) => {
-    try {
-      await api.delete(`/admin/miembros/${id}`);
-      setConfirmDeactivate(null);
-      load(q, filtro === 'desactivados' ? true : false);
-    } catch (err) {
-      setError(err.message || 'No se pudo desactivar el miembro.');
-    }
-  };
-
-  // Eliminar miembro permanentemente (hard delete)
-  const eliminarPermanentemente = async (id) => {
-    try {
-      await api.delete(`/admin/miembros/${id}/permanent`);
-      setConfirmDelete(null);
-      load(q, filtro === 'desactivados' ? true : false);
-    } catch (err) {
-      setError(err.message || 'No se pudo eliminar el miembro permanentemente.');
-    }
   };
 
   const askDeactivate = (m) => setConfirmDeactivate(m);
@@ -980,7 +911,9 @@ export default function MiembrosPage() {
       for (const k of EDITABLES) {
         if (editForm[k] !== undefined) payload[k] = editForm[k];
       }
-      if (!payload.email) delete payload.email;
+      // Un correo vacio se envia tal cual: el backend lo guarda como null
+      // (updateSchema de routes/miembros.js). Si se quitara del payload, borrar
+      // el correo en la ficha no tendria efecto y el viejo seguiria guardado.
       await api.put(`/admin/miembros/${editing.id_miembro}`, payload);
       setEditing(null);
       setEditForm(empty);
@@ -1255,12 +1188,14 @@ export default function MiembrosPage() {
                   <label className="field">
                     <span className="field-label">Teléfono emergencia</span>
                     <input
-                      className="field-input"
+                      className={`field-input${formErrors.telefono_emergencia ? ' field-input--error' : ''}`}
                       value={form.telefono_emergencia}
                       onChange={(e) => handleFormChange('telefono_emergencia', e.target.value)}
                       placeholder="3001234567"
                       inputMode="numeric"
+                      aria-invalid={formErrors.telefono_emergencia ? 'true' : undefined}
                     />
+                    <ErrorCampo msg={formErrors.telefono_emergencia} />
                   </label>
                 </div>
                 <label className="field">
@@ -1333,30 +1268,35 @@ export default function MiembrosPage() {
                       placeholder="Calculada automáticamente"
                       readOnly
                     />
+                    <ErrorCampo msg={formErrors.fecha_fin} />
                   </label>
                   <label className="field">
                     <span className="field-label">Valor total del plan *</span>
                     <input
-                      className="field-input"
+                      className={`field-input${formErrors.valor_total ? ' field-input--error' : ''}`}
                       type="number"
                       required value={form.valor_total}
                       onChange={(e) => handleFormChange('valor_total', e.target.value)}
                       placeholder="0.00"
                       step="0.01"
+                      aria-invalid={formErrors.valor_total ? 'true' : undefined}
                     />
+                    <ErrorCampo msg={formErrors.valor_total} />
                   </label>
                 </div>
                 <div className="auth-form-row">
                   <label className="field">
                     <span className="field-label">Valor pagado hoy</span>
                     <input
-                      className="field-input"
+                      className={`field-input${formErrors.valor_pagado ? ' field-input--error' : ''}`}
                       type="number"
                       value={form.valor_pagado}
                       onChange={(e) => handleFormChange('valor_pagado', e.target.value)}
                       placeholder="0.00"
                       step="0.01"
+                      aria-invalid={formErrors.valor_pagado ? 'true' : undefined}
                     />
+                    <ErrorCampo msg={formErrors.valor_pagado} />
                   </label>
                   <label className="field">
                     <span className="field-label">Estado del pago</span>
@@ -1861,6 +1801,8 @@ export default function MiembrosPage() {
           {/* --- Plan del miembro ------------------------------------------
               Vive en otra tabla, asi que tiene su propio boton de guardar y
               no viaja con el resto de la ficha. */}
+          {/* Si el plan no cargo no hay editor, pero el motivo se ve igual. */}
+          {!planForm && planError && <p className="field-error">{planError}</p>}
           {planForm && (
             <section className="plan-editor">
               <header className="plan-editor__cabecera">
