@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import EmptyState from '../components/EmptyState';
 import PageTransition from '../components/PageTransition';
 import Ripple from '../components/Ripple';
+import { armarPayloadCheckin } from '../lib/checkin';
 
 const COP = (n) => '$' + Number(n || 0).toLocaleString('es-CO');
 
@@ -192,15 +193,10 @@ export default function CheckinPage() {
   const submit = async (e, porDocumento = false) => {
     e.preventDefault();
     setError(''); setFeedback(null);
-    const payload = { metodo };
-    if (codigo && !porDocumento) {
-      payload.codigo = codigo.trim();
-    } else if (documento) {
-      payload.documento = documento.trim();
-      // Escribir el documento es un ingreso manual: el selector arranca en QR
-      // y sin esto el ingreso quedaba guardado como QR (RQNF-04).
-      if (metodo === 'QR') payload.metodo = 'MANUAL';
-    } else {
+    // Un documento escrito en el campo del QR (donde arranca el cursor) se
+    // registra por documento, como ingreso manual (RQNF-04, lib/checkin.js).
+    const payload = armarPayloadCheckin({ codigo, documento, metodo, porDocumento });
+    if (!payload) {
       setError('Escribe el código QR o el documento.');
       return;
     }
