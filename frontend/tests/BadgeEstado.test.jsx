@@ -9,14 +9,20 @@ import BadgeEstado, { estadoDeMiembro } from '../src/components/BadgeEstado';
 
 describe('estadoDeMiembro', () => {
   test.each([
-    ['sin miembro', null, 'activo'],
-    ['sin banderas', {}, 'activo'],
-    ['congelado aunque este vencido', { congelada: true, vencido: true }, 'congelado'],
-    ['vencido aunque venza pronto', { vencido: true, vencePronto: true }, 'vencido'],
-    ['por vencer aunque este en riesgo', { vencePronto: true, enRiesgo: true }, 'moroso'],
-    ['solo en riesgo', { enRiesgo: true }, 'riesgo'],
-  ])('should map a member %s', (_caso, miembro, esperado) => {
-    expect(estadoDeMiembro(miembro)).toBe(esperado);
+    ['there is no member', null, 'activo'],
+    ['the member has no flags', {}, 'activo'],
+    ['the member is frozen even if expired', { congelada: true, vencido: true }, 'congelado'],
+    ['the member is expired even if about to expire', { vencido: true, vencePronto: true }, 'vencido'],
+    ['the member is about to expire even if at risk', { vencePronto: true, enRiesgo: true }, 'moroso'],
+    ['the member is only at risk', { enRiesgo: true }, 'riesgo'],
+  ])('should return the right state when %s', (_caso, miembro, esperado) => {
+    // Arrange: sin dobles, funcion pura; el caso viene de la tabla.
+
+    // Act
+    const estado = estadoDeMiembro(miembro);
+
+    // Assert
+    expect(estado).toBe(esperado);
   });
 });
 

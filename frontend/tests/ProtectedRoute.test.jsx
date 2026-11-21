@@ -52,10 +52,10 @@ describe('ProtectedRoute', () => {
     sesion = { user: null, loading: true, ready: false };
 
     // Act
-    const { container } = abrir(['admin']);
+    abrir(['admin']);
 
     // Assert
-    expect(container.querySelector('.boot-shell .spinner')).not.toBeNull();
+    expect(screen.getByRole('status', { name: 'Cargando' })).toBeInTheDocument();
     expect(screen.queryByText(/Pantalla de login/)).not.toBeInTheDocument();
     expect(screen.queryByText('Contenido protegido')).not.toBeInTheDocument();
   });
