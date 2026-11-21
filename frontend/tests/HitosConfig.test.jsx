@@ -63,7 +63,8 @@ describe('HitosConfig', () => {
 
   test('mantiene deshabilitado el envío hasta que nombre y mensaje tengan contenido', async () => {
     vi.spyOn(api, 'get').mockResolvedValue({ data: { hitos: [] } });
-    const post = vi.spyOn(api, 'post');
+    // Sin mockResolvedValue el spy llama al api real y dispara un XHR de verdad.
+    const post = vi.spyOn(api, 'post').mockResolvedValue({ data: { ok: true } });
     const { user } = renderWithProviders(<HitosConfig />);
     const submit = screen.getByRole('button', { name: /Agregar hito/ });
     expect(submit).toBeDisabled();
