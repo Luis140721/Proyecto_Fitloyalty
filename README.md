@@ -336,6 +336,9 @@ En PowerShell, el segundo comando es
     host es `127.0.0.1` y nunca `localhost`, que en Windows puede resolver a `::1`.
   - Antes de migrar, se revisan el host, el puerto y la BD que `pg` va a usar de verdad con el
     pool de la app ya construido. Si no son los de la BD de pruebas, los tests fallan sin conectarse.
+- La guardia confía en lo que escuche en `127.0.0.1:5433`. En Windows, si ese puerto ya lo ocupa
+  otro Postgres (de otro proyecto), los tests se conectan a ese: antes de correrlos, comprueba que
+  `docker ps --filter publish=5433` muestre solo el contenedor de `db-test`.
 
 ---
 

@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
+import { API_URL } from './support/entorno.js';
 
 // Estos tests usan el backend real y la BD de pruebas (pnpm run db:up): no simulan el API.
-const API = 'http://localhost:3001/api';
 
 test('should open the dashboard of the new gym when the owner signs up with valid data', async ({ page }) => {
   // Arrange: correo unico porque la BD conserva los registros entre corridas
@@ -25,7 +25,7 @@ test('should open the dashboard of the new gym when the owner signs up with vali
 test('should show an error when the owner email is already registered', async ({ page, request }) => {
   // Arrange: la cuenta ya existe. Se crea por API, sin pasar por la pantalla
   const correo = `luis.duplicado.${Date.now()}@example.com`;
-  const previa = await request.post(`${API}/auth/signup`, {
+  const previa = await request.post(`${API_URL}/auth/signup`, {
     data: {
       gymName: 'Gimnasio E2E previo',
       gymPhone: '3001234567',

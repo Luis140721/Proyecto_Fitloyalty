@@ -5,6 +5,7 @@
  */
 const fs = require('fs');
 const path = require('path');
+const { spawnSync } = require('child_process');
 const ConnectionParameters = require('pg/lib/connection-parameters');
 const { exigirBdDePruebas } = require('../../../e2e/guardia-bd.cjs');
 
@@ -75,6 +76,26 @@ describe('exigirBdDePruebas', () => {
     expect(() => exigir(url)).toThrow(motivo);
   });
 
+  // Antes, sin la variable, url.includes('#') daba «TypeError: Cannot read
+  // properties of undefined» (lo vio la guia del vocero en el paso del job e2e).
+  test.each([
+    ['falta (undefined)', undefined, 'Falta DATABASE_URL: las pruebas con BD (integracion y E2E) solo corren contra la BD de pruebas local, db-test (127.0.0.1:5433, nombre terminado en _test).'],
+    ['falta (null)', null, 'Falta DATABASE_URL: '],
+    ['esta vacia', '', 'DATABASE_URL esta vacia: las pruebas con BD'],
+    ['solo tiene espacios', '   ', 'DATABASE_URL esta vacia: '],
+  ])('dice que la variable %s, con la regla y sin un TypeError', (_caso, url, mensaje) => {
+    let error;
+    try {
+      exigir(url);
+    } catch (err) {
+      error = err;
+    }
+    expect(error).toBeInstanceOf(Error);
+    expect(error).not.toBeInstanceOf(TypeError);
+    expect(error.message.startsWith(mensaje)).toBe(true);
+    expect(error.message).toContain('postgres://usuario:clave@127.0.0.1:5433/nombre_test');
+  });
+
   test('el mensaje dice la forma esperada', () => {
     expect(() => exigir(ATAQUE_CLAVE)).toThrow(
       'DATABASE_URL debe tener la forma postgres://usuario:clave@127.0.0.1:5433/nombre_test (solo se admite ?sslmode=)',
@@ -102,6 +123,66 @@ describe('exigirBdDePruebas', () => {
     expect(config).toContain("import { exigirBdDePruebas } from './guardia-bd.cjs';");
     expect(config).toContain("exigirBdDePruebas(DATABASE_URL, 'E2E_DATABASE_URL');");
     expect(config).not.toMatch(/function\s+exigirBdDePruebas/);
+  });
+});
+
+// El paso «La BD es la de pruebas» del job e2e: node e2e/guardia-bd.cjs DATABASE_URL.
+describe('la guardia desde la linea de comandos', () => {
+  const RAIZ = path.join(__dirname, '..', '..', '..');
+  const GUARDIA = path.join(RAIZ, 'e2e', 'guardia-bd.cjs');
+
+  /** Corre la guardia en otro proceso, con DATABASE_URL y GITHUB_ACTIONS solo si se dan. */
+  const correrGuardia = (variables = {}) => {
+    const env = { ...process.env };
+    delete env.DATABASE_URL;
+    delete env.GITHUB_ACTIONS;
+    return spawnSync(process.execPath, [GUARDIA, 'DATABASE_URL'], { env: { ...env, ...variables }, encoding: 'utf8' });
+  };
+
+  test('sin DATABASE_URL sale con codigo 1 y escribe solo el mensaje, sin la pila', () => {
+    const r = correrGuardia();
+
+    expect(r.status).toBe(1);
+    expect(r.stdout).toBe('');
+    expect(r.stderr.trim().split('\n')).toHaveLength(1);
+    expect(r.stderr).toMatch(/^Falta DATABASE_URL: las pruebas con BD/);
+    expect(r.stderr).not.toMatch(/TypeError|\n\s+at /);
+  });
+
+  test('con DATABASE_URL vacia sale con codigo 1 y dice que esta vacia', () => {
+    const r = correrGuardia({ DATABASE_URL: '' });
+
+    expect(r.status).toBe(1);
+    expect(r.stderr).toMatch(/^DATABASE_URL esta vacia: /);
+  });
+
+  test('con otra BD sale con codigo 1 y no muestra el usuario ni la clave', () => {
+    const r = correrGuardia({ DATABASE_URL: 'postgres://usuario_dev:clave_dev@127.0.0.1:5432/fitloyalty' });
+
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain('el puerto no es 5433');
+    expect(r.stderr).not.toContain('usuario_dev');
+    expect(r.stderr).not.toContain('clave_dev');
+  });
+
+  test('con la BD de pruebas sale con codigo 0 sin escribir nada', () => {
+    const r = correrGuardia({ DATABASE_URL: VALIDA });
+
+    expect(r.status).toBe(0);
+    expect(r.stdout + r.stderr).toBe('');
+  });
+
+  test('en GitHub Actions el mensaje sale como ::error:: para el resumen del job', () => {
+    const r = correrGuardia({ GITHUB_ACTIONS: 'true' });
+
+    expect(r.status).toBe(1);
+    expect(r.stderr).toMatch(/^::error::Falta DATABASE_URL: /);
+  });
+
+  test('el paso del job e2e usa la guardia desde la linea de comandos', () => {
+    const workflow = fs.readFileSync(path.join(RAIZ, '.github', 'workflows', 'tests.yml'), 'utf8');
+
+    expect(workflow).toContain('run: node e2e/guardia-bd.cjs DATABASE_URL');
   });
 });
 

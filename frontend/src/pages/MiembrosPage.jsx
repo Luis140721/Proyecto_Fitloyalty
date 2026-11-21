@@ -15,48 +15,8 @@ import Modal from '../components/Modal';
 import Ripple from '../components/Ripple';
 import QRCode from 'qrcode';
 
-// Componente personalizado para input de fecha con formato automático DD/MM/YYYY
-function DateInputWithAutoFormat({ value, onChange, placeholder, ...props }) {
-  const formatDateString = (input) => {
-    // Remover todos los caracteres que no sean dígitos
-    const cleaned = input.replace(/\D/g, '');
-    
-    // Limitar a 8 dígitos máximo
-    const truncated = cleaned.slice(0, 8);
-    
-    // Aplicar formato DD/MM/YYYY
-    let formatted = '';
-    if (truncated.length > 0) {
-      formatted += truncated.slice(0, 2);
-    }
-    if (truncated.length > 2) {
-      formatted += '/' + truncated.slice(2, 4);
-    }
-    if (truncated.length > 4) {
-      formatted += '/' + truncated.slice(4, 8);
-    }
-    
-    return formatted;
-  };
-
-  const handleChange = (e) => {
-    const rawValue = e.target.value;
-    const formatted = formatDateString(rawValue);
-    onChange(formatted);
-  };
-
-  return (
-    <input
-      {...props}
-      type="text"
-      value={value}
-      onChange={handleChange}
-      placeholder={placeholder || "DD/MM/YYYY"}
-      maxLength={10}
-      inputMode="numeric"
-    />
-  );
-}
+// CampoFecha usa locale="es": sin registrarlo, el calendario sale en ingles.
+registerLocale('es', es);
 
 /** Mensaje de error bajo un campo. No renderiza nada si no hay error. */
 function ErrorCampo({ msg }) {
@@ -139,6 +99,10 @@ function CampoFecha({ value, onChange, placeholder, anosAtras = 100, ...props })
       }}
       value={value}
       dateFormat="dd/MM/yyyy"
+      /* Sin esto, al teclear el primer digito react-datepicker leia "1" como
+         el dia 1 del mes actual y el campo se quedaba en 01/11/2026. Asi solo
+         acepta una fecha escrita completa (DD/MM/AAAA). */
+      strictParsing
       placeholderText={placeholder || 'DD/MM/YYYY'}
       className="field-input"
       showMonthDropdown
@@ -163,17 +127,6 @@ function convertToISODate(dateString) {
   
   const [day, month, year] = parts;
   return `${year}-${month}-${day}`;
-}
-
-// Función para convertir formato ISO a DD/MM/YYYY
-function convertFromISODate(isoDate) {
-  if (!isoDate || isoDate.length !== 10) return isoDate;
-  
-  const parts = isoDate.split('-');
-  if (parts.length !== 3) return isoDate;
-  
-  const [year, month, day] = parts;
-  return `${day}/${month}/${year}`;
 }
 
 /* Duracion de cada plan, en dias. Lo que no este aqui dura un mes. */
@@ -304,6 +257,9 @@ export default function MiembrosPage() {
   const [enviandoContrato, setEnviandoContrato] = useState(false);
   const [editInfo, setEditInfo] = useState('');
   const [error, setError] = useState('');
+  // Por que no se pudo traer la lista. Va aparte de `error` (alta, desactivar...)
+  // para que una carga buena lo quite sin borrar otros avisos.
+  const [errorCarga, setErrorCarga] = useState('');
   const [info, setInfo] = useState('');
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -402,17 +358,29 @@ export default function MiembrosPage() {
   const guardarRipple = Ripple({ opacity: 0.30 });
   const desactivarRipple = Ripple({ opacity: 0.30 });
 
+  /*
+   * Numero de la ultima carga pedida. Con la red lenta las respuestas pueden
+   * llegar en desorden: si la carga inicial respondia despues de la recarga que
+   * sigue a un alta, su lista (sin el miembro nuevo) reemplazaba a la buena.
+   * Ahora solo cuenta la respuesta de la ultima carga pedida.
+   */
+  const ultimaCargaRef = useRef(0);
+
   const load = async (query = '', includeInactive = false) => {
+    const carga = ++ultimaCargaRef.current;
     setLoading(true);
     try {
       const { data } = await api.get('/admin/miembros', { 
         params: { q: query, pageSize: 100, includeInactive } 
       });
+      if (carga !== ultimaCargaRef.current) return;
       setItems(data.miembros);
+      setErrorCarga('');
     } catch (err) {
-      setError(err.message || 'Error al cargar miembros.');
+      if (carga !== ultimaCargaRef.current) return;
+      setErrorCarga(err.message || 'Error al cargar miembros.');
     } finally {
-      setLoading(false);
+      if (carga === ultimaCargaRef.current) setLoading(false);
     }
   };
 
@@ -445,28 +413,6 @@ export default function MiembrosPage() {
     setFiltro(nuevoFiltro);
     const includeInactive = nuevoFiltro === 'desactivados';
     load(q, includeInactive);
-  };
-
-  // Desactivar miembro (soft delete)
-  const desactivar = async (id) => {
-    try {
-      await api.delete(`/admin/miembros/${id}`);
-      setConfirmDeactivate(null);
-      load(q, filtro === 'desactivados' ? true : false);
-    } catch (err) {
-      setError(err.message || 'No se pudo desactivar el miembro.');
-    }
-  };
-
-  // Eliminar miembro permanentemente (hard delete)
-  const eliminarPermanentemente = async (id) => {
-    try {
-      await api.delete(`/admin/miembros/${id}/permanent`);
-      setConfirmDelete(null);
-      load(q, filtro === 'desactivados' ? true : false);
-    } catch (err) {
-      setError(err.message || 'No se pudo eliminar el miembro permanentemente.');
-    }
   };
 
   const askDeactivate = (m) => setConfirmDeactivate(m);
@@ -965,7 +911,9 @@ export default function MiembrosPage() {
       for (const k of EDITABLES) {
         if (editForm[k] !== undefined) payload[k] = editForm[k];
       }
-      if (!payload.email) delete payload.email;
+      // Un correo vacio se envia tal cual: el backend lo guarda como null
+      // (updateSchema de routes/miembros.js). Si se quitara del payload, borrar
+      // el correo en la ficha no tendria efecto y el viejo seguiria guardado.
       await api.put(`/admin/miembros/${editing.id_miembro}`, payload);
       setEditing(null);
       setEditForm(empty);
@@ -1002,6 +950,31 @@ export default function MiembrosPage() {
     desactivados: items.filter(m => !m.activo).length,
   }), [items]);
 
+  /*
+   * Lo que se ve en la tabla y en las tarjetas cuando no hay filas. Si la
+   * ultima carga fallo no se sabe si el gimnasio tiene miembros: antes salia
+   * "Sin miembros que mostrar" con el API caido. Ahora se dice que no se
+   * pudieron cargar y se ofrece reintentar con la misma busqueda y filtro.
+   */
+  const sinFilas = errorCarga ? (
+    <EmptyState
+      icono="cloud_off"
+      titulo="No pudimos cargar los miembros"
+      descripcion="Revisa la conexión y vuelve a intentarlo."
+      ctaLabel="Reintentar"
+      ctaIcono="refresh"
+      onCta={() => load(q, filtro === 'desactivados')}
+    />
+  ) : (
+    <EmptyState
+      icono="group_off"
+      titulo="Sin miembros que mostrar"
+      descripcion="No hay miembros que coincidan con el filtro actual."
+      ctaLabel="Nuevo miembro"
+      onCta={() => setOpen(true)}
+    />
+  );
+
   return (
     <PageTransition>
       <header className="admin-page-head">
@@ -1029,6 +1002,12 @@ export default function MiembrosPage() {
         </div>
       </header>
 
+      {errorCarga && (
+        <div className="alert alert-error anim-scale-in" role="alert">
+          <span className="material-symbols-outlined icon" aria-hidden="true">error</span>
+          <span>{errorCarga}</span>
+        </div>
+      )}
       {error && (
         <div className="alert alert-error anim-scale-in" role="alert">
           <span className="material-symbols-outlined icon" aria-hidden="true">error</span>
@@ -1209,12 +1188,14 @@ export default function MiembrosPage() {
                   <label className="field">
                     <span className="field-label">Teléfono emergencia</span>
                     <input
-                      className="field-input"
+                      className={`field-input${formErrors.telefono_emergencia ? ' field-input--error' : ''}`}
                       value={form.telefono_emergencia}
                       onChange={(e) => handleFormChange('telefono_emergencia', e.target.value)}
                       placeholder="3001234567"
                       inputMode="numeric"
+                      aria-invalid={formErrors.telefono_emergencia ? 'true' : undefined}
                     />
+                    <ErrorCampo msg={formErrors.telefono_emergencia} />
                   </label>
                 </div>
                 <label className="field">
@@ -1287,30 +1268,35 @@ export default function MiembrosPage() {
                       placeholder="Calculada automáticamente"
                       readOnly
                     />
+                    <ErrorCampo msg={formErrors.fecha_fin} />
                   </label>
                   <label className="field">
                     <span className="field-label">Valor total del plan *</span>
                     <input
-                      className="field-input"
+                      className={`field-input${formErrors.valor_total ? ' field-input--error' : ''}`}
                       type="number"
                       required value={form.valor_total}
                       onChange={(e) => handleFormChange('valor_total', e.target.value)}
                       placeholder="0.00"
                       step="0.01"
+                      aria-invalid={formErrors.valor_total ? 'true' : undefined}
                     />
+                    <ErrorCampo msg={formErrors.valor_total} />
                   </label>
                 </div>
                 <div className="auth-form-row">
                   <label className="field">
                     <span className="field-label">Valor pagado hoy</span>
                     <input
-                      className="field-input"
+                      className={`field-input${formErrors.valor_pagado ? ' field-input--error' : ''}`}
                       type="number"
                       value={form.valor_pagado}
                       onChange={(e) => handleFormChange('valor_pagado', e.target.value)}
                       placeholder="0.00"
                       step="0.01"
+                      aria-invalid={formErrors.valor_pagado ? 'true' : undefined}
                     />
+                    <ErrorCampo msg={formErrors.valor_pagado} />
                   </label>
                   <label className="field">
                     <span className="field-label">Estado del pago</span>
@@ -1486,8 +1472,15 @@ export default function MiembrosPage() {
                 Paso {SECCIONES.indexOf(activeSection) + 1} de {SECCIONES.length}
               </div>
               
+              {/* Cada boton con su key: sin ella React reutilizaba el mismo
+                  <button> y, durante el clic en "Siguiente" del paso 4, le
+                  cambiaba el tipo a "submit"; el navegador enviaba entonces el
+                  formulario con un solo clic (los terminos salian en rojo, o el
+                  miembro se creaba si ya estaban marcados). Con la key se monta
+                  un boton nuevo y el del clic sale del formulario. */}
               {activeSection !== 'terminos' ? (
                 <button
+                  key="siguiente"
                   type="button"
                   className="btn btn-secondary"
                   onClick={() => {
@@ -1499,9 +1492,17 @@ export default function MiembrosPage() {
                 </button>
               ) : (
                 <button
+                  key="crear"
                   type="submit"
                   className="btn btn-primary"
                   disabled={submitting}
+                  /* El segundo clic de un doble clic en "Siguiente →" del paso 4
+                     puede caer aqui: con la pagina desplazada hasta el final, el
+                     paso 5 es mas bajo, el navegador sube el desplazamiento y este
+                     boton queda justo bajo el puntero. event.detail cuenta los
+                     clics seguidos (1 en un clic normal, 0 con el teclado), asi
+                     que solo se ignora el segundo de un doble clic. */
+                  onClick={(e) => { if (e.detail > 1) e.preventDefault(); }}
                 >
                   {submitting ? 'Creando miembro...' : 'Crear miembro'}
                 </button>
@@ -1563,13 +1564,7 @@ export default function MiembrosPage() {
               {!loading && filtrados.length === 0 && (
                 <tr>
                   <td colSpan={6} style={{ padding: 24 }}>
-                    <EmptyState
-                      icono="group_off"
-                      titulo="Sin miembros que mostrar"
-                      descripcion="No hay miembros que coincidan con el filtro actual."
-                      ctaLabel="Nuevo miembro"
-                      onCta={() => setOpen(true)}
-                    />
+                    {sinFilas}
                   </td>
                 </tr>
               )}
@@ -1656,13 +1651,7 @@ export default function MiembrosPage() {
             En escritorio se muestra la tabla original; CSS decide cual se ve. */}
         <div className="miembros-cards">
           {filtrados.length === 0 && !loading && (
-            <EmptyState
-              icono="group_off"
-              titulo="Sin miembros que mostrar"
-              descripcion="No hay miembros que coincidan con el filtro actual."
-              ctaLabel="Nuevo miembro"
-              onCta={() => setOpen(true)}
-            />
+            sinFilas
           )}
           {filtrados.map((m) => {
             const initials = (m.nombre || '?').split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase();
@@ -1812,6 +1801,8 @@ export default function MiembrosPage() {
           {/* --- Plan del miembro ------------------------------------------
               Vive en otra tabla, asi que tiene su propio boton de guardar y
               no viaja con el resto de la ficha. */}
+          {/* Si el plan no cargo no hay editor, pero el motivo se ve igual. */}
+          {!planForm && planError && <p className="field-error">{planError}</p>}
           {planForm && (
             <section className="plan-editor">
               <header className="plan-editor__cabecera">

@@ -21,11 +21,12 @@ module.exports = {
     'src/routes/**/*.js',
     'src/jobs/**/*.js',
   ],
-  // Semana 1: linea base medida el 2026-10-26 sobre develop @ 7e3ede9 (docs/cobertura-baseline-backend.txt).
-  // Es el piso: nunca puede bajar (regla de trinquete del bootcamp). Todavia no
-  // se exige el 30% de la semana 2; solo evita retroceder.
+  // Cierre de S2 a S4 (2026-11-19): el mayor entre el piso de la S4 (50%) y la
+  // cobertura real, redondeada hacia abajo. Se toma la menor entre el CI (run
+  // 44653040667) y Windows, que da unas decimas menos, para que nadie vea rojo
+  // en su equipo. Nunca baja (regla de trinquete del bootcamp).
   coverageThreshold: {
-    global: { statements: 39, branches: 35, functions: 43, lines: 41 },
+    global: { statements: 60, branches: 54, functions: 66, lines: 61 },
   },
   // Evita que Jest intente transformar código nativo (bcrypt, pg) sin
   // necesidad. Cuando agreguemos tests sobre rutas reales, podemos cambiar

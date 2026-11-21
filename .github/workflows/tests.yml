@@ -149,9 +149,10 @@ jobs:
           }
           JS
 
-  # La app completa en un navegador: el webServer de playwright.config.js
-  # levanta el backend (que migra al arrancar) y el frontend, y espera a que
-  # /api/health responda 200 antes del primer test.
+  # La app completa en un navegador, como en la receta de la semana 8: el
+  # backend arranca en segundo plano (y migra al arrancar), curl espera a que
+  # /api/health responda 200 y el webServer de playwright.config.js levanta el
+  # frontend. En el CI Playwright reutiliza ese backend (reuseExistingServer).
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -171,6 +172,8 @@ jobs:
           --health-retries 30
     env:
       PUPPETEER_SKIP_DOWNLOAD: "true"
+      # La BD del servicio: la misma que playwright.config.js usa por defecto.
+      DATABASE_URL: postgres://fitloyalty_test:fitloyalty_test@127.0.0.1:5433/fitloyalty_test
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: pnpm/action-setup@v6.1.0
@@ -189,19 +192,43 @@ jobs:
           pnpm --dir backend install --frozen-lockfile
           pnpm --dir frontend install --frozen-lockfile
           pnpm --dir e2e install --frozen-lockfile
+      # Antes de arrancar el backend: la URL pasa por la misma guardia de los
+      # tests de integracion y de playwright.config.js. Sin DATABASE_URL, vacia
+      # o con otra forma, sale con codigo 1 y solo el mensaje (sin el valor).
+      - name: La BD es la de pruebas
+        run: node e2e/guardia-bd.cjs DATABASE_URL
+      # Arranca el backend en segundo plano: sigue vivo en los pasos siguientes.
+      # Son las variables del webServer del backend en playwright.config.js; si
+      # cambias una alli, cambiala aqui.
+      - name: Start backend
+        working-directory: backend
+        env:
+          PORT: "3001"
+          NODE_ENV: test
+          DB_SSL: "false"
+          JWT_SECRET: jwt-solo-para-e2e-no-es-secreto
+          DISABLE_SCHEDULER: "true"
+          ENABLE_WHATSAPP: "false"
+          BREVO_API_KEY: ""
+          RESEND_API_KEY: ""
+          FRONTEND_URL: http://localhost:5173
+        run: node src/index.js > api.log 2>&1 &
       # Los navegadores no se cachean: Playwright recomienda instalarlos en cada
       # corrida, porque restaurarlos tarda casi lo mismo.
       - name: Chromium
         working-directory: e2e
         run: pnpm exec playwright install --with-deps chromium
-      # La BD es la que playwright.config.js usa por defecto (127.0.0.1:5433,
-      # fitloyalty_test). Ademas del list y el HTML, deja un JSON para contar.
+      # Espera a que el API responda (maximo 60 s), sin sleeps fijos. /api/health
+      # responde 503 mientras no hay BD y 200 cuando ya migro.
+      - name: Wait for the API
+        run: curl --silent --fail --retry 30 --retry-delay 2 --retry-all-errors http://localhost:3001/api/health
+      # Ademas del list y el HTML, deja un JSON para contar.
       - name: Pruebas E2E
         working-directory: e2e
         env:
           PLAYWRIGHT_JSON_OUTPUT_NAME: resultados-e2e.json
         run: pnpm test --reporter=list,html,json
-      - name: Ningun test saltado
+      - name: Ningun test saltado ni inestable
         if: always()
         working-directory: e2e
         run: |
@@ -219,8 +246,15 @@ jobs:
             console.log('::error::Hay tests E2E saltados o no corrio ninguno.');
             process.exit(1);
           }
+          // Con CI, la config de la semana 7 reintenta una vez: un test que pasa
+          // en el reintento queda como flaky y Playwright no falla. La Parte 3
+          // del reto pide ningun flaky sin investigar.
+          if (stats.flaky > 0) {
+            console.log('::error::Hay tests E2E inestables (pasaron en el reintento): investigalos con la traza del reporte.');
+            process.exit(1);
+          }
           JS
-      # Si algo falla, el reporte HTML con las trazas queda descargable.
+      # Si algo falla, el reporte HTML con las trazas y el log del backend quedan descargables.
       - uses: actions/upload-artifact@v7.0.2
         if: failure()
         with:
@@ -228,6 +262,7 @@ jobs:
           path: |
             e2e/playwright-report/
             e2e/test-results/
+            backend/api.log
           retention-days: 7
 
   # No construye ni prueba nada: deja en el resumen del run quién hizo commits

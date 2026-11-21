@@ -120,7 +120,7 @@ describe('DashboardPage: la carga', () => {
     expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
   });
 
-  test('should show the loading bar until the API answers', async () => {
+  test('should show the loading bar when the API has not answered yet', async () => {
     // Arrange: el dashboard no responde hasta que el test lo diga
     let responder;
     mockGet = vi.fn((url, opciones) => (url === '/admin/dashboard'
@@ -154,6 +154,21 @@ describe('DashboardPage: la carga', () => {
     expect(mockGet).toHaveBeenCalledWith('/admin/dashboard/horas-pico', { params: { periodo: 'hoy' } });
   });
 
+  test.each([
+    [5, 'Buen día'],
+    [4, 'Esperando más entradas'],
+  ])('should comment the attendance of today when %i members came in', async (checkinsHoy, comentario) => {
+    // Arrange: 5 entradas es el limite de un buen dia
+    dashboard = { ...DASHBOARD, checkinsHoy };
+
+    // Act
+    abrirDashboard();
+    await cargado();
+
+    // Assert: el contador animado pinta el numero en un efecto, por eso se espera
+    await waitFor(() => expect(kpi('Asistencia hoy')).toHaveTextContent(`${checkinsHoy}↑ ${comentario}`));
+  });
+
   test('should list at most four members at risk and say when one never came', async () => {
     // Act
     abrirDashboard();
@@ -168,7 +183,7 @@ describe('DashboardPage: la carga', () => {
     expect(within(riesgo).queryByText('Quinto Fuera')).not.toBeInTheDocument();
   });
 
-  test('should mark in warning the memberships that expire in three days or less', async () => {
+  test('should mark the membership in warning when it expires in three days or less', async () => {
     // Act
     abrirDashboard();
     await cargado();
@@ -253,6 +268,48 @@ describe('DashboardPage: las horas pico', () => {
 });
 
 describe('DashboardPage: los refrescos', () => {
+  test('should not warn when an older period fails after the newer one already answered', async () => {
+    // Arrange: la respuesta de 7 dias se queda esperando y al final falla
+    let fallarSemana;
+    mockGet = vi.fn((url, opciones = {}) => {
+      if (url === '/admin/dashboard') return Promise.resolve({ data: DASHBOARD });
+      const { periodo } = opciones.params;
+      if (periodo === 'semana') return new Promise((_resolve, reject) => { fallarSemana = () => reject(ERROR_503); });
+      return Promise.resolve({ data: HORAS[periodo] });
+    });
+    const { user } = abrirDashboard();
+    await cargado();
+    await user.click(screen.getByRole('button', { name: '7 días' }));
+    await user.click(screen.getByRole('button', { name: '30 días' }));
+    await waitFor(() => expect(resumenHorasPico()).toHaveTextContent('(31 de 51 entradas, últimos 30 días)'));
+
+    // Act
+    await act(async () => fallarSemana());
+
+    // Assert
+    expect(screen.queryByText('No se pudo actualizar; se reintentará en un minuto.')).not.toBeInTheDocument();
+    expect(resumenHorasPico()).toHaveTextContent('(31 de 51 entradas, últimos 30 días)');
+  });
+
+  test('should not ask again when the tab becomes visible while a load is still on its way', async () => {
+    // Arrange: la primera carga no ha respondido
+    let responder;
+    mockGet = vi.fn((url, opciones = {}) => {
+      if (url === '/admin/dashboard') return new Promise((resolve) => { responder = () => resolve({ data: DASHBOARD }); });
+      return Promise.resolve({ data: HORAS[opciones.params.periodo] });
+    });
+    abrirDashboard();
+    await waitFor(() => expect(llamadasA('/admin/dashboard')).toHaveLength(1));
+
+    // Act
+    fireEvent(document, new Event('visibilitychange'));
+    await act(async () => responder());
+
+    // Assert
+    expect(await cargado()).toBeInTheDocument();
+    expect(llamadasA('/admin/dashboard')).toHaveLength(1);
+  });
+
   test('should keep the metrics and warn in small text when a refresh fails', async () => {
     // Arrange
     const { user } = abrirDashboard();
@@ -297,7 +354,7 @@ describe('DashboardPage: los botones', () => {
     });
   });
 
-  test('should download the CSV with the file name of Content-Disposition and then free the Blob URL', async () => {
+  test('should download the CSV with the name of Content-Disposition and free the Blob URL when the export is clicked', async () => {
     // Arrange: 8:00 p. m. del 27 en Colombia, ya 28 en UTC; manda el nombre del servidor
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-10-28T01:00:00.000Z'));
