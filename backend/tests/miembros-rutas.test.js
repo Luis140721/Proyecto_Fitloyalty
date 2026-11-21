@@ -561,7 +561,7 @@ describe('PUT /api/admin/miembros/:id: editing a member', () => {
 
   test.each([
     ['the body has nothing to change', '88', {}, 'Nada que actualizar'],
-    ['the id is not a number', 'abc', { nombre: 'Ana Maria' }, 'Id invalido'],
+    ['the id is not a number', 'abc', { nombre: 'Ana Maria' }, 'Id inválido'],
     ['the new password is too short', '88', { password: '123' }, 'La contrasena debe tener minimo 6 caracteres'],
   ])('should answer 400 and update nothing when %s', async (_caso, id, cuerpo, mensaje) => {
     // Arrange
