@@ -191,6 +191,10 @@ router.put('/me', asyncHandler(async (req, res) => {
     if (dup.length > 0) throw new AppError(409, 'Ese correo ya esta registrado en otro miembro.', 'EMAIL_TAKEN');
   }
 
+  // RQNF-17: sin la autorizacion de datos sensibles no se guardan
+  // condiciones medicas ni alergias (quedan en NULL).
+  const sensiblesDescartados = await descartarSensiblesSinAutorizacion(idMiembro, gymId, data);
+
   const campos = [];
   const params = [];
   for (const [k, v] of Object.entries(data)) {
@@ -212,7 +216,13 @@ router.put('/me', asyncHandler(async (req, res) => {
       params
     );
     if (rows.length === 0) throw new AppError(404, 'Miembro no encontrado', 'MEMBER_NOT_FOUND');
-    return res.json({ message: 'Perfil actualizado.', miembro: miembroSeguro(rows[0]) });
+    return res.json({
+      message: sensiblesDescartados
+        ? 'Perfil actualizado. Tus condiciones médicas y alergias no se guardaron porque no has autorizado el tratamiento de datos de salud.'
+        : 'Perfil actualizado.',
+      miembro: miembroSeguro(rows[0]),
+      datos_sensibles_descartados: sensiblesDescartados,
+    });
   } catch (err) {
     if (err instanceof AppError) throw err;
     console.error('[PUT /cliente/me] Error:', err.message);
@@ -424,5 +434,173 @@ router.get('/retos', asyncHandler(async (req, res) => {
 // El cliente borra el token.
 // ---------------------------------------------------------------------------
 router.post('/logout', (req, res) => res.json({ message: 'Sesion cerrada' }));
+
+// ===========================================================================
+// RQNF-17 y RQNF-18: autorizaciones y contrato del miembro
+// ===========================================================================
+//   GET   /autorizaciones                 -> que autorizo, cuando, con que texto
+//   PATCH /autorizaciones/datos-sensibles -> { otorgada: false } revoca (y borra
+//                                            condiciones medicas y alergias);
+//                                            { otorgada: true } la otorga (solo
+//                                            un adulto: la de un menor la da su
+//                                            representante en el gimnasio)
+//   GET   /contrato                       -> su contrato de membresia (el mismo
+//                                            texto que el envio por WhatsApp)
+// Todo filtra por el miembro y el gimnasio del token: un miembro solo ve lo
+// suyo. Van aqui, al final, para no tocar las rutas de arriba.
+const {
+  leerVigentes: leerAutorizacionesVigentes, leerHistorial: leerHistorialAutorizaciones,
+  otorgada: autorizacionOtorgada, registrarAutorizacion, resumenAutorizaciones,
+  esMenorDeEdad,
+} = require('../lib/autorizaciones');
+const { armarContrato, registrarEntregaApp } = require('../lib/contrato');
+
+/**
+ * PUT /me: si el miembro no ha autorizado el tratamiento de datos sensibles,
+ * condiciones_medicas y alergias se guardan en NULL. Cambia `data` y devuelve
+ * true si se descarto algo que el miembro escribio.
+ */
+async function descartarSensiblesSinAutorizacion(idMiembro, gymId, data) {
+  if (data.condiciones_medicas === undefined && data.alergias === undefined) return false;
+  const vigentes = await leerAutorizacionesVigentes(pool, idMiembro, gymId);
+  if (autorizacionOtorgada(vigentes, 'DATOS_SENSIBLES')) return false;
+  const escribio = Boolean((data.condiciones_medicas || '').trim() || (data.alergias || '').trim());
+  if (data.condiciones_medicas !== undefined) data.condiciones_medicas = null;
+  if (data.alergias !== undefined) data.alergias = null;
+  return escribio;
+}
+
+/** Miembro activo del token, con lo necesario para saber si es menor. */
+async function miembroDelToken(db, req, { bloquear = false } = {}) {
+  const { rows } = await db.query(
+    `SELECT id_miembro, id_gimnasio, tipo_documento,
+            to_char(fecha_nacimiento, 'YYYY-MM-DD') AS fecha_nacimiento,
+            representante_nombre, representante_parentesco
+       FROM miembro
+      WHERE id_miembro = $1 AND id_gimnasio = $2 AND activo = TRUE
+      ${bloquear ? 'FOR UPDATE' : ''}`,
+    [req.user.idMiembro, req.user.gymId]
+  );
+  if (rows.length === 0) throw new AppError(404, 'Miembro no encontrado', 'MEMBER_NOT_FOUND');
+  return rows[0];
+}
+
+async function respuestaAutorizaciones(db, m) {
+  const vigentes = await leerAutorizacionesVigentes(db, m.id_miembro, m.id_gimnasio);
+  const historial = await leerHistorialAutorizaciones(db, m.id_miembro, m.id_gimnasio, 50);
+  const menor = esMenorDeEdad(m);
+  return {
+    ...resumenAutorizaciones(vigentes, historial),
+    menor_de_edad: menor,
+    representante: menor && m.representante_nombre
+      ? { nombre: m.representante_nombre, parentesco: m.representante_parentesco }
+      : null,
+    // En la app solo se puede cambiar la de datos sensibles; la de un menor
+    // solo la puede otorgar su representante, en el gimnasio.
+    puede_otorgar_datos_sensibles: !menor,
+    puede_revocar_datos_sensibles: autorizacionOtorgada(vigentes, 'DATOS_SENSIBLES'),
+  };
+}
+
+router.get('/autorizaciones', asyncHandler(async (req, res) => {
+  try {
+    const m = await miembroDelToken(pool, req);
+    return res.json(await respuestaAutorizaciones(pool, m));
+  } catch (err) {
+    if (err instanceof AppError) throw err;
+    console.error('[GET /cliente/autorizaciones] Error:', err.message);
+    throw new AppError(503, 'No pudimos cargar tus autorizaciones. Intenta de nuevo.', 'DB_UNREACHABLE');
+  }
+}));
+
+const autorizacionSensiblesSchema = z.object({
+  otorgada: z.boolean({
+    required_error: 'Indica si otorgas (true) o revocas (false) la autorización.',
+    invalid_type_error: 'Indica si otorgas (true) o revocas (false) la autorización.',
+  }),
+});
+
+router.patch('/autorizaciones/datos-sensibles', asyncHandler(async (req, res) => {
+  const parsed = autorizacionSensiblesSchema.safeParse(req.body || {});
+  if (!parsed.success) throw new AppError(400, parsed.error.issues[0].message, 'VALIDATION_ERROR');
+  const { otorgada } = parsed.data;
+
+  let client;
+  try {
+    client = await pool.connect();
+    await client.query('BEGIN');
+    const m = await miembroDelToken(client, req, { bloquear: true });
+    const vigentes = await leerAutorizacionesVigentes(client, m.id_miembro, m.id_gimnasio);
+    const antes = autorizacionOtorgada(vigentes, 'DATOS_SENSIBLES');
+
+    if (otorgada && esMenorDeEdad(m)) {
+      throw new AppError(403, 'Eres menor de edad: esta autorización la debe dar tu representante legal en el gimnasio.', 'REPRESENTANTE_REQUERIDO');
+    }
+
+    let message = otorgada
+      ? 'Ya habías autorizado el tratamiento de tus datos de salud.'
+      : 'No tenías autorizado el tratamiento de tus datos de salud.';
+    if (otorgada !== antes) {
+      await registrarAutorizacion(client, {
+        idMiembro: m.id_miembro, gymId: m.id_gimnasio, tipo: 'DATOS_SENSIBLES',
+        otorgada, canal: 'APP', registradaPor: null,
+      });
+      message = otorgada
+        ? 'Autorizaste el tratamiento de tus datos de salud.'
+        : 'Revocaste la autorización: borramos tus condiciones médicas y alergias.';
+    }
+    // Sin autorizacion no se guardan: se borran tambien si venian de antes.
+    if (!otorgada) {
+      await client.query(
+        `UPDATE miembro SET condiciones_medicas = NULL, alergias = NULL
+          WHERE id_miembro = $1 AND id_gimnasio = $2`,
+        [m.id_miembro, m.id_gimnasio]
+      );
+    }
+    const cuerpo = await respuestaAutorizaciones(client, m);
+    await client.query('COMMIT');
+    return res.json({ message, cambio: otorgada !== antes, ...cuerpo });
+  } catch (err) {
+    if (client) await client.query('ROLLBACK').catch(() => {});
+    if (err instanceof AppError) throw err;
+    console.error('[PATCH /cliente/autorizaciones/datos-sensibles] Error:', err.message);
+    throw new AppError(503, 'No pudimos guardar tu autorización. Intenta de nuevo.', 'DB_UNREACHABLE');
+  } finally {
+    if (client) client.release();
+  }
+}));
+
+router.get('/contrato', asyncHandler(async (req, res) => {
+  let c;
+  try {
+    c = await armarContrato(pool, req.user.idMiembro, req.user.gymId);
+  } catch (err) {
+    console.error('[GET /cliente/contrato] Error:', err.message);
+    throw new AppError(503, 'No pudimos cargar tu contrato. Intenta de nuevo.', 'DB_UNREACHABLE');
+  }
+  if (!c || c.fila.activo === false) throw new AppError(404, 'Miembro no encontrado', 'MEMBER_NOT_FOUND');
+  if (c.faltantes.length > 0) {
+    throw new AppError(404, 'Tu contrato aún no está completo: el gimnasio debe registrar tu plan con su precio y forma de pago.',
+      'CONTRACT_INCOMPLETE', { faltantes: c.faltantes });
+  }
+
+  // Constancia de entrega en la app (RQNF-18). Si falla, igual se muestra.
+  let entrega = null;
+  try {
+    entrega = await registrarEntregaApp(pool, {
+      idMiembro: c.fila.id_miembro, gymId: c.fila.id_gimnasio, version: c.datos.version, contenido: c.texto,
+    });
+  } catch (err) {
+    console.error('[GET /cliente/contrato] No se pudo registrar la entrega:', err.message);
+  }
+
+  return res.json({
+    version: c.datos.version,
+    gimnasio: c.datos.gimnasio.nombre,
+    secciones: c.secciones,
+    contrato: c.texto,
+    entregado_en: entrega ? entrega.creado_en : null,
+  });
+}));
 
 module.exports = router;
