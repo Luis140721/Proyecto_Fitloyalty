@@ -6,13 +6,18 @@ Prueban la app completa desde el navegador. `pnpm test` levanta el backend real 
 - `tests/register-gym.spec.js`: registro de gimnasio. Usa el backend real y la BD de pruebas.
 - `tests/checkin.spec.js`: check-in de un miembro por documento (plan vigente, vencido, congelado y documento que no existe). Backend real y BD de pruebas.
 - `tests/checkin-tiempos.spec.js`: defectos de tiempos del check-in (doble envío y red lenta), con respuestas retrasadas por `page.route`.
+- `tests/alta-miembro.spec.js`: alta de un miembro con el asistente de 5 pasos (caso feliz, documento repetido y correo que rechaza el servidor). Backend real y BD de pruebas.
+- `tests/alta-miembro-tiempos.spec.js`: defectos de tiempos del alta (doble clic en «Crear miembro» y en «Siguiente →», dos altas simultáneas con el mismo documento y red lenta). El de las altas simultáneas está marcado con `test.fail()` mientras siga abierta su incidencia, la [#87](https://github.com/Luis140721/Proyecto_Fitloyalty/issues/87).
+- `tests/miembros-api-simulada.spec.js`: estados de la lista y del alta que el backend real no da cuando uno quiere (API caído, lista vacía, error de validación). Simula solo `/api/admin/miembros` con `page.route`; cada test anota qué doble usa.
 
 ## Sesión y datos
 
 - La sesión se prepara una sola vez por corrida, como en la guía «Authentication» de Playwright: `tests/auth.setup.js` es el proyecto `setup` de `playwright.config.js`, del que dependen los demás. Crea por API un gimnasio nuevo con su dueño, escribe el token en `localStorage` (el front no usa cookies) y guarda el estado del navegador en `e2e/playwright/.auth/user.json`, que está en `.gitignore`.
 - Los archivos que necesitan la sesión la cargan con `test.use({ storageState: SESION })` (`tests/support/entorno.js`). Los del login y el registro no la cargan: prueban justamente eso.
 - Los datos de cada test se crean por API con el fixture `request` y valores únicos (`tests/support/datos.js`): los tests corren en paralelo sobre el mismo gimnasio y la BD conserva lo de corridas anteriores. Por la UI solo va lo que el test prueba.
-- `tests/support/checkin-page.js` es el objeto de página del check-in (locators y pasos, sin aserciones) y `tests/support/red.js` retrasa o retiene respuestas y cuenta peticiones.
+- `tests/support/checkin-page.js` y `tests/support/alta-miembro-page.js` son los objetos de página del check-in y del alta de miembros (locators y pasos, sin aserciones). `tests/support/red.js` retrasa o retiene las respuestas de una ruta y cuenta peticiones.
+- Las ayudas de `datos.js` mandan `Connection: close`: el `request` de Playwright reutiliza la conexión y el backend la cierra a los 5 s sin uso, y una llamada que sale justo entonces termina en «socket hang up».
+- `tests/support/bd.js` abre una transacción en la BD de pruebas que retiene los INSERT de miembros de un gimnasio (bloquea su fila con `FOR UPDATE`). Lo usa el test de las altas simultáneas para que las dos peticiones lleguen al INSERT a la vez, sin depender de la velocidad del equipo. Usa el `pg` del backend y la misma guardia de la config.
 
 ## Requisitos
 
@@ -46,6 +51,7 @@ Para medir la estabilidad: `pnpm exec playwright test --repeat-each=5`.
 - Los tests crean gimnasios y usuarios reales: llenarían tu BD de desarrollo de datos de prueba.
 - La BD de pruebas guarda los datos en memoria (`tmpfs`): `pnpm run db:down` la borra por completo. Solo escucha en `127.0.0.1:5433`, y sus credenciales son solo de prueba, no secretos.
 - `playwright.config.js` usa la guardia con lista permitida de `guardia-bd.cjs` (la misma de los tests de integración del backend): la URL de la BD (por defecto la de `db-test`, o la que pongas en `E2E_DATABASE_URL`) debe tener la forma exacta `postgres://usuario:clave@127.0.0.1:5433/nombre_test`, con `?sslmode=` como único parámetro. El usuario, la clave y la BD solo pueden llevar letras, números y `. _ ~ -`, y el host es `127.0.0.1`, no `localhost`. Con cualquier otra forma, `new URL`, `backend/src/db/db.js` y pg pueden leer destinos distintos. Si algo no cumple, lanza un error antes de levantar nada; el mensaje muestra solo `host:puerto/BD`, nunca la clave.
+- La misma guardia corre desde la línea de comandos: `node e2e/guardia-bd.cjs DATABASE_URL` (desde la raíz) revisa esa variable y sale con código 1 si falta, está vacía o no es la BD de pruebas. Escribe solo el mensaje, sin la pila ni el valor. Es el paso «La BD es la de pruebas» del job `e2e`, antes de arrancar el backend.
 - Playwright le pasa al backend sus variables (`DATABASE_URL` de pruebas, `JWT_SECRET` de prueba, el cron y WhatsApp apagados, sin claves de correo). `dotenv` no pisa variables que ya existen, así que `backend/.env` no las cambia.
 
 ## Grabar un flujo nuevo con codegen

@@ -1,16 +1,13 @@
 import { defineConfig, devices } from '@playwright/test';
 import { exigirBdDePruebas } from './guardia-bd.cjs';
-import { API_URL } from './tests/support/entorno.js';
+import { API_URL, BD_PRUEBAS_URL } from './tests/support/entorno.js';
 
 const FRONT_PORT = process.env.FRONT_PORT ?? '5173';
 const FRONT_URL = `http://localhost:${FRONT_PORT}`;
 
-// BD de pruebas desechable (servicio db-test de e2e/docker-compose.yml). Las
-// credenciales son de prueba, no secretos. Se puede cambiar con E2E_DATABASE_URL.
-// 127.0.0.1 y no localhost: el contenedor solo escucha en IPv4 y en Windows Node
-// puede resolver localhost a ::1.
-const DATABASE_URL =
-  process.env.E2E_DATABASE_URL ?? 'postgres://fitloyalty_test:fitloyalty_test@127.0.0.1:5433/fitloyalty_test';
+// BD de pruebas desechable: la URL esta en tests/support/entorno.js, porque
+// tambien la usa tests/support/bd.js.
+const DATABASE_URL = BD_PRUEBAS_URL;
 
 // Guardia con lista permitida: los E2E crean gimnasios y usuarios de verdad, asi
 // que solo se acepta la BD de pruebas local. Cualquier otra URL (la de desarrollo
@@ -47,11 +44,16 @@ export default defineConfig({
       cwd: '../backend',
       // /api/health responde 503 mientras no hay BD: Playwright espera el 200.
       url: `${API_URL}/health`,
-      // Nunca reutilizar un backend ya abierto: podria estar conectado a la BD de
-      // desarrollo y los tests le crearian gimnasios de prueba.
-      reuseExistingServer: false,
+      // En tu equipo nunca se reutiliza un backend ya abierto: podria estar
+      // conectado a la BD de desarrollo y los tests le crearian gimnasios de
+      // prueba. En el CI si: el job e2e de tests.yml lo arranca en segundo plano
+      // despues de pasar la URL por la guardia, y en el runner no hay mas BD que
+      // el servicio. Por eso no pongas CI=1 en tu equipo con un backend en 3001.
+      reuseExistingServer: !!process.env.CI,
       timeout: 60_000,
       // dotenv no pisa variables ya definidas, asi que estas mandan sobre backend/.env.
+      // El paso "Start backend" de tests.yml repite estas variables: si cambias
+      // una aqui, cambiala alli.
       env: {
         PORT: '3001',
         NODE_ENV: 'test',

@@ -22,13 +22,23 @@ setup('should save the owner session when the gym is created through the API', a
       password: `clave${sufijo}1`,
     },
   });
-  expect(registro.status(), await registro.text()).toBe(201);
+  expect(registro.status(), `POST /api/auth/signup respondio ${registro.status()}: ${await registro.text()}`).toBe(201);
   const { token } = await registro.json();
+  expect(token, 'POST /api/auth/signup respondio 201 sin token').toBeTruthy();
 
   // Act: el front lee el token de localStorage al cargar
   await page.goto('/login');
   await page.evaluate(([clave, valor]) => localStorage.setItem(clave, valor), [CLAVE_TOKEN, token]);
+  // El panel solo abre si GET /auth/me responde 200. Con otra respuesta (un 503,
+  // un corte de red), AuthContext deja la sesion sin usuario y ProtectedRoute
+  // manda al login: sin esta comprobacion, el setup fallaria esperando
+  // "Hola, Recepcion" sin decir por que.
+  const pedidoMe = page.waitForRequest((r) => r.method() === 'GET' && r.url() === `${API_URL}/auth/me`);
   await page.goto('/admin/dashboard');
+  const pedido = await pedidoMe;
+  const me = await pedido.response();
+  expect(me, `GET /api/auth/me no tuvo respuesta: ${pedido.failure()?.errorText}`).not.toBeNull();
+  expect(me.status(), `GET /api/auth/me respondio ${me.status()}: ${await me.text()}`).toBe(200);
 
   // Assert: con ese token el panel abre sin pasar por el login
   await expect(page.getByRole('heading', { name: 'Hola, Recepcion' })).toBeVisible();

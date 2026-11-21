@@ -2,7 +2,7 @@
  * Integracion: el esquema de la BD de pruebas sale de backend/migrations, igual
  * que en produccion, con applyMigrations (src/db/migrate.js), la funcion que
  * corre el backend al arrancar. Una migracion rota falla aqui y no en el
- * despliegue. Sin TEST_DATABASE_URL se salta.
+ * despliegue. Sin DATABASE_URL en el entorno del proceso se salta.
  */
 const { describeConBd, prepararBdDePruebas } = require('./bd-pruebas');
 const fs = require('fs');

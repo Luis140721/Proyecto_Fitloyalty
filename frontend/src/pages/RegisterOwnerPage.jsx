@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { flushSync } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import AuthPanel from '../components/AuthPanel';
@@ -46,7 +47,10 @@ export default function RegisterOwnerPage() {
 
     // Las reglas viven en lib/validateRegisterOwnerForm.js (funcion pura, con sus tests).
     const found = validateRegisterOwnerForm(form);
-    setFieldErrors(found);
+    // flushSync pinta los errores antes de buscar el primero. Sin el, el
+    // querySelector corria sobre el DOM de antes del envio, no encontraba
+    // ningun .field-input--error y el foco se quedaba en el boton.
+    flushSync(() => setFieldErrors(found));
     if (Object.keys(found).length > 0) {
       // Lleva el foco al primer campo con problema.
       const first = document.querySelector('.field-input--error');

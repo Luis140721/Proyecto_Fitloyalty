@@ -5,11 +5,12 @@
  */
 const fs = require('fs');
 const path = require('path');
+const { spawnSync } = require('child_process');
 const ConnectionParameters = require('pg/lib/connection-parameters');
 const { exigirBdDePruebas } = require('../../../e2e/guardia-bd.cjs');
 
 const VALIDA = 'postgres://fitloyalty_test:fitloyalty_test@127.0.0.1:5433/fitloyalty_test';
-const exigir = (url) => exigirBdDePruebas(url, 'TEST_DATABASE_URL');
+const exigir = (url) => exigirBdDePruebas(url, 'DATABASE_URL');
 
 const ACEPTADAS = [
   VALIDA,
@@ -75,9 +76,29 @@ describe('exigirBdDePruebas', () => {
     expect(() => exigir(url)).toThrow(motivo);
   });
 
+  // Antes, sin la variable, url.includes('#') daba «TypeError: Cannot read
+  // properties of undefined» (lo vio la guia del vocero en el paso del job e2e).
+  test.each([
+    ['falta (undefined)', undefined, 'Falta DATABASE_URL: las pruebas con BD (integracion y E2E) solo corren contra la BD de pruebas local, db-test (127.0.0.1:5433, nombre terminado en _test).'],
+    ['falta (null)', null, 'Falta DATABASE_URL: '],
+    ['esta vacia', '', 'DATABASE_URL esta vacia: las pruebas con BD'],
+    ['solo tiene espacios', '   ', 'DATABASE_URL esta vacia: '],
+  ])('dice que la variable %s, con la regla y sin un TypeError', (_caso, url, mensaje) => {
+    let error;
+    try {
+      exigir(url);
+    } catch (err) {
+      error = err;
+    }
+    expect(error).toBeInstanceOf(Error);
+    expect(error).not.toBeInstanceOf(TypeError);
+    expect(error.message.startsWith(mensaje)).toBe(true);
+    expect(error.message).toContain('postgres://usuario:clave@127.0.0.1:5433/nombre_test');
+  });
+
   test('el mensaje dice la forma esperada', () => {
     expect(() => exigir(ATAQUE_CLAVE)).toThrow(
-      'TEST_DATABASE_URL debe tener la forma postgres://usuario:clave@127.0.0.1:5433/nombre_test (solo se admite ?sslmode=)',
+      'DATABASE_URL debe tener la forma postgres://usuario:clave@127.0.0.1:5433/nombre_test (solo se admite ?sslmode=)',
     );
   });
 
@@ -88,7 +109,7 @@ describe('exigirBdDePruebas', () => {
     } catch (err) {
       mensaje = err.message;
     }
-    expect(mensaje).toContain('TEST_DATABASE_URL');
+    expect(mensaje).toContain('DATABASE_URL');
     expect(mensaje).toContain('127.0.0.1:5432/fitloyalty');
     expect(mensaje).not.toContain('usuario_dev');
     expect(mensaje).not.toContain('clave_dev');
@@ -105,17 +126,80 @@ describe('exigirBdDePruebas', () => {
   });
 });
 
+// El paso «La BD es la de pruebas» del job e2e: node e2e/guardia-bd.cjs DATABASE_URL.
+describe('la guardia desde la linea de comandos', () => {
+  const RAIZ = path.join(__dirname, '..', '..', '..');
+  const GUARDIA = path.join(RAIZ, 'e2e', 'guardia-bd.cjs');
+
+  /** Corre la guardia en otro proceso, con DATABASE_URL y GITHUB_ACTIONS solo si se dan. */
+  const correrGuardia = (variables = {}) => {
+    const env = { ...process.env };
+    delete env.DATABASE_URL;
+    delete env.GITHUB_ACTIONS;
+    return spawnSync(process.execPath, [GUARDIA, 'DATABASE_URL'], { env: { ...env, ...variables }, encoding: 'utf8' });
+  };
+
+  test('sin DATABASE_URL sale con codigo 1 y escribe solo el mensaje, sin la pila', () => {
+    const r = correrGuardia();
+
+    expect(r.status).toBe(1);
+    expect(r.stdout).toBe('');
+    expect(r.stderr.trim().split('\n')).toHaveLength(1);
+    expect(r.stderr).toMatch(/^Falta DATABASE_URL: las pruebas con BD/);
+    expect(r.stderr).not.toMatch(/TypeError|\n\s+at /);
+  });
+
+  test('con DATABASE_URL vacia sale con codigo 1 y dice que esta vacia', () => {
+    const r = correrGuardia({ DATABASE_URL: '' });
+
+    expect(r.status).toBe(1);
+    expect(r.stderr).toMatch(/^DATABASE_URL esta vacia: /);
+  });
+
+  test('con otra BD sale con codigo 1 y no muestra el usuario ni la clave', () => {
+    const r = correrGuardia({ DATABASE_URL: 'postgres://usuario_dev:clave_dev@127.0.0.1:5432/fitloyalty' });
+
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain('el puerto no es 5433');
+    expect(r.stderr).not.toContain('usuario_dev');
+    expect(r.stderr).not.toContain('clave_dev');
+  });
+
+  test('con la BD de pruebas sale con codigo 0 sin escribir nada', () => {
+    const r = correrGuardia({ DATABASE_URL: VALIDA });
+
+    expect(r.status).toBe(0);
+    expect(r.stdout + r.stderr).toBe('');
+  });
+
+  test('en GitHub Actions el mensaje sale como ::error:: para el resumen del job', () => {
+    const r = correrGuardia({ GITHUB_ACTIONS: 'true' });
+
+    expect(r.status).toBe(1);
+    expect(r.stderr).toMatch(/^::error::Falta DATABASE_URL: /);
+  });
+
+  test('el paso del job e2e usa la guardia desde la linea de comandos', () => {
+    const workflow = fs.readFileSync(path.join(RAIZ, '.github', 'workflows', 'tests.yml'), 'utf8');
+
+    expect(workflow).toContain('run: node e2e/guardia-bd.cjs DATABASE_URL');
+  });
+});
+
 describe('redes de tests/integracion/bd-pruebas.js', () => {
   const ENV_ORIGINAL = process.env;
+  const URL_DEL_PROCESO = globalThis.DATABASE_URL_DEL_PROCESO;
 
   beforeEach(() => {
     process.env = { ...ENV_ORIGINAL };
     // Cada test fija la que necesita, tambien cuando la suite corre con BD.
-    delete process.env.TEST_DATABASE_URL;
+    delete process.env.DATABASE_URL;
+    delete globalThis.DATABASE_URL_DEL_PROCESO;
   });
 
   afterEach(() => {
     process.env = ENV_ORIGINAL;
+    globalThis.DATABASE_URL_DEL_PROCESO = URL_DEL_PROCESO;
   });
 
   const cargarBdPruebas = () => {
@@ -135,14 +219,32 @@ describe('redes de tests/integracion/bd-pruebas.js', () => {
     return pool;
   };
 
-  test('al cargarse con TEST_DATABASE_URL pasa la URL por la guardia', () => {
-    process.env.TEST_DATABASE_URL = 'postgres://u:c@127.0.0.1:5432/fitloyalty';
+  test('la DATABASE_URL del entorno del proceso pasa por la guardia al cargarse', () => {
+    globalThis.DATABASE_URL_DEL_PROCESO = 'postgres://u:c@127.0.0.1:5432/fitloyalty';
 
     expect(cargarBdPruebas).toThrow('el puerto no es 5433');
   });
 
+  // La de backend/.env llega a process.env cuando algo carga dotenv, pero no es
+  // la del entorno del proceso: los tests de integracion se saltan.
+  test('una DATABASE_URL que solo cargo dotenv no activa los tests de integracion', () => {
+    process.env.DATABASE_URL = 'postgres://dev:dev@127.0.0.1:5432/fitloyalty';
+
+    const { describeConBd } = cargarBdPruebas();
+
+    expect(describeConBd).toBe(describe.skip);
+  });
+
+  test('entorno-del-proceso.js guarda la DATABASE_URL antes de que corra el test', () => {
+    process.env.DATABASE_URL = VALIDA;
+
+    jest.isolateModules(() => require('./entorno-del-proceso'));
+
+    expect(globalThis.DATABASE_URL_DEL_PROCESO).toBe(VALIDA);
+  });
+
   test('con una URL valida, el pool de la app la usa en lugar de la DATABASE_URL de desarrollo', () => {
-    process.env.TEST_DATABASE_URL = VALIDA;
+    globalThis.DATABASE_URL_DEL_PROCESO = VALIDA;
     process.env.DATABASE_URL = 'postgres://dev:dev@127.0.0.1:5432/fitloyalty';
     process.env.DB_SSL = 'true';
 
