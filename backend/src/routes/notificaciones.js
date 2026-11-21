@@ -37,6 +37,10 @@ const { TIPO_ACCESO_BLOQUEADO, TITULO_ACCESO_BLOQUEADO } = require('../lib/acces
 const { TITULO_RETO_COMPLETADO } = require('../lib/retos');
 const { z } = require('zod');
 const { formatZodError } = require('../lib/validators');
+// RQNF-16 (Ley 2300): solo los usa POST /admin/notificaciones/enviado.
+const { clasificarTipo, ahora: relojLey2300 } = require('../lib/contacto-legal');
+const { bloquearContacto, evaluarContacto, registrarEnvio } = require('../lib/contacto-miembro');
+const { pieBaja } = require('../lib/baja-mensajes');
 
 const router = express.Router();
 
@@ -311,6 +315,18 @@ router.post(
 // - mensaje: el texto que se abrio en WhatsApp. Va a mensaje_copiado, que es
 //   NOT NULL: sin el no hay constancia de que se dijo, asi que es obligatorio.
 // - idAlerta: opcional, la alerta de abandono que motivo el mensaje.
+// - antesDeAbrir: el panel pide la constancia ANTES de abrir WhatsApp
+//   (RQNF-16) y abre el chat con el `mensaje` que devuelve esta respuesta. Si
+//   es un mensaje comercial, ese texto ya trae al final el enlace de baja.
+//
+// RQNF-16 (Ley 2300 de 2023): antes de registrar se revisa que se pueda
+// contactar al miembro (lib/contacto-legal.js), con un bloqueo por miembro
+// para que dos envios a la vez no pasen los dos la regla de "una vez al dia".
+// Los avisos del plan (tipo vencida, por-vencer, acceso-bloqueado) son aviso
+// del contrato: horario y frecuencia, por WhatsApp. Lo demas (en riesgo, reto
+// completado o sin tipo) es comercial: ademas pide que el miembro haya
+// aceptado mensajes comerciales por ese canal. Si no se puede, responde 409
+// CONTACTO_NO_PERMITIDO con el motivo y no guarda nada.
 const envioSchema = z.object({
   idMiembro: z.coerce.number().int().positive(),
   canal: z.enum(['WHATSAPP', 'EMAIL']).default('WHATSAPP'),
@@ -320,6 +336,7 @@ const envioSchema = z.object({
     .min(1, 'Falta el mensaje que se envio.')
     .max(2000, 'El mensaje no puede superar 2000 caracteres.'),
   idAlerta: z.coerce.number().int().positive().optional(),
+  antesDeAbrir: z.boolean().optional(),
 });
 
 /**
@@ -371,15 +388,16 @@ router.post(
   asyncHandler(async (req, res) => {
     const r = envioSchema.safeParse(req.body || {});
     if (!r.success) throw new AppError(400, formatZodError(r.error), 'VALIDATION_ERROR');
-    const { idMiembro, canal, tipo, mensaje, idAlerta } = r.data;
+    const { idMiembro, canal, tipo, mensaje, idAlerta, antesDeAbrir } = r.data;
     const gymId = req.user.gymId;
+    const clase = clasificarTipo(tipo);
 
     // Todo dentro del try: si la base no responde (tambien al pedir la
     // conexion), la respuesta es 503 y no un 500 generico.
     let client;
     try {
       const { rows: existe } = await pool.query(
-        'SELECT nombre FROM miembro WHERE id_miembro = $1 AND id_gimnasio = $2',
+        'SELECT id_miembro, nombre FROM miembro WHERE id_miembro = $1 AND id_gimnasio = $2',
         [idMiembro, gymId]
       );
       if (existe.length === 0) throw new AppError(404, 'Miembro no encontrado.', 'MEMBER_NOT_FOUND');
@@ -395,20 +413,37 @@ router.post(
 
       client = await pool.connect();
       await client.query('BEGIN');
+
+      // RQNF-16: con el bloqueo por miembro, el segundo envio a la vez ya ve
+      // el primero en el historial.
+      const instante = relojLey2300();
+      await bloquearContacto(client, idMiembro);
+      const decision = await evaluarContacto(client, { miembro: existe[0], gymId, canal, clase, instante });
+      if (!decision.puede) {
+        throw new AppError(409, decision.mensaje, 'CONTACTO_NO_PERMITIDO', {
+          motivo: decision.motivo,
+          clase,
+          siguiente: decision.siguiente ? decision.siguiente.toISOString() : null,
+        });
+      }
+
       const idCanal = await canalDelGimnasio(client, gymId, canal);
+
+      // Un mensaje comercial lleva el enlace de baja al final. Solo se agrega
+      // si el panel va a abrir el chat con este texto (antesDeAbrir): si el
+      // chat ya se abrio, lo que se guarda es lo que de verdad se abrio.
+      const texto = clase === 'COMERCIAL' && antesDeAbrir ? mensaje + pieBaja(idMiembro, gymId) : mensaje;
 
       /*
        * El mensaje lo manda WhatsApp desde el telefono del gimnasio, asi que
        * el sistema no puede confirmar la entrega: solo deja constancia de que
-       * se abrio el envio. Por eso el estado es ENVIADO y no ENTREGADO.
+       * se abrio el envio. Por eso el estado es ENVIADO y no ENTREGADO. La
+       * fecha es la del reloj con que se decidio (lib/contacto-legal).
        */
-      const { rows: envio } = await client.query(
-        `INSERT INTO envio_mensaje (id_gimnasio, id_miembro, id_canal, id_alerta,
-                                    mensaje_copiado, estado, fecha_envio, enviado_por)
-         VALUES ($1, $2, $3, $4, $5, 'ENVIADO', NOW(), $6)
-         RETURNING id_envio, estado, fecha_envio`,
-        [gymId, idMiembro, idCanal, idAlerta || null, mensaje, req.user.id]
-      );
+      const envio = [await registrarEnvio(client, {
+        gymId, idMiembro, idCanal, idAlerta: idAlerta || null,
+        mensaje: texto, enviadoPor: req.user.id, fecha: instante,
+      })];
 
       await client.query(
         `INSERT INTO notificacion (id_gimnasio, id_usuario, tipo, titulo, mensaje, leida)
@@ -418,7 +453,7 @@ router.post(
       );
 
       await client.query('COMMIT');
-      return res.status(201).json({ message: 'Envio registrado.', envio: envio[0] });
+      return res.status(201).json({ message: 'Envio registrado.', envio: envio[0], mensaje: texto, clase });
     } catch (err) {
       if (client) await client.query('ROLLBACK').catch(() => {});
       if (err instanceof AppError) throw err;
