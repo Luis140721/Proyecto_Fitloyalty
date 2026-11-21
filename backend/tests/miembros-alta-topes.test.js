@@ -84,7 +84,7 @@ describe('POST /api/admin/miembros: what does not fit in its column is rejected 
 
     // Assert
     expect(justo.status).toBe(201);
-    expect(escriturasDelJusto).toBe(2);
+    expect(mockEscrituras).toEqual(expect.arrayContaining(['INSERT INTO miembro', 'INSERT INTO plan_cobro']));
     expect(sobra.status).toBe(400);
     expect(sobra.headers['content-type']).toMatch(/^application\/json/);
     expect(sobra.body).toMatchObject({ code: 'VALIDATION_ERROR', error: `${etiqueta} admite máximo ${n} caracteres` });

@@ -52,6 +52,8 @@ function mockProyectar(lista, fila) {
 
 async function mockEjecutar(sql, params = []) {
   if (/SELECT id_gimnasio, activo, trial_ends_at FROM gimnasio/.test(sql)) return { rows: [{ id_gimnasio: 7, activo: true, trial_ends_at: null }] };
+  // GET /:id lee las autorizaciones del miembro (RQNF-17, #102): aqui no tiene ninguna.
+  if (/FROM autorizacion_miembro/.test(sql)) return { rows: [] };
 
   const lectura = sql.match(/^\s*SELECT\s+([\s\S]+?)\s+FROM miembro\s+WHERE\s+([\s\S]+?)\s*$/);
   if (lectura) {
@@ -104,6 +106,8 @@ function filaDeMiembro(cambios) {
     ciudad: 'Bogota', direccion: 'Calle 1 # 2-3', contacto_emergencia: 'Luz Ruiz', telefono_emergencia: '3107654321',
     condiciones_medicas: null, alergias: 'Penicilina', objetivo: 'Resistencia', nivel_experiencia: 'Intermedio',
     observaciones: null, app_acceso: false, password_hash: null, password_set_at: null,
+    acepto_terminos: true, autorizo_datos: true, representante_nombre: null, representante_tipo_documento: null,
+    representante_documento: null, representante_parentesco: null, representante_telefono: null,
     ...cambios,
   };
 }
@@ -140,9 +144,11 @@ describe('GET /api/admin/miembros/:id: one member of the gym', () => {
     // Act
     const r = await pedir('get', '/88');
 
-    // Assert
+    // Assert: lo guardado, mas lo que el #102 (RQNF-17) calcula para la ficha
     esJson(r, 200);
-    expect(r.body).toEqual({ miembro: visible });
+    expect(r.body.miembro).toEqual({
+      ...visible, autorizo_datos_sensibles: false, menor_de_edad: false, datos_sensibles_sin_autorizacion: true,
+    });
   });
 
   test('should answer 404 MEMBER_NOT_FOUND without its data when the member belongs to another gym', async () => {
@@ -199,15 +205,16 @@ describe('PUT /api/admin/miembros/:id: edit one member of the gym', () => {
   });
 
   test('should show the saved changes on the next GET, also the fields the PUT response does not bring', async () => {
-    // Arrange: la respuesta del PUT no trae ciudad, alergias ni nivel_experiencia
-    await pedir('put', '/88').send({ ciudad: 'Cali', alergias: 'Ninguna', nivel_experiencia: 'Avanzado' });
+    // Arrange: la respuesta del PUT no trae ciudad, observaciones ni nivel_experiencia. Las
+    // alergias no van aqui: con el #102 pasan por las autorizaciones de datos sensibles.
+    await pedir('put', '/88').send({ ciudad: 'Cali', observaciones: 'Viene en la manana', nivel_experiencia: 'Avanzado' });
 
     // Act
     const r = await pedir('get', '/88');
 
     // Assert
     esJson(r, 200);
-    expect(r.body.miembro).toMatchObject({ ciudad: 'Cali', alergias: 'Ninguna', nivel_experiencia: 'Avanzado', nombre: 'Ana Maria Ruiz' });
+    expect(r.body.miembro).toMatchObject({ ciudad: 'Cali', observaciones: 'Viene en la manana', nivel_experiencia: 'Avanzado', nombre: 'Ana Maria Ruiz' });
   });
 
   // [caso, cuerpo, campo que debe nombrar el error]
