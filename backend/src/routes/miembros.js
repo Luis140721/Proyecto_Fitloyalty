@@ -25,7 +25,7 @@ const asyncHandler = require('../lib/asyncHandler');
 const { AppError } = require('../lib/errors');
 const { requireActiveTrial } = require('../lib/trial');
 const { z } = require('zod');
-const { formatZodError } = require('../lib/validators');
+const { formatZodError, largoEnCaracteres } = require('../lib/validators');
 const { ULTIMO_PLAN } = require('../lib/planes');
 const { telefonoWhatsapp, mensajeParaMiembro, enPalabras } = require('../lib/mensajes');
 const { sendMemberQR } = require('../lib/email');
@@ -42,6 +42,17 @@ const QR_ENCRYPTION_KEY = process.env.QR_ENCRYPTION_KEY || 'FitLoyalty2024Secret
 // checkin.js. Es la misma clave de antes, asi que los QR ya cifrados siguen
 // descifrando igual.
 const QR_KEY = crypto.scryptSync(QR_ENCRYPTION_KEY, 'salt', 32);
+const MAX_NOMBRE = 100;
+const MAX_DOCUMENTO = 20;
+
+const nombreConLimite = (schema) => schema.refine(
+  (value) => largoEnCaracteres(value.trim()) <= MAX_NOMBRE,
+  `El nombre no puede tener más de ${MAX_NOMBRE} caracteres`,
+);
+const documentoConLimite = (schema) => schema.refine(
+  (value) => largoEnCaracteres(value) <= MAX_DOCUMENTO,
+  `El documento no puede tener más de ${MAX_DOCUMENTO} caracteres`,
+);
 
 // Función para cifrar el código QR
 function encryptQrCode(qrCode) {
@@ -74,9 +85,9 @@ function decryptQrCode(encrypted) {
 
 const createSchema = z.object({
   // Datos personales
-  nombre:     z.string().min(2, 'El nombre es requerido'),
+  nombre:     nombreConLimite(z.string().min(2, 'El nombre es requerido')),
   tipo_documento: z.enum(['CC', 'TI', 'NIT', 'CE', 'PP']).default('CC'),
-  documento: z.string().min(4, 'El documento es requerido'),
+  documento: documentoConLimite(z.string().min(4, 'El documento es requerido')),
   fecha_nacimiento: z.string().optional(),
   // El select de genero puede quedar en "Seleccionar...", que llega como
   // cadena vacia: se traduce a "sin dato" en vez de romper la validacion.
@@ -140,8 +151,8 @@ const vacioANull = (schema) =>
   schema.optional().or(z.literal('').transform(() => null)).nullable();
 
 const updateSchema = z.object({
-  nombre:    z.string().min(2).optional(),
-  documento: z.string().min(3).optional(),
+  nombre:    nombreConLimite(z.string().min(2)).optional(),
+  documento: documentoConLimite(z.string().min(3)).optional(),
   telefono:  z.string().min(7).optional(),
   email:     z.string().email().optional().or(z.literal('').transform(() => null)).nullable(),
   activo:    z.boolean().optional(),

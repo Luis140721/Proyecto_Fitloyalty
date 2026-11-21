@@ -35,8 +35,8 @@ const NO_NULOS = [
 // Columnas VARCHAR(n). Hallazgos: con uno mas, POST /api/auth/signup respondia
 // 500 en gimnasio.nombre, gimnasio.email, usuario.nombre y usuario.email
 // (corregido en lib/validators.js, con su test unitario en
-// signup-longitudes.test.js), y POST /api/admin/miembros responde 500
-// DB_UNREACHABLE en miembro.nombre y miembro.documento (sin corregir).
+// signup-longitudes.test.js), y POST /api/admin/miembros no debe responder 500
+// al exceder miembro.nombre o miembro.documento (regresión en miembros-rutas.test.js).
 const LARGOS = [
   ['gimnasio', 'nombre', 100], ['gimnasio', 'nit', 20], ['gimnasio', 'direccion', 200], ['gimnasio', 'telefono', 20],
   ['gimnasio', 'email', 150], ['gimnasio', 'plan_activo', 20],

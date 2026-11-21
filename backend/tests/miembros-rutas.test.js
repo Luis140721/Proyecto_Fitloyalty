@@ -130,6 +130,65 @@ test('valida campos requeridos y evita duplicar documento o correo en el alta', 
   expect(duplicateEmail.body.code).toBe('MEMBER_EMAIL_TAKEN');
 });
 
+test.each([
+  [{ nombre: `${'A'.repeat(100)}A`, documento: 'CC12345', telefono: '3001234567' }, /nombre.*100 caracteres/i],
+  [{ nombre: 'Ana María', documento: 'D'.repeat(21), telefono: '3001234567' }, /documento.*20 caracteres/i],
+])('rechaza campos del miembro que exceden el límite de la BD antes de consultar', async (member, message) => {
+  const { app, pool } = createApp(async () => {
+    throw new Error('No debe consultar la BD');
+  });
+
+  const response = await request(app).post('/admin/miembros').send(member).expect(400);
+
+  expect(response.body).toMatchObject({
+    code: 'VALIDATION_ERROR',
+    error: expect.stringMatching(message),
+  });
+  expect(pool.query).not.toHaveBeenCalled();
+});
+
+test('acepta los límites de 100 caracteres Unicode para nombre y 20 para documento', async () => {
+  const nombre = `${'A'.repeat(99)}💪`;
+  const documento = 'D'.repeat(20);
+  const { app, pool } = createApp(async (sql) => {
+    if (sql.includes('SELECT id_miembro FROM miembro')) return { rows: [] };
+    if (sql.includes('SELECT 1 FROM miembro WHERE codigo_qr')) return { rows: [] };
+    if (sql.includes('INSERT INTO miembro')) {
+      return { rows: [{ id_miembro: 88, nombre, documento }] };
+    }
+    if (sql.includes('INSERT INTO plan_cobro')) return { rows: [] };
+    if (sql === 'SELECT nombre FROM gimnasio WHERE id_gimnasio = $1') return { rows: [] };
+    throw new Error(`Consulta no esperada: ${sql}`);
+  });
+
+  const response = await request(app).post('/admin/miembros')
+    .send({ nombre, documento, telefono: '3001234567' })
+    .expect(201);
+
+  expect([...nombre]).toHaveLength(100);
+  expect(response.body.miembro).toMatchObject({ nombre, documento });
+  const insertCall = pool.query.mock.calls.find(([sql]) => sql.includes('INSERT INTO miembro'));
+  expect(insertCall[1][1]).toBe(nombre);
+  expect(insertCall[1][3]).toBe(documento);
+});
+
+test.each([
+  [{ nombre: `${'A'.repeat(100)}A` }, /nombre.*100 caracteres/i],
+  [{ documento: 'D'.repeat(21) }, /documento.*20 caracteres/i],
+])('rechaza actualizaciones de miembro fuera del tamaño de columna', async (changes, message) => {
+  const { app, pool } = createApp(async () => {
+    throw new Error('No debe consultar la BD');
+  });
+
+  const response = await request(app).put('/admin/miembros/44').send(changes).expect(400);
+
+  expect(response.body).toMatchObject({
+    code: 'VALIDATION_ERROR',
+    error: expect.stringMatching(message),
+  });
+  expect(pool.query).not.toHaveBeenCalled();
+});
+
 test('crea miembro, cifra el QR, calcula plan y registra errores de notificación sin perder el alta', async () => {
   const { app, pool, mocks } = createApp(async (sql) => {
     if (sql.includes('SELECT id_miembro FROM miembro')) return { rows: [] };
