@@ -10,3 +10,6 @@ allowBuilds:
   esbuild: true
   # Solo se instala en macOS y ya trae fsevents.node compilado.
   fsevents: false
+  # Su script de instalacion solo prepara el modo navegador; los tests corren
+  # en Node con msw/node (semana 5).
+  msw: false
