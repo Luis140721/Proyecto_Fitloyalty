@@ -110,6 +110,7 @@ describe('mensajes comerciales (en riesgo, reto completado o sin tipo)', () => {
     const r = await enviar({ tipo: 'riesgo', antesDeAbrir: true });
     expect(r.status).toBe(201);
     expect(r.body.clase).toBe('COMERCIAL');
+    expect(r.body.texto_del_servidor).toBe(false); // el texto es el del panel (con el enlace de baja)
     expect(r.body.mensaje).toMatch(/^Hola Ana\n\nSi ya no quieres recibir mensajes comerciales del gimnasio, entra aquí: .*\/baja\//);
     expect(verificarTokenBaja(r.body.mensaje.split('/baja/')[1])).toEqual({ idMiembro: 12, idGimnasio: 7 });
     expect(estado.envios[0][6]).toBe(r.body.mensaje); // se guarda lo que se abre
@@ -173,6 +174,8 @@ describe('la clase la confirma el servidor, no el tipo que manda el panel', () =
     ['vencida con el plan al dia', 'vencida', { plan: AL_DIA }],
     ['vencida sin plan', 'vencida', { plan: { sin_plan: true, congelada: false, vencida: false, dias_para_vencer: null } }],
     ['vencida con la membresia congelada', 'vencida', { plan: { ...VENCIDO, congelada: true } }],
+    ['miembro inactivo con el plan vencido hace 5 dias', 'vencida', { plan: { ...VENCIDO, dias_para_vencer: -5, activo: false } }],
+    ['miembro inactivo con un ingreso bloqueado', 'acceso-bloqueado', { plan: { ...VENCIDO, activo: false } }],
     ['vencida hace 400 dias', 'vencida', { plan: { ...VENCIDO, dias_para_vencer: -400 } }],
     ['por vencer en 40 dias (el gimnasio avisa a 7)', 'por-vencer', { plan: AL_DIA }],
     ['por vencer en 3 dias con aviso a 2', 'por-vencer', { plan: VENCE_EN_3, diasAviso: 2 }],
@@ -186,6 +189,17 @@ describe('la clase la confirma el servidor, no el tipo que manda el panel', () =
     expect(r.body.details).toMatchObject({ motivo: 'NO_AUTORIZA', clase: 'COMERCIAL', aviso_no_confirmado: true });
     expect(r.body.error).toMatch(/No es un aviso del plan: .+, así que se trata como un mensaje comercial/);
     expect(estado.envios).toHaveLength(0);
+  });
+
+  test('un miembro inactivo no confirma el aviso, como en la campana: la razon lo dice', async () => {
+    prepararBD({ plan: { ...VENCIDO, dias_para_vencer: -5, activo: false } });
+    const r = await enviar({ tipo: 'vencida' });
+    expect(r.status).toBe(409);
+    expect(r.body.details).toMatchObject({ clase: 'COMERCIAL', aviso_no_confirmado: true });
+    expect(r.body.error).toMatch(/No es un aviso del plan: el miembro está inactivo/);
+    // activo = TRUE con el mismo plan si es aviso
+    prepararBD({ plan: { ...VENCIDO, dias_para_vencer: -5, activo: true } });
+    expect((await enviar({ tipo: 'vencida' })).body).toMatchObject({ clase: 'AVISO' });
   });
 
   test('si no se confirma pero el miembro acepto mensajes comerciales, sale como COMERCIAL y con el enlace de baja', async () => {

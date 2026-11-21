@@ -101,6 +101,12 @@ describe('aplicarCambio: la logica que ya tenia el formulario sigue igual', () =
     assert.equal(aplicarCambio({ ...VACIO, valor_total: '5' }, 'tipo_plan', 'MENSUAL', {}).valor_total, '5');
   });
 
+  it('un precio configurado con centavos se redondea al peso (la base lo guarda NUMERIC con 2 decimales)', () => {
+    const gymConfig = { plan_mensual_valor: '80000.60', plan_anual_valor: '799999.40' };
+    assert.equal(aplicarCambio({ ...VACIO }, 'tipo_plan', 'MENSUAL', { gymConfig }).valor_total, '80001');
+    assert.equal(aplicarCambio({ ...VACIO }, 'tipo_plan', 'ANUAL', { gymConfig }).valor_total, '799999');
+  });
+
   it('recalcula el estado del pago con el valor nuevo y el otro del formulario anterior', () => {
     assert.equal(aplicarCambio({ ...VACIO, valor_total: '100' }, 'valor_pagado', '100', { estadoPago }).estado_pago, 'PAGADO');
     assert.equal(aplicarCambio({ ...VACIO, valor_pagado: '50' }, 'valor_total', '100', { estadoPago }).estado_pago, 'PARCIAL');

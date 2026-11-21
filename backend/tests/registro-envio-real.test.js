@@ -26,6 +26,7 @@
  *   TEST_DATABASE_URL=postgres://postgres:...@127.0.0.1:55433/fl_consultas \
  *   npx jest tests/registro-envio-real.test.js
  */
+jest.setTimeout(30000); // base real: con la maquina cargada los hooks pasan de 5 s
 const crypto = require('crypto');
 const express = require('express');
 const jwt = require('jsonwebtoken');

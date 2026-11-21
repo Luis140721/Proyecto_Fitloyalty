@@ -24,6 +24,7 @@
  *   TEST_DATABASE_URL=postgres://postgres:...@127.0.0.1:55444/fl_consultas \
  *   npx jest tests/ley2300-real.test.js
  */
+jest.setTimeout(30000); // base real: con la maquina cargada los hooks pasan de 5 s
 const crypto = require('crypto');
 const express = require('express');
 const jwt = require('jsonwebtoken');
@@ -441,6 +442,27 @@ describeReal('RQNF-16 contra la base real', () => {
       const r3 = await enviar(otroTipo, 'acceso-bloqueado');
       expect(r3.status).toBe(409);
       expect(r3.body.details).toMatchObject({ clase: 'COMERCIAL', aviso_no_confirmado: true });
+
+      // El mismo tipo y titulo, pero para la bandeja del miembro (migracion
+      // 016): no es el bloqueo que ve el gimnasio.
+      const paraMiembro = await crearMiembro(gymA, 'Bloqueo En Bandeja');
+      await planVencido(paraMiembro, gymA);
+      await notificar(paraMiembro, { horas: 1 });
+      await pool.query("UPDATE notificacion SET destinatario = 'MIEMBRO' WHERE id_miembro = $1", [paraMiembro]);
+      const r4 = await enviar(paraMiembro, 'acceso-bloqueado');
+      expect(r4.status).toBe(409);
+      expect(r4.body.details).toMatchObject({ clase: 'COMERCIAL', aviso_no_confirmado: true });
+    });
+
+    test('un miembro inactivo no confirma el aviso, igual que en la campana', async () => {
+      const id = await crearMiembro(gymA, 'Inactivo Vencido');
+      await planVencido(id, gymA, { venceEn: -5 });
+      await pool.query('UPDATE miembro SET activo = FALSE WHERE id_miembro = $1', [id]);
+      const r = await enviar(id, 'vencida');
+      expect(r.status).toBe(409);
+      expect(r.body.details).toMatchObject({ clase: 'COMERCIAL', aviso_no_confirmado: true });
+      expect(r.body.error).toMatch(/el miembro está inactivo/);
+      expect((await uno('SELECT count(*)::int AS n FROM envio_mensaje WHERE id_miembro = $1', [id])).n).toBe(0);
     });
 
     test('un envio FALLIDO de hoy no cuenta en la frecuencia', async () => {
@@ -641,10 +663,12 @@ describeReal('RQNF-16 contra la base real', () => {
       const g = await crearGimnasio(`Prueba Ley 2300 C ${sufijo}`);
       await pool.query('UPDATE gimnasio SET dias_aviso_vencimiento = 3 WHERE id_gimnasio = $1', [g]);
       eva = await crearMiembro(g, 'Eva Vence'); // sin aceptar mensajes comerciales
+      // Fechas relativas a CURRENT_DATE de la base, que es con lo que el job
+      // cuenta los dias (no la fecha de Colombia calculada en JS).
       idPlan = (await uno(
         `INSERT INTO plan_cobro (id_miembro, id_gimnasio, tipo_plan, fecha_inicio, fecha_fin, activo)
-         VALUES ($1, $2, 'MENSUAL', $3::date, $4::date, TRUE) RETURNING id_plan_cobro`,
-        [eva, g, hoyMas(-28), hoyMas(2)]
+         VALUES ($1, $2, 'MENSUAL', CURRENT_DATE - 28, CURRENT_DATE + 2, TRUE) RETURNING id_plan_cobro`,
+        [eva, g]
       )).id_plan_cobro;
       // A Eva ya le escribieron hoy (martes) por WhatsApp desde el panel.
       const canal = await uno("INSERT INTO canal_comunicacion (id_gimnasio, tipo, activo) VALUES ($1, 'WHATSAPP', TRUE) RETURNING id_canal", [g]);

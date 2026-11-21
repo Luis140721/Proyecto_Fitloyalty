@@ -342,12 +342,16 @@ router.post(
 // RQF-09: cada envio queda en envio_mensaje con su fecha y su estado.
 // - canal: solo los tipos que admite el CHECK de canal_comunicacion en
 //   produccion (EMAIL, WHATSAPP). SMS lo admitia Docker, no produccion.
-// - mensaje: el texto que se abrio en WhatsApp. Va a mensaje_copiado, que es
-//   NOT NULL: sin el no hay constancia de que se dijo, asi que es obligatorio.
+// - mensaje: el texto que propone el panel. Es obligatorio. En un mensaje
+//   comercial es el que va a mensaje_copiado (NOT NULL: la constancia de lo
+//   que se dijo). En un AVISO confirmado NO se usa: la constancia guarda el
+//   texto de la plantilla del servidor (mensajeParaMiembro con datoAviso).
 // - idAlerta: opcional, la alerta de abandono que motivo el mensaje.
 // - antesDeAbrir: el panel pide la constancia ANTES de abrir WhatsApp
-//   (RQNF-16) y abre el chat con el `mensaje` que devuelve esta respuesta. Si
-//   es un mensaje comercial, ese texto ya trae al final el enlace de baja.
+//   (RQNF-16) y abre el chat con el `mensaje` que devuelve esta respuesta: el
+//   de la plantilla si es AVISO, o el suyo con el enlace de baja al final si
+//   es comercial. Lo que el administrador envie al final desde su WhatsApp el
+//   sistema no lo puede ver.
 //
 // RQNF-16 (Ley 2300 de 2023): antes de registrar se revisa que se pueda
 // contactar al miembro (lib/contacto-legal.js), con un bloqueo por miembro
@@ -419,7 +423,7 @@ async function canalDelGimnasio(client, gymId, tipo) {
  * RQNF-16: la clase del envio la decide el servidor. Un tipo de aviso
  * ('vencida', 'por-vencer'/'vencimiento', 'acceso-bloqueado') solo se acepta
  * como AVISO si el ultimo plan del miembro lo confirma, con las mismas reglas
- * de la campana del panel:
+ * de la campana del panel (un miembro inactivo no confirma ninguno):
  *   - vencida: el plan vencio (fecha_fin < hoy) hace DIAS_AVISO_VENCIDA dias
  *     o menos, y no esta congelado. Despues de ese plazo ya no es un aviso
  *     del contrato sino un mensaje para recuperar al cliente (comercial);
@@ -436,7 +440,8 @@ async function claseDelEnvio({ tipo, idMiembro, gymId }) {
   const t = String(tipo).toLowerCase();
   const no = (razon) => ({ clase: 'COMERCIAL', pedida, razon });
   const { rows } = await pool.query(
-    `SELECT (pc.id_miembro IS NULL) AS sin_plan,
+    `SELECT m.activo,
+            (pc.id_miembro IS NULL) AS sin_plan,
             (pc.congelado_desde IS NOT NULL) AS congelada,
             (pc.fecha_fin IS NOT NULL AND pc.fecha_fin < CURRENT_DATE) AS vencida,
             CASE WHEN pc.fecha_fin IS NULL THEN NULL ELSE (pc.fecha_fin - CURRENT_DATE)::int END AS dias_para_vencer
@@ -447,6 +452,9 @@ async function claseDelEnvio({ tipo, idMiembro, gymId }) {
   );
   const p = rows[0];
   if (!p) return no('el miembro no tiene un plan');
+  // Como la campana (mb.activo = TRUE en vencidas y por vencer; el check-in solo
+  // registra ingresos bloqueados de activos): un inactivo no confirma avisos.
+  if (p.activo === false) return no('el miembro está inactivo');
   const sinPlan = p.sin_plan === true || p.dias_para_vencer === null;
   const congelada = p.congelada === true;
   const si = (plantilla, datos) => ({ clase: 'AVISO', pedida, plantilla, dato: datoAviso(plantilla, datos) });
