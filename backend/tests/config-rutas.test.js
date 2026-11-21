@@ -47,8 +47,14 @@ const filas = (rows) => () => ({ rows });
 const falla = (code) => () => { const e = new Error('fallo de la BD'); if (code) e.code = code; throw e; };
 const llamadas = (patron) => mockLlamadas.filter(({ sql }) => patron.test(sql));
 
-// Lo que conDiasAviso agrega a toda respuesta: dias de aviso del gimnasio y umbrales.
-const diasDeAviso = (dias = 5) => [/SELECT dias_aviso_vencimiento FROM gimnasio/, filas([{ dias_aviso_vencimiento: dias }])];
+// Lo que conDiasAviso agrega a toda respuesta: dias de aviso del gimnasio, si
+// exige el QR dinamico (migracion 015) y umbrales.
+const diasDeAviso = (dias = 5) => [
+  /SELECT dias_aviso_vencimiento, qr_dinamico_obligatorio FROM gimnasio/,
+  filas([{ dias_aviso_vencimiento: dias, qr_dinamico_obligatorio: false }]),
+];
+// El gimnasio no exige el QR dinamico, y fuera de produccion se puede activar.
+const QR_DINAMICO = { qr_dinamico_obligatorio: false, qr_dinamico_disponible: true };
 const umbrales = (fila = { umbral_alerta_amarilla: 6, umbral_alerta_roja: 12 }) => [/FROM configuracion_gimnasio/, filas(fila ? [fila] : [])];
 const CONFIG = { id_config: 3, id_gimnasio: 7, plan_mensual_valor: '50000.00', plan_anual_valor: '480000.00' };
 
@@ -85,7 +91,7 @@ describe('GET /api/admin/config', () => {
 
     // Assert
     expect(r.status).toBe(200);
-    expect(r.body.config).toEqual({ id_config: 9, id_gimnasio: 7, dias_aviso_vencimiento: 4, umbral_alerta_amarilla: 7, umbral_alerta_roja: 15 });
+    expect(r.body.config).toEqual({ id_config: 9, id_gimnasio: 7, dias_aviso_vencimiento: 4, ...QR_DINAMICO, umbral_alerta_amarilla: 7, umbral_alerta_roja: 15 });
     expect(llamadas(/INSERT INTO config_gimnasio/)[0].params).toEqual([7]);
   });
 
@@ -162,7 +168,7 @@ describe('PUT /api/admin/config', () => {
     expect(r.status).toBe(200);
     expect(r.body).toEqual({
       message: 'Configuración actualizada.',
-      config: { ...CONFIG, dias_aviso_vencimiento: 0, umbral_alerta_amarilla: 6, umbral_alerta_roja: 12 },
+      config: { ...CONFIG, dias_aviso_vencimiento: 0, ...QR_DINAMICO, umbral_alerta_amarilla: 6, umbral_alerta_roja: 12 },
     });
     expect(llamadas(/UPDATE gimnasio SET dias_aviso_vencimiento/)[0].params).toEqual([0, 7]);
     expect(llamadas(/UPDATE config_gimnasio|INSERT INTO config_gimnasio/)).toHaveLength(0);
@@ -182,7 +188,7 @@ describe('PUT /api/admin/config', () => {
 
     // Assert
     expect(r.status).toBe(200);
-    expect(r.body.config).toEqual({ dias_aviso_vencimiento: 2, umbral_alerta_amarilla: 7, umbral_alerta_roja: 15 });
+    expect(r.body.config).toEqual({ dias_aviso_vencimiento: 2, ...QR_DINAMICO, umbral_alerta_amarilla: 7, umbral_alerta_roja: 15 });
   });
 
   test('should keep the saved yellow threshold when only the red one is sent', async () => {
