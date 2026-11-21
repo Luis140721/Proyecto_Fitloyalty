@@ -14,6 +14,11 @@
  * El progreso se actualiza solo en cada check-in (lib/retos.js) y el miembro
  * se puede unir desde la app (POST /api/cliente/retos/:id/unirse).
  *
+ * Inscribir elegibles y cambiar la meta o las fechas tambien pueden completar
+ * un reto (los ingresos que ya hizo cuentan): por eso recalculan con
+ * recalcularYAvisar, que deja el aviso al gimnasio y al miembro una sola vez.
+ * Cancelar le deja un mensaje en la app a quien iba en curso.
+ *
  * Usa las columnas de produccion (ConsultasDB): meta_asistencias, recompensa,
  * segmento_elegible, estado y creado_por; en Docker las alinean la 009 y la 015.
  */
@@ -26,7 +31,7 @@ const { AppError } = require('../lib/errors');
 const { requireActiveTrial } = require('../lib/trial');
 const { formatZodError } = require('../lib/validators');
 const { SEGMENTOS, HOY, miembrosDelSegmento } = require('../lib/segmentos');
-const { sincronizarEstados, recalcularParticipacion } = require('../lib/retos');
+const { sincronizarEstados, recalcularYAvisar, cancelarParticipaciones } = require('../lib/retos');
 
 const router = express.Router();
 
@@ -162,14 +167,16 @@ router.put('/admin/retos/:id', ...soloAdmin, enBase('PUT /admin/retos', 'No pudi
   );
   await sincronizarEstados(pool, gymId);
 
-  // Si cambio la meta o las fechas, el avance de los inscritos cambia.
+  // Si cambio la meta o las fechas, el avance de los inscritos cambia. Bajar
+  // la meta puede completar el reto de alguien: recalcularYAvisar le deja el
+  // aviso a el y al gimnasio.
   if (d.meta_asistencias !== undefined || d.fecha_inicio !== undefined || d.fecha_fin !== undefined) {
     const { rows: enCurso } = await pool.query(
       `SELECT id_reto_miembro, id_miembro FROM reto_miembro WHERE id_reto = $1 AND estado = 'EN_CURSO'`,
       [idReto]
     );
     for (const p of enCurso) {
-      await recalcularParticipacion(pool, { idRetoMiembro: p.id_reto_miembro, idReto, idMiembro: p.id_miembro, gymId });
+      await recalcularYAvisar(pool, { idRetoMiembro: p.id_reto_miembro, idReto, idMiembro: p.id_miembro, gymId });
     }
   }
   const reto = await retoDelGimnasio(pool, idReto, gymId);
@@ -180,7 +187,7 @@ router.put('/admin/retos/:id', ...soloAdmin, enBase('PUT /admin/retos', 'No pudi
 router.post('/admin/retos/:id/cancelar', ...soloAdmin, enBase('POST /admin/retos/cancelar', 'No pudimos cancelar el reto.', async (req, res) => {
   const idReto = idDe(req);
   const gymId = req.user.gymId;
-  await retoDelGimnasio(pool, idReto, gymId);
+  const actual = await retoDelGimnasio(pool, idReto, gymId);
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -188,10 +195,9 @@ router.post('/admin/retos/:id/cancelar', ...soloAdmin, enBase('POST /admin/retos
       `UPDATE reto SET estado = 'CANCELADO', activo = FALSE WHERE id_reto = $1 AND id_gimnasio = $2`,
       [idReto, gymId]
     );
-    await client.query(
-      `UPDATE reto_miembro SET estado = 'CANCELADO' WHERE id_reto = $1 AND estado = 'EN_CURSO'`,
-      [idReto]
-    );
+    // Las participaciones en curso se cancelan y a cada miembro le llega un
+    // mensaje en la app. Las completadas se quedan como estan.
+    await cancelarParticipaciones(client, { idReto, gymId, nombreReto: actual.nombre });
     await client.query('COMMIT');
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
@@ -265,8 +271,9 @@ router.post('/admin/retos/:id/inscribir', ...soloAdmin, enBase('POST /admin/reto
     );
     if (rows.length === 0) continue;
     inscritos += 1;
-    // Los ingresos que ya hizo dentro de las fechas del reto cuentan.
-    await recalcularParticipacion(pool, {
+    // Los ingresos que ya hizo dentro de las fechas del reto cuentan; si con
+    // eso llega a la meta, se le avisa a el y al gimnasio.
+    await recalcularYAvisar(pool, {
       idRetoMiembro: rows[0].id_reto_miembro, idReto, idMiembro: m.id_miembro, gymId,
     });
   }

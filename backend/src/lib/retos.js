@@ -15,16 +15,30 @@
  *   2. recalcula el avance de cada reto en curso contando los DIAS distintos
  *      con un ingreso valido dentro de las fechas del reto (hora de Colombia),
  *      asi dos ingresos el mismo dia cuentan una sola asistencia;
- *   3. si llego a la meta lo marca COMPLETADO y deja un aviso tipo RETO en
- *      notificacion para el administrador. Al miembro se le avisa en la misma
- *      pantalla del check-in y en la app (el reto sale como completado).
+ *   3. si llego a la meta lo marca COMPLETADO y deja dos filas tipo RETO en
+ *      notificacion: una para el administrador (destinatario GIMNASIO, la
+ *      campana del panel) y otra para el miembro (destinatario MIEMBRO, la
+ *      bandeja de la app, GET /api/cliente/mensajes; migracion 016).
  *
  * Recalcular en vez de sumar 1 hace que repetir la llamada no cambie nada.
  * Nada de esto debe frenar el check-in: `actualizarRetos` nunca lanza.
+ *
+ * Un reto se completa por cuatro caminos y todos pasan por `recalcularYAvisar`:
+ * el check-in (actualizarRetos), «Unirme» en la app (routes/cliente.js),
+ * «Inscribir elegibles» y bajar la meta o mover las fechas en el panel
+ * (routes/retos.js). Los avisos salen una sola vez por miembro y reto: solo se
+ * dejan cuando el UPDATE pasa la fila de EN_CURSO a COMPLETADO, y ese UPDATE no
+ * toca filas que ya no estan EN_CURSO. El recalculo y los avisos van en la
+ * misma transaccion: o quedan los dos o ninguno (si el aviso falla, el reto
+ * sigue EN_CURSO y se completa en el siguiente intento, con su aviso).
  */
 const { HOY, fechaLocal } = require('./segmentos');
 
+// Titulos de las filas de notificacion. La campana del panel busca el del
+// gimnasio (routes/notificaciones.js).
 const TITULO_RETO_COMPLETADO = 'Reto completado';
+const TITULO_MENSAJE_COMPLETADO = '¡Completaste un reto!';
+const TITULO_MENSAJE_CANCELADO = 'Reto cancelado';
 
 /** Estado que corresponde a un reto segun sus fechas (sin tocar CANCELADO). */
 function estadoPorFechas(reto, hoy) {
@@ -91,27 +105,104 @@ async function recalcularParticipacion(db, { idRetoMiembro, idReto, idMiembro, g
   return { fila, completado: !!(fila && fila.estado === 'COMPLETADO') };
 }
 
-/** Aviso para el administrador en la campana. No lanza. */
-async function avisarRetoCompletado(db, { gymId, idMiembro, nombreMiembro, nombreReto, recompensa }) {
+/** Textos de los dos avisos al completar. La recompensa es opcional. */
+function textosCompletado({ nombreMiembro, nombreReto, recompensa }) {
+  return {
+    gimnasio: `${nombreMiembro || 'Un miembro'} completó el reto «${nombreReto}».`
+      + (recompensa ? ` Recompensa: ${recompensa}.` : ''),
+    miembro: `¡Completaste el reto «${nombreReto}»!`
+      + (recompensa ? ` Tu recompensa: ${recompensa}. Reclámala en recepción.` : ''),
+  };
+}
+
+/** Texto del mensaje al miembro cuando el gimnasio cancela un reto en curso. */
+function textoCancelado(nombreReto) {
+  return `El gimnasio canceló el reto «${nombreReto}». Tu avance en ese reto ya no cuenta, `
+    + 'pero tus ingresos siguen sumando en tu racha y tus logros.';
+}
+
+/**
+ * Deja los dos avisos de un reto completado: el del administrador
+ * (destinatario GIMNASIO, campana del panel) y el del miembro (destinatario
+ * MIEMBRO, bandeja de la app). Los nombres salen de la base, filtrando por el
+ * gimnasio, para que todos los caminos escriban lo mismo.
+ *
+ * Lanza si no puede escribir: se llama dentro de la transaccion de
+ * `recalcularYAvisar`, que deshace el completado para no perder el aviso.
+ */
+async function avisarRetoCompletado(db, { gymId, idMiembro, idReto }) {
+  const { rows } = await db.query(
+    `SELECT r.nombre AS nombre_reto, r.recompensa, m.nombre AS nombre_miembro
+       FROM reto r
+       JOIN miembro m ON m.id_miembro = $2 AND m.id_gimnasio = r.id_gimnasio
+      WHERE r.id_reto = $1 AND r.id_gimnasio = $3`,
+    [idReto, idMiembro, gymId]
+  );
+  const d = rows[0] || {};
+  const textos = textosCompletado({
+    nombreMiembro: d.nombre_miembro, nombreReto: d.nombre_reto || 'del gimnasio', recompensa: d.recompensa,
+  });
+  await db.query(
+    `INSERT INTO notificacion (id_gimnasio, id_miembro, tipo, titulo, mensaje, destinatario)
+     VALUES ($1, $2, 'RETO', $3, $4, 'GIMNASIO'),
+            ($1, $2, 'RETO', $5, $6, 'MIEMBRO')`,
+    [gymId, idMiembro, TITULO_RETO_COMPLETADO, textos.gimnasio, TITULO_MENSAJE_COMPLETADO, textos.miembro]
+  );
+}
+
+/**
+ * Recalcula el avance de un inscrito y, si con eso completa el reto, deja los
+ * dos avisos. Es lo que llaman todos los caminos que pueden completar un reto.
+ *
+ * Con un pool abre su propia transaccion; con un cliente del pool (tiene
+ * release) usa la transaccion de quien llama. Lanza si algo falla.
+ */
+async function recalcularYAvisar(db, { idRetoMiembro, idReto, idMiembro, gymId }) {
+  const conTransaccion = typeof db.connect === 'function' && typeof db.release !== 'function';
+  const client = conTransaccion ? await db.connect() : db;
   try {
-    await db.query(
-      `INSERT INTO notificacion (id_gimnasio, id_miembro, tipo, titulo, mensaje)
-       VALUES ($1, $2, 'RETO', $3, $4)`,
-      [gymId, idMiembro, TITULO_RETO_COMPLETADO,
-       `${nombreMiembro || 'Un miembro'} completó el reto «${nombreReto}».`
-       + (recompensa ? ` Recompensa: ${recompensa}.` : '')]
-    );
+    if (conTransaccion) await client.query('BEGIN');
+    const r = await recalcularParticipacion(client, { idRetoMiembro, idReto, idMiembro, gymId });
+    if (r.completado) await avisarRetoCompletado(client, { gymId, idMiembro, idReto });
+    if (conTransaccion) await client.query('COMMIT');
+    return r;
   } catch (err) {
-    console.error('[retos] No se pudo avisar el reto completado:', err.message);
+    if (conTransaccion) await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    if (conTransaccion) client.release();
   }
+}
+
+/**
+ * Al cancelar un reto: pasa a CANCELADO las participaciones EN_CURSO y le deja
+ * a cada uno de esos miembros un mensaje en su bandeja. Las COMPLETADO no se
+ * tocan (la recompensa ya es suya). Es un solo UPDATE con su INSERT, asi que
+ * cancelar dos veces no repite el mensaje. Devuelve a cuantos se aviso.
+ */
+async function cancelarParticipaciones(db, { idReto, gymId, nombreReto }) {
+  const { rowCount } = await db.query(
+    `WITH cancelados AS (
+       UPDATE reto_miembro rm SET estado = 'CANCELADO'
+         FROM reto r
+        WHERE rm.id_reto = $1 AND r.id_reto = rm.id_reto AND r.id_gimnasio = $2
+          AND rm.estado = 'EN_CURSO'
+        RETURNING rm.id_miembro
+     )
+     INSERT INTO notificacion (id_gimnasio, id_miembro, tipo, titulo, mensaje, destinatario)
+     SELECT $2, c.id_miembro, 'RETO', $3, $4, 'MIEMBRO' FROM cancelados c`,
+    [idReto, gymId, TITULO_MENSAJE_CANCELADO, textoCancelado(nombreReto)]
+  );
+  return rowCount;
 }
 
 /**
  * Inscribe, recalcula y avisa despues de un check-in. Devuelve lo que muestra
  * la pantalla del check-in: [{ id_reto, nombre, meta, acumulados, porcentaje,
  * completado, recompensa }]. Nunca lanza: si algo falla devuelve [].
+ * (Los nombres de los avisos salen de la base, en avisarRetoCompletado.)
  */
-async function actualizarRetos(db, { gymId, idMiembro, nombreMiembro }) {
+async function actualizarRetos(db, { gymId, idMiembro }) {
   try {
     await sincronizarEstados(db, gymId);
 
@@ -138,15 +229,11 @@ async function actualizarRetos(db, { gymId, idMiembro, nombreMiembro }) {
 
     const resultado = [];
     for (const r of enCurso) {
-      const { fila, completado } = await recalcularParticipacion(db, {
+      // Recalcula y, si se completo, avisa al gimnasio y al miembro (una vez).
+      const { fila, completado } = await recalcularYAvisar(db, {
         idRetoMiembro: r.id_reto_miembro, idReto: r.id_reto, idMiembro, gymId,
       });
       if (!fila) continue;
-      if (completado) {
-        await avisarRetoCompletado(db, {
-          gymId, idMiembro, nombreMiembro, nombreReto: r.nombre, recompensa: r.recompensa,
-        });
-      }
       resultado.push({
         id_reto: r.id_reto,
         nombre: r.nombre,
@@ -179,11 +266,17 @@ function mensajeRetos(retos) {
 
 module.exports = {
   TITULO_RETO_COMPLETADO,
+  TITULO_MENSAJE_COMPLETADO,
+  TITULO_MENSAJE_CANCELADO,
   estadoPorFechas,
   sincronizarEstados,
   porcentaje,
   recalcularParticipacion,
+  textosCompletado,
+  textoCancelado,
   avisarRetoCompletado,
+  recalcularYAvisar,
+  cancelarParticipaciones,
   actualizarRetos,
   mensajeRetos,
 };

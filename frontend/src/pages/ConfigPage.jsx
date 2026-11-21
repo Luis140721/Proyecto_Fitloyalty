@@ -220,10 +220,18 @@ export default function ConfigPage() {
             <input
               type="checkbox"
               checked={!!config.qr_dinamico_obligatorio}
+              // Sin QR_DINAMICO_SECRET en produccion no se puede activar (el backend
+              // responde 409); si ya estaba activo, si se puede apagar.
+              disabled={config.qr_dinamico_disponible === false && !config.qr_dinamico_obligatorio}
               onChange={(e) => setConfig({ ...config, qr_dinamico_obligatorio: e.target.checked })}
             />
             <span className="field-label" style={{ margin: 0 }}>Exigir el QR dinámico de la app (más seguro)</span>
           </label>
+          {config.qr_dinamico_disponible === false && (
+            <p className="field-hint" role="note" style={{ marginTop: 4 }}>
+              No disponible: falta configurar la clave QR_DINAMICO_SECRET en el servidor.
+            </p>
+          )}
 
           <header className="chart-card__head" style={{ marginTop: 32, paddingTop: 16, borderTop: '1px solid var(--border-subtle)' }}>
             <div>
