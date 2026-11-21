@@ -48,6 +48,10 @@ describe('festivos de Colombia', () => {
     expect(festivo('2026-07-13')).toBe('Virgen de Chiquinquirá');
     expect(festivo('2027-07-12')).toBe('Virgen de Chiquinquirá');
     expect(festivo('2030-07-15')).toBe('Virgen de Chiquinquirá'); // el 9 cae martes
+    // 2029: el 9 de julio cae en lunes, asi que no se corre.
+    expect(festivo('2029-07-09')).toBe('Virgen de Chiquinquirá');
+    expect(festivo('2029-07-16')).toBeNull();
+    expect(festivo('2029-07-10')).toBeNull();
     expect(festivo('2025-07-14')).toBeNull();                   // antes de la ley no lo era
     // 2025: sin Chiquinquirá, y San Pedro y el Sagrado Corazón cayeron el
     // mismo lunes 30 de junio, así que son 17 días festivos.

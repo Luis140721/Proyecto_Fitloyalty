@@ -370,6 +370,79 @@ describeReal('RQNF-16 contra la base real', () => {
       expect((await enviar(otro, 'por-vencer')).body).toMatchObject({ clase: 'AVISO' });
     });
 
+    test('vencida: hace 30 dias es aviso (con el texto del servidor); hace 31, o vence hoy, es comercial', async () => {
+      const m30 = await crearMiembro(gymA, 'Vencio Hace Treinta');
+      await planVencido(m30, gymA, { venceEn: -30 });
+      const r30 = await enviar(m30, 'vencida', 'Cualquier texto del panel');
+      expect(r30.status).toBe(201);
+      expect(r30.body).toMatchObject({ clase: 'AVISO', texto_del_servidor: true });
+      expect(r30.body.mensaje).toMatch(/^Hola Vencio, te saludamos de Prueba Ley 2300 A .+\. Tu plan vencio hace 30 dias\./);
+      expect((await uno('SELECT mensaje_copiado FROM envio_mensaje WHERE id_miembro = $1', [m30])).mensaje_copiado).toBe(r30.body.mensaje);
+
+      const m31 = await crearMiembro(gymA, 'Vencio Hace Treintaiuno');
+      await planVencido(m31, gymA, { venceEn: -31 });
+      const r31 = await enviar(m31, 'vencida');
+      expect(r31.status).toBe(409);
+      expect(r31.body.details).toMatchObject({ motivo: 'NO_AUTORIZA', clase: 'COMERCIAL', aviso_no_confirmado: true });
+      expect(r31.body.error).toMatch(/venció hace más de 30 días/);
+
+      const hoy = await crearMiembro(gymA, 'Vence Hoy');
+      await planVencido(hoy, gymA, { venceEn: 0 });
+      const rHoy = await enviar(hoy, 'vencida');
+      expect(rHoy.status).toBe(409);
+      expect(rHoy.body.details).toMatchObject({ clase: 'COMERCIAL', aviso_no_confirmado: true });
+      expect(rHoy.body.error).toMatch(/el plan no está vencido/);
+    });
+
+    test('la campana del panel usa la misma regla: ofrece como aviso el vencido hace 30 dias y no el de 31', async () => {
+      const g = await crearGimnasio(`Prueba Ley 2300 D ${sufijo}`);
+      const recep = await crearUsuario(g, 'recep-d', 'RECEPCIONISTA');
+      const tk = jwt.sign({ id: recep, role: 'receptionist', gymId: g }, process.env.JWT_SECRET, { expiresIn: '1h' });
+      const a30 = await crearMiembro(g, 'Campana Treinta');
+      await planVencido(a30, g, { venceEn: -30 });
+      const a31 = await crearMiembro(g, 'Campana Treintaiuno');
+      await planVencido(a31, g, { venceEn: -31 });
+      const r = await llamar('GET', '/api/admin/notificaciones', tk);
+      expect(r.status).toBe(200);
+      const vencidas = r.body.avisos.filter((x) => x.tipo === 'vencida');
+      expect(vencidas.map((x) => x.idMiembro)).toEqual([a30]);
+      // El texto que propone la campana es el mismo que registra el POST.
+      const p = await llamar('POST', '/api/admin/notificaciones/enviado', tk, { idMiembro: a30, tipo: 'vencida', mensaje: vencidas[0].mensaje });
+      expect(p.status).toBe(201);
+      expect(p.body).toMatchObject({ clase: 'AVISO', mensaje: vencidas[0].mensaje });
+    });
+
+    test('acceso bloqueado: un bloqueo de hace 23 h es aviso; de hace 25 h, u otra notificacion, no', async () => {
+      const notificar = (id, { horas, tipo = 'ALERTA', titulo = 'Acceso bloqueado' }) => pool.query(
+        `INSERT INTO notificacion (id_gimnasio, id_miembro, tipo, titulo, mensaje, fecha_creacion)
+         VALUES ($1, $2, $3, $4, 'Intento de ingreso', NOW() - ($5 || ' hours')::interval)`,
+        [gymA, id, tipo, titulo, String(horas)]
+      );
+      const reciente = await crearMiembro(gymA, 'Bloqueo Reciente');
+      await planVencido(reciente, gymA);
+      await notificar(reciente, { horas: 23 });
+      const r1 = await enviar(reciente, 'acceso-bloqueado');
+      expect(r1.status).toBe(201);
+      expect(r1.body.clase).toBe('AVISO');
+      expect(r1.body.mensaje).toMatch(/no pudimos dejarte pasar porque tu plan vencio hace 2 dias/);
+
+      const viejo = await crearMiembro(gymA, 'Bloqueo Viejo');
+      await planVencido(viejo, gymA);
+      await notificar(viejo, { horas: 25 });
+      const r2 = await enviar(viejo, 'acceso-bloqueado');
+      expect(r2.status).toBe(409);
+      expect(r2.body.details).toMatchObject({ clase: 'COMERCIAL', aviso_no_confirmado: true });
+      expect(r2.body.error).toMatch(/no hubo un ingreso bloqueado en las últimas 24 horas/);
+
+      const otroTipo = await crearMiembro(gymA, 'Otra Notificacion');
+      await planVencido(otroTipo, gymA);
+      await notificar(otroTipo, { horas: 1, tipo: 'SISTEMA' });
+      await notificar(otroTipo, { horas: 1, titulo: 'Recordatorio enviado' });
+      const r3 = await enviar(otroTipo, 'acceso-bloqueado');
+      expect(r3.status).toBe(409);
+      expect(r3.body.details).toMatchObject({ clase: 'COMERCIAL', aviso_no_confirmado: true });
+    });
+
     test('un envio FALLIDO de hoy no cuenta en la frecuencia', async () => {
       const id = await crearMiembro(gymA, 'Con Fallido');
       await planVencido(id, gymA);

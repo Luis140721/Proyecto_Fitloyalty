@@ -53,6 +53,26 @@ export const NOMBRES_AUTORIZACION = {
   MENSAJES_COMERCIALES: 'Mensajes comerciales',
 };
 
+/** RQNF-16: canales de los mensajes comerciales, en el orden de siempre. */
+export const CANALES_COMERCIALES = ['WHATSAPP', 'EMAIL'];
+
+/**
+ * RQNF-16: lo que pasa al marcar o desmarcar un canal de mensajes
+ * comerciales. Devuelve { canales, acepta }. El texto dice «por los canales
+ * que marco»: no se marca ninguno solo, y sin ningun canal no hay aceptacion
+ * (quitar el ultimo la apaga).
+ */
+export function cambiarCanalComercial({ acepta, canales }, canal, marcado) {
+  const actuales = Array.isArray(canales) ? canales : [];
+  const nuevos = CANALES_COMERCIALES.filter((c) => (c === canal ? marcado : actuales.includes(c)));
+  return { canales: nuevos, acepta: Boolean(acepta) && nuevos.length > 0 };
+}
+
+/** RQNF-16: la aceptacion solo se puede encender con al menos un canal marcado. */
+export function puedeAceptarComerciales(canales) {
+  return Array.isArray(canales) && canales.length > 0;
+}
+
 export const TIPOS_DOC_REPRESENTANTE = ['CC', 'CE', 'PP'];
 export const PARENTESCOS = ['Madre', 'Padre', 'Tutor(a) legal', 'Otro familiar a cargo'];
 

@@ -62,6 +62,7 @@ function prepararBD({ comercial = null, contactos = [], plan = VENCIDO, diasAvis
     if (/FROM config_gimnasio/.test(s)) return { rows: [{ recordatorio_cobro_activo: true, dias_recordatorio_default: diasAviso }] };
     if (/FROM configuracion_gimnasio/.test(s)) return { rows: [] };
     if (/^SELECT 1 FROM notificacion/.test(s)) return { rows: bloqueo ? [{}] : [] };
+    if (/^SELECT nombre FROM gimnasio WHERE id_gimnasio = \$1$/.test(s)) return { rows: [{ nombre: 'Gym Demo' }] };
     if (/FROM autorizacion_miembro a/.test(s)) {
       return { rows: comercial ? [{ id_miembro: 12, otorgada: comercial.otorgada, canales_autorizados: comercial.canales, canal: 'APP', version_texto: 'v2', fecha: co('2026-11-01 09:00') }] : [] };
     }
@@ -122,16 +123,42 @@ describe('mensajes comerciales (en riesgo, reto completado o sin tipo)', () => {
 });
 
 describe('avisos del plan (vencida, por vencer, acceso bloqueado)', () => {
+  const SALUDO = 'Hola Ana, te saludamos de Gym Demo.';
   test.each([
-    ['vencida', VENCIDO],
-    ['por-vencer', VENCE_EN_3],
-    ['acceso-bloqueado', VENCIDO],
-  ])('%s confirmado por el plan, sin aceptacion comercial: 201, sin enlace de baja', async (tipo, plan) => {
+    ['vencida', VENCIDO, `${SALUDO} Tu plan vencio hace 2 dias. Pasa cuando quieras y lo renovamos para que no pierdas el ritmo.`],
+    ['por-vencer', VENCE_EN_3, `${SALUDO} Te recordamos que tu plan vence en 3 dias. Puedes renovarlo en recepcion o escribirnos por aqui.`],
+    ['acceso-bloqueado', VENCIDO, `${SALUDO} Hoy intentaste ingresar y no pudimos dejarte pasar porque tu plan vencio hace 2 dias. Pasa por recepcion y lo resolvemos para que sigas entrenando.`],
+  ])('%s confirmado por el plan, sin aceptacion comercial: 201, sin enlace de baja y con el texto del servidor', async (tipo, plan, texto) => {
     const estado = prepararBD({ plan });
-    const r = await enviar({ tipo, antesDeAbrir: true });
+    // El panel manda otro texto: queda el de la plantilla del servidor.
+    const r = await enviar({ tipo, antesDeAbrir: true, mensaje: 'Promocion: 2x1 en planes trimestrales' });
     expect(r.status).toBe(201);
-    expect(r.body).toMatchObject({ clase: 'AVISO', mensaje: 'Hola Ana' });
+    expect(r.body).toMatchObject({ clase: 'AVISO', mensaje: texto, texto_del_servidor: true });
     expect(estado.envios).toHaveLength(1);
+    expect(estado.envios[0][6]).toBe(texto);
+  });
+
+  test.each([
+    ['vence hoy', { ...VENCE_EN_3, dias_para_vencer: 0 }, 'vence hoy'],
+    ['membresia congelada', { ...VENCIDO, congelada: true }, 'tu membresia esta congelada'],
+    ['sin plan', { sin_plan: true, congelada: false, vencida: false, dias_para_vencer: null }, 'no tienes un plan activo'],
+  ])('el texto del servidor cubre %s', async (_, plan, frase) => {
+    prepararBD({ plan });
+    const tipo = frase === 'vence hoy' ? 'por-vencer' : 'acceso-bloqueado';
+    const r = await enviar({ tipo });
+    expect(r.status).toBe(201);
+    expect(r.body.mensaje).toContain(frase);
+  });
+
+  test(`vencida hace ${30} dias es aviso; hace 31 ya es comercial (DIAS_AVISO_VENCIDA)`, async () => {
+    expect(require('../src/lib/contacto-legal').DIAS_AVISO_VENCIDA).toBe(30);
+    prepararBD({ plan: { ...VENCIDO, dias_para_vencer: -30 } });
+    expect((await enviar({ tipo: 'vencida' })).body).toMatchObject({ clase: 'AVISO' });
+    prepararBD({ plan: { ...VENCIDO, dias_para_vencer: -31 } });
+    const r = await enviar({ tipo: 'vencida' });
+    expect(r.status).toBe(409);
+    expect(r.body.details).toMatchObject({ clase: 'COMERCIAL', aviso_no_confirmado: true });
+    expect(r.body.error).toMatch(/venció hace más de 30 días/);
   });
 
   test('un aviso por correo: 409 (el contrato dice que el aviso va por WhatsApp)', async () => {
@@ -146,6 +173,7 @@ describe('la clase la confirma el servidor, no el tipo que manda el panel', () =
     ['vencida con el plan al dia', 'vencida', { plan: AL_DIA }],
     ['vencida sin plan', 'vencida', { plan: { sin_plan: true, congelada: false, vencida: false, dias_para_vencer: null } }],
     ['vencida con la membresia congelada', 'vencida', { plan: { ...VENCIDO, congelada: true } }],
+    ['vencida hace 400 dias', 'vencida', { plan: { ...VENCIDO, dias_para_vencer: -400 } }],
     ['por vencer en 40 dias (el gimnasio avisa a 7)', 'por-vencer', { plan: AL_DIA }],
     ['por vencer en 3 dias con aviso a 2', 'por-vencer', { plan: VENCE_EN_3, diasAviso: 2 }],
     ['por vencer pero ya vencido', 'por-vencer', { plan: VENCIDO }],
@@ -156,7 +184,7 @@ describe('la clase la confirma el servidor, no el tipo que manda el panel', () =
     const r = await enviar({ tipo, mensaje: 'Te extrañamos, vuelve con 20% de descuento' });
     expect(r.status).toBe(409);
     expect(r.body.details).toMatchObject({ motivo: 'NO_AUTORIZA', clase: 'COMERCIAL', aviso_no_confirmado: true });
-    expect(r.body.error).toMatch(/no es un aviso del plan sino un mensaje comercial/);
+    expect(r.body.error).toMatch(/No es un aviso del plan: .+, así que se trata como un mensaje comercial/);
     expect(estado.envios).toHaveLength(0);
   });
 

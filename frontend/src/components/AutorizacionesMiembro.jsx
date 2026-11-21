@@ -17,6 +17,7 @@
  */
 import {
   TEXTOS_AUTORIZACION, NOMBRES_AUTORIZACION, TIPOS_DOC_REPRESENTANTE, PARENTESCOS,
+  cambiarCanalComercial, puedeAceptarComerciales,
 } from '../lib/autorizaciones';
 
 function ErrorTexto({ msg }) {
@@ -159,7 +160,7 @@ export function CasillaDatosSensibles({ checked, onChange, menor = false, aviso 
   );
 }
 
-const CANALES_COMERCIALES = [
+const ETIQUETAS_CANAL = [
   { valor: 'WHATSAPP', etiqueta: 'WhatsApp' },
   { valor: 'EMAIL', etiqueta: 'Correo' },
 ];
@@ -176,16 +177,19 @@ const CANALES_COMERCIALES = [
  */
 export function CasillaMensajesComerciales({ checked, onChange, canales = [], onCanales, menor = false, aviso }) {
   const marcado = (c) => (canales || []).includes(c);
+  // La regla esta en lib/autorizaciones.js (cambiarCanalComercial), probada en
+  // frontend/tests/formularioMiembro.test.js. Llama a onCanales y, si quito el
+  // ultimo canal, a onChange(false) en el mismo evento: quien la usa tiene que
+  // actualizar su estado con funcion (setForm((prev) => ...)) para que el
+  // segundo cambio no pise el primero.
   const alternarCanal = (c, valor) => {
-    const nuevos = CANALES_COMERCIALES.map((x) => x.valor)
-      .filter((x) => (x === c ? valor : marcado(x)));
-    onCanales(nuevos);
-    // Sin ningun canal no hay aceptacion: se apaga con el ultimo.
-    if (checked && nuevos.length === 0) onChange(false);
+    const r = cambiarCanalComercial({ acepta: checked, canales }, c, valor);
+    onCanales(r.canales);
+    if (r.acepta !== Boolean(checked)) onChange(r.acepta);
   };
   // El texto dice «por los canales que marco»: no se marca ninguno solo. Para
   // aceptar hay que marcar antes al menos un canal.
-  const sinCanal = !canales || canales.length === 0;
+  const sinCanal = !puedeAceptarComerciales(canales);
   const activar = (valor) => {
     if (valor && sinCanal) return;
     onChange(valor);
@@ -211,7 +215,7 @@ export function CasillaMensajesComerciales({ checked, onChange, canales = [], on
       </label>
       {/* Los canales se ven siempre: primero se marcan, luego se acepta. */}
       <div style={{ display: 'flex', gap: 16, marginLeft: 26, marginBottom: 6 }} role="group" aria-label="Canales autorizados">
-        {CANALES_COMERCIALES.map((c) => (
+        {ETIQUETAS_CANAL.map((c) => (
           <label key={c.valor} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
             <input
               type="checkbox"

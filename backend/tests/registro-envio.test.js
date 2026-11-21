@@ -99,9 +99,10 @@ function prepararBD({ miembro = { id_miembro: 12, nombre: 'Ana' }, canales = [],
       return { rows: [{ id_miembro: params[0][0], otorgada: true, canales_autorizados: ['WHATSAPP', 'EMAIL'], canal: 'PANEL', version_texto: 'v2', fecha: new Date('2026-11-01T15:00:00Z') }] };
     }
     // RQNF-16: el servidor confirma el aviso con el plan (aqui, vencido hace 2 dias).
-    if (/LEFT JOIN .* pc ON pc\.id_miembro = m\.id_miembro/.test(s)) {
+    if (/LEFT JOIN[\s\S]* pc ON pc\.id_miembro = m\.id_miembro/.test(s)) {
       return { rows: [{ sin_plan: false, congelada: false, vencida: true, dias_para_vencer: -2 }] };
     }
+    if (/^SELECT nombre FROM gimnasio WHERE id_gimnasio = \$1$/.test(s)) return { rows: [{ nombre: 'Gym Demo' }] };
     if (/FROM miembro/.test(s)) {
       if (fallaMiembro) throw new Error('caida');
       return { rows: miembro ? [miembro] : [] };
@@ -164,7 +165,11 @@ describe('POST /api/admin/notificaciones/enviado: canal del gimnasio', () => {
     expect(llamadas(LOCK_CANAL)).toHaveLength(0);
     // [id_gimnasio, id_miembro, id_canal, id_alerta, id_campana, id_plantilla,
     //  mensaje_copiado, estado, fecha_envio (reloj de la Ley 2300), enviado_por]
-    expect(insertEnvio()[1]).toEqual([7, 12, 4, null, null, null, TEXTO, 'ENVIADO', MARTES, 2]);
+    // RQNF-16: un aviso confirmado guarda el texto que arma el servidor (el
+    // mismo de la campana), no el que manda el panel.
+    const AVISO = 'Hola Ana, te saludamos de Gym Demo. Tu plan vencio hace 2 dias. Pasa cuando quieras y lo renovamos para que no pierdas el ritmo.';
+    expect(r.body).toMatchObject({ clase: 'AVISO', mensaje: AVISO, texto_del_servidor: true });
+    expect(insertEnvio()[1]).toEqual([7, 12, 4, null, null, null, AVISO, 'ENVIADO', MARTES, 2]);
     expect(llamadas(/^COMMIT$/)).toHaveLength(1);
     expect(mockRelease).toHaveBeenCalledTimes(1);
   });

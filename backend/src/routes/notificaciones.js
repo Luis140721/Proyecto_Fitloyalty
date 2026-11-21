@@ -38,7 +38,7 @@ const { TITULO_RETO_COMPLETADO } = require('../lib/retos');
 const { z } = require('zod');
 const { formatZodError } = require('../lib/validators');
 // RQNF-16 (Ley 2300): solo los usa POST /admin/notificaciones/enviado.
-const { clasificarTipo, ahora: relojLey2300 } = require('../lib/contacto-legal');
+const { clasificarTipo, ahora: relojLey2300, DIAS_AVISO_VENCIDA } = require('../lib/contacto-legal');
 const { bloquearContacto, evaluarContacto, registrarEnvio } = require('../lib/contacto-miembro');
 const { pieBaja } = require('../lib/baja-mensajes');
 
@@ -49,6 +49,27 @@ const POR_DEFECTO = { diasAviso: 7, diasRiesgo: 7, diasRiesgoAlto: 15 };
 
 // Tope de avisos por categoria: la campana es un resumen, no un listado.
 const TOPE = 5;
+
+const enDias = (n) => `${n} ${n === 1 ? 'dia' : 'dias'}`;
+
+/**
+ * La frase de cada aviso del plan que va dentro de mensajeParaMiembro. La
+ * usan la campana (GET) y la constancia del envio (POST), para que el texto
+ * que se propone y el que se registra sean el mismo (RQNF-16).
+ *   vencida           dias desde el vencimiento
+ *   por-vencer        dias que faltan
+ *   acceso-bloqueado  congelada, sin plan o dias desde el vencimiento
+ */
+function datoAviso(tipo, { dias, congelada = false, sinPlan = false } = {}) {
+  if (tipo === 'vencida') return dias === 0 ? 'hoy' : `hace ${enDias(dias)}`;
+  if (tipo === 'por-vencer') return dias === 0 ? 'hoy' : `en ${enDias(dias)}`;
+  if (tipo === 'acceso-bloqueado') {
+    if (congelada) return 'tu membresia esta congelada';
+    if (sinPlan) return 'no tienes un plan activo';
+    return `tu plan vencio ${datoAviso('vencida', { dias })}`;
+  }
+  return null;
+}
 
 /** Lee los umbrales del gimnasio; si algo falta, usa los valores por defecto. */
 async function leerUmbrales(gymId) {
@@ -123,6 +144,8 @@ router.get(
           [gymId, TIPO_ACCESO_BLOQUEADO, TOPE, TITULO_ACCESO_BLOQUEADO]
         ),
 
+        // Vencidas: RQNF-16, solo hasta DIAS_AVISO_VENCIDA dias despues del
+        // vencimiento son aviso del plan; es la misma regla del POST /enviado.
         umbrales.recordatoriosActivos
           ? pool.query(
               `SELECT mb.id_miembro, mb.nombre, mb.telefono, mb.codigo_pais_telefono,
@@ -131,10 +154,11 @@ router.get(
                  INNER JOIN miembro mb ON mb.id_miembro = pc.id_miembro
                 WHERE mb.id_gimnasio = $1 AND mb.activo = TRUE
                   AND pc.fecha_fin < CURRENT_DATE
+                  AND pc.fecha_fin >= CURRENT_DATE - $3::int
                   AND pc.congelado_desde IS NULL
                 ORDER BY pc.fecha_fin DESC
                 LIMIT $2`,
-              [gymId, TOPE]
+              [gymId, TOPE, DIAS_AVISO_VENCIDA]
             )
           : vacio,
 
@@ -210,9 +234,7 @@ router.get(
           ...armar(r, 'acceso-bloqueado', 'block',
             `${r.nombre} intento ingresar y fue bloqueado`,
             `${r.congelada ? 'Membresia congelada' : r.dias_vencida === null ? 'Sin plan activo' : 'Membresia vencida'} · ${hace(r.minutos)}`,
-            r.congelada ? 'tu membresia esta congelada'
-              : r.dias_vencida === null ? 'no tienes un plan activo'
-              : `tu plan vencio ${r.dias_vencida === 0 ? 'hoy' : `hace ${r.dias_vencida} ${r.dias_vencida === 1 ? 'dia' : 'dias'}`}`),
+            datoAviso('acceso-bloqueado', { dias: r.dias_vencida, congelada: r.congelada, sinPlan: r.dias_vencida === null })),
           id: `acceso-bloqueado-${r.id_notificacion}`,
           idNotificacion: r.id_notificacion,
         })),
@@ -220,13 +242,13 @@ router.get(
           armar(r, 'vencida', 'event_busy',
             `La membresia de ${r.nombre} vencio`,
             r.dias === 0 ? 'Vencio hoy' : `Hace ${r.dias} ${r.dias === 1 ? 'dia' : 'dias'}`,
-            r.dias === 0 ? 'hoy' : `hace ${r.dias} ${r.dias === 1 ? 'dia' : 'dias'}`)
+            datoAviso('vencida', { dias: r.dias }))
         ),
         ...porVencer.rows.map((r) =>
           armar(r, 'por-vencer', 'schedule',
             `${r.nombre} renueva pronto`,
             r.dias === 0 ? 'Vence hoy' : `En ${r.dias} ${r.dias === 1 ? 'dia' : 'dias'}`,
-            r.dias === 0 ? 'hoy' : `en ${r.dias} ${r.dias === 1 ? 'dia' : 'dias'}`)
+            datoAviso('por-vencer', { dias: r.dias }))
         ),
         ...enRiesgo.rows.map((r) => ({
           ...armar(r, 'riesgo', 'trending_down',
@@ -398,17 +420,21 @@ async function canalDelGimnasio(client, gymId, tipo) {
  * ('vencida', 'por-vencer'/'vencimiento', 'acceso-bloqueado') solo se acepta
  * como AVISO si el ultimo plan del miembro lo confirma, con las mismas reglas
  * de la campana del panel:
- *   - vencida: el plan vencio (fecha_fin < hoy) y no esta congelado;
+ *   - vencida: el plan vencio (fecha_fin < hoy) hace DIAS_AVISO_VENCIDA dias
+ *     o menos, y no esta congelado. Despues de ese plazo ya no es un aviso
+ *     del contrato sino un mensaje para recuperar al cliente (comercial);
  *   - por vencer: vence entre hoy y los dias de aviso del gimnasio, sin congelar;
  *   - acceso bloqueado: hay un aviso de ingreso bloqueado de las ultimas 24 h
  *     y el miembro sigue sin poder entrar (vencido, sin plan o congelado).
  * Si no se confirma, es COMERCIAL (pide la aceptacion de mensajes comerciales).
- * Devuelve { clase, pedida }.
+ * Devuelve { clase, pedida, razon, plantilla, dato }: `razon` dice por que no
+ * se confirmo; `plantilla` y `dato` arman el texto del aviso (datoAviso).
  */
 async function claseDelEnvio({ tipo, idMiembro, gymId }) {
   const pedida = clasificarTipo(tipo);
   if (pedida !== 'AVISO') return { clase: 'COMERCIAL', pedida };
   const t = String(tipo).toLowerCase();
+  const no = (razon) => ({ clase: 'COMERCIAL', pedida, razon });
   const { rows } = await pool.query(
     `SELECT (pc.id_miembro IS NULL) AS sin_plan,
             (pc.congelado_desde IS NOT NULL) AS congelada,
@@ -420,27 +446,41 @@ async function claseDelEnvio({ tipo, idMiembro, gymId }) {
     [idMiembro, gymId]
   );
   const p = rows[0];
-  let confirmado = false;
-  if (p && t === 'vencida') {
-    confirmado = p.vencida === true && p.congelada !== true;
-  } else if (p && (t === 'por-vencer' || t === 'vencimiento')) {
-    const { diasAviso } = await leerUmbrales(gymId);
-    confirmado = p.congelada !== true && p.dias_para_vencer !== null
-      && p.dias_para_vencer >= 0 && p.dias_para_vencer <= diasAviso;
-  } else if (p && t === 'acceso-bloqueado') {
-    const sinAcceso = p.sin_plan === true || p.vencida === true || p.congelada === true || p.dias_para_vencer === null;
-    if (sinAcceso) {
-      const { rows: bloqueo } = await pool.query(
-        `SELECT 1 FROM notificacion
-          WHERE id_gimnasio = $1 AND id_miembro = $2 AND tipo = $3 AND titulo = $4
-            AND fecha_creacion > NOW() - INTERVAL '24 hours'
-          LIMIT 1`,
-        [gymId, idMiembro, TIPO_ACCESO_BLOQUEADO, TITULO_ACCESO_BLOQUEADO]
-      );
-      confirmado = bloqueo.length > 0;
-    }
+  if (!p) return no('el miembro no tiene un plan');
+  const sinPlan = p.sin_plan === true || p.dias_para_vencer === null;
+  const congelada = p.congelada === true;
+  const si = (plantilla, datos) => ({ clase: 'AVISO', pedida, plantilla, dato: datoAviso(plantilla, datos) });
+
+  if (t === 'vencida') {
+    if (sinPlan) return no('el miembro no tiene un plan');
+    if (congelada) return no('la membresía está congelada');
+    if (p.vencida !== true) return no('el plan no está vencido');
+    const dias = -p.dias_para_vencer;
+    if (dias > DIAS_AVISO_VENCIDA) return no(`el plan venció hace más de ${DIAS_AVISO_VENCIDA} días`);
+    return si('vencida', { dias });
   }
-  return { clase: confirmado ? 'AVISO' : 'COMERCIAL', pedida };
+  if (t === 'por-vencer' || t === 'vencimiento') {
+    if (sinPlan) return no('el miembro no tiene un plan');
+    if (congelada) return no('la membresía está congelada');
+    if (p.vencida === true) return no('el plan ya venció');
+    const { diasAviso } = await leerUmbrales(gymId);
+    if (p.dias_para_vencer > diasAviso) return no(`el plan no vence en los próximos ${diasAviso} días`);
+    return si('por-vencer', { dias: p.dias_para_vencer });
+  }
+  if (t === 'acceso-bloqueado') {
+    if (!(sinPlan || congelada || p.vencida === true)) return no('el miembro tiene el plan al día');
+    const { rows: bloqueo } = await pool.query(
+      `SELECT 1 FROM notificacion
+        WHERE id_gimnasio = $1 AND id_miembro = $2 AND destinatario = 'GIMNASIO'
+          AND tipo = $3 AND titulo = $4
+          AND fecha_creacion > NOW() - INTERVAL '24 hours'
+        LIMIT 1`,
+      [gymId, idMiembro, TIPO_ACCESO_BLOQUEADO, TITULO_ACCESO_BLOQUEADO]
+    );
+    if (bloqueo.length === 0) return no('no hubo un ingreso bloqueado en las últimas 24 horas');
+    return si('acceso-bloqueado', { dias: sinPlan ? null : -p.dias_para_vencer, congelada, sinPlan });
+  }
+  return no('ese tipo de aviso no existe');
 }
 
 router.post(
@@ -464,7 +504,7 @@ router.post(
       if (existe.length === 0) throw new AppError(404, 'Miembro no encontrado.', 'MEMBER_NOT_FOUND');
 
       // RQNF-16: el servidor confirma si de verdad es un aviso del plan.
-      const { clase, pedida } = await claseDelEnvio({ tipo, idMiembro, gymId });
+      const { clase, pedida, razon, plantilla, dato } = await claseDelEnvio({ tipo, idMiembro, gymId });
 
       // La alerta tiene que ser de ese miembro y de este gimnasio.
       if (idAlerta) {
@@ -486,7 +526,7 @@ router.post(
       if (!decision.puede) {
         const noConfirmado = pedida === 'AVISO' && clase === 'COMERCIAL';
         throw new AppError(409, noConfirmado
-          ? `${decision.mensaje} (El plan del miembro no está ${String(tipo).toLowerCase() === 'vencida' ? 'vencido' : 'en esa situación'}, así que el mensaje no es un aviso del plan sino un mensaje comercial.)`
+          ? `${decision.mensaje} (No es un aviso del plan: ${razon}, así que se trata como un mensaje comercial.)`
           : decision.mensaje, 'CONTACTO_NO_PERMITIDO', {
           motivo: decision.motivo,
           clase,
@@ -497,10 +537,21 @@ router.post(
 
       const idCanal = await canalDelGimnasio(client, gymId, canal);
 
-      // Un mensaje comercial lleva el enlace de baja al final. Solo se agrega
-      // si el panel va a abrir el chat con este texto (antesDeAbrir): si el
-      // chat ya se abrio, lo que se guarda es lo que de verdad se abrio.
-      const texto = clase === 'COMERCIAL' && antesDeAbrir ? mensaje + pieBaja(idMiembro, gymId) : mensaje;
+      // El texto que se abre en WhatsApp y queda en la constancia:
+      // - AVISO: lo arma el servidor con la misma plantilla de la campana
+      //   (mensajeParaMiembro y datoAviso), no el que manda el panel; asi un
+      //   "aviso" no puede llevar otro contenido. El administrador lo envia
+      //   desde su WhatsApp y aun puede editarlo alli (ver la evidencia).
+      // - COMERCIAL: el del panel, con el enlace de baja al final si el panel
+      //   va a abrir el chat con este texto (antesDeAbrir); si el chat ya se
+      //   abrio, se guarda lo que de verdad se abrio.
+      let texto = mensaje;
+      if (clase === 'AVISO') {
+        const { rows: gym } = await client.query('SELECT nombre FROM gimnasio WHERE id_gimnasio = $1', [gymId]);
+        texto = mensajeParaMiembro(plantilla, gym[0]?.nombre || 'tu gimnasio', existe[0].nombre, dato);
+      } else if (antesDeAbrir) {
+        texto = mensaje + pieBaja(idMiembro, gymId);
+      }
 
       /*
        * El mensaje lo manda WhatsApp desde el telefono del gimnasio, asi que
@@ -521,7 +572,7 @@ router.post(
       );
 
       await client.query('COMMIT');
-      return res.status(201).json({ message: 'Envio registrado.', envio: envio[0], mensaje: texto, clase });
+      return res.status(201).json({ message: 'Envio registrado.', envio: envio[0], mensaje: texto, clase, texto_del_servidor: clase === 'AVISO' });
     } catch (err) {
       if (client) await client.query('ROLLBACK').catch(() => {});
       if (err instanceof AppError) throw err;

@@ -18,6 +18,7 @@ import {
   CasillaMensajesComerciales,
 } from '../components/AutorizacionesMiembro';
 import { abrirWhatsappAutorizado } from '../lib/contactoWhatsapp';
+import { aplicarCambio } from '../lib/formularioMiembro';
 import { esMenor, edadEnAnios, isoADate, erroresRepresentante } from '../lib/autorizaciones';
 import QRCode from 'qrcode';
 
@@ -597,8 +598,6 @@ export default function MiembrosPage() {
 
   // Manejar cambios en campos que afectan cálculos automáticos
   const handleFormChange = (field, value) => {
-    const newForm = { ...form, [field]: value };
-
     // Al escribir se retira el error de ESE campo, no el del formulario entero.
     setFormErrors((prev) => {
       if (!prev[field]) return prev;
@@ -608,30 +607,10 @@ export default function MiembrosPage() {
       return sig;
     });
 
-    /*
-     * Al cambiar el plan se propone el precio que el gimnasio tenga
-     * configurado. Solo si hay uno de verdad: el valor llega como cadena
-     * ("0.00"), y una cadena vacia de contenido sigue siendo "verdadera" en
-     * JavaScript, asi que un `if (valor)` a secas ponia el precio en cero y
-     * borraba lo que el usuario habia escrito.
-     */
-    if (field === 'tipo_plan' && gymConfig) {
-      const sugerido = Number(gymConfig[`plan_${String(value).toLowerCase()}_valor`]);
-      if (Number.isFinite(sugerido) && sugerido > 0) {
-        newForm.valor_total = String(Math.round(sugerido));
-      }
-    }
-    
-    // Si cambian valores de pago, recalcular estado
-    if (field === 'valor_total' || field === 'valor_pagado') {
-      const estadoPago = determinarEstadoPago(
-        field === 'valor_total' ? value : form.valor_total,
-        field === 'valor_pagado' ? value : form.valor_pagado
-      );
-      newForm.estado_pago = estadoPago;
-    }
-    
-    setForm(newForm);
+    // Sobre el formulario ANTERIOR (setForm con funcion): dos cambios en el
+    // mismo evento se suman y no se pisan. El precio sugerido por plan y el
+    // estado del pago siguen igual (lib/formularioMiembro.js).
+    setForm((prev) => aplicarCambio(prev, field, value, { gymConfig, estadoPago: determinarEstadoPago }));
   };
 
   const onSubmit = async (e) => {

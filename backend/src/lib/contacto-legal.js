@@ -39,9 +39,11 @@
  *   - los que dependen de la Pascua: jueves y viernes santos (sin traslado),
  *     Ascension (+39 dias), Corpus Christi (+60) y Sagrado Corazon (+68), los
  *     tres trasladados al lunes;
- *   - desde 2026, la Virgen de Chiquinquira: 9 de julio trasladado al lunes
- *     siguiente (Ley 2578 del 1 de junio de 2026, segun Wikipedia; conviene
- *     confirmar su vigencia en el texto oficial de la ley).
+ *   - desde 2026, la Virgen de Chiquinquira: 9 de julio, con el descanso de
+ *     la Ley 51 de 1983 (al lunes siguiente si no cae en lunes). Ley 2578 del
+ *     1 de junio de 2026, art. 6; rige desde su promulgacion (art. 7), en el
+ *     Diario Oficial 53.510 del 2 de junio de 2026 (texto en SUIN-Juriscol).
+ *     El primero es el lunes 13 de julio de 2026.
  */
 
 const ZONA = 'America/Bogota';
@@ -57,6 +59,12 @@ const TIPOS_AVISO = new Set(['vencida', 'por-vencer', 'acceso-bloqueado', 'venci
 const CANALES = ['WHATSAPP', 'EMAIL'];
 // El aviso del plan va por WhatsApp: es lo que informa el contrato.
 const CANALES_AVISO = ['WHATSAPP'];
+
+// Un plan vencido solo se avisa como aviso del contrato durante los primeros
+// DIAS_AVISO_VENCIDA dias: en ese plazo el mensaje es "tu plan vencio,
+// renuevalo", parte de la relacion vigente. Despues ya es un mensaje para
+// recuperar al cliente, o sea comercial, y exige su aceptacion.
+const DIAS_AVISO_VENCIDA = 30;
 const NOMBRE_CANAL = { WHATSAPP: 'WhatsApp', EMAIL: 'correo' };
 
 // Minutos desde la medianoche: [inicio, fin). A la hora de cierre en punto ya
@@ -215,7 +223,8 @@ function festivosColombia(anio) {
     [f(12, 8), 'Día de la Inmaculada Concepción'],
     [f(12, 25), 'Navidad'],
   ];
-  // Ley 2578 de 2026: el 9 de julio, corrido al lunes siguiente, desde 2026.
+  // Ley 2578 de 2026, art. 6: el 9 de julio, con el descanso de la Ley 51 de 1983;
+  // rige desde su promulgacion (art. 7, Diario Oficial 53.510 del 2 de junio de 2026).
   if (anio >= 2026) lista.push([alLunesSiguiente(f(7, 9)), 'Virgen de Chiquinquirá']);
   lista.sort(([a], [b]) => a.localeCompare(b));
   const mapa = new Map(lista);
@@ -405,6 +414,7 @@ module.exports = {
   ZONA,
   CANALES,
   CANALES_AVISO,
+  DIAS_AVISO_VENCIDA,
   NOMBRE_CANAL,
   TIPOS_AVISO,
   TEXTO_HORARIO,
