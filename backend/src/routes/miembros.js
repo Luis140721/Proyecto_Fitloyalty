@@ -73,7 +73,7 @@ function decryptQrCode(encrypted) {
 }
 
 /**
- * Largo maximo de una columna VARCHAR(n) de miembro o plan_cobro. Con uno mas
+ * Largo maximo de una columna VARCHAR(n) de miembro. Con uno mas
  * la BD rechaza el INSERT (22001) y el API respondia 500 DB_UNREACHABLE
  * (hallazgo de la integracion de la semana 6, restricciones-miembro.test.js).
  *
@@ -99,8 +99,8 @@ const createSchema = z.object({
   email:     hasta(z.string().email(), 150, 'El correo').optional().or(z.literal('').transform(() => undefined)),
   direccion: z.string().optional(),
   // Salud y emergencia
-  contacto_emergencia: hasta(z.string(), 100, 'El contacto de emergencia').optional(),
-  telefono_emergencia: hasta(z.string(), 20, 'El teléfono de emergencia').optional(),
+  contacto_emergencia: z.string().optional(),
+  telefono_emergencia: z.string().optional(),
   condiciones_medicas: z.string().optional(),
   alergias: z.string().optional(),
   // Plan y cobros
@@ -110,14 +110,14 @@ const createSchema = z.object({
   valor_total: z.string().optional(),
   valor_pagado: z.string().default('0'),
   metodo_pago: z.enum(['EFECTIVO', 'TRANSFERENCIA', 'TARJETA', 'PSE', 'NEQUI', 'DAVIPLATA', 'OTRO']).default('EFECTIVO'),
-  referencia_pago: hasta(z.string(), 100, 'La referencia de pago').optional(),
+  referencia_pago: z.string().optional(),
   estado_pago: z.enum(['PENDIENTE', 'PAGADO', 'PARCIAL']).default('PENDIENTE'),
   proxima_fecha_cobro: z.string().optional(),
   activar_recordatorio: z.boolean().default(false),
   dias_recordatorio: z.number().default(7),
   // Info adicional
-  objetivo: hasta(z.string(), 50, 'El objetivo').optional(),
-  nivel_experiencia: hasta(z.string(), 30, 'El nivel de experiencia').optional(),
+  objetivo: z.string().optional(),
+  nivel_experiencia: z.string().optional(),
   observaciones: z.string().optional(),
   // Términos
   acepto_terminos: z.boolean().default(false),

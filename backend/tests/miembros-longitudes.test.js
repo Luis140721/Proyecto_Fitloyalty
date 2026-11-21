@@ -93,20 +93,16 @@ function editar(body) {
 const insertoMiembro = () => mockQuery.mock.calls.some(([sql]) => /INSERT INTO miembro/i.test(sql));
 const actualizoMiembro = () => mockQuery.mock.calls.some(([sql]) => /UPDATE miembro/i.test(sql));
 
-// [campo, largo de la columna, como empieza el mensaje]. Los de miembro y el de
-// plan_cobro (referencia_pago) que escribe el alta.
+// [campo, largo de la columna, como empieza el mensaje]. Los topes del alta de
+// contacto y telefono de emergencia, objetivo, nivel de experiencia y
+// referencia_pago los agrega el #96 (miembros-alta-topes.test.js), no este PR.
 const LARGOS_ALTA = [
   ['nombre', 100, 'El nombre'],
   ['documento', 20, 'El documento'],
   ['telefono', 20, 'El teléfono'],
-  ['contacto_emergencia', 100, 'El contacto de emergencia'],
-  ['telefono_emergencia', 20, 'El teléfono de emergencia'],
-  ['objetivo', 50, 'El objetivo'],
-  ['nivel_experiencia', 30, 'El nivel de experiencia'],
-  ['referencia_pago', 100, 'La referencia de pago'],
 ];
 
-describe('POST /api/admin/miembros: largos de las columnas de miembro y plan_cobro', () => {
+describe('POST /api/admin/miembros: largos de las columnas de miembro', () => {
   it.each(LARGOS_ALTA)('should create the member when %s has exactly %i characters', async (campo, largo) => {
     // Arrange: pool falso (FAKE) del beforeEach; un valor en el limite exacto.
     const body = miembroValido({ [campo]: '1'.repeat(largo) });

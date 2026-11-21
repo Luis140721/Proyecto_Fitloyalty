@@ -322,7 +322,8 @@ describeConBd('plan_cobro contra la BD de pruebas', () => {
     });
 
     it('should accept 100 characters and reject 101 with 22001 when writing referencia_pago (VARCHAR(100))', async () => {
-      // Arrange: texto libre que escribe el alta; el createSchema ya lo corta en 100.
+      // Arrange: texto libre que escribe el alta (su tope en el createSchema lo
+    // agrega el #96).
       const { gymId, idMiembro } = await gimnasioConMiembro();
 
       // Act
