@@ -11,45 +11,59 @@ import { LoginPage } from './support/login-page.js';
 
 const tokenGuardado = (page) => page.evaluate((clave) => localStorage.getItem(clave), CLAVE_TOKEN);
 
+// Forma de un JWT: tres partes en base64url separadas por puntos.
+const FORMA_JWT = /^[\w-]+\.[\w-]+\.[\w-]+$/;
+
 test.describe('inicio de sesion con el backend real', () => {
   test.beforeEach(({ page }) => usarIpPropia(page));
 
-  test('should open the owner dashboard and keep the session after a reload', async ({ page, request }) => {
+  test('should open the owner dashboard and keep the session after a reload when the credentials are right', async ({ page, request }) => {
     // Arrange
     const dueno = await crearDueno(request);
     const login = new LoginPage(page);
     await login.abrir();
+    const respuestaLogin = page.waitForResponse(
+      (r) => r.request().method() === 'POST' && new URL(r.url()).pathname.endsWith('/api/auth/login'),
+    );
 
     // Act
     await login.iniciarSesion(dueno.correo, dueno.clave);
 
-    // Assert
+    // Assert: entra al panel y guarda exactamente el token que firmo el backend.
+    const { token } = await (await respuestaLogin).json();
     await expect(page).toHaveURL(/\/admin\/dashboard$/);
     await expect(page.getByRole('heading', { name: 'Hola, Sofia' })).toBeVisible();
-    expect(await tokenGuardado(page)).toBeTruthy();
+    expect(token).toMatch(FORMA_JWT);
+    expect(await tokenGuardado(page)).toBe(token);
 
     // La sesion sobrevive a recargar la pagina: no hay que volver a entrar.
     await page.reload();
     await expect(page.getByRole('heading', { name: 'Hola, Sofia' })).toBeVisible();
   });
 
-  test('should accept the email with capitals and spaces around it', async ({ page, request }) => {
+  test('should log in when the email has capitals and spaces around it', async ({ page, request }) => {
+    // Arrange
     const dueno = await crearDueno(request);
     const login = new LoginPage(page);
     await login.abrir();
 
+    // Act
     await login.iniciarSesion(`  ${dueno.correo.toUpperCase()} `, dueno.clave);
 
+    // Assert
     await expect(page).toHaveURL(/\/admin\/dashboard$/);
   });
 
   test('should stay on the login and show the backend message when the password is wrong', async ({ page, request }) => {
+    // Arrange
     const dueno = await crearDueno(request);
     const login = new LoginPage(page);
     await login.abrir();
 
+    // Act
     await login.iniciarSesion(dueno.correo, 'otraClave99');
 
+    // Assert
     await expect(login.aviso).toContainText('Credenciales incorrectas');
     await expect(page).toHaveURL(/\/login$/);
     expect(await tokenGuardado(page)).toBeNull();
@@ -57,18 +71,22 @@ test.describe('inicio de sesion con el backend real', () => {
     await expect(login.correo).toHaveValue(dueno.correo);
   });
 
-  test('should give the same message for an email that does not exist', async ({ page }) => {
-    // Mismo texto que con la clave mala: el login no revela que correos estan registrados.
+  test('should give the same message as a wrong password when the email does not exist', async ({ page }) => {
+    // Arrange: mismo texto que con la clave mala; el login no revela que
+    // correos estan registrados.
     const login = new LoginPage(page);
     await login.abrir();
 
+    // Act
     await login.iniciarSesion('nadie.registrado@example.com', 'cualquiera1');
 
+    // Assert
     await expect(login.aviso).toContainText('Credenciales incorrectas');
     await expect(page).toHaveURL(/\/login$/);
   });
 
   test('should ask for both fields without calling the API when they are empty', async ({ page }) => {
+    // Arrange
     const peticiones = [];
     page.on('request', (r) => {
       if (r.url().endsWith('/auth/login')) peticiones.push(r);
@@ -76,13 +94,15 @@ test.describe('inicio de sesion con el backend real', () => {
     const login = new LoginPage(page);
     await login.abrir();
 
+    // Act
     await login.entrar.click();
 
+    // Assert
     await expect(login.aviso).toContainText('Ingresa tu correo y contraseña');
     expect(peticiones).toHaveLength(0);
   });
 
-  test('should block the sixth attempt in a minute with a readable message', async ({ page, request }) => {
+  test('should block with a readable message when it is the sixth attempt in a minute', async ({ page, request }) => {
     // Arrange: cinco intentos con la clave mala desde la IP de este test
     const dueno = await crearDueno(request);
     const login = new LoginPage(page);
