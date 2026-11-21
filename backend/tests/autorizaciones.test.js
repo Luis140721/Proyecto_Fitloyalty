@@ -144,8 +144,8 @@ describe('alta en el panel: POST /api/admin/miembros', () => {
 
     const a = porTipo(id);
     expect(Object.keys(a).sort()).toEqual(['DATOS_SENSIBLES', 'TERMINOS', 'TRATAMIENTO_DATOS']);
-    expect(a.DATOS_SENSIBLES).toMatchObject({ otorgada: false, version_texto: 'v1', canal: 'PANEL', registrada_por: 21, id_gimnasio: GYM_A });
-    expect(a.TERMINOS).toMatchObject({ otorgada: true, version_texto: 'v1', canal: 'PANEL' });
+    expect(a.DATOS_SENSIBLES).toMatchObject({ otorgada: false, version_texto: 'v2', canal: 'PANEL', registrada_por: 21, id_gimnasio: GYM_A });
+    expect(a.TERMINOS).toMatchObject({ otorgada: true, version_texto: 'v2', canal: 'PANEL' });
     expect(a.TRATAMIENTO_DATOS).toMatchObject({ otorgada: true });
     for (const fila of Object.values(a)) expect(fila.fecha).toBeInstanceOf(Date);
 
@@ -163,7 +163,7 @@ describe('alta en el panel: POST /api/admin/miembros', () => {
     expect(r.body.datos_sensibles_descartados).toBe(false);
     const id = r.body.miembro.id_miembro;
     expect(mockBd.miembros.get(id)).toMatchObject({ condiciones_medicas: 'Asma leve', alergias: 'Penicilina' });
-    expect(porTipo(id).DATOS_SENSIBLES).toMatchObject({ otorgada: true, version_texto: 'v1', canal: 'PANEL' });
+    expect(porTipo(id).DATOS_SENSIBLES).toMatchObject({ otorgada: true, version_texto: 'v2', canal: 'PANEL' });
   });
 
   test('menor sin representante: 400 REPRESENTANTE_REQUERIDO y no escribe nada', async () => {
@@ -217,7 +217,7 @@ describe('alta en el panel: POST /api/admin/miembros', () => {
     expect(mockBd.miembros.get(id)).toMatchObject({ ...REPRESENTANTE, condiciones_medicas: 'Asma leve' });
 
     const a = porTipo(id);
-    expect(a.REPRESENTANTE_MENOR).toMatchObject({ otorgada: true, version_texto: 'v1', canal: 'PANEL', registrada_por: 21 });
+    expect(a.REPRESENTANTE_MENOR).toMatchObject({ otorgada: true, version_texto: 'v2', canal: 'PANEL', registrada_por: 21 });
     expect(a.REPRESENTANTE_MENOR.detalle).toMatchObject({ ...REPRESENTANTE, edad_miembro: 15 });
     // Las demas las da el representante.
     for (const t of ['TERMINOS', 'TRATAMIENTO_DATOS', 'DATOS_SENSIBLES']) {
@@ -256,7 +256,7 @@ describe('edicion en el panel: PUT /api/admin/miembros/:id', () => {
     // Historial: la otorgada y la revocacion, la mas reciente primero.
     const h = r.body.autorizaciones.historial.filter((x) => x.tipo === 'DATOS_SENSIBLES');
     expect(h.map((x) => x.otorgada)).toEqual([false, true]);
-    expect(h[0]).toMatchObject({ canal: 'PANEL', version: 'v1', registrada_por: 'Usuario 21' });
+    expect(h[0]).toMatchObject({ canal: 'PANEL', version: 'v2', registrada_por: 'Usuario 21' });
     expect(r.body.autorizaciones.vigentes.DATOS_SENSIBLES.otorgada).toBe(false);
   });
 
@@ -396,7 +396,7 @@ describe('app del miembro: /api/cliente/autorizaciones', () => {
     expect(r.body.message).toMatch(/Revocaste la autorización/);
     expect(mockBd.miembros.get(70)).toMatchObject({ condiciones_medicas: null, alergias: null });
     const ultima = autorizacionesDe(70).at(-1);
-    expect(ultima).toMatchObject({ tipo: 'DATOS_SENSIBLES', otorgada: false, canal: 'APP', registrada_por: null, version_texto: 'v1' });
+    expect(ultima).toMatchObject({ tipo: 'DATOS_SENSIBLES', otorgada: false, canal: 'APP', registrada_por: null, version_texto: 'v2' });
     expect(r.body.vigentes.DATOS_SENSIBLES.otorgada).toBe(false);
     expect(r.body.historial.map((h) => [h.tipo, h.otorgada, h.canal])[0]).toEqual(['DATOS_SENSIBLES', false, 'APP']);
     // El miembro del otro gimnasio no se toco.

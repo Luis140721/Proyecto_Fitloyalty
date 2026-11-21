@@ -11,6 +11,8 @@
  *   /api/admin/checkin  -> check-in manual/QR
  *   /api/admin/dashboard -> KPIs
  *   /api/cliente      -> App movil del miembro (login, perfil, QR, gamificacion)
+ *   /api/cliente/preferencias -> mensajes comerciales del miembro (RQNF-16)
+ *   /api/baja/:token  -> enlace publico para dejar los mensajes comerciales (RQNF-16)
  *   /api/health       -> healthcheck
  */
 require('dotenv').config();
@@ -93,6 +95,12 @@ const clienteLoginLimiter = rateLimit({
   standardHeaders: true, legacyHeaders: false,
   message: { error: 'Demasiados intentos. Intenta de nuevo en un minuto.' },
 });
+// El enlace de baja (RQNF-16) es publico: se limita por IP.
+const bajaLimiter = rateLimit({
+  windowMs: 60 * 1000, max: 20,
+  standardHeaders: true, legacyHeaders: false,
+  message: { error: 'Demasiadas solicitudes. Intenta de nuevo en un minuto.' },
+});
 
 app.use('/api/auth/login', loginLimiter);
 app.use('/api/auth/forgot-password', forgotLimiter);
@@ -114,6 +122,11 @@ app.use('/api', require('./routes/retos'));     // RQF-12
 app.use('/api', require('./routes/campanas'));  // RQF-10
 app.use('/api/asistencia', require('./routes/asistencia'));
 app.use('/api/vista',     require('./routes/vista'));
+// RQNF-16: /api/cliente/preferencias (app) y /api/baja/:token (enlace
+// publico). Va antes de clienteRoutes, que pide token de cliente para todo
+// lo que pasa por /api/cliente.
+app.use('/api/baja', bajaLimiter);
+app.use('/api', require('./routes/preferencias'));
 // App movil del cliente. El rate limit va SOLO sobre el login.
 app.use('/api/cliente/login', clienteLoginLimiter);
 app.use('/api/cliente', clienteRoutes);

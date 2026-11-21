@@ -126,7 +126,7 @@ function crearBdFalsa() {
       const fila = {
         id_autorizacion: bd.siguienteId++, id_miembro: params[0], id_gimnasio: params[1], tipo: params[2],
         otorgada: params[3], version_texto: params[4], canal: params[5], registrada_por: params[6],
-        detalle: params[7] ? JSON.parse(params[7]) : null, fecha: ahora(),
+        detalle: params[7] ? JSON.parse(params[7]) : null, canales_autorizados: params[8] ?? null, fecha: ahora(),
       };
       bd.autorizaciones.push(fila);
       return { rows: [{ ...fila }] };
