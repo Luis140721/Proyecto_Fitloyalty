@@ -110,6 +110,8 @@ app.use('/api', billingRoutes);
 app.use('/api', dashboardRoutes);
 app.use('/api', configRoutes);
 app.use('/api', require('./routes/notificaciones'));
+app.use('/api', require('./routes/retos'));     // RQF-12
+app.use('/api', require('./routes/campanas'));  // RQF-10
 app.use('/api/asistencia', require('./routes/asistencia'));
 app.use('/api/vista',     require('./routes/vista'));
 // App movil del cliente. El rate limit va SOLO sobre el login.
@@ -152,6 +154,10 @@ async function iniciar() {
   } catch (err) {
     console.error('[migrate] Migraciones pendientes o con error:', err.message);
   }
+
+  // QR dinamico: en produccion sin QR_DINAMICO_SECRET no se puede exigir
+  // (lib/qr-dinamico.js). Se avisa aqui para que se vea en el log del arranque.
+  await require('./lib/qr-dinamico').avisarSecretoAlArrancar(pool);
 
   app.listen(PORT, () => {
     console.log(`[OK] FitLoyalty API corriendo en http://localhost:${PORT}`);
