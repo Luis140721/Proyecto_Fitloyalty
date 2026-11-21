@@ -67,6 +67,18 @@ describeReal('RQF-10, RQF-12 y QR dinamico contra la base real', () => {
     return { status: r.status, body: await r.json().catch(() => ({})) };
   };
   const uno = async (sql, params) => (await pool.query(sql, params)).rows[0];
+  // RQNF-16 (Ley 2300): las campanas solo salen en horario y una vez al dia
+  // por miembro. Cada prueba de campanas corre con el reloj de la ley en un
+  // martes distinto a las 10:00 a. m. (otra semana), para que la frecuencia
+  // de una no se mezcle con la siguiente.
+  const legal = require('../src/lib/contacto-legal');
+  let semana = 0;
+  const otraSemana = () => {
+    semana += 1;
+    const t = legal.siguienteHorarioPermitido(new Date(Date.parse('2026-11-17T10:00:00-05:00') + semana * 7 * 86400000));
+    legal.establecerReloj(() => t);
+    return t;
+  };
   const hoyMas = (d) => {
     // Fecha de Colombia (UTC-5) dentro de d dias, en AAAA-MM-DD.
     const ms = Date.now() - 5 * 3600 * 1000 + d * 86400000;
@@ -142,6 +154,14 @@ describeReal('RQF-10, RQF-12 y QR dinamico contra la base real', () => {
     eva = await crearMiembro(gymB, 'Eva Otro Gym', 'eva', { diasRegistro: 0 });
     await checkinHace(ana, gymA, 1);
     await checkinHace(beto, gymA, 20);
+    // RQNF-16: Ana, Beto y Carla aceptaron mensajes comerciales por WhatsApp y correo.
+    for (const id of [ana, beto, carla]) {
+      await pool.query(
+        `INSERT INTO autorizacion_miembro (id_miembro, id_gimnasio, tipo, otorgada, version_texto, canal, canales_autorizados)
+         VALUES ($1, $2, 'MENSAJES_COMERCIALES', TRUE, 'v2', 'APP', ARRAY['WHATSAPP', 'EMAIL']::varchar(20)[])`,
+        [id, gymA]
+      );
+    }
 
     const firmar = (id, gymId, role) => jwt.sign({ id, role, gymId }, process.env.JWT_SECRET, { expiresIn: '1h' });
     const firmarMiembro = (idMiembro, gymId) => jwt.sign({ idMiembro, gymId, role: 'cliente' }, process.env.JWT_SECRET, { expiresIn: '1h' });
@@ -167,6 +187,7 @@ describeReal('RQF-10, RQF-12 y QR dinamico contra la base real', () => {
   });
 
   afterAll(async () => {
+    legal.establecerReloj(null);
     if (establecerBusquedaPersonal) establecerBusquedaPersonal(null);
     if (server) {
       if (server.closeAllConnections) server.closeAllConnections();
@@ -182,7 +203,7 @@ describeReal('RQF-10, RQF-12 y QR dinamico contra la base real', () => {
       await pool.query('DELETE FROM reto_miembro WHERE id_reto IN (SELECT id_reto FROM reto WHERE id_gimnasio = ANY($1::int[]))', g);
       await pool.query('DELETE FROM reto WHERE id_gimnasio = ANY($1::int[])', g);
       await pool.query('DELETE FROM hito_miembro WHERE id_miembro IN (SELECT id_miembro FROM miembro WHERE id_gimnasio = ANY($1::int[]))', g).catch(() => {});
-      for (const tabla of ['notificacion', 'canal_comunicacion', 'checkin', 'plan_cobro', 'alerta_abandono', 'miembro', 'usuario', 'gimnasio']) {
+      for (const tabla of ['notificacion', 'canal_comunicacion', 'checkin', 'plan_cobro', 'alerta_abandono', 'autorizacion_miembro', 'miembro', 'usuario', 'gimnasio']) {
         await pool.query(`DELETE FROM ${tabla} WHERE id_gimnasio = ANY($1::int[])`, g);
       }
     }
@@ -396,6 +417,17 @@ describeReal('RQF-10, RQF-12 y QR dinamico contra la base real', () => {
   // ================================================================ campanas
   describe('campanas y plantillas (RQF-10)', () => {
     let plantilla, campWa;
+    beforeEach(() => { otraSemana(); });
+
+    /** Primer dia habil (lunes a viernes, sin festivo) desde manana, a las 8:30 a. m. */
+    const proximoHabil = () => {
+      for (let d = 1; d < 15; d += 1) {
+        const f = hoyMas(d);
+        const dow = new Date(`${f}T12:00:00Z`).getUTCDay();
+        if (dow >= 1 && dow <= 5 && !legal.festivo(f)) return `${f}T08:30`;
+      }
+      throw new Error('sin dia habil');
+    };
 
     test('plantillas: crear, no repetir el nombre y listar', async () => {
       const r = await llamar('POST', '/api/admin/plantillas', tkAdminA, {
@@ -438,16 +470,19 @@ describeReal('RQF-10, RQF-12 y QR dinamico contra la base real', () => {
     });
 
     test('el envio a mano queda en envio_mensaje ligado a la campana', async () => {
+      // RQNF-16: el texto lo arma el servidor (con el enlace de baja) y es el
+      // que se abre en WhatsApp y queda registrado.
       const r = await llamar('POST', `/api/admin/campanas/${campWa}/destinatarios/${beto}/enviado`, tkAdminA, { mensaje: 'Hola Beto, te extrañamos.' });
       expect(r.status).toBe(201);
       expect(r.body.destinatario.estado_envio).toBe('ENVIADO');
+      expect(r.body.mensaje).toMatch(/^Hola Beto, en Prueba RQ10-12 A .*\n\nSi ya no quieres recibir mensajes comerciales del gimnasio, entra aquí: .*\/baja\//);
       const e = await uno(
         `SELECT e.estado, e.mensaje_copiado, e.id_plantilla, e.enviado_por, c.tipo
            FROM envio_mensaje e JOIN canal_comunicacion c ON c.id_canal = e.id_canal
           WHERE e.id_campana = $1 AND e.id_miembro = $2`,
         [campWa, beto]
       );
-      expect(e).toMatchObject({ estado: 'ENVIADO', mensaje_copiado: 'Hola Beto, te extrañamos.', id_plantilla: plantilla, enviado_por: adminA, tipo: 'WHATSAPP' });
+      expect(e).toMatchObject({ estado: 'ENVIADO', mensaje_copiado: r.body.mensaje, id_plantilla: plantilla, enviado_por: adminA, tipo: 'WHATSAPP' });
       expect((await llamar('POST', `/api/admin/campanas/${campWa}/destinatarios/${ana}/enviado`, tkAdminA, { mensaje: 'x' })).status).toBe(404);
     });
 
@@ -459,7 +494,7 @@ describeReal('RQF-10, RQF-12 y QR dinamico contra la base real', () => {
       const r = await llamar('POST', `/api/admin/campanas/${c.body.campana.id_campana}/ejecutar`, tkAdminA);
       expect(r.body.resumen).toMatchObject({ destinatarios: 1, enviados: 1, canal: 'EMAIL' });
       const correo = correos.find((x) => x.to === `carla-${sufijo}@prueba.local`);
-      expect(correo.texto).toMatch(/^Hola Carla Prueba, tu plan vence el \d{2}\/\d{2}\/\d{4}\.$/);
+      expect(correo.texto).toMatch(/^Hola Carla Prueba, tu plan vence el \d{2}\/\d{2}\/\d{4}\.\n\nSi ya no quieres recibir mensajes comerciales/);
       const e = await uno(
         `SELECT c.tipo FROM envio_mensaje e JOIN canal_comunicacion c ON c.id_canal = e.id_canal WHERE e.id_campana = $1`,
         [c.body.campana.id_campana]
@@ -473,7 +508,7 @@ describeReal('RQF-10, RQF-12 y QR dinamico contra la base real', () => {
         const c = await llamar('POST', '/api/admin/campanas', tkAdminA, { nombre: 'A todos', segmento: 'TODOS', mensaje: 'Hola {primer_nombre}, ¡nuevo horario!' });
         const r = await llamar('POST', `/api/admin/campanas/${c.body.campana.id_campana}/ejecutar`, tkAdminA);
         expect(r.body.resumen).toMatchObject({ destinatarios: 3, enviados: 3, pendientes: 0 });
-        expect(whatsapps.map((w) => w.texto)).toEqual(expect.arrayContaining(['Hola Ana, ¡nuevo horario!']));
+        expect(whatsapps.map((w) => w.texto)).toEqual(expect.arrayContaining([expect.stringMatching(/^Hola Ana, ¡nuevo horario!\n\n/)]));
       } finally {
         whatsappActivo = false;
       }
@@ -487,10 +522,10 @@ describeReal('RQF-10, RQF-12 y QR dinamico contra la base real', () => {
       });
       expect(pasada.status).toBe(400);
       const c = await llamar('POST', '/api/admin/campanas', tkAdminA, {
-        nombre: 'Programada', segmento: 'NUEVOS', mensaje: 'Hola {nombre}', tipo_disparo: 'PROGRAMADO', fecha_programada: `${hoyMas(1)}T08:30`,
+        nombre: 'Programada', segmento: 'NUEVOS', mensaje: 'Hola {nombre}', tipo_disparo: 'PROGRAMADO', fecha_programada: proximoHabil(),
       });
       expect(c.status).toBe(201);
-      expect(c.body.campana.fecha_programada).toBe(`${hoyMas(1)}T08:30`);
+      expect(c.body.campana.fecha_programada).toBe(proximoHabil());
       const id = c.body.campana.id_campana;
 
       // Todavia no es la hora: el job no la toca.

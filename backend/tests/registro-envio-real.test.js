@@ -109,6 +109,12 @@ describeReal('RQF-09 contra la base real: POST /api/admin/notificaciones/enviado
   let gymA, gymB, gymC, recepA, ana, beto, carla, dora, alertaAna, tokenA, tokenB, tokenC, tokenAdminA;
   const sufijo = crypto.randomBytes(3).toString('hex');
   const TEXTO = 'Hola Ana, te saludamos de Prueba RQF-09. Notamos que llevas 20 dias sin venir.';
+  // RQNF-16: el envio se revisa con la Ley 2300. El reloj de la ley se fija a
+  // un martes a las 10:00 a. m. de Colombia (y al miercoles en la prueba que
+  // repite el envio a Ana, por la regla de una vez al dia).
+  const legal = require('../src/lib/contacto-legal');
+  const MARTES = new Date('2026-11-17T10:00:00-05:00');
+  const MIERCOLES = new Date('2026-11-18T10:00:00-05:00');
 
   const enviar = async (body, tk = tokenA) => {
     const r = await fetch(base + '/api/admin/notificaciones/enviado', {
@@ -189,6 +195,13 @@ describeReal('RQF-09 contra la base real: POST /api/admin/notificaciones/enviado
       [ana, gymA]
     ));
     await pool.query("INSERT INTO canal_comunicacion (id_gimnasio, tipo, activo) VALUES ($1, 'WHATSAPP', FALSE)", [gymC]);
+    // RQNF-16: Ana acepto mensajes comerciales por WhatsApp (el de "en riesgo" lo es).
+    await pool.query(
+      `INSERT INTO autorizacion_miembro (id_miembro, id_gimnasio, tipo, otorgada, version_texto, canal, canales_autorizados)
+       VALUES ($1, $2, 'MENSAJES_COMERCIALES', TRUE, 'v2', 'APP', ARRAY['WHATSAPP']::varchar(20)[])`,
+      [ana, gymA]
+    );
+    legal.establecerReloj(() => MARTES);
 
     const firmar = (id, gymId, role = 'receptionist') => jwt.sign({ id, role, gymId }, process.env.JWT_SECRET, { expiresIn: '1h' });
     tokenA = firmar(recepA, gymA);
@@ -207,6 +220,7 @@ describeReal('RQF-09 contra la base real: POST /api/admin/notificaciones/enviado
   });
 
   afterAll(async () => {
+    legal.establecerReloj(null);
     if (establecerBusquedaPersonal) establecerBusquedaPersonal(null);
     if (server) {
       if (server.closeAllConnections) server.closeAllConnections();
@@ -214,7 +228,7 @@ describeReal('RQF-09 contra la base real: POST /api/admin/notificaciones/enviado
     }
     if (!pool) return;
     if (gimnasios.length > 0) {
-      for (const tabla of ['notificacion', 'envio_mensaje', 'canal_comunicacion', 'alerta_abandono', 'miembro', 'usuario', 'gimnasio']) {
+      for (const tabla of ['notificacion', 'envio_mensaje', 'canal_comunicacion', 'alerta_abandono', 'autorizacion_miembro', 'miembro', 'usuario', 'gimnasio']) {
         await pool.query(`DELETE FROM ${tabla} WHERE id_gimnasio = ANY($1::int[])`, [gimnasios]);
       }
     }
@@ -239,9 +253,10 @@ describeReal('RQF-09 contra la base real: POST /api/admin/notificaciones/enviado
     const { rows: [envio] } = await pool.query(
       `SELECT id_gimnasio, id_miembro, id_canal, id_alerta, id_campana, id_plantilla,
               mensaje_copiado, estado, enviado_por,
-              ABS(EXTRACT(EPOCH FROM (NOW()::timestamp - fecha_envio))) < 60 AS fecha_de_ahora
+              -- la fecha es la del reloj de la Ley 2300 (RQNF-16)
+              fecha_envio = ($2::timestamptz AT TIME ZONE current_setting('TimeZone')) AS fecha_de_ahora
          FROM envio_mensaje WHERE id_envio = $1`,
-      [r.body.envio.id_envio]
+      [r.body.envio.id_envio, MARTES]
     );
     expect(envio).toEqual({
       id_gimnasio: gymA,
@@ -267,26 +282,30 @@ describeReal('RQF-09 contra la base real: POST /api/admin/notificaciones/enviado
   });
 
   test('segundo envio: reutiliza el canal del gimnasio', async () => {
+    // El mismo dia la Ley 2300 no lo deja (una vez al dia); al dia siguiente si.
+    const mismoDia = await enviar({ idMiembro: ana, tipo: 'riesgo', mensaje: TEXTO });
+    expect(mismoDia.status).toBe(409);
+    expect(mismoDia.body.details.motivo).toBe('FRECUENCIA');
+    legal.establecerReloj(() => MIERCOLES);
     const r = await enviar({ idMiembro: ana, tipo: 'riesgo', mensaje: TEXTO });
+    legal.establecerReloj(() => MARTES);
     expect(r.status).toBe(201);
     expect(await contar('canal_comunicacion', 'id_gimnasio = $1', [gymA])).toBe(1);
     expect(await contar('envio_mensaje', 'id_gimnasio = $1', [gymA])).toBe(2);
     expect(await contar('envio_mensaje', 'id_gimnasio = $1 AND id_alerta IS NULL', [gymA])).toBe(1);
   });
 
-  test('cinco envios a la vez en un gimnasio sin canal: crean un solo canal', async () => {
+  test('cinco envios a la vez al mismo miembro: un solo canal y, por la Ley 2300, un solo envio', async () => {
     expect(await contar('canal_comunicacion', 'id_gimnasio = $1', [gymB])).toBe(0);
     const respuestas = await Promise.all(
-      Array.from({ length: 5 }, (_, i) => enviar({ idMiembro: beto, mensaje: `Hola Beto (${i})` }, tokenB))
+      Array.from({ length: 5 }, (_, i) => enviar({ idMiembro: beto, tipo: 'vencida', mensaje: `Hola Beto (${i})` }, tokenB))
     );
-    expect(respuestas.map((r) => r.status)).toEqual([201, 201, 201, 201, 201]);
+    // El bloqueo de contacto pone los cinco en fila: el primero pasa y los
+    // otros ya lo ven en el historial (una vez al dia).
+    expect(respuestas.map((r) => r.status).sort()).toEqual([201, 409, 409, 409, 409]);
+    expect(respuestas.filter((r) => r.status === 409).every((r) => r.body.details.motivo === 'FRECUENCIA')).toBe(true);
     expect(await contar('canal_comunicacion', 'id_gimnasio = $1', [gymB])).toBe(1);
-    const { rows } = await pool.query(
-      'SELECT DISTINCT id_canal FROM envio_mensaje WHERE id_gimnasio = $1',
-      [gymB]
-    );
-    expect(rows).toHaveLength(1);
-    expect(await contar('envio_mensaje', 'id_gimnasio = $1', [gymB])).toBe(5);
+    expect(await contar('envio_mensaje', 'id_gimnasio = $1', [gymB])).toBe(1);
   });
 
   test('miembro de otro gimnasio: 404 y no escribe nada', async () => {
@@ -312,7 +331,7 @@ describeReal('RQF-09 contra la base real: POST /api/admin/notificaciones/enviado
   });
 
   test('si el unico canal WhatsApp esta inactivo: crea uno activo y no usa el inactivo', async () => {
-    const r = await enviar({ idMiembro: dora, mensaje: 'Hola Dora' }, tokenC);
+    const r = await enviar({ idMiembro: dora, tipo: 'vencida', mensaje: 'Hola Dora' }, tokenC);
     expect(r.status).toBe(201);
     const { rows: canales } = await pool.query(
       "SELECT id_canal, activo FROM canal_comunicacion WHERE id_gimnasio = $1 AND tipo = 'WHATSAPP' ORDER BY id_canal",
@@ -324,7 +343,7 @@ describeReal('RQF-09 contra la base real: POST /api/admin/notificaciones/enviado
   });
 
   test('borrado permanente de un miembro al que se le escribio: borra sus envios y al miembro', async () => {
-    expect((await enviar({ idMiembro: carla, mensaje: 'Hola Carla' })).status).toBe(201);
+    expect((await enviar({ idMiembro: carla, tipo: 'vencida', mensaje: 'Hola Carla' })).status).toBe(201);
     expect(await contar('envio_mensaje', 'id_miembro = $1', [carla])).toBe(1);
     const r = await fetch(`${base}/api/admin/miembros/${carla}/permanent`, {
       method: 'DELETE',
