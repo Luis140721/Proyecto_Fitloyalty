@@ -168,7 +168,8 @@ describe('AdminLayout: el periodo de prueba', () => {
 
 describe('AdminLayout: el menu lateral', () => {
   test.each([
-    ['admin', ['Dashboard', 'Miembros', 'Check-in', 'Equipo', 'Configuración'], 'Administrador'],
+    // Retos y Campañas (RQF-12 y RQF-10) son solo del admin, como Equipo y Configuración.
+    ['admin', ['Dashboard', 'Miembros', 'Check-in', 'Retos', 'Campañas', 'Equipo', 'Configuración'], 'Administrador'],
     ['receptionist', ['Miembros', 'Check-in'], 'Recepción'],
     ['trainer', [], 'Entrenador'],
     // Un rol que el front no conoce (el backend manda rol_4 para un id_rol nuevo) se muestra tal cual.
