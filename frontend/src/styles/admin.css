@@ -1305,6 +1305,7 @@
 .aviso--por-vencer .aviso__icono { color: var(--primary-accent); }
 .aviso--riesgo     .aviso__icono { color: #FBBF24; }
 .aviso--acceso-bloqueado .aviso__icono { color: #F87171; }
+.aviso--reto-completado .aviso__icono { color: #FBBF24; }
 .aviso__visto {
   font-size: 11px;
   padding: 2px 8px;
@@ -1660,3 +1661,43 @@
   cursor: default;
 }
 .wa-fila--sin:hover { background: transparent; border-color: transparent; }
+
+
+/* ---------- Retos y campañas (RQF-12, RQF-10) ---------- */
+.barra-avance {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--surface-container);
+  overflow: hidden;
+  min-width: 80px;
+}
+.barra-avance > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--primary-accent);
+  transition: width 0.3s ease;
+}
+.lista-tarjetas { display: flex; flex-direction: column; gap: 12px; }
+.tarjeta-fila {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  flex-wrap: wrap;
+}
+.tarjeta-fila__texto { min-width: 0; flex: 1 1 260px; line-height: 1.45; }
+.tarjeta-fila__texto small { display: block; color: var(--on-surface-variant); }
+.tarjeta-fila__acciones { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.vista-mensaje {
+  white-space: pre-wrap;
+  padding: 12px 14px;
+  border-radius: var(--radius-lg);
+  border: 1px dashed var(--border-subtle);
+  background: var(--surface-container);
+  font-size: 14px;
+}

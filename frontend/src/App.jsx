@@ -22,6 +22,8 @@ import MiembrosPage from './pages/MiembrosPage';
 import CheckinPage from './pages/CheckinPage';
 import StaffPage from './pages/StaffPage';
 import ConfigPage from './pages/ConfigPage';
+import RetosPage from './pages/RetosPage';
+import CampanasPage from './pages/CampanasPage';
 
 export default function App() {
   return (
@@ -75,6 +77,22 @@ export default function App() {
               element={
                 <ProtectedRoute roles={['admin']}>
                   <AdminLayout><StaffPage /></AdminLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/retos"
+              element={
+                <ProtectedRoute roles={['admin']}>
+                  <AdminLayout><RetosPage /></AdminLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/campanas"
+              element={
+                <ProtectedRoute roles={['admin']}>
+                  <AdminLayout><CampanasPage /></AdminLayout>
                 </ProtectedRoute>
               }
             />

@@ -17,6 +17,7 @@ import '../services/api_client.dart';
 import '../services/asistencia_service.dart';
 import '../services/gamificacion_service.dart';
 import '../services/perfil_service.dart';
+import '../utils/qr_dinamico.dart';
 
 enum DataStatus { idle, loading, loaded, error }
 
@@ -29,11 +30,15 @@ class PerfilProvider extends ChangeNotifier {
   // -- QR --
   String? _qrCodigo;
   String? _qrImagen;
+  QrDinamico? _qrDinamico;
+  bool _qrSoloDinamico = false;
   DataStatus _qrStatus = DataStatus.idle;
   String? _qrError;
 
   String? get qrCodigo => _qrCodigo;
   String? get qrImagen => _qrImagen;
+  QrDinamico? get qrDinamico => _qrDinamico;
+  bool get qrSoloDinamico => _qrSoloDinamico;
   DataStatus get qrStatus => _qrStatus;
   String? get qrError => _qrError;
 
@@ -45,6 +50,8 @@ class PerfilProvider extends ChangeNotifier {
       final res = await _perfilService.getQr();
       _qrCodigo = res.codigo;
       _qrImagen = res.imagenDataUrl;
+      _qrDinamico = res.dinamico;
+      _qrSoloDinamico = res.soloDinamico;
       _qrStatus = DataStatus.loaded;
     } on ApiException catch (e) {
       _qrError = e.message;
@@ -166,6 +173,20 @@ class PerfilProvider extends ChangeNotifier {
       _retosStatus = DataStatus.error;
     }
     notifyListeners();
+  }
+
+  /// Inscribe al miembro en un reto. Devuelve null si salio bien o el mensaje
+  /// de error para mostrarlo.
+  Future<String?> unirseAReto(int idReto) async {
+    try {
+      await GamificacionService().unirseAReto(idReto);
+      await cargarRetos();
+      return null;
+    } on ApiException catch (e) {
+      return e.message;
+    } catch (_) {
+      return 'No pudimos inscribirte en el reto.';
+    }
   }
 
   // -- Edicion de perfil --
