@@ -30,8 +30,8 @@ class MiembrosPage {
 
   async acceptTerms() {
     await this.page.getByRole('button', { name: 'Términos' }).click();
-    await this.page.getByRole('checkbox', { name: /Acepto los términos y condiciones/ }).check();
-    await this.page.getByRole('checkbox', { name: /Autorizo el uso de mis datos/ }).check();
+    await this.page.getByRole('checkbox', { name: /Contrato y términos/ }).check();
+    await this.page.getByRole('checkbox', { name: /Tratamiento de datos/ }).check();
   }
 
   async completeRegistration(member) {

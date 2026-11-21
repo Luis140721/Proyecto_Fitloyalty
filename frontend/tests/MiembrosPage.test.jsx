@@ -191,8 +191,9 @@ describe('MiembrosPage', () => {
     await user.click(screen.getByRole('button', { name: /Siguiente/ }));
     expect(screen.getByRole('heading', { name: 'Términos y condiciones' })).toBeInTheDocument();
 
-    await user.click(screen.getByRole('checkbox', { name: /Acepto los términos y condiciones/ }));
-    await user.click(screen.getByRole('checkbox', { name: /Autorizo el uso de mis datos/ }));
+    // RQNF-17: cada autorización es una casilla separada con su texto.
+    await user.click(screen.getByRole('checkbox', { name: /Contrato y términos/ }));
+    await user.click(screen.getByRole('checkbox', { name: /Tratamiento de datos/ }));
     await user.click(screen.getByRole('button', { name: 'Crear miembro' }));
 
     await waitFor(() => expect(mocks.post).toHaveBeenCalledWith('/admin/miembros', expect.objectContaining({

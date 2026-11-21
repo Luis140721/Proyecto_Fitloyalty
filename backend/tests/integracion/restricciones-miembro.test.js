@@ -45,6 +45,10 @@ const LARGOS = [
   ['miembro', 'codigo_qr', 100], ['miembro', 'tipo_documento', 10], ['miembro', 'genero', 20],
   ['miembro', 'codigo_pais_telefono', 5], ['miembro', 'ciudad', 100], ['miembro', 'contacto_emergencia', 100],
   ['miembro', 'telefono_emergencia', 20], ['miembro', 'objetivo', 50], ['miembro', 'nivel_experiencia', 30],
+  // Migracion 019 (RQNF-17): representante legal del menor.
+  ['miembro', 'representante_nombre', 100], ['miembro', 'representante_tipo_documento', 10],
+  ['miembro', 'representante_documento', 20], ['miembro', 'representante_parentesco', 40],
+  ['miembro', 'representante_telefono', 20],
 ];
 
 // UNIQUE, llaves foraneas y CHECK de las tres tablas, cada una con su test abajo.

@@ -3,11 +3,31 @@ const request = require('supertest');
 
 const USER = { id: 7, gymId: 42, role: 'admin' };
 
+const TRANSACCION = ['BEGIN', 'COMMIT', 'ROLLBACK'];
+
+// Consultas de RQNF-17 que hacen el alta, el detalle y el borrado permanente.
+// Cada test las delega aquí para concentrarse en su propio flujo.
+function consultaDeAutorizaciones(sql) {
+  if (sql.includes('INSERT INTO autorizacion_miembro')) {
+    return { rows: [{ id_autorizacion: 1, tipo: 'TERMINOS', otorgada: false, version_texto: 'v1', canal: 'PANEL', fecha: '2026-01-01' }] };
+  }
+  if (sql.includes('FROM autorizacion_miembro')) return { rows: [] };
+  if (sql.startsWith('DELETE FROM envio_mensaje')) return { rows: [] };
+  return null;
+}
+
 function createApp(queryImpl, client) {
   const pool = {
-    query: jest.fn((sql, params) => queryImpl(sql, params)),
-    connect: jest.fn().mockResolvedValue(client),
+    query: jest.fn(async (sql, params) => consultaDeAutorizaciones(sql) ?? queryImpl(sql, params)),
+    connect: jest.fn(),
   };
+  // Sin un cliente propio, la transacción usa las mismas respuestas del pool
+  // y sus consultas quedan en pool.query.mock.calls.
+  const clienteTx = client ?? {
+    query: jest.fn(async (sql, params) => (TRANSACCION.includes(sql) ? { rows: [] } : pool.query(sql, params))),
+    release: jest.fn(),
+  };
+  pool.connect.mockResolvedValue(clienteTx);
   const mocks = {
     hash: jest.fn().mockResolvedValue('hashed-password'),
     sendMemberQR: jest.fn().mockResolvedValue({ delivered: true }),
@@ -256,7 +276,13 @@ test('busca por documento, carga detalle, valida actualizaciones y soporta borra
   await request(app).get('/admin/miembros/lookup').expect(400);
 
   const detail = await request(app).get('/admin/miembros/88').expect(200);
-  expect(detail.body.miembro).toEqual(member);
+  expect(detail.body.miembro).toEqual({
+    ...member,
+    // RQNF-17: sin autorizaciones registradas ni fecha de nacimiento.
+    autorizo_datos_sensibles: false,
+    datos_sensibles_sin_autorizacion: false,
+    menor_de_edad: false,
+  });
   await request(app).get('/admin/miembros/invalid').expect(400);
 
   await request(app).put('/admin/miembros/88').send({ email: 'ANA@example.com', password: 'clave123' }).expect(200);
