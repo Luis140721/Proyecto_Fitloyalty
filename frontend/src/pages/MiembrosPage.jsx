@@ -13,6 +13,10 @@ import EmptyState from '../components/EmptyState';
 import PageTransition from '../components/PageTransition';
 import Modal from '../components/Modal';
 import Ripple from '../components/Ripple';
+import {
+  RepresentanteCampos, CasillaAutorizacion, CasillaDatosSensibles, HistorialAutorizaciones,
+} from '../components/AutorizacionesMiembro';
+import { esMenor, edadEnAnios, isoADate, erroresRepresentante } from '../lib/autorizaciones';
 import QRCode from 'qrcode';
 
 // Componente personalizado para input de fecha con formato automático DD/MM/YYYY
@@ -220,8 +224,41 @@ const empty = {
   // Términos
   acepto_terminos: false,
   autorizo_datos: false,
+  // RQNF-17: autorizacion separada y opcional de datos sensibles, y
+  // representante legal (obligatorio si el miembro es menor de edad).
+  autorizo_datos_sensibles: false,
+  representante_nombre: '',
+  representante_tipo_documento: '',
+  representante_documento: '',
+  representante_parentesco: '',
+  representante_telefono: '',
+  autoriza_representante: false,
   activo: true
 };
+
+const CAMPOS_REPRESENTANTE = [
+  'representante_nombre', 'representante_tipo_documento', 'representante_documento',
+  'representante_parentesco', 'representante_telefono',
+];
+
+/**
+ * RQNF-17: lo que se le manda al backend sobre autorizaciones y
+ * representante. Sin autorizacion de datos sensibles no se mandan condiciones
+ * medicas ni alergias; si no es menor, no se manda representante.
+ */
+function payloadLegal(f, menor) {
+  const p = { autorizo_datos_sensibles: Boolean(f.autorizo_datos_sensibles) };
+  if (!p.autorizo_datos_sensibles) {
+    p.condiciones_medicas = '';
+    p.alergias = '';
+  }
+  if (menor) {
+    for (const k of CAMPOS_REPRESENTANTE) p[k] = (f[k] || '').trim();
+    p.representante_telefono = p.representante_telefono.replace(/\D/g, '');
+    p.autoriza_representante = Boolean(f.autoriza_representante);
+  }
+  return p;
+}
 
 const TIPOS_DOCUMENTO = ['CC', 'TI', 'NIT', 'CE', 'PP'];
 const GENEROS = ['Masculino', 'Femenino', 'Otro', 'Prefiero no decir'];
@@ -288,6 +325,8 @@ export default function MiembrosPage() {
   const [editError, setEditError] = useState('');
   const [editLoading, setEditLoading] = useState(false);
   const [editQr, setEditQr] = useState('');      // imagen del QR en el detalle
+  // RQNF-17: autorizaciones del miembro que se edita (vigentes e historial).
+  const [autorizacionesEdit, setAutorizacionesEdit] = useState(null);
   // Plan del miembro que se esta editando. Va aparte del resto de la ficha
   // porque vive en otra tabla y se guarda con su propia peticion.
   const [planForm, setPlanForm] = useState(null);
@@ -345,6 +384,8 @@ export default function MiembrosPage() {
       else if (f.fecha_nacimiento && textoAFecha(f.fecha_nacimiento) > new Date()) {
         e.fecha_nacimiento = 'La fecha de nacimiento no puede ser futura.';
       }
+      // RQNF-17: si es menor de edad, los datos del representante son obligatorios.
+      if (esMenor(textoAFecha(f.fecha_nacimiento), f.tipo_documento)) Object.assign(e, erroresRepresentante(f));
     }
     if (seccion === 'salud') {
       const tel = (f.telefono_emergencia || '').replace(/\D/g, '');
@@ -365,9 +406,18 @@ export default function MiembrosPage() {
     if (seccion === 'terminos') {
       if (!f.acepto_terminos) e.acepto_terminos = 'Debes aceptar los términos para registrar al miembro.';
       if (!f.autorizo_datos) e.autorizo_datos = 'Falta la autorización de tratamiento de datos.';
+      if (esMenor(textoAFecha(f.fecha_nacimiento), f.tipo_documento) && !f.autoriza_representante) {
+        e.autoriza_representante = 'El miembro es menor de edad: falta la autorización de su representante legal.';
+      }
     }
     return e;
   };
+
+  // RQNF-17: ¿el miembro del alta o de la edicion es menor de edad?
+  const menorAlta = esMenor(textoAFecha(form.fecha_nacimiento), form.tipo_documento);
+  const edadAlta = edadEnAnios(textoAFecha(form.fecha_nacimiento));
+  const menorEdit = esMenor(isoADate(editForm.fecha_nacimiento), editForm.tipo_documento);
+  const edadEdit = edadEnAnios(isoADate(editForm.fecha_nacimiento));
 
   /** Lleva el foco al primer campo marcado en rojo. */
   const enfocarPrimerError = () => {
@@ -605,7 +655,11 @@ export default function MiembrosPage() {
     try {
       const payload = { ...form };
       if (!payload.email) delete payload.email;
-      
+      // RQNF-17: el representante solo viaja si es menor; sin autorizacion
+      // de datos sensibles no viajan condiciones medicas ni alergias.
+      for (const k of [...CAMPOS_REPRESENTANTE, 'autoriza_representante']) delete payload[k];
+      Object.assign(payload, payloadLegal(form, menorAlta));
+
       // Convertir fechas de DD/MM/YYYY a formato ISO para el backend
       if (payload.fecha_inicio && payload.fecha_inicio.includes('/')) {
         payload.fecha_inicio = convertToISODate(payload.fecha_inicio);
@@ -653,7 +707,9 @@ export default function MiembrosPage() {
       setForm(formularioVacio());
       setOpen(false);
       load(q);
-      setInfo('Miembro creado exitosamente.');
+      setInfo(data.datos_sensibles_descartados
+        ? 'Miembro creado. No se guardaron condiciones médicas ni alergias porque no se autorizó el tratamiento de datos sensibles.'
+        : 'Miembro creado exitosamente.');
     } catch (err) {
       setError(err.message || 'No se pudo crear el miembro.');
     } finally {
@@ -698,7 +754,12 @@ export default function MiembrosPage() {
         // <input type="date"> necesita AAAA-MM-DD, no un ISO completo.
         fecha_nacimiento: full.fecha_nacimiento ? String(full.fecha_nacimiento).slice(0, 10) : '',
         activo: full.activo !== false,
+        // RQNF-17: los null del representante pasan a '' para los inputs.
+        ...Object.fromEntries(CAMPOS_REPRESENTANTE.map((k) => [k, full[k] || ''])),
+        autorizo_datos_sensibles: Boolean(full.autorizo_datos_sensibles),
+        autoriza_representante: false,
       });
+      setAutorizacionesEdit(data.autorizaciones || null);
       if (full.codigo_qr) {
         try { setEditQr(await QRCode.toDataURL(full.codigo_qr)); }
         catch (_) { /* si falla el dibujo, igual mostramos el codigo en texto */ }
@@ -942,6 +1003,7 @@ export default function MiembrosPage() {
     setEditInfo('');
     setEditQr('');
     setQrCopiado(false);
+    setAutorizacionesEdit(null);
   };
 
   const onSaveEdit = async (e) => {
@@ -965,11 +1027,15 @@ export default function MiembrosPage() {
         if (editForm[k] !== undefined) payload[k] = editForm[k];
       }
       if (!payload.email) delete payload.email;
-      await api.put(`/admin/miembros/${editing.id_miembro}`, payload);
+      // RQNF-17: autorizacion de datos sensibles (desmarcarla la revoca y
+      // borra esos datos) y representante legal si es menor.
+      Object.assign(payload, payloadLegal(editForm, menorEdit));
+      const { data: guardado } = await api.put(`/admin/miembros/${editing.id_miembro}`, payload);
       setEditing(null);
       setEditForm(empty);
       setEditQr('');
-      setInfo('Miembro actualizado.');
+      setAutorizacionesEdit(null);
+      setInfo(guardado?.message || 'Miembro actualizado.');
       load(q);
     } catch (err) {
       setEditError(err.message || 'No se pudo actualizar.');
@@ -1151,6 +1217,15 @@ export default function MiembrosPage() {
                     </select>
                   </label>
                 </div>
+                {/* RQNF-17: menor de edad -> representante legal obligatorio */}
+                {menorAlta && (
+                  <RepresentanteCampos
+                    valores={form}
+                    onChange={handleFormChange}
+                    errores={formErrors}
+                    edad={edadAlta}
+                  />
+                )}
                 <div className="auth-form-row">
                   <label className="field">
                     <span className="field-label">Teléfono / WhatsApp *</span>
@@ -1216,13 +1291,22 @@ export default function MiembrosPage() {
                     />
                   </label>
                 </div>
+                {/* RQNF-17: autorizacion separada y opcional de datos sensibles */}
+                <CasillaDatosSensibles
+                  checked={form.autorizo_datos_sensibles}
+                  onChange={(v) => handleFormChange('autorizo_datos_sensibles', v)}
+                  menor={menorAlta}
+                />
                 <label className="field">
                   <span className="field-label">Condiciones médicas / lesiones</span>
                   <textarea
                     className="field-input"
-                    value={form.condiciones_medicas}
+                    value={form.autorizo_datos_sensibles ? form.condiciones_medicas : ''}
                     onChange={(e) => handleFormChange('condiciones_medicas', e.target.value)}
-                    placeholder="Información relevante sobre condiciones médicas"
+                    placeholder={form.autorizo_datos_sensibles
+                      ? 'Información relevante sobre condiciones médicas'
+                      : 'Requiere la autorización de datos sensibles'}
+                    disabled={!form.autorizo_datos_sensibles}
                     rows={3}
                   />
                 </label>
@@ -1230,9 +1314,12 @@ export default function MiembrosPage() {
                   <span className="field-label">Alergias</span>
                   <textarea
                     className="field-input"
-                    value={form.alergias}
+                    value={form.autorizo_datos_sensibles ? form.alergias : ''}
                     onChange={(e) => handleFormChange('alergias', e.target.value)}
-                    placeholder="Alergias a medicamentos, alimentos, etc."
+                    placeholder={form.autorizo_datos_sensibles
+                      ? 'Alergias a medicamentos, alimentos, etc.'
+                      : 'Requiere la autorización de datos sensibles'}
+                    disabled={!form.autorizo_datos_sensibles}
                     rows={2}
                   />
                 </label>
@@ -1439,31 +1526,41 @@ export default function MiembrosPage() {
             {activeSection === 'terminos' && (
               <div className="form-section anim-fade-up">
                 <h4 style={{ marginBottom: 16, color: 'var(--primary)' }}>Términos y condiciones</h4>
-                <label className="field" style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 12 }}>
-                  <input
-                    type="checkbox"
-                    required
-                    checked={form.acepto_terminos}
-                    onChange={(e) => handleFormChange('acepto_terminos', e.target.checked)}
-                    style={{ marginTop: 4 }}
+                {/* RQNF-17: cada autorizacion por separado, con el texto (v1)
+                    que el backend guarda como prueba. */}
+                {menorAlta && (
+                  <p className="field-hint" style={{ marginBottom: 12 }}>
+                    El miembro es menor de edad: estas autorizaciones las da su representante legal
+                    {form.representante_nombre ? `, ${form.representante_nombre}` : ''}.
+                  </p>
+                )}
+                <CasillaAutorizacion
+                  tipo="TERMINOS"
+                  obligatoria
+                  checked={form.acepto_terminos}
+                  onChange={(v) => handleFormChange('acepto_terminos', v)}
+                  error={formErrors.acepto_terminos}
+                />
+                <CasillaAutorizacion
+                  tipo="TRATAMIENTO_DATOS"
+                  obligatoria
+                  checked={form.autorizo_datos}
+                  onChange={(v) => handleFormChange('autorizo_datos', v)}
+                  error={formErrors.autorizo_datos}
+                />
+                {menorAlta && (
+                  <CasillaAutorizacion
+                    tipo="REPRESENTANTE_MENOR"
+                    obligatoria
+                    checked={form.autoriza_representante}
+                    onChange={(v) => handleFormChange('autoriza_representante', v)}
+                    error={formErrors.autoriza_representante}
                   />
-                  <span className="field-label" style={{ margin: 0, fontSize: 14 }}>
-                    Acepto los términos y condiciones del gimnasio *
-                    <ErrorCampo msg={formErrors.acepto_terminos} />
-                  </span>
-                </label>
-                <label className="field" style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
-                  <input
-                    type="checkbox"
-                    checked={form.autorizo_datos}
-                    onChange={(e) => handleFormChange('autorizo_datos', e.target.checked)}
-                    style={{ marginTop: 4 }}
-                  />
-                  <span className="field-label" style={{ margin: 0, fontSize: 14 }}>
-                    Autorizo el uso de mis datos para fines administrativos y de contacto
-                    <ErrorCampo msg={formErrors.autorizo_datos} />
-                  </span>
-                </label>
+                )}
+                <p className="field-hint" style={{ marginTop: 4 }}>
+                  Datos sensibles (salud): {form.autorizo_datos_sensibles ? 'autorizados' : 'no autorizados'}.
+                  {' '}Es opcional y se marca en «Salud y emergencia».
+                </p>
               </div>
             )}
 
@@ -2045,10 +2142,31 @@ export default function MiembrosPage() {
                 className="field-input"
                 type="date"
                 value={editForm.fecha_nacimiento || ''}
+                max={new Date().toISOString().slice(0, 10)}
                 onChange={(e) => setEditForm({ ...editForm, fecha_nacimiento: e.target.value })}
               />
             </label>
           </div>
+
+          {/* RQNF-17: menor de edad -> representante legal y su autorizacion */}
+          {menorEdit && (
+            <>
+              <RepresentanteCampos
+                valores={editForm}
+                onChange={(campo, valor) => setEditForm((f) => ({ ...f, [campo]: valor }))}
+                edad={edadEdit}
+              />
+              <CasillaAutorizacion
+                tipo="REPRESENTANTE_MENOR"
+                obligatoria
+                checked={editForm.autoriza_representante}
+                onChange={(v) => setEditForm((f) => ({ ...f, autoriza_representante: v }))}
+                nota={autorizacionesEdit?.vigentes?.REPRESENTANTE_MENOR?.otorgada
+                  ? `Ya registrada el ${new Date(autorizacionesEdit.vigentes.REPRESENTANTE_MENOR.fecha).toLocaleDateString('es-CO')}. Márcala de nuevo solo si cambian los datos del representante.`
+                  : 'Todavía no está registrada: márcala para poder guardar.'}
+              />
+            </>
+          )}
 
           <div className="auth-form-row">
             <label className="field">
@@ -2107,6 +2225,20 @@ export default function MiembrosPage() {
             </label>
           </div>
 
+          {/* RQNF-17: autorizacion de datos sensibles. Desmarcarla y guardar
+              la revoca, deja constancia en el historial y borra los datos. */}
+          <CasillaDatosSensibles
+            checked={editForm.autorizo_datos_sensibles}
+            onChange={(v) => setEditForm((f) => ({ ...f, autorizo_datos_sensibles: v }))}
+            menor={menorEdit}
+            aviso={
+              editing?.autorizo_datos_sensibles && !editForm.autorizo_datos_sensibles
+                ? 'Al guardar se revoca la autorización y se borran las condiciones médicas y las alergias. Queda constancia en el historial.'
+                : editing?.datos_sensibles_sin_autorizacion && !editForm.autorizo_datos_sensibles
+                  ? 'Este miembro tiene datos de salud guardados sin una autorización separada (registro anterior). Si guardas sin marcar la autorización, se borran.'
+                  : null
+            }
+          />
           <div className="auth-form-row">
             <label className="field">
               <span className="field-label">Condiciones médicas</span>
@@ -2115,7 +2247,8 @@ export default function MiembrosPage() {
                 rows={2}
                 value={editForm.condiciones_medicas || ''}
                 onChange={(e) => setEditForm({ ...editForm, condiciones_medicas: e.target.value })}
-                placeholder="Lesiones, tratamientos, etc."
+                placeholder={editForm.autorizo_datos_sensibles ? 'Lesiones, tratamientos, etc.' : 'Requiere la autorización de datos sensibles'}
+                disabled={!editForm.autorizo_datos_sensibles}
               />
             </label>
             <label className="field">
@@ -2125,10 +2258,15 @@ export default function MiembrosPage() {
                 rows={2}
                 value={editForm.alergias || ''}
                 onChange={(e) => setEditForm({ ...editForm, alergias: e.target.value })}
-                placeholder="Alimentos, medicamentos…"
+                placeholder={editForm.autorizo_datos_sensibles ? 'Alimentos, medicamentos…' : 'Requiere la autorización de datos sensibles'}
+                disabled={!editForm.autorizo_datos_sensibles}
               />
             </label>
           </div>
+          <details style={{ marginBottom: 8 }}>
+            <summary className="field-label" style={{ cursor: 'pointer' }}>Historial de autorizaciones</summary>
+            <HistorialAutorizaciones historial={autorizacionesEdit?.historial} />
+          </details>
 
           <div className="auth-form-divider" style={{ margin: '6px 0 0' }}>ENTRENAMIENTO</div>
 
