@@ -99,6 +99,8 @@ router.get(
       const [bloqueados, vencidas, porVencer, enRiesgo] = await Promise.all([
         // Intentos de ingreso bloqueados de las ultimas 24 h que nadie ha marcado
         // como vistos. Si el miembro ya renovo, el aviso deja de aplicar solo.
+        // Solo los avisos para el gimnasio: los mensajes para la app del
+        // miembro (destinatario MIEMBRO, migracion 015) no salen en la campana.
         pool.query(
           `SELECT n.id_notificacion, mb.id_miembro, mb.nombre, mb.telefono, mb.codigo_pais_telefono,
                   GREATEST(0, EXTRACT(EPOCH FROM (NOW() - n.fecha_creacion)) / 60)::int AS minutos,
@@ -107,7 +109,8 @@ router.get(
              FROM notificacion n
              INNER JOIN miembro mb ON mb.id_miembro = n.id_miembro AND mb.id_gimnasio = n.id_gimnasio
              LEFT JOIN ${ULTIMO_PLAN} pc ON pc.id_miembro = mb.id_miembro
-            WHERE n.id_gimnasio = $1 AND n.tipo = $2 AND n.titulo = $4 AND n.leida = FALSE
+            WHERE n.id_gimnasio = $1 AND n.destinatario = 'GIMNASIO'
+              AND n.tipo = $2 AND n.titulo = $4 AND n.leida = FALSE
               AND n.fecha_creacion > NOW() - INTERVAL '24 hours'
               AND (pc.fecha_fin IS NULL OR pc.fecha_fin < CURRENT_DATE OR pc.congelado_desde IS NOT NULL)
             ORDER BY n.fecha_creacion DESC

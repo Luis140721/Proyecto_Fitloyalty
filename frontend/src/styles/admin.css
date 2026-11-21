@@ -1305,6 +1305,7 @@
 .aviso--por-vencer .aviso__icono { color: var(--primary-accent); }
 .aviso--riesgo     .aviso__icono { color: #FBBF24; }
 .aviso--acceso-bloqueado .aviso__icono { color: #F87171; }
+.aviso--reto-completado .aviso__icono { color: #4ADE80; }
 .aviso__visto {
   font-size: 11px;
   padding: 2px 8px;

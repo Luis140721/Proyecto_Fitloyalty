@@ -10,6 +10,7 @@
  *   /api/admin/miembros -> CRUD miembros
  *   /api/admin/checkin  -> check-in manual/QR
  *   /api/admin/dashboard -> KPIs
+ *   /api/admin/retos    -> retos de asistencia (RQF-12)
  *   /api/cliente      -> App movil del miembro (login, perfil, QR, gamificacion)
  *   /api/health       -> healthcheck
  */
@@ -110,6 +111,8 @@ app.use('/api', billingRoutes);
 app.use('/api', dashboardRoutes);
 app.use('/api', configRoutes);
 app.use('/api', require('./routes/notificaciones'));
+// Retos de asistencia (RQF-12): CRUD, progreso y avisos de retos completados.
+app.use('/api', require('./routes/retos'));
 app.use('/api/asistencia', require('./routes/asistencia'));
 app.use('/api/vista',     require('./routes/vista'));
 // App movil del cliente. El rate limit va SOLO sobre el login.

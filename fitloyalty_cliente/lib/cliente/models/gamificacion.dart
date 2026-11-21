@@ -15,6 +15,10 @@
 //     reto_miembro: checkins_acumulados, porcentaje_avance, estado (EN_CURSO/COMPLETADO/CANCELADO),
 //                   fecha_completado
 //     Se mapean a Reto.meta (meta_asistencias), Reto.premio (recompensa), etc.
+//     `participa`: ya esta inscrito (entra solo con su primer ingreso dentro de
+//     las fechas); `elegible`: hoy es del segmento del reto (RQF-12).
+//     porcentaje_avance es NUMERIC: el backend lo manda como numero, pero
+//     se acepta tambien como texto ("40.00") por si viene de una version vieja.
 
 class GamificacionResumen {
   final int puntosTotales;
@@ -85,6 +89,7 @@ class Reto {
   final double? porcentajeAvance;
   final bool completado;
   final DateTime? fechaCompletado;
+  final bool elegible;
 
   const Reto({
     required this.idReto,
@@ -99,12 +104,29 @@ class Reto {
     this.porcentajeAvance,
     this.completado = false,
     this.fechaCompletado,
+    this.elegible = false,
   });
 
-  /// Dias que faltan para que termine (negativo si ya cerro).
+  /// Dias que faltan para que termine, contando el de hoy como el ultimo si
+  /// termina hoy (0). Negativo si ya cerro.
   int get diasRestantes {
-    final hoy = DateTime.now();
-    return fechaFin.difference(hoy).inDays;
+    final ahora = DateTime.now();
+    final hoy = DateTime(ahora.year, ahora.month, ahora.day);
+    final fin = DateTime(fechaFin.year, fechaFin.month, fechaFin.day);
+    return fin.difference(hoy).inDays;
+  }
+
+  /// Todavia no empieza (reto programado).
+  bool get porEmpezar {
+    final ahora = DateTime.now();
+    return DateTime(fechaInicio.year, fechaInicio.month, fechaInicio.day)
+        .isAfter(DateTime(ahora.year, ahora.month, ahora.day));
+  }
+
+  static double? _numero(dynamic v) {
+    if (v == null) return null;
+    if (v is num) return v.toDouble();
+    return double.tryParse(v.toString());
   }
 
   factory Reto.fromJson(Map<String, dynamic> json) {
@@ -118,10 +140,11 @@ class Reto {
       premio:             json['recompensa']         as String?,
       participa:          json['participa']          as bool? ?? false,
       checkinsAcumulados: (json['checkins_acumulados'] as num?)?.toInt(),
-      porcentajeAvance:   (json['porcentaje_avance'] as num?)?.toDouble(),
+      porcentajeAvance:   _numero(json['porcentaje_avance']),
       completado:         json['completado']         as bool? ?? false,
       fechaCompletado:    json['fecha_completado'] == null
-        ? null : DateTime.tryParse(json['fecha_completado'].toString()),
+        ? null : DateTime.tryParse(json['fecha_completado'].toString())?.toLocal(),
+      elegible:           json['elegible']           as bool? ?? false,
     );
   }
 }
