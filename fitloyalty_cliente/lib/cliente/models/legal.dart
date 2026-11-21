@@ -22,7 +22,7 @@ class Autorizacion {
   final String tipo;
   final bool otorgada;
   final String? version;
-  final String? canal;          // PANEL o APP
+  final String? canal;          // PANEL, APP o ENLACE (baja de mensajes comerciales, RQNF-16)
   final DateTime? fecha;
   final String? registradaPor;  // usuario del gimnasio (null si fue en la app)
   final String? texto;          // texto que se le mostro, segun la version
@@ -41,7 +41,11 @@ class Autorizacion {
 
   String get nombre => nombresAutorizacion[tipo] ?? tipo;
 
-  String get canalLegible => canal == 'APP' ? 'en la app' : 'en el gimnasio';
+  String get canalLegible => switch (canal) {
+        'APP' => 'en la app',
+        'ENLACE' => 'con el enlace de baja',
+        _ => 'en el gimnasio',
+      };
 
   factory Autorizacion.fromJson(Map<String, dynamic> json) {
     final detalle = json['detalle'];

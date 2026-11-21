@@ -92,11 +92,19 @@ class _EditarPerfilScreenState extends State<EditarPerfilScreen> {
     if (m != null) {
       // Reflejar en el AuthProvider para que el resto de pantallas vean el cambio.
       context.read<AuthProvider>().setMiembro(m);
+      // Ajuste 7 del #102: si el backend descarto las condiciones medicas y
+      // alergias (no hay autorizacion de datos sensibles), se dice, en vez de
+      // un "Perfil actualizado" que haria creer que se guardaron.
+      final descartados = p.sensiblesDescartados;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Perfil actualizado'),
-          backgroundColor: AppColors.surfaceHigh,
+        SnackBar(
+          content: Text(descartados
+              ? (p.editMensaje ?? 'Perfil actualizado, pero tus condiciones médicas y alergias no se guardaron: autoriza el tratamiento de datos de salud en «Mis autorizaciones».')
+              : 'Perfil actualizado',
+              style: descartados ? const TextStyle(color: AppColors.bg, fontWeight: FontWeight.w600) : null),
+          backgroundColor: descartados ? AppColors.warning : AppColors.surfaceHigh,
           behavior: SnackBarBehavior.floating,
+          duration: Duration(seconds: descartados ? 6 : 3),
         ),
       );
       Navigator.pop(context);

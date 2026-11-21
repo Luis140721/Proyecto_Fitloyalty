@@ -196,6 +196,13 @@ class PerfilProvider extends ChangeNotifier {
   String? get editError => _editError;
   DataStatus get editStatus => _editStatus;
 
+  // Lo que dijo el servidor al guardar, y si descarto los datos de salud por
+  // no tener la autorizacion de datos sensibles (ajuste 7 del #102).
+  String? _editMensaje;
+  bool _sensiblesDescartados = false;
+  String? get editMensaje => _editMensaje;
+  bool get sensiblesDescartados => _sensiblesDescartados;
+
   /// Actualizar perfil (PUT /api/cliente/me). Devuelve el Miembro actualizado
   /// o null si fallo. La pantalla que llama muestra _editError.
   Future<Miembro?> actualizarPerfil({
@@ -211,9 +218,11 @@ class PerfilProvider extends ChangeNotifier {
   }) async {
     _editStatus = DataStatus.loading;
     _editError = null;
+    _editMensaje = null;
+    _sensiblesDescartados = false;
     notifyListeners();
     try {
-      final m = await _perfilService.updatePerfil(
+      final r = await _perfilService.updatePerfil(
         telefono: telefono,
         email: email,
         direccion: direccion,
@@ -224,9 +233,11 @@ class PerfilProvider extends ChangeNotifier {
         objetivo: objetivo,
         nivelExperiencia: nivelExperiencia,
       );
+      _editMensaje = r.mensaje;
+      _sensiblesDescartados = r.sensiblesDescartados;
       _editStatus = DataStatus.loaded;
       notifyListeners();
-      return m;
+      return r.miembro;
     } on ApiException catch (e) {
       _editError = e.message;
       _editStatus = DataStatus.error;
