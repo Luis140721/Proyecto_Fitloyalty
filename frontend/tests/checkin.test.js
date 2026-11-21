@@ -76,6 +76,23 @@ describe('los códigos QR siguen yendo como código', () => {
     assert.deepEqual(armarPayloadCheckin({ codigo: '123', metodo: 'QR' }), { metodo: 'QR', codigo: '123' });
   });
 
+  it('los bordes del patrón: de 4 a 15 dígitos, y el NIT con un solo dígito de verificación', () => {
+    assert.equal(pareceDocumento('1234'), true);
+    assert.equal(pareceDocumento('123456789012345'), true);
+    assert.equal(pareceDocumento('1234567890123456'), false);
+    assert.equal(pareceDocumento('900123456-7'), true);
+    assert.equal(pareceDocumento('900123456-12'), false);
+    assert.equal(pareceDocumento(' 79123456 '), true);
+    assert.equal(pareceDocumento(undefined), false);
+  });
+
+  it('un QR con espacios en los extremos se manda recortado', () => {
+    assert.deepEqual(
+      armarPayloadCheckin({ codigo: ' FL-1-A83T7U7 ', metodo: 'QR' }),
+      { metodo: 'QR', codigo: 'FL-1-A83T7U7' },
+    );
+  });
+
   it('el campo del QR tiene prioridad sobre «O por documento» al pulsar «Registrar»', () => {
     assert.deepEqual(
       armarPayloadCheckin({ codigo: 'FL-1-A83T7U7', documento: '79123456', metodo: 'QR' }),
@@ -112,6 +129,13 @@ describe('sin nada que registrar', () => {
     assert.equal(armarPayloadCheckin({ codigo: '', documento: '', metodo: 'QR' }), null);
     assert.equal(armarPayloadCheckin({ codigo: '   ', documento: ' ', metodo: 'QR' }), null);
     assert.equal(armarPayloadCheckin(), null);
+  });
+
+  it('un campo del QR con solo espacios cuenta como vacío y se usa el documento', () => {
+    assert.deepEqual(
+      armarPayloadCheckin({ codigo: '   ', documento: '79123456', metodo: 'QR' }),
+      { metodo: 'MANUAL', documento: '79123456' },
+    );
   });
 
   it('el Enter de «O por documento» vacío no manda el QR', () => {

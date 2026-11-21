@@ -5,8 +5,10 @@
  *
  * El cursor arranca en el campo del QR (autoFocus), así que quien no conoce
  * la pantalla suele escribir ahí el documento. Antes eso se mandaba como un
- * código QR y salía «Miembro no encontrado». Un documento escrito en ese
- * campo ahora se registra por documento, como ingreso manual.
+ * código QR y salía «Miembro no encontrado» (o, con «Exigir QR dinámico»,
+ * el 400 QR_ESTATICO_NO_PERMITIDO). Un documento escrito en ese campo ahora
+ * se registra por documento, como ingreso manual. Un campo con solo
+ * espacios cuenta como vacío.
  *
  * Los códigos de FitLoyalty nunca son solo números: el QR fijo es
  * «FL-<gimnasio>-<código>» (o su versión cifrada, en hexadecimal con «:»)
