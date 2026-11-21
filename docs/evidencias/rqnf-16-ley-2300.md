@@ -1,8 +1,8 @@
 # RQNF-16: mensajes a los miembros según la Ley 2300 de 2023
 
 **Requisito:** «El sistema debe aplicar la Ley 2300 de 2023 a los mensajes que se envían a los miembros (retención, campañas y avisos de vencimiento): usar solo los canales que el miembro autorizó; enviarlos de lunes a viernes de 7:00 a. m. a 7:00 p. m. y los sábados de 8:00 a. m. a 3:00 p. m., nunca domingos ni festivos; no contactar al mismo miembro más de una vez al día ni por varios canales en la misma semana; y ofrecer un mecanismo sencillo para que el miembro cancele en cualquier momento la recepción de mensajes comerciales.»
-**Categoría:** Cumplimiento. **Fecha:** 2026-11-21. **Rama:** `feat/rqnf-16-ley2300`, creada desde `feat/qr-dinamico-retos-campanas` (PR #100 de Santiago, con las campañas de RQF-10) y con `develop` @ `907af1a` (PR #102) fusionado encima, sin rebase.
-**Resultado:** implementado en el backend, el panel y la app del miembro, con las migraciones 017 y 018. Pruebas: 602 en total, todas en verde contra las dos bases reales; 152 nuevas sin base (reglas, campañas, preferencias, envíos y vencimientos) y 19 nuevas contra cada base real.
+**Categoría:** Cumplimiento. **Fecha:** 2026-11-21. **Rama:** `feat/rqnf-16-ley2300`, creada desde `feat/qr-dinamico-retos-campanas` (PR #100 de Santiago, con las campañas de RQF-10) y con `develop` fusionado encima dos veces, sin rebase: primero `907af1a` (PR #102) y después `ad90d73` (PR #104 con el #100, la bandeja del miembro y la migración 016, y los PR de documentos #103 y #107).
+**Resultado:** implementado en el backend, el panel y la app del miembro, con las migraciones 017 y 018. Pruebas: 647 en total, todas en verde contra las dos bases reales; 152 nuevas sin base (reglas, campañas, preferencias, envíos y vencimientos) y 19 nuevas contra cada base real.
 
 > **Nota legal.** Los textos, las páginas legales y las reglas de este documento son una implementación técnica de la ley hecha por el equipo, no una asesoría jurídica. Conviene que los revise un abogado antes de usarlos con miembros reales.
 
@@ -107,18 +107,21 @@ En el panel, la constancia se pide **antes** de abrir WhatsApp (`frontend/src/li
 
 Jest con configuración propia (carpeta del scratchpad, `testRegex` sobre `backend/tests/`), `NODE_PATH` del backend principal. PostgreSQL 16 en un contenedor propio (`fl-ley2300-pg`, `127.0.0.1:55444`), con tres bases:
 
-- `fl_consultas`: `ConsultasDB/Query_Inicial_Crear_Tablas.sql` de develop y luego `node src/db/migrate.js` (como producción);
+- `fl_consultas`: `ConsultasDB/Query_Inicial_Crear_Tablas.sql` de develop `ad90d73` y luego `node src/db/migrate.js` (como producción);
 - `fl_migraciones`: solo `migrate.js` (como Docker);
-- `fl_orden_viejo`: todas las migraciones con 017 y 018 **después** de 019 y 020 (una base que ya tenía el #102), y 017 y 018 corridas dos veces.
+- `fl_orden_viejo`: todas las migraciones con 017 y 018 **después** de 019 y 020 (una base que ya tenía el #102).
 
-`pg_dump --schema-only` de `autorizacion_miembro` y `campana_destinatario` da el mismo esquema en las tres bases (solo cambia el token `\restrict` del volcado).
+En `fl_consultas` y `fl_migraciones` las migraciones 015 a 020 corrieron juntas: `migrate.js` dos veces (la segunda dice «Nada pendiente») y después 015, 016, 017, 018, 019 y 020 otra vez con `psql -v ON_ERROR_STOP=1`, sin errores. `pg_dump --schema-only` de `autorizacion_miembro` y `campana_destinatario` da el mismo esquema en las tres bases (solo cambia el token `\restrict` del volcado).
+
+Cifras después de fusionar develop `ad90d73` (2026-11-21):
 
 | Suite | Sin base | `fl_consultas` | `fl_migraciones` |
 |---|---|---|---|
-| Todo el backend (27 archivos) | 534 pasan, 68 saltadas (las reales) | 602 de 602 | 602 de 602 |
-| `fl_orden_viejo` (las cuatro reales) | — | 87 de 87 | — |
+| Todo el backend (30 archivos) | 561 pasan, 86 saltadas (las reales) | 647 de 647, dos corridas | 647 de 647, dos corridas |
+| `fl_orden_viejo` (las cinco suites reales) | — | 106 de 106 | — |
+| App: `flutter analyze` / `flutter test` (copia con SDK `^3.12.0`) | sin problemas / 18 de 18 | — | — |
 
-Antes de esta rama había 432 pruebas (383 sin base). Las nuevas o cambiadas:
+Antes de la primera fusión había 432 pruebas en el backend (383 sin base); las 45 que se sumaron con `ad90d73` son de la bandeja del miembro y los avisos de retos (#104). Las nuevas o cambiadas por RQNF-16:
 
 | Archivo | Pruebas | Qué cubre |
 |---|---|---|
@@ -130,7 +133,7 @@ Antes de esta rama había 432 pruebas (383 sin base). Las nuevas o cambiadas:
 | `backend/tests/ley2300-real.test.js` | 20 (19 contra la base) | Columnas y CHECK de 017 y 018 (y que el CHECK viejo ya no está), miembro existente sin fila, app, doble toque concurrente, enlace, panel, ajustes (1) y (2), campaña con los tres motivos y la hora del reloj, otro canal en la semana, «Enviar ahora» un sábado a las 4:00 p. m. (queda programada para el lunes 23 a las 7:00 a. m.), programar en domingo, GET que no ejecuta y scheduler por gimnasio, reintento concurrente (botón y scheduler) sin duplicar, doble clic concurrente, avisos de vencimiento (domingo, frecuencia, miércoles) |
 | `backend/tests/registro-envio-real.test.js`, `retos-campanas-real.test.js`, `legal-real.test.js`, `registro-envio.test.js`, `autorizaciones.test.js`, `miembros-update.test.js`, `retos-campanas.test.js` | ajustadas | Reloj fijo, aceptación comercial de sus miembros, textos v2 y contrato v3. En RQF-09, los cinco envíos a la vez al mismo miembro ahora dan un 201 y cuatro 409 `FRECUENCIA` (antes eran cinco 201): es el bloqueo de contacto funcionando |
 
-Además: `esbuild` compila los `.jsx` cambiados y el bundle de `App.jsx` con todos sus imports; `flutter analyze` sobre una copia con el SDK relajado a `^3.12.0` (Flutter 3.44.8, Dart 3.12.2): **No issues found** (en la copia se creó un `assets/.env` vacío para que no avise por el asset; no se copió el `.env` real). Arranque del `app` completo de Express: `/api/baja/abc` responde 404 `ENLACE_INVALIDO` y `/api/cliente/preferencias` sin token, 401.
+Además: `esbuild` compila los `.jsx` cambiados y el bundle de `src/main.jsx` con todos sus imports; `flutter analyze` sobre una copia con el SDK relajado a `^3.12.0` (Flutter 3.44.8, Dart 3.12.2): **No issues found**, y `flutter test`: 18 de 18 (en la copia se creó un `assets/.env` vacío para que no avise por el asset; no se copió el `.env` real). Arranque del `app` completo de Express: `/api/baja/abc` responde 404 `ENLACE_INVALIDO` y `/api/cliente/preferencias` sin token, 401.
 
 ## Límites y riesgos
 
@@ -144,4 +147,5 @@ Además: `esbuild` compila los `.jsx` cambiados y el bundle de `App.jsx` con tod
 - **Los textos v2 y el contrato v3** cambian lo que el miembro ve; las filas viejas conservan su versión. El texto de las páginas legales y de las autorizaciones lo debe revisar un abogado.
 - **No se probó en un navegador ni en un teléfono:** el panel se compiló con esbuild y la app con `flutter analyze`; el flujo de abrir wa.me después de la respuesta depende de que el navegador deje la pestaña en blanco abierta (si un bloqueador la cierra, se intenta abrir de nuevo con la respuesta).
 - **No se corrió contra Neon ni producción**, solo contra las tres bases locales.
-- **Choques posibles al fusionar:** la rama trae el PR #100 (todavía no está en develop). El otro ejecutor (`feat/rqf-12-completo`) también toca `routes/notificaciones.js` (aquí solo cambió el POST `/enviado` y tres `require` arriba), `tests/retos-campanas-real.test.js` y `tests/retos-campanas.test.js` (aquí solo la parte de campañas y la preparación) y `perfil_provider.dart` (aquí solo la parte de edición).
+- **Fusión con develop `ad90d73` (PR #104):** solo chocó `tests/retos-campanas-real.test.js`, donde se conservaron los dos ayudantes (`otraSemana` de RQNF-16 y `avisos` del #104). `routes/notificaciones.js` se fusionó solo: el filtro `destinatario = 'GIMNASIO'` del #104 en el GET y en «marcar visto» quedó junto al POST `/enviado` de RQNF-16, cuya fila de `notificacion` («Recordatorio enviado») toma el valor por defecto `GIMNASIO`. `perfil_provider.dart` y `main.dart` también se fusionaron solos.
+- **Avisos de retos en la bandeja (#104):** `avisarRetoCompletado` (`backend/src/lib/retos.js:133-152`) y el aviso de reto cancelado solo escriben filas de `notificacion` (`MIEMBRO` para la bandeja de la app y `GIMNASIO` para la campana del panel). Son mensajes internos de la app, no salen por WhatsApp ni por correo, así que no pasan por las reglas de la Ley 2300 ni cuentan en la frecuencia. Si el administrador felicita al miembro por WhatsApp desde la campana, ese envío va por `POST /enviado` con el tipo `reto-completado`, que es comercial: pide la aceptación, el horario y la frecuencia.

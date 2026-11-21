@@ -14,6 +14,7 @@ const { AppError } = require('../lib/errors');
 const { requireActiveTrial } = require('../lib/trial');
 const { z } = require('zod');
 const { formatZodError } = require('../lib/validators');
+const { puedeExigirse: puedeExigirseQrDinamico, MENSAJE_SIN_SECRETO } = require('../lib/qr-dinamico');
 
 const router = express.Router();
 
@@ -56,6 +57,8 @@ async function conDiasAviso(gymId, cfg) {
     ...cfg,
     dias_aviso_vencimiento: rows[0] ? rows[0].dias_aviso_vencimiento : 3,
     qr_dinamico_obligatorio: rows[0] ? rows[0].qr_dinamico_obligatorio === true : false,
+    // false en produccion sin QR_DINAMICO_SECRET: la pantalla no deja activarlo.
+    qr_dinamico_disponible: puedeExigirseQrDinamico(),
     ...UMBRALES_POR_DEFECTO,
     ...(umbrales[0] || {}),
   };
@@ -170,6 +173,20 @@ router.put(
 
     try {
       // Primero lo que puede rechazar la peticion, para no guardar a medias.
+
+      // QR dinamico: en produccion sin QR_DINAMICO_SECRET no se puede activar
+      // (lib/qr-dinamico.js). Apagarlo, o reenviarlo encendido si ya lo estaba
+      // (la pantalla manda toda la configuracion), si se puede.
+      if (qrDinamico === true && !puedeExigirseQrDinamico()) {
+        const { rows: gym } = await pool.query(
+          'SELECT qr_dinamico_obligatorio FROM gimnasio WHERE id_gimnasio = $1',
+          [gymId]
+        );
+        if (!(gym[0] && gym[0].qr_dinamico_obligatorio === true)) {
+          throw new AppError(409, MENSAJE_SIN_SECRETO, 'QR_DINAMICO_SIN_SECRETO');
+        }
+      }
+
       if (hayUmbrales) {
         await guardarUmbrales(gymId, req.user.id, {
           umbral_alerta_amarilla: umbralAmarilla,

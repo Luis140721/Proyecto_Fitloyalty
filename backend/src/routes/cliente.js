@@ -11,8 +11,11 @@
  *   GET  /membresia    -> plan vigente (plan_cobro activo)
  *   GET  /asistencia   -> ultimos check-ins del miembro (default 20)
  *   GET  /gamificacion -> hitos alcanzados + disponibles + puntos totales
- *   GET  /retos        -> retos activos en el gimnasio del miembro
+ *   GET  /retos        -> retos vigentes del gimnasio y los que el miembro completo
  *   POST /retos/:id/unirse -> inscribe al miembro en un reto (si es elegible)
+ *   GET  /mensajes     -> bandeja de mensajes del gimnasio para el miembro
+ *   PATCH /mensajes/:id/leido -> marca un mensaje propio como leido
+ *   PATCH /mensajes/leidos    -> marca todos como leidos
  *   POST /logout       -> cierre de sesion (cliente borra el token)
  *
  * Autenticacion:
@@ -37,7 +40,7 @@ const { AppError } = require('../lib/errors');
 const { generarTokenCliente, miembroSeguro } = require('../lib/auth-helpers');
 const { datosParaApp } = require('../lib/qr-dinamico');
 const { esElegible, ETIQUETAS, HOY } = require('../lib/segmentos');
-const { sincronizarEstados, recalcularParticipacion } = require('../lib/retos');
+const { sincronizarEstados, recalcularYAvisar } = require('../lib/retos');
 
 const router = express.Router();
 
@@ -401,33 +404,48 @@ router.get('/gamificacion', asyncHandler(async (req, res) => {
 
 // ---------------------------------------------------------------------------
 // GET /api/cliente/retos
-// Retos activos en el gimnasio, con flag `participa` para los que ya esta
-// inscrito el miembro.
+// Retos del miembro (RQF-12):
+//   - los vigentes o programados del gimnasio, con `participa` si ya esta
+//     inscrito (si no, la app ofrece «Unirme»);
+//   - los que ya completo, aunque el reto haya terminado o lo hayan cancelado
+//     despues: la recompensa es suya y la app los muestra como completados.
+// Primero los que no ha completado (el que termina antes, arriba) y despues
+// los completados (el mas reciente, arriba). `vigente` dice si el reto todavia
+// corre.
 //
 // NOTA: la tabla `reto` NO tiene `meta` ni `premio`, tiene `meta_asistencias`
 // y `recompensa`. `reto_miembro` no tiene `progreso` ni `completado` como
 // boolean, tiene `checkins_acumulados`, `porcentaje_avance` y `estado`
 // ('EN_CURSO' / 'COMPLETADO' / 'CANCELADO').
+// Las fechas salen como AAAA-MM-DD y el porcentaje como numero: pg entrega
+// NUMERIC como texto y la app lo lee como numero.
 // ---------------------------------------------------------------------------
 router.get('/retos', asyncHandler(async (req, res) => {
   const idMiembro = req.user.idMiembro;
   const gymId     = req.user.gymId;
   try {
+    // Vigente: activo, no terminado (dia de Colombia) y no cancelado.
+    const VIGENTE = `(r.activo = TRUE AND r.estado IN ('ACTIVO', 'PROGRAMADO') AND r.fecha_fin >= ${HOY})`;
     const { rows: retos } = await pool.query(
-      `SELECT r.id_reto, r.nombre, r.descripcion, r.fecha_inicio, r.fecha_fin,
+      `SELECT r.id_reto, r.nombre, r.descripcion,
+              to_char(r.fecha_inicio, 'YYYY-MM-DD') AS fecha_inicio,
+              to_char(r.fecha_fin, 'YYYY-MM-DD') AS fecha_fin,
               r.meta_asistencias, r.recompensa, r.segmento_elegible, r.estado AS estado_reto,
-              rm.id_reto_miembro, rm.checkins_acumulados, rm.porcentaje_avance,
+              rm.id_reto_miembro, rm.checkins_acumulados,
+              rm.porcentaje_avance::float AS porcentaje_avance,
               rm.estado AS estado_participacion, rm.fecha_completado,
               (rm.id_reto_miembro IS NOT NULL) AS participa,
-              (rm.estado = 'COMPLETADO')      AS completado
+              COALESCE(rm.estado = 'COMPLETADO', FALSE) AS completado,
+              ${VIGENTE} AS vigente
          FROM reto r
          LEFT JOIN reto_miembro rm
            ON rm.id_reto = r.id_reto AND rm.id_miembro = $1
         WHERE r.id_gimnasio = $2
-          AND r.activo = TRUE
-          AND r.fecha_fin >= CURRENT_DATE
-          AND r.estado IN ('ACTIVO', 'PROGRAMADO')
-        ORDER BY r.fecha_fin ASC`,
+          AND (${VIGENTE} OR rm.estado = 'COMPLETADO')
+        ORDER BY COALESCE(rm.estado = 'COMPLETADO', FALSE),
+                 rm.fecha_completado DESC NULLS LAST,
+                 r.fecha_fin ASC, r.id_reto
+        LIMIT 50`,
       [idMiembro, gymId]
     );
     return res.json({ retos });
@@ -477,14 +495,105 @@ router.post('/retos/:id/unirse', asyncHandler(async (req, res) => {
     );
     if (nuevo.length === 0) throw new AppError(409, 'Ya estás inscrito en este reto.', 'RETO_YA_INSCRITO');
 
-    const { fila } = await recalcularParticipacion(pool, {
+    // Si con los ingresos que ya tiene llega a la meta, el reto queda
+    // completado y le llega el mensaje (y el aviso al gimnasio), una sola vez.
+    const { fila, completado } = await recalcularYAvisar(pool, {
       idRetoMiembro: nuevo[0].id_reto_miembro, idReto, idMiembro, gymId,
     });
-    return res.status(201).json({ message: `Te uniste al reto «${reto.nombre}».`, participacion: fila });
+    return res.status(201).json({
+      message: completado
+        ? `Te uniste al reto «${reto.nombre}» y ya lo completaste con tus ingresos. ¡Felicitaciones!`
+        : `Te uniste al reto «${reto.nombre}».`,
+      participacion: fila,
+      completado,
+    });
   } catch (err) {
     if (err instanceof AppError) throw err;
     console.error('[POST /cliente/retos/unirse] Error:', err.message);
     throw new AppError(503, 'No pudimos inscribirte en el reto. Intenta de nuevo.', 'DB_UNREACHABLE');
+  }
+}));
+
+// ---------------------------------------------------------------------------
+// Bandeja de mensajes del miembro (issue #46, RQF-12)
+//   GET   /api/cliente/mensajes?limit=50   -> { mensajes, no_leidos }
+//   PATCH /api/cliente/mensajes/:id/leido  -> marca uno como leido
+//   PATCH /api/cliente/mensajes/leidos     -> marca todos como leidos
+//
+// Salen de la tabla notificacion con destinatario = 'MIEMBRO' (migracion
+// 016): por ahora, el reto completado y el reto cancelado (lib/retos.js). Las
+// filas del gimnasio (destinatario GIMNASIO: el acceso bloqueado o el aviso del
+// reto para el administrador, que tambien llevan id_miembro) nunca se le
+// muestran al miembro. Todo filtra por el miembro y el gimnasio del token: un
+// mensaje ajeno responde 404, igual que uno que no existe (RQNF-05).
+// ---------------------------------------------------------------------------
+const DE_MIEMBRO = `id_gimnasio = $1 AND id_miembro = $2 AND destinatario = 'MIEMBRO'`;
+
+async function contarNoLeidos(gymId, idMiembro) {
+  const { rows } = await pool.query(
+    `SELECT COUNT(*)::int AS n FROM notificacion WHERE ${DE_MIEMBRO} AND leida = FALSE`,
+    [gymId, idMiembro]
+  );
+  return rows[0].n;
+}
+
+router.get('/mensajes', asyncHandler(async (req, res) => {
+  const idMiembro = req.user.idMiembro;
+  const gymId     = req.user.gymId;
+  const limit     = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 100);
+  try {
+    const [{ rows: mensajes }, noLeidos] = await Promise.all([
+      pool.query(
+        `SELECT id_notificacion AS id, tipo, titulo, mensaje, leida, fecha_creacion
+           FROM notificacion
+          WHERE ${DE_MIEMBRO}
+          ORDER BY fecha_creacion DESC, id_notificacion DESC
+          LIMIT $3`,
+        [gymId, idMiembro, limit]
+      ),
+      contarNoLeidos(gymId, idMiembro),
+    ]);
+    return res.json({ mensajes, no_leidos: noLeidos });
+  } catch (err) {
+    console.error('[GET /cliente/mensajes] Error:', err.message);
+    throw new AppError(503, 'No pudimos cargar tus mensajes. Intenta de nuevo.', 'DB_UNREACHABLE');
+  }
+}));
+
+router.patch('/mensajes/leidos', asyncHandler(async (req, res) => {
+  const idMiembro = req.user.idMiembro;
+  const gymId     = req.user.gymId;
+  try {
+    const { rowCount } = await pool.query(
+      `UPDATE notificacion SET leida = TRUE WHERE ${DE_MIEMBRO} AND leida = FALSE`,
+      [gymId, idMiembro]
+    );
+    return res.json({ message: 'Mensajes marcados como leidos.', marcados: rowCount, no_leidos: 0 });
+  } catch (err) {
+    console.error('[PATCH /cliente/mensajes/leidos] Error:', err.message);
+    throw new AppError(503, 'No pudimos marcar tus mensajes. Intenta de nuevo.', 'DB_UNREACHABLE');
+  }
+}));
+
+router.patch('/mensajes/:id/leido', asyncHandler(async (req, res) => {
+  // Mismo tope que un INTEGER de PostgreSQL: mas grande responde 400, no 503.
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0 || id > 2147483647) {
+    throw new AppError(400, 'Id invalido', 'VALIDATION_ERROR');
+  }
+  const idMiembro = req.user.idMiembro;
+  const gymId     = req.user.gymId;
+  try {
+    const { rowCount } = await pool.query(
+      `UPDATE notificacion SET leida = TRUE WHERE ${DE_MIEMBRO} AND id_notificacion = $3`,
+      [gymId, idMiembro, id]
+    );
+    if (rowCount === 0) throw new AppError(404, 'Mensaje no encontrado.', 'NOT_FOUND');
+    return res.json({ message: 'Mensaje marcado como leido.', no_leidos: await contarNoLeidos(gymId, idMiembro) });
+  } catch (err) {
+    if (err instanceof AppError) throw err;
+    console.error('[PATCH /cliente/mensajes/:id/leido] Error:', err.message);
+    throw new AppError(503, 'No pudimos marcar el mensaje. Intenta de nuevo.', 'DB_UNREACHABLE');
   }
 }));
 

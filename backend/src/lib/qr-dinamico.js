@@ -26,6 +26,17 @@
  * El formato usa solo letras y numeros a proposito: los lectores HID escriben
  * como un teclado, y simbolos como ':' o '-' salen distinto segun la
  * distribucion del teclado del computador (en espanol ':' sale como 'Ñ').
+ *
+ * La clave del servidor: el QR dinamico solo protege si la clave es secreta.
+ * Sin QR_DINAMICO_SECRET sale de QR_ENCRYPTION_KEY y, si tampoco esta, de la
+ * clave de respaldo ('FitLoyalty2024SecretKey'), que esta en el repositorio:
+ * con ella cualquiera que fotografie el QR fijo puede descifrarlo, sacar el
+ * secreto del miembro y calcular sus codigos. Por eso, en produccion
+ * (NODE_ENV=production) y sin un QR_DINAMICO_SECRET propio:
+ *   - el gimnasio no puede activar «Exigir QR dinamico» (routes/config.js
+ *     responde 409 QR_DINAMICO_SIN_SECRETO), y
+ *   - el servidor lo avisa al arrancar (avisarSecretoAlArrancar, index.js).
+ * El QR fijo no cambia: sigue con QR_ENCRYPTION_KEY, como antes.
  */
 const crypto = require('crypto');
 
@@ -40,13 +51,58 @@ const VENTANA_ADELANTE = 1;
 
 const FORMATO = new RegExp(`^${PREFIJO}(\\d{1,10})T(\\d{${DIGITOS}})$`, 'i');
 
+// Clave de respaldo del codigo: esta en el repositorio, asi que no es secreta.
+const CLAVE_DEL_REPO = 'FitLoyalty2024SecretKey';
+
 function claveBase() {
   // QR_DINAMICO_SECRET permite rotar solo el QR dinamico; si no esta, sale de
   // la misma clave del QR fijo (QR_ENCRYPTION_KEY) con otro proposito.
   const raiz = process.env.QR_DINAMICO_SECRET
     || process.env.QR_ENCRYPTION_KEY
-    || 'FitLoyalty2024SecretKey';
+    || CLAVE_DEL_REPO;
   return crypto.createHmac('sha256', raiz).update('fitloyalty-qr-dinamico-v1').digest();
+}
+
+/** true si QR_DINAMICO_SECRET tiene un valor propio (ni vacio ni la clave del repo). */
+function secretoPropio() {
+  const s = String(process.env.QR_DINAMICO_SECRET || '').trim();
+  return s.length > 0 && s !== CLAVE_DEL_REPO;
+}
+
+/**
+ * Si el gimnasio puede exigir el QR dinamico. Fuera de produccion siempre (la
+ * clave del repo sirve para probar); en produccion solo con QR_DINAMICO_SECRET.
+ */
+function puedeExigirse() {
+  return process.env.NODE_ENV !== 'production' || secretoPropio();
+}
+
+const MENSAJE_SIN_SECRETO = 'No se puede exigir el QR dinámico: falta configurar la clave '
+  + 'QR_DINAMICO_SECRET en el servidor. Pide a quien lo administra que la defina; mientras '
+  + 'tanto, el QR fijo y el documento siguen funcionando.';
+
+/**
+ * Aviso al arrancar el servidor. En produccion sin QR_DINAMICO_SECRET escribe
+ * una advertencia (con cuantos gimnasios ya lo tienen activado, si la base
+ * responde) y devuelve el texto; si no hay nada que avisar devuelve null.
+ * Nunca lanza.
+ */
+async function avisarSecretoAlArrancar(pool, log = console) {
+  if (puedeExigirse()) return null;
+  let activos = null;
+  try {
+    const { rows } = await pool.query(
+      'SELECT COUNT(*)::int AS n FROM gimnasio WHERE qr_dinamico_obligatorio = TRUE'
+    );
+    activos = rows[0] ? rows[0].n : 0;
+  } catch (_) {
+    activos = null;
+  }
+  const texto = '[qr-dinamico] ADVERTENCIA: NODE_ENV=production sin QR_DINAMICO_SECRET: '
+    + 'ningun gimnasio podra activar «Exigir QR dinamico» hasta definirla'
+    + (activos ? `; ${activos} gimnasio(s) ya lo tienen activado, define la clave cuanto antes.` : '.');
+  log.warn(texto);
+  return texto;
 }
 
 /** Secreto del miembro (Buffer de 32 bytes). */
@@ -122,6 +178,11 @@ function datosParaApp(idMiembro, codigoQr, ms = Date.now()) {
 }
 
 module.exports = {
+  CLAVE_DEL_REPO,
+  MENSAJE_SIN_SECRETO,
+  secretoPropio,
+  puedeExigirse,
+  avisarSecretoAlArrancar,
   PASO_SEG,
   DIGITOS,
   PREFIJO,

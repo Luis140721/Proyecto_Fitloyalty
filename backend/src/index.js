@@ -168,6 +168,10 @@ async function iniciar() {
     console.error('[migrate] Migraciones pendientes o con error:', err.message);
   }
 
+  // QR dinamico: en produccion sin QR_DINAMICO_SECRET no se puede exigir
+  // (lib/qr-dinamico.js). Se avisa aqui para que se vea en el log del arranque.
+  await require('./lib/qr-dinamico').avisarSecretoAlArrancar(pool);
+
   app.listen(PORT, () => {
     console.log(`[OK] FitLoyalty API corriendo en http://localhost:${PORT}`);
     console.log(`[OK] Health: http://localhost:${PORT}/api/health\n`);

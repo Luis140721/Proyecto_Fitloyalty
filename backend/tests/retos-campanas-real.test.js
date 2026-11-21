@@ -11,6 +11,12 @@
  * salta entera (asi queda en CI) y se niega a correr si la base no es local.
  * Crea sus propios gimnasios y al final borra todo lo que creo.
  *
+ * Correcciones del verificador al PR #100: cada camino que completa un reto
+ * (check-in, «Unirme», «Inscribir elegibles», bajar la meta) deja el aviso al
+ * gimnasio y el mensaje al miembro una sola vez; cancelar avisa a quien iba en
+ * curso; los completados siguen en la app; el QR dinamico no se puede exigir
+ * en produccion sin QR_DINAMICO_SECRET.
+ *
  *   TEST_DATABASE_URL=postgres://postgres@127.0.0.1:55433/fl_consultas \
  *   npx jest tests/retos-campanas-real.test.js
  */
@@ -53,7 +59,7 @@ describeReal('RQF-10, RQF-12 y QR dinamico contra la base real', () => {
   const sufijo = crypto.randomBytes(3).toString('hex');
   const gimnasios = [];
   let gymA, gymB, adminA, adminB, recepA, ana, beto, carla, eva;
-  let tkAdminA, tkAdminB, tkRecepA, tkAna, tkCarla;
+  let tkAdminA, tkAdminB, tkRecepA, tkAna, tkBeto, tkCarla;
   const correos = [];
   const whatsapps = [];
   let whatsappActivo = false;
@@ -79,6 +85,13 @@ describeReal('RQF-10, RQF-12 y QR dinamico contra la base real', () => {
     legal.establecerReloj(() => t);
     return t;
   };
+  // Filas de notificacion tipo RETO de un miembro, por destinatario y titulo.
+  const avisos = async (idMiembro, destinatario, titulo) => (await pool.query(
+    `SELECT titulo, mensaje FROM notificacion
+      WHERE id_miembro = $1 AND tipo = 'RETO' AND destinatario = $2 AND ($3::text IS NULL OR titulo = $3)
+      ORDER BY id_notificacion`,
+    [idMiembro, destinatario, titulo || null]
+  )).rows;
   const hoyMas = (d) => {
     // Fecha de Colombia (UTC-5) dentro de d dias, en AAAA-MM-DD.
     const ms = Date.now() - 5 * 3600 * 1000 + d * 86400000;
@@ -170,6 +183,7 @@ describeReal('RQF-10, RQF-12 y QR dinamico contra la base real', () => {
     tkRecepA = firmar(recepA, gymA, 'receptionist');
     tkAna = firmarMiembro(ana, gymA);
     tkCarla = firmarMiembro(carla, gymA);
+    tkBeto = firmarMiembro(beto, gymA);
 
     const { errorHandler } = require('../src/middleware/errorHandler');
     const app = express();
@@ -272,6 +286,30 @@ describeReal('RQF-10, RQF-12 y QR dinamico contra la base real', () => {
       expect(r.body.code).toBe('QR_DINAMICO_VENCIDO');
     });
 
+    test('en produccion sin QR_DINAMICO_SECRET no se puede exigir (409) y la pantalla lo sabe', async () => {
+      const antes = { NODE_ENV: process.env.NODE_ENV, QR_DINAMICO_SECRET: process.env.QR_DINAMICO_SECRET };
+      try {
+        process.env.NODE_ENV = 'production';
+        delete process.env.QR_DINAMICO_SECRET;
+        const r = await llamar('PUT', '/api/admin/config', tkAdminB, { qr_dinamico_obligatorio: true });
+        expect(r.status).toBe(409);
+        expect(r.body.code).toBe('QR_DINAMICO_SIN_SECRETO');
+        expect(r.body.error).toContain('QR_DINAMICO_SECRET');
+        expect((await uno('SELECT qr_dinamico_obligatorio FROM gimnasio WHERE id_gimnasio = $1', [gymB])).qr_dinamico_obligatorio).toBe(false);
+        expect((await llamar('GET', '/api/admin/config', tkAdminB)).body.config.qr_dinamico_disponible).toBe(false);
+        // El gimnasio A ya lo tenia activo: guardar su configuracion sigue funcionando.
+        expect((await llamar('PUT', '/api/admin/config', tkAdminA, { qr_dinamico_obligatorio: true, dias_aviso_vencimiento: 3 })).status).toBe(200);
+
+        process.env.QR_DINAMICO_SECRET = 'clave-propia-de-prueba-local';
+        expect((await llamar('PUT', '/api/admin/config', tkAdminB, { qr_dinamico_obligatorio: true })).status).toBe(200);
+        expect((await llamar('PUT', '/api/admin/config', tkAdminB, { qr_dinamico_obligatorio: false })).status).toBe(200);
+      } finally {
+        process.env.NODE_ENV = antes.NODE_ENV;
+        if (antes.QR_DINAMICO_SECRET === undefined) delete process.env.QR_DINAMICO_SECRET;
+        else process.env.QR_DINAMICO_SECRET = antes.QR_DINAMICO_SECRET;
+      }
+    });
+
     test('el codigo de Ana no sirve en otro gimnasio', async () => {
       const tkAdminBRecep = jwt.sign({ id: adminB, role: 'admin', gymId: gymB }, process.env.JWT_SECRET, { expiresIn: '1h' });
       const r = await llamar('POST', '/api/admin/checkin', tkAdminBRecep, { codigo: q.tokenEn(ana, `QR-${sufijo}-ana`) });
@@ -332,13 +370,30 @@ describeReal('RQF-10, RQF-12 y QR dinamico contra la base real', () => {
       expect(despues.body.avisos.find((a) => a.tipo === 'reto-completado')).toBeFalsy();
     });
 
+    test('camino 1 (check-in): a Ana le llega el mensaje en la app y la campana no lo muestra', async () => {
+      const m = await llamar('GET', '/api/cliente/mensajes', tkAna);
+      expect(m.status).toBe(200);
+      expect(m.body.no_leidos).toBe(1);
+      expect(m.body.mensajes).toEqual([expect.objectContaining({
+        tipo: 'RETO', titulo: '¡Completaste un reto!', leida: false,
+        mensaje: '¡Completaste el reto «Dos visitas»! Tu recompensa: Batido gratis. Reclámala en recepción.',
+      })]);
+      // El administrador ya marco su aviso; el de Ana sigue sin leer y es otra fila.
+      expect(await avisos(ana, 'GIMNASIO')).toHaveLength(1);
+      const campana = await llamar('GET', '/api/admin/notificaciones', tkAdminA);
+      expect(campana.body.avisos.filter((a) => a.idMiembro === ana && a.tipo === 'reto-completado')).toHaveLength(0);
+      // Y el personal no puede marcar como visto el mensaje de Ana.
+      expect((await llamar('POST', `/api/admin/notificaciones/reto/${m.body.mensajes[0].id}/leida`, tkAdminA)).status).toBe(404);
+    });
+
     test('un segundo check-in el mismo dia no suma otra asistencia ni repite el aviso', async () => {
       await pool.query("UPDATE checkin SET fecha_hora = fecha_hora - INTERVAL '5 minutes' WHERE id_miembro = $1", [ana]);
       const r = await llamar('POST', '/api/admin/checkin', tkRecepA, { documento: `rq1012-${sufijo}-ana`, metodo: 'MANUAL' });
       expect(r.status).toBe(201);
       expect(r.body.retos.find((x) => x.id_reto === retoTodos)).toBeUndefined(); // ya no esta EN_CURSO
-      const n = await uno("SELECT count(*)::int AS n FROM notificacion WHERE id_gimnasio = $1 AND tipo = 'RETO'", [gymA]);
-      expect(n.n).toBe(1);
+      // Un aviso para el gimnasio y un mensaje para Ana, nada mas.
+      expect(await avisos(ana, 'GIMNASIO')).toHaveLength(1);
+      expect(await avisos(ana, 'MIEMBRO')).toHaveLength(1);
     });
 
     test('la app muestra el reto como completado', async () => {
@@ -391,6 +446,45 @@ describeReal('RQF-10, RQF-12 y QR dinamico contra la base real', () => {
       expect(fila.estado).toBe('COMPLETADO');
     });
 
+    test('camino 4 (bajar la meta): aviso al gimnasio y mensaje a Carla, una sola vez', async () => {
+      expect(await avisos(carla, 'GIMNASIO')).toEqual([{ titulo: 'Reto completado', mensaje: 'Carla Prueba completó el reto «Primer mes».' }]);
+      expect(await avisos(carla, 'MIEMBRO')).toEqual([{ titulo: '¡Completaste un reto!', mensaje: '¡Completaste el reto «Primer mes»!' }]);
+      // Volver a guardar la meta (o bajarla mas) no repite nada.
+      expect((await llamar('PUT', `/api/admin/retos/${retoNuevos}`, tkAdminA, { meta_asistencias: 1 })).status).toBe(200);
+      expect(await avisos(carla, 'MIEMBRO')).toHaveLength(1);
+      expect(await avisos(carla, 'GIMNASIO')).toHaveLength(1);
+    });
+
+    test('camino 2 («Unirme»): con el ingreso de hoy Carla completa de una vez un reto de meta 1', async () => {
+      const c = await llamar('POST', '/api/admin/retos', tkAdminA, {
+        nombre: 'Un ingreso', meta_asistencias: 1, recompensa: 'Toalla', segmento_elegible: 'NUEVOS', fecha_inicio: hoyMas(0), fecha_fin: hoyMas(7),
+      });
+      const r = await llamar('POST', `/api/cliente/retos/${c.body.reto.id_reto}/unirse`, tkCarla);
+      expect(r.status).toBe(201);
+      expect(r.body.completado).toBe(true);
+      expect(r.body.message).toContain('ya lo completaste');
+      expect(await avisos(carla, 'MIEMBRO', '¡Completaste un reto!')).toHaveLength(2);
+      expect((await avisos(carla, 'GIMNASIO')).map((a) => a.mensaje)).toContain('Carla Prueba completó el reto «Un ingreso». Recompensa: Toalla.');
+      expect((await llamar('POST', `/api/cliente/retos/${c.body.reto.id_reto}/unirse`, tkCarla)).status).toBe(409);
+      expect(await avisos(carla, 'MIEMBRO', '¡Completaste un reto!')).toHaveLength(2);
+    });
+
+    test('camino 3 («Inscribir elegibles»): el ingreso de Beto de hace 20 dias completa un reto que empezo antes', async () => {
+      const c = await llamar('POST', '/api/admin/retos', tkAdminA, {
+        nombre: 'Regreso', meta_asistencias: 1, segmento_elegible: 'INACTIVOS', fecha_inicio: hoyMas(-25), fecha_fin: hoyMas(5),
+      });
+      const id = c.body.reto.id_reto;
+      const r = await llamar('POST', `/api/admin/retos/${id}/inscribir`, tkAdminA, {});
+      expect(r.body.inscritos).toBe(1);
+      expect((await uno('SELECT estado FROM reto_miembro WHERE id_reto = $1 AND id_miembro = $2', [id, beto])).estado).toBe('COMPLETADO');
+      expect(await avisos(beto, 'GIMNASIO')).toEqual([{ titulo: 'Reto completado', mensaje: 'Beto Prueba completó el reto «Regreso».' }]);
+      const m = await llamar('GET', '/api/cliente/mensajes', tkBeto);
+      expect(m.body.mensajes.map((x) => x.mensaje)).toEqual(['¡Completaste el reto «Regreso»!']);
+      // Otra vez: ya esta inscrito, nada se repite.
+      expect((await llamar('POST', `/api/admin/retos/${id}/inscribir`, tkAdminA, {})).body.inscritos).toBe(0);
+      expect(await avisos(beto, 'MIEMBRO')).toHaveLength(1);
+    });
+
     test('lista con inscritos y completados; otro gimnasio no lo ve', async () => {
       const r = await llamar('GET', '/api/admin/retos', tkAdminA);
       // Al de TODOS se inscriben solos los que hacen check-in: Ana y Carla (Beto no ha venido).
@@ -407,6 +501,63 @@ describeReal('RQF-10, RQF-12 y QR dinamico contra la base real', () => {
       const fila = await uno('SELECT estado FROM reto_miembro WHERE id_reto = $1 AND id_miembro = $2', [retoInactivos, beto]);
       expect(fila.estado).toBe('CANCELADO');
       expect((await llamar('PUT', `/api/admin/retos/${retoInactivos}`, tkAdminA, { nombre: 'Otro' })).status).toBe(409);
+    });
+
+    test('al cancelar, a quien iba en curso le llega un mensaje (una vez); al que ya lo completo, no', async () => {
+      const cancelados = await avisos(beto, 'MIEMBRO', 'Reto cancelado');
+      expect(cancelados).toHaveLength(1);
+      expect(cancelados[0].mensaje).toMatch(/^El gimnasio canceló el reto «Vuelve al gym»\./);
+      // Cancelar otra vez no repite.
+      expect((await llamar('POST', `/api/admin/retos/${retoInactivos}/cancelar`, tkAdminA)).status).toBe(200);
+      expect(await avisos(beto, 'MIEMBRO', 'Reto cancelado')).toHaveLength(1);
+      // Carla ya habia completado «Primer mes»: cancelarlo no le avisa ni le quita el completado.
+      expect((await llamar('POST', `/api/admin/retos/${retoNuevos}/cancelar`, tkAdminA)).status).toBe(200);
+      expect(await avisos(carla, 'MIEMBRO', 'Reto cancelado')).toHaveLength(0);
+      expect((await uno('SELECT estado FROM reto_miembro WHERE id_reto = $1 AND id_miembro = $2', [retoNuevos, carla])).estado).toBe('COMPLETADO');
+      // En la campana solo salen los avisos del gimnasio: los de Carla (2) y Beto (1).
+      const campana = await llamar('GET', '/api/admin/notificaciones', tkAdminA);
+      const ids = campana.body.avisos.filter((a) => a.tipo === 'reto-completado').map((a) => a.idNotificacion);
+      expect(ids).toHaveLength(3);
+      const ajenos = await pool.query("SELECT 1 FROM notificacion WHERE id_notificacion = ANY($1::int[]) AND destinatario <> 'GIMNASIO'", [ids]);
+      expect(ajenos.rows).toHaveLength(0);
+    });
+
+    test('los retos completados siguen en la app aunque hayan terminado o los hayan cancelado', async () => {
+      // «Dos visitas» termina ayer: Ana lo completo, asi que lo sigue viendo.
+      await pool.query('UPDATE reto SET fecha_inicio = $2::date, fecha_fin = $3::date WHERE id_reto = $1', [retoTodos, hoyMas(-10), hoyMas(-1)]);
+      const ana1 = await llamar('GET', '/api/cliente/retos', tkAna);
+      expect(ana1.status).toBe(200);
+      const dos = ana1.body.retos.find((x) => x.id_reto === retoTodos);
+      expect(dos).toMatchObject({ completado: true, vigente: false, fecha_fin: hoyMas(-1), porcentaje_avance: 100 });
+      // Carla: «Primer mes» (cancelado despues de completarlo) y «Un ingreso» completados;
+      // «Dos visitas» (terminado, iba 1 de 2) ya no sale.
+      const carla1 = await llamar('GET', '/api/cliente/retos', tkCarla);
+      const porId = Object.fromEntries(carla1.body.retos.map((x) => [x.nombre, x]));
+      expect(porId['Primer mes']).toMatchObject({ completado: true, vigente: false });
+      expect(porId['Un ingreso']).toMatchObject({ completado: true, vigente: true });
+      expect(porId['Dos visitas']).toBeUndefined();
+      // Los no completados (vigentes) van primero; despues los completados.
+      const completados = carla1.body.retos.map((x) => x.completado);
+      expect(completados).toEqual([...completados].sort((a, b) => Number(a) - Number(b)));
+      // Beto: el cancelado en curso no sale; el que completo, si.
+      const beto1 = await llamar('GET', '/api/cliente/retos', tkBeto);
+      expect(beto1.body.retos.map((x) => x.nombre)).toContain('Regreso');
+      expect(beto1.body.retos.map((x) => x.nombre)).not.toContain('Vuelve al gym');
+    });
+
+    test('cuatro recalculos a la vez completan el reto y avisan una sola vez', async () => {
+      const { recalcularYAvisar } = require('../src/lib/retos');
+      const c = await llamar('POST', '/api/admin/retos', tkAdminA, {
+        nombre: 'A la vez', meta_asistencias: 1, segmento_elegible: 'TODOS', fecha_inicio: hoyMas(-3), fecha_fin: hoyMas(3),
+      });
+      const idReto = c.body.reto.id_reto;
+      const rm = await uno('INSERT INTO reto_miembro (id_reto, id_miembro) VALUES ($1, $2) RETURNING id_reto_miembro', [idReto, ana]);
+      const args = { idRetoMiembro: rm.id_reto_miembro, idReto, idMiembro: ana, gymId: gymA };
+      const r = await Promise.all([1, 2, 3, 4].map(() => recalcularYAvisar(pool, args)));
+      expect(r.filter((x) => x.completado)).toHaveLength(1);
+      const deEste = (filas) => filas.filter((a) => a.mensaje.includes('«A la vez»'));
+      expect(deEste(await avisos(ana, 'GIMNASIO'))).toHaveLength(1);
+      expect(deEste(await avisos(ana, 'MIEMBRO'))).toHaveLength(1);
     });
 
     test('un id no numerico responde 400, no 503', async () => {

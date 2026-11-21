@@ -3,13 +3,15 @@
 // Pantalla "Mis logros y retos":
 //   - Resumen (puntos, % completado)
 //   - Lista de hitos (logrados vs disponibles)
-//   - Lista de retos activos
+//   - Lista de retos: los vigentes (con «Unirme» o el avance) y los que el
+//     miembro ya completo, aunque hayan terminado (RQF-12)
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../models/gamificacion.dart';
+import '../providers/mensajes_provider.dart';
 import '../providers/perfil_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common.dart';
@@ -66,7 +68,7 @@ class _GamificacionScreenState extends State<GamificacionScreen> {
             const SizedBox(height: 22),
 
             // Retos
-            const Text('RETOS ACTIVOS',
+            const Text('RETOS',
                 style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 0.6, color: AppColors.textMuted)),
             const SizedBox(height: 10),
             _retos(p),
@@ -247,7 +249,7 @@ class _GamificacionScreenState extends State<GamificacionScreen> {
         ),
         child: const EmptyState(
           icon: Icons.flag_outlined,
-          title: 'Sin retos activos',
+          title: 'Sin retos por ahora',
           subtitle: 'Cuando el gimnasio lance un reto, aparecera aqui.',
         ),
       );
@@ -259,15 +261,48 @@ class _GamificacionScreenState extends State<GamificacionScreen> {
     );
   }
 
-  Widget _retoTile(Reto r) {
+  /// Linea de fechas del reto: cuando lo completo, o cuanto le falta.
+  String _textoFechas(Reto r) {
+    if (r.completado) {
+      return r.fechaCompletado == null
+          ? 'Reto completado'
+          : 'Completado el ${DateFormat('d MMM yyyy', 'es_CO').format(r.fechaCompletado!)}';
+    }
     final dias = r.diasRestantes;
+    if (dias == 0) return 'Termina hoy';
+    if (dias == 1) return 'Termina mañana';
+    return dias > 0 ? 'Termina en $dias dias' : 'Termino hace ${-dias} dias';
+  }
+
+  Future<void> _unirse(Reto r) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final perfil = context.read<PerfilProvider>();
+    final mensajes = context.read<MensajesProvider>();
+    final error = await perfil.unirseAReto(r.idReto);
+    if (!mounted) return;
+    // Con los ingresos que ya tenia puede completarlo de una vez: entonces le
+    // llega el mensaje y se actualiza el contador de la pestaña Mensajes.
+    final yaCompletado = error == null
+        && perfil.retos.any((x) => x.idReto == r.idReto && x.completado);
+    if (yaCompletado) mensajes.cargar(silencioso: true);
+    messenger.showSnackBar(
+      SnackBar(content: Text(error
+          ?? (yaCompletado
+              ? '¡Completaste «${r.nombre}» con tus visitas! Revisa tus mensajes.'
+              : 'Te uniste a «${r.nombre}». Tus visitas ya cuentan.'))),
+    );
+  }
+
+  Widget _retoTile(Reto r) {
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(
+          color: r.completado ? AppColors.success.withValues(alpha: 0.45) : AppColors.border,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -291,11 +326,16 @@ class _GamificacionScreenState extends State<GamificacionScreen> {
           const SizedBox(height: 10),
           Row(
             children: [
-              const Icon(Icons.event_outlined, size: 14, color: AppColors.textMuted),
+              Icon(r.completado ? Icons.check_circle : Icons.event_outlined,
+                  size: 14, color: r.completado ? AppColors.success : AppColors.textMuted),
               const SizedBox(width: 4),
               Text(
-                dias >= 0 ? 'Termina en $dias dias' : 'Termino hace ${-dias} dias',
-                style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                _textoFechas(r),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: r.completado ? AppColors.success : AppColors.textMuted,
+                  fontWeight: r.completado ? FontWeight.w700 : FontWeight.w400,
+                ),
               ),
               const Spacer(),
               if (r.premio != null && r.premio!.isNotEmpty) ...[
@@ -310,21 +350,14 @@ class _GamificacionScreenState extends State<GamificacionScreen> {
               ],
             ],
           ),
-          if (!r.participa && !r.completado) ...[
+          if (!r.participa && !r.completado && r.vigente) ...[
             const SizedBox(height: 10),
             Align(
               alignment: Alignment.centerRight,
               child: FilledButton.icon(
                 icon: const Icon(Icons.flag, size: 16),
                 label: const Text('Unirme'),
-                onPressed: () async {
-                  final messenger = ScaffoldMessenger.of(context);
-                  final error = await context.read<PerfilProvider>().unirseAReto(r.idReto);
-                  if (!mounted) return;
-                  messenger.showSnackBar(
-                    SnackBar(content: Text(error ?? 'Te uniste a «${r.nombre}». Tus visitas ya cuentan.')),
-                  );
-                },
+                onPressed: () => _unirse(r),
               ),
             ),
           ],

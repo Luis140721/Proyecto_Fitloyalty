@@ -115,4 +115,4 @@ Las observaciones de RQNF-18 que se corrigieron junto con RQNF-16 (ver `docs/evi
 | 10 | La cláusula 10 no incluía las demás obligaciones legales del gimnasio | Agrega «y por las demás obligaciones que le impone la ley» | `mensajes.js:408-414` | `ley2300-preferencias.test.js` («(10) … cláusula 10») |
 | 10 | Para un menor, la cláusula 15 decía «Aceptaste» | Dice «Tu representante legal, <nombre>, aceptó las condiciones del gimnasio en tu nombre el …» (y, sin constancia, que el representante debe confirmarlas en recepción) | `mensajes.js:447-462` | `ley2300-preferencias.test.js` («(10) … cláusula 15», con el caso del adulto) |
 
-Pruebas que cambiaron: `legal-real.test.js` compara la versión de las entregas con `CONTRATO_VERSION` (v3) en vez de `'v2'`. Todas pasan sin base y contra `fl_consultas` y `fl_migraciones` (602 de 602).
+Pruebas que cambiaron: `legal-real.test.js` compara la versión de las entregas con `CONTRATO_VERSION` (v3) en vez de `'v2'`. Todas pasan sin base y contra `fl_consultas` y `fl_migraciones` (647 de 647 después de fusionar develop `ad90d73`).
