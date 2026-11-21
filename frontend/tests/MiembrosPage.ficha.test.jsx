@@ -54,6 +54,9 @@ const EDITABLES = [
   'nombre', 'documento', 'telefono', 'email', 'activo', 'tipo_documento', 'fecha_nacimiento', 'genero', 'codigo_pais_telefono',
   'ciudad', 'direccion', 'contacto_emergencia', 'telefono_emergencia', 'condiciones_medicas', 'alergias', 'objetivo',
   'nivel_experiencia', 'observaciones',
+  // RQNF-17 (#102): la autorizacion de datos sensibles y los datos del representante legal.
+  'autorizo_datos_sensibles', 'autoriza_representante', 'representante_nombre', 'representante_tipo_documento',
+  'representante_documento', 'representante_parentesco', 'representante_telefono',
 ];
 
 let plan, congelaciones;
@@ -157,6 +160,8 @@ describe('MiembrosPage: la ficha del miembro', () => {
     await reemplazar('Dirección', 'Carrera 7 # 8-9');
     await reemplazar('Contacto de emergencia', 'Pedro Pérez');
     await reemplazar('Teléfono de emergencia', '3120000000');
+    // Con el #102, las condiciones medicas y las alergias se escriben despues de autorizar los datos sensibles.
+    await user.click(ficha_.getByRole('checkbox', { name: /^Datos sensibles \(salud\)/ }));
     await reemplazar('Condiciones médicas', 'Asma');
     await reemplazar('Alergias', 'Polen');
     await user.selectOptions(ficha_.getByLabelText('Objetivo'), 'Resistencia');
@@ -171,6 +176,7 @@ describe('MiembrosPage: la ficha del miembro', () => {
       fecha_nacimiento: '1991-06-18', genero: 'Otro', ciudad: 'Cali', direccion: 'Carrera 7 # 8-9',
       contacto_emergencia: 'Pedro Pérez', telefono_emergencia: '3120000000', condiciones_medicas: 'Asma', alergias: 'Polen',
       objetivo: 'Resistencia', nivel_experiencia: 'Avanzado', observaciones: 'Prefiere las clases de la tarde', activo: false,
+      autorizo_datos_sensibles: true,
     })));
   }, 15000);
 

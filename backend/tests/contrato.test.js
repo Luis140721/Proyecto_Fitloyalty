@@ -54,8 +54,11 @@ beforeEach(() => {
   mockWa.isWhatsAppReady.mockClear();
   mockQuery.mockImplementation(async (sql) => {
     if (/INSERT INTO contrato_enviado/i.test(sql)) return { rows: [{ id_contrato_enviado: 5, creado_en: new Date() }] };
-    // datos del miembro para armar el contrato
-    return { rows: [{ id_miembro: 12, id_gimnasio: 7, nombre: 'Ana Gomez', telefono: '3001234567', documento: '123', email: 'a@b.co', gym_nombre: 'Gym Demo', tipo_plan: 'MENSUAL', fecha_inicio: '2026-10-01', fecha_fin: '2026-10-31', valor_total: 50000 }] };
+    // autorizaciones vigentes (RQNF-17): ninguna
+    if (/FROM autorizacion_miembro/i.test(sql)) return { rows: [] };
+    // datos del miembro para armar el contrato. Desde RQNF-18 el contrato
+    // exige la forma de pago del plan, por eso va metodo_pago.
+    return { rows: [{ id_miembro: 12, id_gimnasio: 7, nombre: 'Ana Gomez', telefono: '3001234567', documento: '123', email: 'a@b.co', gym_nombre: 'Gym Demo', gym_telefono: '3000000000', tipo_plan: 'MENSUAL', fecha_inicio: '2026-10-01', fecha_fin: '2026-10-31', valor_total: 50000, valor_pagado: 50000, metodo_pago: 'EFECTIVO' }] };
   });
   jest.spyOn(console, 'error').mockImplementation(() => {});
 });

@@ -176,6 +176,7 @@ describe('member routes: what each role can do', () => {
       [/SELECT 1 FROM miembro WHERE codigo_qr/, filas([])],
       [/INSERT INTO miembro/, (p) => ({ rows: [{ id_miembro: 88, nombre: p[1], documento: p[3], password_asignada: true }] })],
       [/INSERT INTO plan_cobro/, filas([])],
+      [/INSERT INTO autorizacion_miembro/, (p) => ({ rows: [{ id_autorizacion: 1, tipo: p[2], otorgada: p[3], version_texto: p[4], canal: p[5], fecha: new Date('2026-11-17T15:00:00Z') }] })],
       [/SELECT nombre FROM gimnasio/, filas([{ nombre: 'Gym Norte' }])],
     );
 

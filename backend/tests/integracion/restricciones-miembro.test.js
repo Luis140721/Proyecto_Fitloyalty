@@ -53,6 +53,14 @@ const LARGOS = [
   ['miembro', 'codigo_pais_telefono', 5], ['miembro', 'ciudad', 100], ['miembro', 'contacto_emergencia', 100],
   ['miembro', 'telefono_emergencia', 20], ['miembro', 'objetivo', 50], ['miembro', 'nivel_experiencia', 30],
 ];
+// Los del representante legal llegaron con el #102 (RQNF-17, migracion 019). Por
+// ahora solo entran en la comparacion con la BD migrada; sus tests de largo vienen
+// con los del #102.
+const LARGOS_DEL_REPRESENTANTE = [
+  ['miembro', 'representante_nombre', 100], ['miembro', 'representante_tipo_documento', 10],
+  ['miembro', 'representante_documento', 20], ['miembro', 'representante_parentesco', 40],
+  ['miembro', 'representante_telefono', 20],
+];
 
 // UNIQUE, llaves foraneas y CHECK de las tres tablas, cada una con su test abajo.
 const RESTRICCIONES = [
@@ -124,7 +132,7 @@ describeConBd('restricciones de gimnasio, usuario y miembro', () => {
     const largos = columnas.filter((c) => c.largo !== null).map((c) => `${c.tabla}.${c.columna}:${c.largo}`);
 
     expect(ordenar(noNulos)).toEqual(ordenar(NO_NULOS.map(([t, c]) => `${t}.${c}`)));
-    expect(ordenar(largos)).toEqual(ordenar(LARGOS.map(([t, c, n]) => `${t}.${c}:${n}`)));
+    expect(ordenar(largos)).toEqual(ordenar([...LARGOS, ...LARGOS_DEL_REPRESENTANTE].map(([t, c, n]) => `${t}.${c}:${n}`)));
     expect(ordenar(restricciones.map((r) => r.conname))).toEqual(ordenar(RESTRICCIONES));
   });
 

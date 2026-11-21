@@ -278,7 +278,8 @@ describe('POST /api/auth/signup: gym and owner in one transaction', () => {
     expect(r.status).toBe(201);
     expect(escrituras()[0]).toEqual(['INSERT INTO gimnasio', [expect.any(String), expect.any(String), 'contacto@gym.co', dias]]);
     expect(r.body.message).toBe(message);
-    expect(r.body.gym).toEqual({ id: GYM, nombre: 'Gym Central', trialEndsAt, trialDays, devAccount });
+    // Con el #47 de develop, el gimnasio del registro trae las mismas claves que login y /me (name y active).
+    expect(r.body.gym).toEqual({ id: GYM, name: 'Gym Central', active: true, trialEndsAt, trialDays, devAccount });
   });
 
   test.each([

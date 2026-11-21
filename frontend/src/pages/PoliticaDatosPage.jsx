@@ -5,7 +5,7 @@ export default function PoliticaDatosPage() {
     <LegalLayout
       title="Política de tratamiento de datos personales"
       subtitle="Política interna de FitLoyalty para el cumplimiento de la Ley 1581 de 2012, el Decreto 1377 de 2013 y las directrices de la Superintendencia de Industria y Comercio."
-      updated="20 de agosto de 2026"
+      updated="17 de noviembre de 2026"
     >
       <h2>1. Ámbito de aplicación</h2>
       <p>
@@ -33,8 +33,8 @@ export default function PoliticaDatosPage() {
       <h3>3.1 Gimnasio (Responsable del Tratamiento)</h3>
       <ul>
         <li>Decide qué datos de sus miembros recolectar y para qué fines.</li>
-        <li>Obtiene el consentimiento de cada miembro antes de registrar sus datos.</li>
-        <li>Mantiene un registro de las autorizaciones otorgadas por los miembros.</li>
+        <li>Obtiene la autorización de cada miembro, o de su representante legal si es menor, antes de registrar sus datos.</li>
+        <li>Registra cada autorización en la Plataforma, que guarda la prueba (sección 7).</li>
         <li>Atiende directamente las PQR de sus miembros sobre datos personales.</li>
         <li>Notifica a FitLoyalty cuando un miembro solicita supresión o rectificación.</li>
       </ul>
@@ -42,6 +42,7 @@ export default function PoliticaDatosPage() {
       <ul>
         <li>Procesa los datos por instrucción del gimnasio y exclusivamente para prestar el servicio.</li>
         <li>Garantiza la seguridad y confidencialidad de los datos almacenados.</li>
+        <li>Conserva la constancia de cada autorización y de cada entrega del contrato al miembro.</li>
         <li>Ejecuta las solicitudes de supresión, rectificación o actualización recibidas del gimnasio.</li>
         <li>No usa los datos para fines propios ni los comparte con terceros.</li>
       </ul>
@@ -53,14 +54,66 @@ export default function PoliticaDatosPage() {
       <ul>
         <li><strong>Administrador:</strong> al registrarse en la Plataforma y aceptar los Términos y Condiciones.</li>
         <li><strong>Staff:</strong> al aceptar la invitación enviada por el Administrador.</li>
-        <li><strong>Miembros:</strong> el gimnasio es responsable de obtener la autorización del miembro antes de registrar sus datos. FitLoyalty no registra miembros directamente; solo el gimnasio lo hace.</li>
+        <li>
+          <strong>Miembros:</strong> el gimnasio pide la autorización al registrar al miembro en el
+          panel, con una casilla para cada una y su texto completo: la aceptación del contrato, el
+          tratamiento de datos y, de forma separada y opcional, los datos sensibles. FitLoyalty no
+          registra miembros directamente; solo el gimnasio lo hace.
+        </li>
       </ul>
       <p>
-        La autorización debe constar por escrito o por cualquier medio que permita demostrar su
-        existencia (formato físico, correo, firma digital, aceptación en la app del gimnasio).
+        La autorización consta en un medio que permite consultarla después (artículo 7 del Decreto
+        1377 de 2013): la casilla del panel o de la app, con la constancia de la sección 7.
       </p>
 
-      <h2>5. Derechos de los titulares</h2>
+      <h2>5. Datos sensibles</h2>
+      <p>
+        Las condiciones médicas, las lesiones y las alergias son datos sensibles (artículo 5 de la
+        Ley 1581 de 2012). Según el artículo 6 de esa ley y el artículo 6 del Decreto 1377 de 2013:
+      </p>
+      <ol>
+        <li>Se le informa al titular, antes de pedir la autorización, que por tratarse de datos sensibles no está obligado a autorizar su tratamiento.</li>
+        <li>Se le informa cuáles datos son sensibles (condiciones médicas, lesiones y alergias) y para qué se usan: cuidar su seguridad durante el entrenamiento.</li>
+        <li>La autorización es expresa y va separada de las demás. Ninguna actividad, ni la membresía, depende de que el titular entregue estos datos.</li>
+        <li>Sin la autorización, la Plataforma no guarda condiciones médicas ni alergias.</li>
+        <li>El titular la revoca cuando quiera, en la app o en el gimnasio; al revocarla, esos datos se borran y queda constancia.</li>
+      </ol>
+
+      <h2>6. Datos de niños, niñas y adolescentes</h2>
+      <p>
+        El tratamiento de datos de menores de 18 años respeta su interés superior y sus derechos
+        fundamentales (artículo 7 de la Ley 1581 de 2012). Según el artículo 12 del Decreto 1377 de
+        2013:
+      </p>
+      <ul>
+        <li>La autorización la da el representante legal del menor, después de escuchar al menor y valorar su opinión según su madurez.</li>
+        <li>
+          La Plataforma exige, para registrar a un menor, el nombre, el tipo y número de documento,
+          el parentesco y el teléfono de su representante, y su autorización. Si los datos del
+          representante cambian, la autorización se pide de nuevo.
+        </li>
+        <li>La autorización de datos sensibles de un menor solo la puede dar su representante; el menor sí puede revocarla desde la app.</li>
+      </ul>
+
+      <h2>7. Prueba de la autorización</h2>
+      <p>
+        El Responsable debe conservar prueba de la autorización (artículo 8 del Decreto 1377 de
+        2013). La Plataforma guarda, por cada autorización que se otorga o se revoca, una constancia
+        que no se modifica:
+      </p>
+      <ul>
+        <li>el tipo de autorización y si se otorgó o no;</li>
+        <li>la fecha y la hora;</li>
+        <li>la versión del texto que se le mostró al titular;</li>
+        <li>el canal: el panel del gimnasio o la app del miembro;</li>
+        <li>el usuario del gimnasio que la registró y, si la dio el representante de un menor, la foto de sus datos en ese momento.</li>
+      </ul>
+      <p>
+        La autorización vigente es la más reciente. Las constancias de los registros anteriores a
+        noviembre de 2026 indican que vienen del registro anterior, sin versión del texto.
+      </p>
+
+      <h2>8. Derechos de los titulares</h2>
       <p>
         Los titulares de datos personales pueden ejercer los siguientes derechos:
       </p>
@@ -73,15 +126,16 @@ export default function PoliticaDatosPage() {
         <li><strong>Información:</strong> conocer la finalidad del tratamiento y los derechos que les asisten.</li>
       </ol>
 
-      <h2>6. Procedimiento para el ejercicio de derechos (PQR)</h2>
+      <h2>9. Procedimiento para el ejercicio de derechos (PQR)</h2>
       <div className="legal-callout">
         <div className="legal-callout__title">
           <span className="material-symbols-outlined">support_agent</span>
           Canal de atención
         </div>
         <p>
-          Los miembros deben dirigir su solicitud al gimnasio. El gimnasio, si requiere que
-          FitLoyalty ejecute la acción, debe escribir a{' '}
+          Los miembros deben dirigir su solicitud al gimnasio. La autorización de datos de salud la
+          pueden revocar ellos mismos en la app. El gimnasio, si requiere que FitLoyalty ejecute la
+          acción, debe escribir a{' '}
           <a href="mailto:fitloyaltysaas@gmail.com">fitloyaltysaas@gmail.com</a> con el asunto
           "Solicitud ARCO" e incluir:
         </p>
@@ -93,29 +147,29 @@ export default function PoliticaDatosPage() {
         <li>Si es rectificación: los datos correctos que deben reemplazar los actuales.</li>
       </ul>
       <p>
-        <strong>Plazo de respuesta:</strong> 10 días hábiles desde la recepción de la solicitud,
-        prorrogables hasta 5 días más si se requiere información adicional, conforme al artículo 14
-        del Decreto 1377 de 2013.
+        <strong>Plazo de respuesta:</strong> las consultas, 10 días hábiles desde su recepción,
+        prorrogables hasta 5 días más (artículo 14 de la Ley 1581 de 2012); los reclamos, 15 días
+        hábiles, prorrogables hasta 8 días más (artículo 15 de la misma ley).
       </p>
 
-      <h2>7. Medidas de seguridad</h2>
-      <h3>7.1 Técnicas</h3>
+      <h2>10. Medidas de seguridad</h2>
+      <h3>10.1 Técnicas</h3>
       <ul>
         <li>Cifrado TLS 1.2+ en todo el tráfico.</li>
         <li>Base de datos cifrada en reposo (Neon Postgres).</li>
         <li>Contraseñas con bcrypt (salt rounds 10).</li>
-        <li>JWT con expiración de 24 horas.</li>
-        <li>Aislamiento por id_gimnasio en todas las queries.</li>
+        <li>JWT con expiración.</li>
+        <li>Aislamiento por id_gimnasio en todas las queries, y por miembro en la app.</li>
         <li>Rate limiting en endpoints de autenticación.</li>
       </ul>
-      <h3>7.2 Administrativas</h3>
+      <h3>10.2 Administrativas</h3>
       <ul>
         <li>Acceso restringido: solo el equipo de ingeniería de FitLoyalty tiene acceso a la base de datos, bajo NDA.</li>
         <li>Principio de mínimo privilegio en roles de la Plataforma.</li>
-        <li>Logs de auditoría para acciones sensibles (creación de usuarios, eliminación de miembros).</li>
+        <li>Logs de auditoría para acciones sensibles (creación de usuarios, eliminación de miembros) y constancia de cada autorización.</li>
       </ul>
 
-      <h2>8. Violación de datos personales</h2>
+      <h2>11. Violación de datos personales</h2>
       <p>
         En caso de una brecha de seguridad que afecte datos personales, FitLoyalty:
       </p>
@@ -126,7 +180,7 @@ export default function PoliticaDatosPage() {
         <li>Documentará el incidente y las acciones tomadas.</li>
       </ol>
 
-      <h2>9. Transferencia internacional</h2>
+      <h2>12. Transferencia internacional</h2>
       <p>
         Los datos se procesan en servidores ubicados en Estados Unidos (Render y Neon Postgres).
         Esta transferencia se realiza bajo las salvaguardas del artículo 26 de la Ley 1581 de 2012.
@@ -134,14 +188,31 @@ export default function PoliticaDatosPage() {
         27001) y tienen políticas de privacidad alineadas con GDPR.
       </p>
 
-      <h2>10. Vigencia y eliminación</h2>
+      <h2>13. Contacto con los titulares (Ley 2300 de 2023)</h2>
+      <p>
+        Cuando el gimnasio contacta a sus miembros desde la Plataforma:
+      </p>
+      <ul>
+        <li>
+          Solo lo hace de lunes a viernes de 7:00 a. m. a 7:00 p. m. y los sábados de 8:00 a. m. a
+          3:00 p. m.; nunca los domingos ni los días festivos.
+        </li>
+        <li>Solo usa los canales que el miembro autorizó.</li>
+        <li>
+          Solo envía mensajes comerciales o publicitarios a quien los autorizó, y el miembro puede
+          darse de baja en cualquier momento; desde entonces no se le vuelven a enviar.
+        </li>
+      </ul>
+
+      <h2>14. Vigencia y eliminación</h2>
       <p>
         Los datos se conservan mientras el gimnasio mantenga su cuenta activa. Tras la cancelación
         del plan, los datos se conservan por 90 días y luego se eliminan permanentemente. Los
-        backups se destruyen 30 días después de la eliminación.
+        backups se destruyen 30 días después de la eliminación. Las constancias de autorización se
+        conservan mientras exista el registro del miembro y se eliminan con él.
       </p>
 
-      <h2>11. Superintendencia de Industria y Comercio</h2>
+      <h2>15. Superintendencia de Industria y Comercio</h2>
       <p>
         La SIC es la autoridad competente para la vigilancia y control del tratamiento de datos
         personales en Colombia. Los titulares pueden presentar quejas ante la SIC a través de{' '}

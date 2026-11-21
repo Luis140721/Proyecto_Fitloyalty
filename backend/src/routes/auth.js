@@ -187,10 +187,12 @@ router.post('/signup', asyncHandler(async (req, res) => {
         : `Gimnasio creado. Tienes ${days} dias de prueba gratuita.`,
       token,
       user: usuarioSeguro({ ...owner, id_rol: owner.id_rol ?? 1, rol: 'ADMINISTRADOR', rol_nombre: 'ADMINISTRADOR' }),
+      // Mismas claves que login y /me: el front lee gym.name y gym.active.
       gym: {
         id: gym.id_gimnasio,
-        nombre: gym.nombre,
+        name: gym.nombre,
         trialEndsAt: gym.trial_ends_at,
+        active: gym.activo,
         trialDays: days,
         devAccount: isDevAccount,
       },

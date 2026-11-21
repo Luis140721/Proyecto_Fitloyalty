@@ -12,8 +12,9 @@ export class AltaMiembroPage {
     this.telefono = page.getByLabel('Teléfono / WhatsApp *');
     this.email = page.getByLabel('Email', { exact: true });
     this.valorTotal = page.getByLabel('Valor total del plan *');
-    this.aceptoTerminos = page.getByLabel(/Acepto los términos y condiciones/);
-    this.autorizoDatos = page.getByLabel(/Autorizo el uso de mis datos/);
+    // Las casillas del paso 5 con el #102 (RQNF-17): el nombre de cada autorizacion va primero.
+    this.aceptoTerminos = page.getByLabel(/^Contrato y términos/);
+    this.autorizoDatos = page.getByLabel(/^Tratamiento de datos/);
     this.siguiente = page.getByRole('button', { name: 'Siguiente →' });
     this.anterior = page.getByRole('button', { name: '← Anterior' });
     // Mientras envia, el boton dice "Creando miembro..." y este locator no lo
