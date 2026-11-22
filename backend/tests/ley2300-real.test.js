@@ -2,33 +2,38 @@
  * RQNF-16 (Ley 2300 de 2023) contra una base de datos real.
  *
  * Levanta los routers reales (preferencias y enlace de baja, miembros,
- * campanas y notificaciones) sobre la base de TEST_DATABASE_URL y los llama
+ * campanas y notificaciones) sobre la BD de pruebas y los llama
  * por HTTP; corre el job de vencimientos con WhatsApp simulado. Comprueba las
  * filas que quedan en autorizacion_miembro (migraciones 019 y 017),
  * campana_destinatario (015 y 018), envio_mensaje y alerta_vencimiento_enviada,
  * y que las restricciones de 017 y 018 existen de verdad.
  *
- * Sirve con las dos formas de crear la base:
- *   - ConsultasDB/Query_Inicial_Crear_Tablas.sql y luego las migraciones (asi
- *     es produccion: el servidor aplica las migraciones al arrancar)
- *   - solo las migraciones de backend/migrations (Docker)
- *
  * El reloj de la Ley 2300 se fija (lib/contacto-legal, establecerReloj): las
  * pruebas no dependen de la hora a la que se corren.
  *
- * Seguridad (la misma guardia de legal-real.test.js): sin TEST_DATABASE_URL se
- * salta; solo corre contra localhost o 127.0.0.1; WhatsApp y el correo estan
- * simulados; crea sus propios gimnasios y al final borra todo lo que creo.
+ * La conexion es la de los tests de integracion (tests/integracion/bd-pruebas.js),
+ * como en legal-real.test.js y registro-envio-real.test.js:
+ *   - Sin DATABASE_URL en el entorno del proceso se salta entera (asi queda en
+ *     el job backend del CI); la DATABASE_URL de backend/.env no la activa.
+ *   - Solo acepta la BD de pruebas local (127.0.0.1:5433, BD terminada en
+ *     _test), revisa antes de conectarse el destino que pg va a usar de verdad
+ *     y aplica las migraciones de backend/migrations. Las pruebas de esa
+ *     guardia estan en tests/integracion/guardia-bd.test.js.
+ *   - WhatsApp y el correo estan simulados: no sale ningun mensaje.
+ *   - Crea sus propios gimnasios y al final borra todo lo que creo.
  *
- * Uso (desde backend/):
- *   TEST_DATABASE_URL=postgres://postgres:...@127.0.0.1:55444/fl_consultas \
- *   npx jest tests/ley2300-real.test.js
+ * Corre en el job integracion del CI. Uso (desde la raiz, con db-test levantada):
+ *
+ *   DATABASE_URL=postgres://fitloyalty_test:fitloyalty_test@127.0.0.1:5433/fitloyalty_test \
+ *   pnpm --dir backend run test:integracion
  */
 jest.setTimeout(30000); // base real: con la maquina cargada los hooks pasan de 5 s
 const crypto = require('crypto');
 const express = require('express');
 const jwt = require('jsonwebtoken');
-const ConnectionParameters = require('pg/lib/connection-parameters');
+// La guardia de la BD de pruebas y la DATABASE_URL del entorno del proceso:
+// ver tests/integracion/bd-pruebas.js. Va antes que cualquier modulo de src/.
+const { describeConBd, prepararBdDePruebas } = require('./integracion/bd-pruebas');
 
 jest.mock('../src/lib/whatsapp', () => ({
   sendWhatsAppText: jest.fn(async () => {}),
@@ -38,33 +43,10 @@ jest.mock('../src/lib/whatsapp', () => ({
 }));
 jest.mock('../src/lib/email', () => ({ sendMemberQR: jest.fn(async () => {}), sendMail: jest.fn(async () => ({ delivered: true })) }));
 
-const HOSTS_LOCALES = ['localhost', '127.0.0.1', '::1', '[::1]'];
-function exigirBaseLocal(config) {
-  const { host } = new ConnectionParameters(typeof config === 'string' ? { connectionString: config } : config);
-  if (!HOSTS_LOCALES.includes(host)) {
-    throw new Error(`Me niego: TEST_DATABASE_URL lleva a "${host}" y esta prueba solo corre contra una base local (localhost o 127.0.0.1).`);
-  }
-}
+// El secreto con el que esta prueba firma sus tokens. Solo vale en este archivo.
+process.env.JWT_SECRET = 'prueba-real-local';
 
-const URL_PRUEBA = process.env.TEST_DATABASE_URL;
-let poolReal;
-if (URL_PRUEBA) {
-  exigirBaseLocal(URL_PRUEBA);
-  process.env.DATABASE_URL = URL_PRUEBA;
-  process.env.DB_SSL = 'false';
-  process.env.JWT_SECRET = 'prueba-real-local';
-  poolReal = require('../src/db/db');
-  exigirBaseLocal(poolReal.options);
-}
-
-test('la guardia rechaza una base remota', () => {
-  expect(() => exigirBaseLocal('postgres://u:c@ep-algo.neon.tech/neondb')).toThrow(/Me niego/);
-  expect(() => exigirBaseLocal('postgres://u:c@127.0.0.1:55444/fl?host=ep-algo.neon.tech')).toThrow(/Me niego/);
-});
-
-const describeReal = URL_PRUEBA ? describe : describe.skip;
-
-describeReal('RQNF-16 contra la base real', () => {
+describeConBd('RQNF-16 contra la base real', () => {
   let pool, server, base, establecerBusquedaPersonal, campanasRouter, legal;
   const sufijo = crypto.randomBytes(3).toString('hex');
   const gimnasios = [];
@@ -138,7 +120,7 @@ describeReal('RQNF-16 contra la base real', () => {
   );
 
   beforeAll(async () => {
-    pool = poolReal;
+    pool = await prepararBdDePruebas();
     legal = require('../src/lib/contacto-legal');
     fijar(MARTES);
     ({ establecerBusquedaPersonal } = require('../src/middleware/auth'));
@@ -192,7 +174,7 @@ describeReal('RQNF-16 contra la base real', () => {
       await pool.query('DELETE FROM campana_destinatario WHERE id_campana IN (SELECT id_campana FROM campana WHERE id_gimnasio = ANY($1::int[]))', g);
       await pool.query('DELETE FROM campana WHERE id_gimnasio = ANY($1::int[])', g);
       await pool.query('DELETE FROM alerta_vencimiento_enviada WHERE id_miembro IN (SELECT id_miembro FROM miembro WHERE id_gimnasio = ANY($1::int[]))', g);
-      for (const tabla of ['notificacion', 'canal_comunicacion', 'plan_cobro', 'autorizacion_miembro', 'miembro', 'usuario', 'gimnasio']) {
+      for (const tabla of ['checkin', 'notificacion', 'canal_comunicacion', 'plan_cobro', 'autorizacion_miembro', 'miembro', 'usuario', 'gimnasio']) {
         await pool.query(`DELETE FROM ${tabla} WHERE id_gimnasio = ANY($1::int[])`, g);
       }
     }
@@ -646,6 +628,35 @@ describeReal('RQNF-16 contra la base real', () => {
       // A Carla (no es destinataria pendiente: quedo OMITIDO) no se le puede enviar.
       const omitida = await llamar('POST', `/api/admin/campanas/${c.id_campana}/destinatarios/${carla}/enviado`, tkAdminB, {});
       expect(omitida.status).toBe(409);
+    });
+
+    // El envio a mano armaba el texto sin fecha_fin ni dias_sin_venir: salia
+    // «llevas varios días sin venir… Tu plan vence el .» y no lo que el panel
+    // habia mostrado en la lista.
+    test('WhatsApp a mano: el texto que se registra es el de la lista, con los dias sin venir y el vencimiento del plan', async () => {
+      fijar(co('2026-12-16 10:00')); // otra semana
+      // Dani vino por ultima vez hace 12 dias; su plan vencio hace 2 (beforeAll).
+      await pool.query(
+        `INSERT INTO checkin (id_miembro, id_gimnasio, fecha_hora, metodo, valido)
+         VALUES ($1, $2, NOW() - INTERVAL '12 days', 'MANUAL', TRUE)`,
+        [dani, gymB]
+      );
+      const c = await crearCampana({
+        canal: 'WHATSAPP',
+        mensaje: 'Hola {primer_nombre}, llevas {dias_sin_venir} días sin venir. Tu plan vence el {fecha_vencimiento}.',
+      }, tkAdminB);
+      await llamar('POST', `/api/admin/campanas/${c.id_campana}/ejecutar`, tkAdminB);
+
+      const lista = await llamar('GET', `/api/admin/campanas/${c.id_campana}/destinatarios`, tkAdminB);
+      const deLaLista = lista.body.destinatarios.find((d) => d.id_miembro === dani);
+      expect(deLaLista).toMatchObject({ estado_envio: 'PENDIENTE' });
+      expect(deLaLista.mensaje).toMatch(/^Hola Dani, llevas 12 días sin venir\. Tu plan vence el \d{2}\/\d{2}\/\d{4}\./);
+
+      const r = await llamar('POST', `/api/admin/campanas/${c.id_campana}/destinatarios/${dani}/enviado`, tkAdminB, {});
+      expect(r.status).toBe(201);
+      expect(r.body.mensaje).toBe(deLaLista.mensaje);
+      const guardado = await uno('SELECT mensaje_copiado FROM envio_mensaje WHERE id_campana = $1 AND id_miembro = $2', [c.id_campana, dani]);
+      expect(guardado.mensaje_copiado).toBe(deLaLista.mensaje);
     });
   });
 

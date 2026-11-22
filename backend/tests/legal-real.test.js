@@ -28,10 +28,10 @@ jest.setTimeout(30000); // base real: con la maquina cargada los hooks pasan de 
 const crypto = require('crypto');
 const express = require('express');
 const jwt = require('jsonwebtoken');
-const { CONTRATO_VERSION } = require('../src/lib/mensajes');
 // La guardia de la BD de pruebas y la DATABASE_URL del entorno del proceso:
-// ver tests/integracion/bd-pruebas.js.
+// ver tests/integracion/bd-pruebas.js. Va antes que cualquier modulo de src/.
 const { describeConBd, prepararBdDePruebas } = require('./integracion/bd-pruebas');
+const { CONTRATO_VERSION } = require('../src/lib/mensajes');
 
 jest.mock('../src/lib/whatsapp', () => ({
   sendWhatsAppText: jest.fn(async () => {}),
