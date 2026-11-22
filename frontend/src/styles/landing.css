@@ -275,54 +275,114 @@
 .hero-mock-chart svg { width: 100%; height: 100%; }
 
 /* ---------- Foto del hero ----------
-   La foto de la sala va detrás y el panel de muestra se monta sobre su
-   esquina inferior izquierda. El espacio de abajo lo reserva .hero-visual. */
+   La foto de la sala es el fondo de la mitad derecha de la portada. Una
+   máscara la funde con la página hacia la izquierda y hacia abajo, y un
+   tinte morado la une con el resto del tema. Encima flotan el panel de
+   muestra y dos avisos. */
+.landing-hero > .hero-backdrop {
+  position: absolute;
+  z-index: 0;
+  top: 0; right: 0; bottom: 0;
+  width: min(64%, 1100px);
+  pointer-events: none;
+  -webkit-mask-image:
+    linear-gradient(90deg, transparent 0%, rgba(0, 0, 0, 0.4) 26%, #000 58%),
+    linear-gradient(180deg, #000 0%, #000 68%, transparent 100%);
+  -webkit-mask-composite: source-in;
+  mask-image:
+    linear-gradient(90deg, transparent 0%, rgba(0, 0, 0, 0.4) 26%, #000 58%),
+    linear-gradient(180deg, #000 0%, #000 68%, transparent 100%);
+  mask-composite: intersect;
+  animation: fade-in var(--dur-slow) var(--ease-out) both;
+}
+.hero-backdrop img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 36%;
+  filter: saturate(1.08) contrast(1.04);
+}
+.hero-backdrop::after {
+  content: '';
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(circle at 78% 18%, rgba(168, 85, 247, 0.26), transparent 55%),
+    linear-gradient(180deg, rgba(37, 39, 45, 0.18) 0%, rgba(37, 39, 45, 0.42) 100%);
+}
+
 .hero-visual {
   position: relative;
   min-width: 0;
-  padding-bottom: clamp(40px, 6vw, 72px);
-}
-.hero-photo {
-  position: relative;
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border-subtle);
-  overflow: hidden;
-  box-shadow: 0 0 60px rgba(168, 85, 247, 0.14);
-  animation: fade-in-up var(--dur-slow) var(--ease-out) both;
-  animation-delay: 120ms;
-}
-.hero-photo img {
-  display: block;
-  width: 100%;
-  height: auto;
-  aspect-ratio: 4 / 5;
-  max-height: min(76vh, 700px);
-  object-fit: cover;
-  object-position: 50% 38%;
-}
-/* Velo oscuro abajo: sobre él se lee el panel de muestra. */
-.hero-photo::after {
-  content: '';
-  position: absolute; inset: 0;
-  background: linear-gradient(180deg, rgba(10, 8, 20, 0) 40%, rgba(10, 8, 20, 0.78) 100%);
-  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(24px, 4vw, 56px) 0;
 }
 .hero-visual .hero-mock {
-  position: absolute;
-  left: clamp(-24px, -2vw, -10px);
-  bottom: 0;
-  width: min(74%, 400px);
+  width: min(100%, 430px);
   /* Vidrio oscuro: sobre la foto, el fondo translúcido normal no se lee. */
   background: var(--surface-glass);
-  backdrop-filter: blur(14px) saturate(140%);
-  -webkit-backdrop-filter: blur(14px) saturate(140%);
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.55), 0 0 60px rgba(168, 85, 247, 0.16);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  border-color: var(--surface-border);
+  box-shadow: var(--surface-bevel), 0 24px 60px rgba(0, 0, 0, 0.55), 0 0 70px rgba(168, 85, 247, 0.18);
 }
+
+/* Avisos flotantes de la portada */
+.hero-chip {
+  position: absolute;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px 10px 12px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--surface-border);
+  background: var(--surface-glass);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  box-shadow: var(--surface-bevel), 0 14px 36px rgba(0, 0, 0, 0.5);
+  white-space: nowrap;
+  animation: float 6s ease-in-out infinite;
+}
+.hero-chip .icon { font-size: 22px; }
+.hero-chip__text { display: flex; flex-direction: column; line-height: 1.25; }
+.hero-chip__text strong {
+  font-family: var(--font-body);
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--on-surface);
+}
+.hero-chip__text small {
+  font-family: var(--font-label);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  color: var(--on-surface-variant);
+}
+.hero-chip--ingreso { top: clamp(0px, 2vw, 28px); right: 1%; }
+.hero-chip--ingreso .icon { color: var(--success); }
+.hero-chip--aviso { bottom: clamp(0px, 2vw, 28px); left: 1%; animation-delay: -3s; }
+.hero-chip--aviso .icon { color: var(--primary-accent); }
+
 @media (max-width: 960px) {
-  /* En una columna el panel baja más, para que no tape la foto. */
-  .hero-visual { padding-bottom: 124px; }
-  .hero-photo img { aspect-ratio: 1 / 1; max-height: 460px; object-position: 50% 40%; }
-  .hero-visual .hero-mock { left: 12px; width: min(82%, 380px); }
+  /* En una columna la foto queda detrás del panel, al final de la portada. */
+  .landing-hero > .hero-backdrop {
+    top: auto;
+    left: 0;
+    width: 100%;
+    height: 560px;
+    -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 34%, #000 72%, transparent 100%);
+    -webkit-mask-composite: source-over;
+    mask-image: linear-gradient(180deg, transparent 0%, #000 34%, #000 72%, transparent 100%);
+    mask-composite: add;
+  }
+  .hero-backdrop img { object-position: 50% 42%; }
+  .hero-visual { padding: 128px 0 84px; }
+  .hero-visual .hero-mock { width: min(90%, 400px); }
+  .hero-chip--ingreso { top: 64px; right: auto; left: 0; }
+  .hero-chip--aviso { bottom: 30px; left: auto; right: 0; }
 }
 
 /* ---------- Section base ---------- */
@@ -478,70 +538,174 @@
   }
 }
 
-/* ---------- Fotos «En tu sala» ----------
-   Tres fotos verticales con la función encima. En celular se apilan
-   recortadas a lo ancho, para que la sección no quede demasiado larga. */
-.photo-band {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 14px;
+/* ---------- Fotos «En tu sala»: mosaico ----------
+   Dos fotos altas a los lados, a distinta altura, y en el centro las tres
+   funciones con una foto apaisada. Cada foto lleva encima un aviso del
+   producto, que sobresale del borde. En celular todo va en una columna. */
+.sala { position: relative; }
+.sala::before {
+  content: '';
+  position: absolute;
+  top: 58%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(900px, 92vw);
+  height: min(620px, 80vw);
+  background: radial-gradient(ellipse, rgba(168, 85, 247, 0.16), transparent 68%);
+  pointer-events: none;
 }
-.photo-card {
+.sala-mosaic {
   position: relative;
-  margin: 0;
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border-subtle);
-  background: var(--surface);
-  overflow: hidden;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.12fr) minmax(0, 1fr);
+  gap: clamp(14px, 1.6vw, 22px);
+  align-items: start;
 }
-.photo-card img {
+.sala-col {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(14px, 1.6vw, 22px);
+  margin-top: 30px;
+  min-width: 0;
+}
+.sala-photo { position: relative; margin: 0; min-width: 0; }
+.sala-photo--c { margin-top: 60px; }
+.sala-photo__img {
+  position: relative;
+  border-radius: 20px;
+  overflow: hidden;
+  border: 1px solid var(--surface-border);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+}
+.sala-photo__img img {
   display: block;
   width: 100%;
   height: auto;
-  aspect-ratio: 4 / 5;
+  aspect-ratio: 3 / 4;
   object-fit: cover;
-  transition: transform var(--dur-slow) var(--ease-out);
+  filter: saturate(1.05) contrast(1.03);
+  transition: transform 700ms var(--ease-out);
 }
-.photo-card:hover img { transform: scale(1.03); }
-.photo-card::after {
+.sala-photo--b .sala-photo__img img { aspect-ratio: 16 / 10; object-position: 50% 38%; }
+.sala-photo:hover .sala-photo__img img { transform: scale(1.04); }
+/* Tinte que une las fotos con el tema. */
+.sala-photo__img::after {
   content: '';
   position: absolute; inset: 0;
-  background: linear-gradient(180deg, rgba(8, 6, 16, 0) 42%, rgba(8, 6, 16, 0.9) 100%);
+  background:
+    linear-gradient(200deg, rgba(139, 92, 246, 0.20) 0%, rgba(37, 39, 45, 0) 45%),
+    linear-gradient(180deg, rgba(20, 18, 30, 0) 55%, rgba(20, 18, 30, 0.55) 100%);
   pointer-events: none;
 }
-.photo-card figcaption {
-  position: absolute;
-  left: 0; right: 0; bottom: 0;
-  z-index: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 18px;
+
+/* Las tres funciones */
+.sala-points {
+  list-style: none;
+  margin: 0;
+  padding: 8px 20px;
+  border-radius: 20px;
+  border: 1px solid var(--surface-border);
+  background: var(--surface-glass);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  box-shadow: var(--surface-bevel);
 }
-.photo-card figcaption strong {
+.sala-points li {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 16px 0;
+}
+.sala-points li + li { border-top: 1px solid rgba(255, 255, 255, 0.10); }
+.sala-points__icon {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 38px; height: 38px;
+  border-radius: var(--radius-lg);
+  background: var(--primary-soft);
+  border: 1px solid var(--primary);
+  color: var(--primary-accent);
+}
+.sala-points__icon .icon { font-size: 20px; }
+.sala-points h3 {
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 17px;
+  font-size: 16px;
   letter-spacing: -0.01em;
-  color: #fff;
+  color: var(--on-surface);
+  margin: 0 0 3px;
 }
-.photo-card figcaption span {
+.sala-points p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--on-surface-variant);
+}
+
+/* Avisos sobre las fotos */
+.sala-chip {
+  position: absolute;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px 10px 12px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--surface-border);
+  background: var(--surface-glass);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  box-shadow: var(--surface-bevel), 0 14px 36px rgba(0, 0, 0, 0.5);
+  white-space: nowrap;
+}
+.sala-chip .icon { font-size: 22px; color: var(--primary-accent); }
+.sala-chip--ingreso .icon { color: var(--success); }
+.sala-chip__text { display: flex; flex-direction: column; line-height: 1.25; }
+.sala-chip__text strong {
+  font-family: var(--font-body);
   font-size: 13.5px;
-  line-height: 1.45;
-  color: rgba(255, 255, 255, 0.84);
+  font-weight: 700;
+  color: var(--on-surface);
 }
-@media (max-width: 720px) {
-  .photo-band { grid-template-columns: 1fr; }
-  .photo-card img { aspect-ratio: 3 / 2; }
-  /* La foto es más baja: el velo empieza antes para que el texto se lea. */
-  .photo-card::after {
-    background: linear-gradient(180deg, rgba(8, 6, 16, 0) 18%, rgba(8, 6, 16, 0.92) 100%);
-  }
+.sala-chip__text small {
+  font-family: var(--font-label);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  color: var(--on-surface-variant);
+}
+.sala-chip__bar {
+  display: block;
+  width: 132px; height: 5px;
+  margin-top: 7px;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.16);
+  overflow: hidden;
+}
+.sala-chip__bar span {
+  display: block;
+  width: 66%; height: 100%;
+  border-radius: inherit;
+  background: var(--brand-grad);
+}
+.sala-chip--reto    { left: -10px;  bottom: 34px; }
+.sala-chip--ingreso { right: -10px; top: 22px; }
+.sala-chip--aviso   { right: -10px; bottom: 44px; }
+
+@media (max-width: 860px) {
+  .sala-mosaic { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .sala-col { order: -1; margin-top: 0; gap: 16px; }
+  .sala-photo--c { margin-top: 0; }
+  .sala-photo__img img,
+  .sala-photo--b .sala-photo__img img { aspect-ratio: 4 / 3; }
+  .sala-photo--a .sala-photo__img img { object-position: 50% 30%; }
+  .sala-chip--reto    { left: 12px;  bottom: 14px; }
+  .sala-chip--ingreso { right: 12px; top: 14px; }
+  .sala-chip--aviso   { right: 12px; bottom: 14px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .photo-card img { transition: none; }
-  .photo-card:hover img { transform: none; }
-  .hero-photo { animation: none; }
+  .hero-chip, .landing-hero > .hero-backdrop { animation: none; }
+  .sala-photo__img img { transition: none; }
+  .sala-photo:hover .sala-photo__img img { transform: none; }
 }
 
 /* ---------- Howto ---------- */
