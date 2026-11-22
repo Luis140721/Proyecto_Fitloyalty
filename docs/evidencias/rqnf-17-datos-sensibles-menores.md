@@ -169,3 +169,30 @@ Además, con RQNF-16 el tipo `MENSAJES_COMERCIALES` ya se usa (deja de ser solo 
 Pruebas que cambiaron por estos ajustes: `autorizaciones.test.js` (versión v2, cuatro filas en el alta y la prueba del efecto de la obs. 2), `legal-real.test.js` (v2, la fila de mensajes comerciales del alta y el contrato v3) y `miembros-update.test.js` (la fecha vacía ahora va por la transacción). Todas pasan sin base y contra `fl_consultas` y `fl_migraciones` (683 de 683 después de fusionar develop `ad90d73` y de las tres rondas de ajustes del #108).
 
 Límite que sigue: si un miembro adulto (CC) nunca tuvo fecha y en realidad es menor, el sistema no lo puede saber; el ajuste solo impide que un menor ya registrado como tal deje de serlo sin constancia.
+
+## Las autorizaciones no se arrastran (rama `fix/autorizaciones-sin-arrastre`, 2026-11-22)
+
+Dos caminos del panel registraban una autorización que nadie había dado. Salieron de las pruebas y revisiones del #108 y se corrigen aparte, sobre esa rama.
+
+| # | Qué pasaba | Arreglo | Dónde |
+|---|---|---|---|
+| 1 | **El alta que se cerraba sin crear al miembro conservaba el borrador, casillas incluidas.** «Cerrar» solo ocultaba el asistente: «Nuevo miembro» lo reabría en el mismo paso con los datos y las casillas del registro anterior (contrato, tratamiento de datos, datos sensibles con sus datos de salud y, desde RQNF-16, mensajes comerciales). Si se escribía encima otro miembro y se creaba sin revisar el paso 5, quedaba con autorizaciones que no dio | «Nuevo miembro» abre siempre en blanco y en el paso 1. «Cerrar» descarta lo escrito; si hay algo escrito, elegido o marcado, antes pregunta. Con el miembro creándose no se cierra | `frontend/src/pages/MiembrosPage.jsx` (`abrirAlta`, `cerrarAlta`, `reiniciarAlta`, `hayBorrador`) |
+| 2 | **La ficha mandaba la autorización de datos sensibles y los datos de salud en cada guardado**, tal como habían llegado. El miembro puede revocarla desde la app (`PATCH /cliente/autorizaciones/datos-sensibles`), y al revocar se borran sus datos de salud. Si lo hacía con la ficha abierta, guardar cualquier otro campo la volvía a registrar por el panel y devolvía los datos borrados; al revés, una autorización dada en la app se revocaba | La autorización solo viaja si se cambió en esa ficha, y los datos de salud solo si cambiaron. Si solo cambia un dato de salud, viaja sin la autorización y el servidor decide con la vigente. Tras un guardado que falla en el cliente, el siguiente reenvía lo que aquel llevaba | `frontend/src/pages/MiembrosPage.jsx` (`sensiblesCargados`, `mismoTexto`, `NO_SE_SABE`) |
+
+No cambia el backend: `PUT /admin/miembros/:id` ya trataba las tres claves como opcionales y solo registra una autorización cuando llega y es distinta de la vigente (`backend/src/routes/miembros.js`, bloque «Datos sensibles»). Un miembro que llega con datos de salud pero sin autorización (`datos_sensibles_sin_autorizacion`) sigue igual: al guardar viajan los dos textos vacíos para que el servidor los borre, como dice el aviso.
+
+**Cómo se probó** (22 de noviembre; Windows 11, Node 24; integración y E2E en contenedores con PostgreSQL 16.15):
+
+| Prueba | Resultado |
+|---|---|
+| `frontend/tests/MiembrosPage.altaEnBlanco.test.jsx` (25) | El alta siguiente abre en blanco y en el paso 1 tras cerrar o tras crear; el POST del nuevo miembro no lleva nada del descartado; sin marcar contrato y datos no se crea; «Cerrar» pregunta con cualquier campo escrito, elegido o marcado y no pregunta con el formulario sin tocar; decir que no deja todo como estaba; los errores de validación no pasan al siguiente; el botón de la lista vacía; no se cierra con el miembro creándose |
+| `frontend/tests/MiembrosPage.sensibles.test.jsx` (22) | Sin tocar los datos sensibles no viaja ninguna de las tres claves; otorgar manda `true` y los textos; revocar manda `false` y los textos vacíos; cambiar solo un texto manda ese texto sin la autorización; marcar y desmarcar no viaja; el registro con datos de salud y sin autorización; guardados fallidos; el menor con representante |
+| `backend/tests/legal-real.test.js`, contra PostgreSQL: «revocada en la app, guardar la ficha sin tocar los datos sensibles no la devuelve ni restaura los datos de salud» | Con la autorización revocada desde la app, el PUT que arma ahora la ficha no agrega ninguna fila a `autorizacion_miembro` ni restaura los datos; el PUT que armaba antes sí la registraba otra vez por el panel |
+| Panel completo (`pnpm test`) | 863 de 863, 48 archivos; cobertura 87,33 % líneas, 93,94 % ramas, 96,03 % funciones (umbral 85 / 92 / 93) |
+| Backend sin base (`pnpm test`) | 1329 pasan, 243 se saltan (integración) |
+| Integración (`test:integracion`) | 263 de 263, ninguna saltada (`legal-real` 8) |
+| E2E (Playwright) | 44 de 44 |
+
+Cada prueba nueva del panel se hizo fallar con un cambio temporal en el código (46 cambios, todos revertidos). Tres sobreviven por ser equivalentes: reiniciar el alta solo al cerrar o solo al abrir (los dos caminos pasan por el otro), limpiar lo cargado al abrir otra ficha (la carga lo sobrescribe antes de que se pueda guardar) y la guarda de la marca «no se sabe» (el texto de pantalla nunca coincide con ella).
+
+**Lo que queda igual a propósito:** «Valor total del plan», «Fecha inicio» y «Estado del pago» no cuentan como borrador aunque se editen a mano, porque son los que el formulario calcula solo; con solo eso cambiado, «Cerrar» no pregunta.
