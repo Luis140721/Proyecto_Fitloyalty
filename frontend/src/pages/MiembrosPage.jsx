@@ -13,57 +13,21 @@ import EmptyState from '../components/EmptyState';
 import PageTransition from '../components/PageTransition';
 import Modal from '../components/Modal';
 import Ripple from '../components/Ripple';
+import {
+  RepresentanteCampos, CasillaAutorizacion, CasillaDatosSensibles, HistorialAutorizaciones,
+} from '../components/AutorizacionesMiembro';
+import { esMenor, edadEnAnios, isoADate, erroresRepresentante } from '../lib/autorizaciones';
 import QRCode from 'qrcode';
 
-// Componente personalizado para input de fecha con formato automático DD/MM/YYYY
-function DateInputWithAutoFormat({ value, onChange, placeholder, ...props }) {
-  const formatDateString = (input) => {
-    // Remover todos los caracteres que no sean dígitos
-    const cleaned = input.replace(/\D/g, '');
-    
-    // Limitar a 8 dígitos máximo
-    const truncated = cleaned.slice(0, 8);
-    
-    // Aplicar formato DD/MM/YYYY
-    let formatted = '';
-    if (truncated.length > 0) {
-      formatted += truncated.slice(0, 2);
-    }
-    if (truncated.length > 2) {
-      formatted += '/' + truncated.slice(2, 4);
-    }
-    if (truncated.length > 4) {
-      formatted += '/' + truncated.slice(4, 8);
-    }
-    
-    return formatted;
-  };
-
-  const handleChange = (e) => {
-    const rawValue = e.target.value;
-    const formatted = formatDateString(rawValue);
-    onChange(formatted);
-  };
-
-  return (
-    <input
-      {...props}
-      type="text"
-      value={value}
-      onChange={handleChange}
-      placeholder={placeholder || "DD/MM/YYYY"}
-      maxLength={10}
-      inputMode="numeric"
-    />
-  );
-}
+// CampoFecha usa locale="es": sin registrarlo, el calendario sale en ingles.
+registerLocale('es', es);
 
 /** Mensaje de error bajo un campo. No renderiza nada si no hay error. */
 function ErrorCampo({ msg }) {
   if (!msg) return null;
   return (
     <span className="field-error" role="alert">
-      <span className="material-symbols-outlined icon">error</span>
+      <span className="material-symbols-outlined icon" aria-hidden="true">error</span>
       {msg}
     </span>
   );
@@ -139,6 +103,10 @@ function CampoFecha({ value, onChange, placeholder, anosAtras = 100, ...props })
       }}
       value={value}
       dateFormat="dd/MM/yyyy"
+      /* Sin esto, al teclear el primer digito react-datepicker leia "1" como
+         el dia 1 del mes actual y el campo se quedaba en 01/11/2026. Asi solo
+         acepta una fecha escrita completa (DD/MM/AAAA). */
+      strictParsing
       placeholderText={placeholder || 'DD/MM/YYYY'}
       className="field-input"
       showMonthDropdown
@@ -163,17 +131,6 @@ function convertToISODate(dateString) {
   
   const [day, month, year] = parts;
   return `${year}-${month}-${day}`;
-}
-
-// Función para convertir formato ISO a DD/MM/YYYY
-function convertFromISODate(isoDate) {
-  if (!isoDate || isoDate.length !== 10) return isoDate;
-  
-  const parts = isoDate.split('-');
-  if (parts.length !== 3) return isoDate;
-  
-  const [year, month, day] = parts;
-  return `${day}/${month}/${year}`;
 }
 
 /* Duracion de cada plan, en dias. Lo que no este aqui dura un mes. */
@@ -220,8 +177,41 @@ const empty = {
   // Términos
   acepto_terminos: false,
   autorizo_datos: false,
+  // RQNF-17: autorizacion separada y opcional de datos sensibles, y
+  // representante legal (obligatorio si el miembro es menor de edad).
+  autorizo_datos_sensibles: false,
+  representante_nombre: '',
+  representante_tipo_documento: '',
+  representante_documento: '',
+  representante_parentesco: '',
+  representante_telefono: '',
+  autoriza_representante: false,
   activo: true
 };
+
+const CAMPOS_REPRESENTANTE = [
+  'representante_nombre', 'representante_tipo_documento', 'representante_documento',
+  'representante_parentesco', 'representante_telefono',
+];
+
+/**
+ * RQNF-17: lo que se le manda al backend sobre autorizaciones y
+ * representante. Sin autorizacion de datos sensibles no se mandan condiciones
+ * medicas ni alergias; si no es menor, no se manda representante.
+ */
+function payloadLegal(f, menor) {
+  const p = { autorizo_datos_sensibles: Boolean(f.autorizo_datos_sensibles) };
+  if (!p.autorizo_datos_sensibles) {
+    p.condiciones_medicas = '';
+    p.alergias = '';
+  }
+  if (menor) {
+    for (const k of CAMPOS_REPRESENTANTE) p[k] = (f[k] || '').trim();
+    p.representante_telefono = p.representante_telefono.replace(/\D/g, '');
+    p.autoriza_representante = Boolean(f.autoriza_representante);
+  }
+  return p;
+}
 
 const TIPOS_DOCUMENTO = ['CC', 'TI', 'NIT', 'CE', 'PP'];
 const GENEROS = ['Masculino', 'Femenino', 'Otro', 'Prefiero no decir'];
@@ -288,6 +278,8 @@ export default function MiembrosPage() {
   const [editError, setEditError] = useState('');
   const [editLoading, setEditLoading] = useState(false);
   const [editQr, setEditQr] = useState('');      // imagen del QR en el detalle
+  // RQNF-17: autorizaciones del miembro que se edita (vigentes e historial).
+  const [autorizacionesEdit, setAutorizacionesEdit] = useState(null);
   // Plan del miembro que se esta editando. Va aparte del resto de la ficha
   // porque vive en otra tabla y se guarda con su propia peticion.
   const [planForm, setPlanForm] = useState(null);
@@ -304,6 +296,9 @@ export default function MiembrosPage() {
   const [enviandoContrato, setEnviandoContrato] = useState(false);
   const [editInfo, setEditInfo] = useState('');
   const [error, setError] = useState('');
+  // Por que no se pudo traer la lista. Va aparte de `error` (alta, desactivar...)
+  // para que una carga buena lo quite sin borrar otros avisos.
+  const [errorCarga, setErrorCarga] = useState('');
   const [info, setInfo] = useState('');
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -345,6 +340,8 @@ export default function MiembrosPage() {
       else if (f.fecha_nacimiento && textoAFecha(f.fecha_nacimiento) > new Date()) {
         e.fecha_nacimiento = 'La fecha de nacimiento no puede ser futura.';
       }
+      // RQNF-17: si es menor de edad, los datos del representante son obligatorios.
+      if (esMenor(textoAFecha(f.fecha_nacimiento), f.tipo_documento)) Object.assign(e, erroresRepresentante(f));
     }
     if (seccion === 'salud') {
       const tel = (f.telefono_emergencia || '').replace(/\D/g, '');
@@ -365,9 +362,18 @@ export default function MiembrosPage() {
     if (seccion === 'terminos') {
       if (!f.acepto_terminos) e.acepto_terminos = 'Debes aceptar los términos para registrar al miembro.';
       if (!f.autorizo_datos) e.autorizo_datos = 'Falta la autorización de tratamiento de datos.';
+      if (esMenor(textoAFecha(f.fecha_nacimiento), f.tipo_documento) && !f.autoriza_representante) {
+        e.autoriza_representante = 'El miembro es menor de edad: falta la autorización de su representante legal.';
+      }
     }
     return e;
   };
+
+  // RQNF-17: ¿el miembro del alta o de la edicion es menor de edad?
+  const menorAlta = esMenor(textoAFecha(form.fecha_nacimiento), form.tipo_documento);
+  const edadAlta = edadEnAnios(textoAFecha(form.fecha_nacimiento));
+  const menorEdit = esMenor(isoADate(editForm.fecha_nacimiento), editForm.tipo_documento);
+  const edadEdit = edadEnAnios(isoADate(editForm.fecha_nacimiento));
 
   /** Lleva el foco al primer campo marcado en rojo. */
   const enfocarPrimerError = () => {
@@ -402,17 +408,29 @@ export default function MiembrosPage() {
   const guardarRipple = Ripple({ opacity: 0.30 });
   const desactivarRipple = Ripple({ opacity: 0.30 });
 
+  /*
+   * Numero de la ultima carga pedida. Con la red lenta las respuestas pueden
+   * llegar en desorden: si la carga inicial respondia despues de la recarga que
+   * sigue a un alta, su lista (sin el miembro nuevo) reemplazaba a la buena.
+   * Ahora solo cuenta la respuesta de la ultima carga pedida.
+   */
+  const ultimaCargaRef = useRef(0);
+
   const load = async (query = '', includeInactive = false) => {
+    const carga = ++ultimaCargaRef.current;
     setLoading(true);
     try {
       const { data } = await api.get('/admin/miembros', { 
         params: { q: query, pageSize: 100, includeInactive } 
       });
+      if (carga !== ultimaCargaRef.current) return;
       setItems(data.miembros);
+      setErrorCarga('');
     } catch (err) {
-      setError(err.message || 'Error al cargar miembros.');
+      if (carga !== ultimaCargaRef.current) return;
+      setErrorCarga(err.message || 'Error al cargar miembros.');
     } finally {
-      setLoading(false);
+      if (carga === ultimaCargaRef.current) setLoading(false);
     }
   };
 
@@ -445,28 +463,6 @@ export default function MiembrosPage() {
     setFiltro(nuevoFiltro);
     const includeInactive = nuevoFiltro === 'desactivados';
     load(q, includeInactive);
-  };
-
-  // Desactivar miembro (soft delete)
-  const desactivar = async (id) => {
-    try {
-      await api.delete(`/admin/miembros/${id}`);
-      setConfirmDeactivate(null);
-      load(q, filtro === 'desactivados' ? true : false);
-    } catch (err) {
-      setError(err.message || 'No se pudo desactivar el miembro.');
-    }
-  };
-
-  // Eliminar miembro permanentemente (hard delete)
-  const eliminarPermanentemente = async (id) => {
-    try {
-      await api.delete(`/admin/miembros/${id}/permanent`);
-      setConfirmDelete(null);
-      load(q, filtro === 'desactivados' ? true : false);
-    } catch (err) {
-      setError(err.message || 'No se pudo eliminar el miembro permanentemente.');
-    }
   };
 
   const askDeactivate = (m) => setConfirmDeactivate(m);
@@ -605,7 +601,11 @@ export default function MiembrosPage() {
     try {
       const payload = { ...form };
       if (!payload.email) delete payload.email;
-      
+      // RQNF-17: el representante solo viaja si es menor; sin autorizacion
+      // de datos sensibles no viajan condiciones medicas ni alergias.
+      for (const k of [...CAMPOS_REPRESENTANTE, 'autoriza_representante']) delete payload[k];
+      Object.assign(payload, payloadLegal(form, menorAlta));
+
       // Convertir fechas de DD/MM/YYYY a formato ISO para el backend
       if (payload.fecha_inicio && payload.fecha_inicio.includes('/')) {
         payload.fecha_inicio = convertToISODate(payload.fecha_inicio);
@@ -653,7 +653,9 @@ export default function MiembrosPage() {
       setForm(formularioVacio());
       setOpen(false);
       load(q);
-      setInfo('Miembro creado exitosamente.');
+      setInfo(data.datos_sensibles_descartados
+        ? 'Miembro creado. No se guardaron condiciones médicas ni alergias porque no se autorizó el tratamiento de datos sensibles.'
+        : 'Miembro creado exitosamente.');
     } catch (err) {
       setError(err.message || 'No se pudo crear el miembro.');
     } finally {
@@ -698,7 +700,12 @@ export default function MiembrosPage() {
         // <input type="date"> necesita AAAA-MM-DD, no un ISO completo.
         fecha_nacimiento: full.fecha_nacimiento ? String(full.fecha_nacimiento).slice(0, 10) : '',
         activo: full.activo !== false,
+        // RQNF-17: los null del representante pasan a '' para los inputs.
+        ...Object.fromEntries(CAMPOS_REPRESENTANTE.map((k) => [k, full[k] || ''])),
+        autorizo_datos_sensibles: Boolean(full.autorizo_datos_sensibles),
+        autoriza_representante: false,
       });
+      setAutorizacionesEdit(data.autorizaciones || null);
       if (full.codigo_qr) {
         try { setEditQr(await QRCode.toDataURL(full.codigo_qr)); }
         catch (_) { /* si falla el dibujo, igual mostramos el codigo en texto */ }
@@ -755,9 +762,10 @@ export default function MiembrosPage() {
         `/admin/miembros/${editing.id_miembro}/${accion}`,
         accion === 'congelar' ? { motivo: motivoCongelar.trim() } : {}
       );
-      setPlanMsg(data.message || (accion === 'congelar' ? 'Membresía congelada.' : 'Membresía descongelada.'));
       setMotivoCongelar('');
+      // El aviso va despues de recargar: cargarPlan limpia planMsg al empezar.
       await cargarPlan(editing.id_miembro);
+      setPlanMsg(data.message || (accion === 'congelar' ? 'Membresía congelada.' : 'Membresía descongelada.'));
       await load(q, filtro === 'desactivados');
     } catch (err) {
       setPlanError(err.message || 'No pudimos cambiar el congelamiento.');
@@ -815,8 +823,8 @@ export default function MiembrosPage() {
         referencia_pago: planForm.referencia_pago || '',
         proxima_fecha_cobro: convertToISODate(calcularProximaFechaCobro(planForm.fecha_fin)),
       });
-      setPlanMsg('Plan actualizado.');
       await cargarPlan(editing.id_miembro);
+      setPlanMsg('Plan actualizado.');
       await load(q, filtro === 'desactivados');
     } catch (err) {
       setPlanError(err.message || 'No pudimos guardar el plan.');
@@ -942,6 +950,7 @@ export default function MiembrosPage() {
     setEditInfo('');
     setEditQr('');
     setQrCopiado(false);
+    setAutorizacionesEdit(null);
   };
 
   const onSaveEdit = async (e) => {
@@ -964,12 +973,18 @@ export default function MiembrosPage() {
       for (const k of EDITABLES) {
         if (editForm[k] !== undefined) payload[k] = editForm[k];
       }
-      if (!payload.email) delete payload.email;
-      await api.put(`/admin/miembros/${editing.id_miembro}`, payload);
+      // Un correo vacio se envia tal cual: el backend lo guarda como null
+      // (updateSchema de routes/miembros.js). Si se quitara del payload, borrar
+      // el correo en la ficha no tendria efecto y el viejo seguiria guardado.
+      // RQNF-17: autorizacion de datos sensibles (desmarcarla la revoca y
+      // borra esos datos) y representante legal si es menor.
+      Object.assign(payload, payloadLegal(editForm, menorEdit));
+      const { data: guardado } = await api.put(`/admin/miembros/${editing.id_miembro}`, payload);
       setEditing(null);
       setEditForm(empty);
       setEditQr('');
-      setInfo('Miembro actualizado.');
+      setAutorizacionesEdit(null);
+      setInfo(guardado?.message || 'Miembro actualizado.');
       load(q);
     } catch (err) {
       setEditError(err.message || 'No se pudo actualizar.');
@@ -1001,6 +1016,31 @@ export default function MiembrosPage() {
     desactivados: items.filter(m => !m.activo).length,
   }), [items]);
 
+  /*
+   * Lo que se ve en la tabla y en las tarjetas cuando no hay filas. Si la
+   * ultima carga fallo no se sabe si el gimnasio tiene miembros: antes salia
+   * "Sin miembros que mostrar" con el API caido. Ahora se dice que no se
+   * pudieron cargar y se ofrece reintentar con la misma busqueda y filtro.
+   */
+  const sinFilas = errorCarga ? (
+    <EmptyState
+      icono="cloud_off"
+      titulo="No pudimos cargar los miembros"
+      descripcion="Revisa la conexión y vuelve a intentarlo."
+      ctaLabel="Reintentar"
+      ctaIcono="refresh"
+      onCta={() => load(q, filtro === 'desactivados')}
+    />
+  ) : (
+    <EmptyState
+      icono="group_off"
+      titulo="Sin miembros que mostrar"
+      descripcion="No hay miembros que coincidan con el filtro actual."
+      ctaLabel="Nuevo miembro"
+      onCta={() => setOpen(true)}
+    />
+  );
+
   return (
     <PageTransition>
       <header className="admin-page-head">
@@ -1010,7 +1050,7 @@ export default function MiembrosPage() {
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
           <button className="btn btn-ghost" onClick={() => load(q)} disabled={loading}>
-            <span className="material-symbols-outlined icon">refresh</span>
+            <span className="material-symbols-outlined icon" aria-hidden="true">refresh</span>
             Actualizar
           </button>
           <button
@@ -1022,21 +1062,27 @@ export default function MiembrosPage() {
               return !o;
             })}
           >
-            <span className="material-symbols-outlined icon">{open ? 'close' : 'person_add'}</span>
+            <span className="material-symbols-outlined icon" aria-hidden="true">{open ? 'close' : 'person_add'}</span>
             {open ? 'Cerrar' : 'Nuevo miembro'}
           </button>
         </div>
       </header>
 
+      {errorCarga && (
+        <div className="alert alert-error anim-scale-in" role="alert">
+          <span className="material-symbols-outlined icon" aria-hidden="true">error</span>
+          <span>{errorCarga}</span>
+        </div>
+      )}
       {error && (
         <div className="alert alert-error anim-scale-in" role="alert">
-          <span className="material-symbols-outlined icon">error</span>
+          <span className="material-symbols-outlined icon" aria-hidden="true">error</span>
           <span>{error}</span>
         </div>
       )}
       {info && (
         <div className="alert alert-success anim-scale-in" role="status">
-          <span className="material-symbols-outlined icon">check_circle</span>
+          <span className="material-symbols-outlined icon" aria-hidden="true">check_circle</span>
           <span>{info}</span>
         </div>
       )}
@@ -1151,6 +1197,15 @@ export default function MiembrosPage() {
                     </select>
                   </label>
                 </div>
+                {/* RQNF-17: menor de edad -> representante legal obligatorio */}
+                {menorAlta && (
+                  <RepresentanteCampos
+                    valores={form}
+                    onChange={handleFormChange}
+                    errores={formErrors}
+                    edad={edadAlta}
+                  />
+                )}
                 <div className="auth-form-row">
                   <label className="field">
                     <span className="field-label">Teléfono / WhatsApp *</span>
@@ -1208,21 +1263,32 @@ export default function MiembrosPage() {
                   <label className="field">
                     <span className="field-label">Teléfono emergencia</span>
                     <input
-                      className="field-input"
+                      className={`field-input${formErrors.telefono_emergencia ? ' field-input--error' : ''}`}
                       value={form.telefono_emergencia}
                       onChange={(e) => handleFormChange('telefono_emergencia', e.target.value)}
                       placeholder="3001234567"
                       inputMode="numeric"
+                      aria-invalid={formErrors.telefono_emergencia ? 'true' : undefined}
                     />
+                    <ErrorCampo msg={formErrors.telefono_emergencia} />
                   </label>
                 </div>
+                {/* RQNF-17: autorizacion separada y opcional de datos sensibles */}
+                <CasillaDatosSensibles
+                  checked={form.autorizo_datos_sensibles}
+                  onChange={(v) => handleFormChange('autorizo_datos_sensibles', v)}
+                  menor={menorAlta}
+                />
                 <label className="field">
                   <span className="field-label">Condiciones médicas / lesiones</span>
                   <textarea
                     className="field-input"
-                    value={form.condiciones_medicas}
+                    value={form.autorizo_datos_sensibles ? form.condiciones_medicas : ''}
                     onChange={(e) => handleFormChange('condiciones_medicas', e.target.value)}
-                    placeholder="Información relevante sobre condiciones médicas"
+                    placeholder={form.autorizo_datos_sensibles
+                      ? 'Información relevante sobre condiciones médicas'
+                      : 'Requiere la autorización de datos sensibles'}
+                    disabled={!form.autorizo_datos_sensibles}
                     rows={3}
                   />
                 </label>
@@ -1230,9 +1296,12 @@ export default function MiembrosPage() {
                   <span className="field-label">Alergias</span>
                   <textarea
                     className="field-input"
-                    value={form.alergias}
+                    value={form.autorizo_datos_sensibles ? form.alergias : ''}
                     onChange={(e) => handleFormChange('alergias', e.target.value)}
-                    placeholder="Alergias a medicamentos, alimentos, etc."
+                    placeholder={form.autorizo_datos_sensibles
+                      ? 'Alergias a medicamentos, alimentos, etc.'
+                      : 'Requiere la autorización de datos sensibles'}
+                    disabled={!form.autorizo_datos_sensibles}
                     rows={2}
                   />
                 </label>
@@ -1243,7 +1312,7 @@ export default function MiembrosPage() {
             {activeSection === 'cobros' && (
               <div className="form-section anim-fade-up" style={{ border: '2px solid var(--primary)', borderRadius: 'var(--radius)', padding: 20, background: 'var(--surface-container-low)' }}>
                 <h4 style={{ marginBottom: 16, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span className="material-symbols-outlined icon">payments</span>
+                  <span className="material-symbols-outlined icon" aria-hidden="true">payments</span>
                   Plan y COBROS
                 </h4>
                 <p style={{ marginBottom: 16, fontSize: 13, color: 'var(--on-surface-variant)' }}>
@@ -1286,30 +1355,35 @@ export default function MiembrosPage() {
                       placeholder="Calculada automáticamente"
                       readOnly
                     />
+                    <ErrorCampo msg={formErrors.fecha_fin} />
                   </label>
                   <label className="field">
                     <span className="field-label">Valor total del plan *</span>
                     <input
-                      className="field-input"
+                      className={`field-input${formErrors.valor_total ? ' field-input--error' : ''}`}
                       type="number"
                       required value={form.valor_total}
                       onChange={(e) => handleFormChange('valor_total', e.target.value)}
                       placeholder="0.00"
                       step="0.01"
+                      aria-invalid={formErrors.valor_total ? 'true' : undefined}
                     />
+                    <ErrorCampo msg={formErrors.valor_total} />
                   </label>
                 </div>
                 <div className="auth-form-row">
                   <label className="field">
                     <span className="field-label">Valor pagado hoy</span>
                     <input
-                      className="field-input"
+                      className={`field-input${formErrors.valor_pagado ? ' field-input--error' : ''}`}
                       type="number"
                       value={form.valor_pagado}
                       onChange={(e) => handleFormChange('valor_pagado', e.target.value)}
                       placeholder="0.00"
                       step="0.01"
+                      aria-invalid={formErrors.valor_pagado ? 'true' : undefined}
                     />
+                    <ErrorCampo msg={formErrors.valor_pagado} />
                   </label>
                   <label className="field">
                     <span className="field-label">Estado del pago</span>
@@ -1439,31 +1513,41 @@ export default function MiembrosPage() {
             {activeSection === 'terminos' && (
               <div className="form-section anim-fade-up">
                 <h4 style={{ marginBottom: 16, color: 'var(--primary)' }}>Términos y condiciones</h4>
-                <label className="field" style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 12 }}>
-                  <input
-                    type="checkbox"
-                    required
-                    checked={form.acepto_terminos}
-                    onChange={(e) => handleFormChange('acepto_terminos', e.target.checked)}
-                    style={{ marginTop: 4 }}
+                {/* RQNF-17: cada autorizacion por separado, con el texto (v1)
+                    que el backend guarda como prueba. */}
+                {menorAlta && (
+                  <p className="field-hint" style={{ marginBottom: 12 }}>
+                    El miembro es menor de edad: estas autorizaciones las da su representante legal
+                    {form.representante_nombre ? `, ${form.representante_nombre}` : ''}.
+                  </p>
+                )}
+                <CasillaAutorizacion
+                  tipo="TERMINOS"
+                  obligatoria
+                  checked={form.acepto_terminos}
+                  onChange={(v) => handleFormChange('acepto_terminos', v)}
+                  error={formErrors.acepto_terminos}
+                />
+                <CasillaAutorizacion
+                  tipo="TRATAMIENTO_DATOS"
+                  obligatoria
+                  checked={form.autorizo_datos}
+                  onChange={(v) => handleFormChange('autorizo_datos', v)}
+                  error={formErrors.autorizo_datos}
+                />
+                {menorAlta && (
+                  <CasillaAutorizacion
+                    tipo="REPRESENTANTE_MENOR"
+                    obligatoria
+                    checked={form.autoriza_representante}
+                    onChange={(v) => handleFormChange('autoriza_representante', v)}
+                    error={formErrors.autoriza_representante}
                   />
-                  <span className="field-label" style={{ margin: 0, fontSize: 14 }}>
-                    Acepto los términos y condiciones del gimnasio *
-                    <ErrorCampo msg={formErrors.acepto_terminos} />
-                  </span>
-                </label>
-                <label className="field" style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
-                  <input
-                    type="checkbox"
-                    checked={form.autorizo_datos}
-                    onChange={(e) => handleFormChange('autorizo_datos', e.target.checked)}
-                    style={{ marginTop: 4 }}
-                  />
-                  <span className="field-label" style={{ margin: 0, fontSize: 14 }}>
-                    Autorizo el uso de mis datos para fines administrativos y de contacto
-                    <ErrorCampo msg={formErrors.autorizo_datos} />
-                  </span>
-                </label>
+                )}
+                <p className="field-hint" style={{ marginTop: 4 }}>
+                  Datos sensibles (salud): {form.autorizo_datos_sensibles ? 'autorizados' : 'no autorizados'}.
+                  {' '}Es opcional y se marca en «Salud y emergencia».
+                </p>
               </div>
             )}
 
@@ -1485,8 +1569,15 @@ export default function MiembrosPage() {
                 Paso {SECCIONES.indexOf(activeSection) + 1} de {SECCIONES.length}
               </div>
               
+              {/* Cada boton con su key: sin ella React reutilizaba el mismo
+                  <button> y, durante el clic en "Siguiente" del paso 4, le
+                  cambiaba el tipo a "submit"; el navegador enviaba entonces el
+                  formulario con un solo clic (los terminos salian en rojo, o el
+                  miembro se creaba si ya estaban marcados). Con la key se monta
+                  un boton nuevo y el del clic sale del formulario. */}
               {activeSection !== 'terminos' ? (
                 <button
+                  key="siguiente"
                   type="button"
                   className="btn btn-secondary"
                   onClick={() => {
@@ -1498,9 +1589,17 @@ export default function MiembrosPage() {
                 </button>
               ) : (
                 <button
+                  key="crear"
                   type="submit"
                   className="btn btn-primary"
                   disabled={submitting}
+                  /* El segundo clic de un doble clic en "Siguiente →" del paso 4
+                     puede caer aqui: con la pagina desplazada hasta el final, el
+                     paso 5 es mas bajo, el navegador sube el desplazamiento y este
+                     boton queda justo bajo el puntero. event.detail cuenta los
+                     clics seguidos (1 en un clic normal, 0 con el teclado), asi
+                     que solo se ignora el segundo de un doble clic. */
+                  onClick={(e) => { if (e.detail > 1) e.preventDefault(); }}
                 >
                   {submitting ? 'Creando miembro...' : 'Crear miembro'}
                 </button>
@@ -1512,7 +1611,7 @@ export default function MiembrosPage() {
 
       <div className="filter-bar">
         <form onSubmit={onSearch} className="search-input filter-bar__search" role="search">
-          <span className="material-symbols-outlined icon">search</span>
+          <span className="material-symbols-outlined icon" aria-hidden="true">search</span>
           <input
             placeholder="Buscar por nombre, documento, correo o código QR"
             value={q}
@@ -1542,7 +1641,8 @@ export default function MiembrosPage() {
       </div>
 
       <section className="table-card miembros-table">
-        {loading && <div className="bar-loader" />}
+        {/* La barra sola no le dice nada a un lector de pantalla: se anuncia como progreso. */}
+        {loading && <div className="bar-loader" role="progressbar" aria-label="Cargando miembros" />}
         <div className="table-scroll">
           <table className="table">
             <thead>
@@ -1561,13 +1661,7 @@ export default function MiembrosPage() {
               {!loading && filtrados.length === 0 && (
                 <tr>
                   <td colSpan={6} style={{ padding: 24 }}>
-                    <EmptyState
-                      icono="group_off"
-                      titulo="Sin miembros que mostrar"
-                      descripcion="No hay miembros que coincidan con el filtro actual."
-                      ctaLabel="Nuevo miembro"
-                      onCta={() => setOpen(true)}
-                    />
+                    {sinFilas}
                   </td>
                 </tr>
               )}
@@ -1621,7 +1715,7 @@ export default function MiembrosPage() {
                           onClick={(e) => { e.stopPropagation(); askDeactivate(m); }}
                           aria-label={`Desactivar a ${m.nombre}`}
                         >
-                          <span className="material-symbols-outlined icon">person_remove</span>
+                          <span className="material-symbols-outlined icon" aria-hidden="true">person_remove</span>
                         </button>
                       ) : (
                         <>
@@ -1631,7 +1725,7 @@ export default function MiembrosPage() {
                             aria-label={`Eliminar permanentemente a ${m.nombre}`}
                             title="Eliminar permanentemente"
                           >
-                            <span className="material-symbols-outlined icon" style={{ color: 'var(--error)' }}>delete_forever</span>
+                            <span className="material-symbols-outlined icon" aria-hidden="true" style={{ color: 'var(--error)' }}>delete_forever</span>
                           </button>
                           <button
                             className="btn btn-ghost btn-sm"
@@ -1639,7 +1733,7 @@ export default function MiembrosPage() {
                             aria-label={`Reactivar a ${m.nombre}`}
                             title="Reactivar"
                           >
-                            <span className="material-symbols-outlined icon" style={{ color: 'var(--success)' }}>person_add</span>
+                            <span className="material-symbols-outlined icon" aria-hidden="true" style={{ color: 'var(--success)' }}>person_add</span>
                           </button>
                         </>
                       )}
@@ -1654,13 +1748,7 @@ export default function MiembrosPage() {
             En escritorio se muestra la tabla original; CSS decide cual se ve. */}
         <div className="miembros-cards">
           {filtrados.length === 0 && !loading && (
-            <EmptyState
-              icono="group_off"
-              titulo="Sin miembros que mostrar"
-              descripcion="No hay miembros que coincidan con el filtro actual."
-              ctaLabel="Nuevo miembro"
-              onCta={() => setOpen(true)}
-            />
+            sinFilas
           )}
           {filtrados.map((m) => {
             const initials = (m.nombre || '?').split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase();
@@ -1694,10 +1782,10 @@ export default function MiembrosPage() {
                 <footer className="miembro-card__actions">
                   <button
                     className="btn btn-ghost btn-sm"
-                    onClick={() => onDelete(m)}
+                    onClick={() => askDeactivate(m)}
                     aria-label={`Desactivar a ${m.nombre}`}
                   >
-                    <span className="material-symbols-outlined icon">person_remove</span>
+                    <span className="material-symbols-outlined icon" aria-hidden="true">person_remove</span>
                     Desactivar
                   </button>
                 </footer>
@@ -1733,7 +1821,7 @@ export default function MiembrosPage() {
               onClick={guardarRipple}
               disabled={editSaving}
             >
-              <span className="material-symbols-outlined icon">save</span>
+              <span className="material-symbols-outlined icon" aria-hidden="true">save</span>
               {editSaving ? 'Guardando...' : 'Guardar cambios'}
             </button>
           </>
@@ -1742,13 +1830,13 @@ export default function MiembrosPage() {
         <form id="miembros-edit-form" className="auth-form" onSubmit={onSaveEdit} noValidate>
           {editError && (
             <div className="alert alert-error" role="alert" style={{ marginBottom: 12 }}>
-              <span className="material-symbols-outlined icon">error</span>
+              <span className="material-symbols-outlined icon" aria-hidden="true">error</span>
               <span>{editError}</span>
             </div>
           )}
           {editInfo && (
             <div className="alert alert-success" role="status" style={{ marginBottom: 12 }}>
-              <span className="material-symbols-outlined icon">check_circle</span>
+              <span className="material-symbols-outlined icon" aria-hidden="true">check_circle</span>
               <span>{editInfo}</span>
             </div>
           )}
@@ -1762,14 +1850,14 @@ export default function MiembrosPage() {
               {editQr
                 ? <img src={editQr} alt={`Código QR de ${editing.nombre}`} className="miembro-qr-panel__img" />
                 : <div className="miembro-qr-panel__img miembro-qr-panel__img--vacio">
-                    <span className="material-symbols-outlined">qr_code_2</span>
+                    <span className="material-symbols-outlined" aria-hidden="true">qr_code_2</span>
                   </div>}
               <div className="miembro-qr-panel__body">
                 <span className="field-label">Código QR</span>
                 <code className="miembro-qr-panel__codigo">{editing.codigo_qr}</code>
                 <div className="miembro-qr-panel__acciones">
                   <button type="button" className="btn btn-secondary btn-sm" onClick={copiarCodigoQr}>
-                    <span className="material-symbols-outlined icon">
+                    <span className="material-symbols-outlined icon" aria-hidden="true">
                       {qrCopiado ? 'check' : 'content_copy'}
                     </span>
                     {qrCopiado ? 'Copiado' : 'Copiar código'}
@@ -1780,7 +1868,7 @@ export default function MiembrosPage() {
                       href={editQr}
                       download={`qr-${editing.documento || editing.codigo_qr}.png`}
                     >
-                      <span className="material-symbols-outlined icon">download</span>
+                      <span className="material-symbols-outlined icon" aria-hidden="true">download</span>
                       Descargar
                     </a>
                   )}
@@ -1791,7 +1879,7 @@ export default function MiembrosPage() {
                     disabled={enviandoContrato || !editing?.id_miembro}
                     title="Envia el contrato de membresia por WhatsApp al miembro"
                   >
-                    <span className="material-symbols-outlined icon">
+                    <span className="material-symbols-outlined icon" aria-hidden="true">
                       {enviandoContrato ? 'hourglass_empty' : 'description'}
                     </span>
                     {enviandoContrato ? 'Enviando...' : 'Enviar contrato'}
@@ -1810,6 +1898,8 @@ export default function MiembrosPage() {
           {/* --- Plan del miembro ------------------------------------------
               Vive en otra tabla, asi que tiene su propio boton de guardar y
               no viaja con el resto de la ficha. */}
+          {/* Si el plan no cargo no hay editor, pero el motivo se ve igual. */}
+          {!planForm && planError && <p className="field-error">{planError}</p>}
           {planForm && (
             <section className="plan-editor">
               <header className="plan-editor__cabecera">
@@ -1913,7 +2003,7 @@ export default function MiembrosPage() {
                 onClick={guardarPlan}
                 disabled={planGuardando}
               >
-                <span className="material-symbols-outlined icon">savings</span>
+                <span className="material-symbols-outlined icon" aria-hidden="true">savings</span>
                 {planGuardando ? 'Guardando…' : 'Guardar plan'}
               </button>
 
@@ -1922,7 +2012,7 @@ export default function MiembrosPage() {
                 <div className="plan-congelar" style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid rgba(255,255,255,0.08)' }}>
                   {planForm.congelado_desde ? (
                     <p style={{ fontSize: 13, marginBottom: 10 }}>
-                      <span className="material-symbols-outlined icon" style={{ verticalAlign: 'middle', marginRight: 6 }}>ac_unit</span>
+                      <span className="material-symbols-outlined icon" aria-hidden="true" style={{ verticalAlign: 'middle', marginRight: 6 }}>ac_unit</span>
                       Congelada desde el {formatearFechaDia(planForm.congelado_desde)}
                       {` (${planForm.dias_congelado} ${planForm.dias_congelado === 1 ? 'día' : 'días'}).`}
                       {' '}Al descongelarla, el vencimiento se correrá esos días.
@@ -1938,7 +2028,7 @@ export default function MiembrosPage() {
                     planForm.congelado_desde ? (
                       <button type="button" className="btn btn-secondary btn-sm"
                         onClick={() => cambiarCongelamiento('descongelar')} disabled={congelando}>
-                        <span className="material-symbols-outlined icon">sunny</span>
+                        <span className="material-symbols-outlined icon" aria-hidden="true">sunny</span>
                         {congelando ? 'Descongelando…' : 'Descongelar membresía'}
                       </button>
                     ) : (
@@ -1954,7 +2044,7 @@ export default function MiembrosPage() {
                         />
                         <button type="button" className="btn btn-secondary btn-sm"
                           onClick={() => cambiarCongelamiento('congelar')} disabled={congelando}>
-                          <span className="material-symbols-outlined icon">ac_unit</span>
+                          <span className="material-symbols-outlined icon" aria-hidden="true">ac_unit</span>
                           {congelando ? 'Congelando…' : 'Congelar membresía'}
                         </button>
                       </div>
@@ -2045,10 +2135,31 @@ export default function MiembrosPage() {
                 className="field-input"
                 type="date"
                 value={editForm.fecha_nacimiento || ''}
+                max={new Date().toISOString().slice(0, 10)}
                 onChange={(e) => setEditForm({ ...editForm, fecha_nacimiento: e.target.value })}
               />
             </label>
           </div>
+
+          {/* RQNF-17: menor de edad -> representante legal y su autorizacion */}
+          {menorEdit && (
+            <>
+              <RepresentanteCampos
+                valores={editForm}
+                onChange={(campo, valor) => setEditForm((f) => ({ ...f, [campo]: valor }))}
+                edad={edadEdit}
+              />
+              <CasillaAutorizacion
+                tipo="REPRESENTANTE_MENOR"
+                obligatoria
+                checked={editForm.autoriza_representante}
+                onChange={(v) => setEditForm((f) => ({ ...f, autoriza_representante: v }))}
+                nota={autorizacionesEdit?.vigentes?.REPRESENTANTE_MENOR?.otorgada
+                  ? `Ya registrada el ${new Date(autorizacionesEdit.vigentes.REPRESENTANTE_MENOR.fecha).toLocaleDateString('es-CO')}. Márcala de nuevo solo si cambian los datos del representante.`
+                  : 'Todavía no está registrada: márcala para poder guardar.'}
+              />
+            </>
+          )}
 
           <div className="auth-form-row">
             <label className="field">
@@ -2107,6 +2218,20 @@ export default function MiembrosPage() {
             </label>
           </div>
 
+          {/* RQNF-17: autorizacion de datos sensibles. Desmarcarla y guardar
+              la revoca, deja constancia en el historial y borra los datos. */}
+          <CasillaDatosSensibles
+            checked={editForm.autorizo_datos_sensibles}
+            onChange={(v) => setEditForm((f) => ({ ...f, autorizo_datos_sensibles: v }))}
+            menor={menorEdit}
+            aviso={
+              editing?.autorizo_datos_sensibles && !editForm.autorizo_datos_sensibles
+                ? 'Al guardar se revoca la autorización y se borran las condiciones médicas y las alergias. Queda constancia en el historial.'
+                : editing?.datos_sensibles_sin_autorizacion && !editForm.autorizo_datos_sensibles
+                  ? 'Este miembro tiene datos de salud guardados sin una autorización separada (registro anterior). Si guardas sin marcar la autorización, se borran.'
+                  : null
+            }
+          />
           <div className="auth-form-row">
             <label className="field">
               <span className="field-label">Condiciones médicas</span>
@@ -2115,7 +2240,8 @@ export default function MiembrosPage() {
                 rows={2}
                 value={editForm.condiciones_medicas || ''}
                 onChange={(e) => setEditForm({ ...editForm, condiciones_medicas: e.target.value })}
-                placeholder="Lesiones, tratamientos, etc."
+                placeholder={editForm.autorizo_datos_sensibles ? 'Lesiones, tratamientos, etc.' : 'Requiere la autorización de datos sensibles'}
+                disabled={!editForm.autorizo_datos_sensibles}
               />
             </label>
             <label className="field">
@@ -2125,10 +2251,15 @@ export default function MiembrosPage() {
                 rows={2}
                 value={editForm.alergias || ''}
                 onChange={(e) => setEditForm({ ...editForm, alergias: e.target.value })}
-                placeholder="Alimentos, medicamentos…"
+                placeholder={editForm.autorizo_datos_sensibles ? 'Alimentos, medicamentos…' : 'Requiere la autorización de datos sensibles'}
+                disabled={!editForm.autorizo_datos_sensibles}
               />
             </label>
           </div>
+          <details style={{ marginBottom: 8 }}>
+            <summary className="field-label" style={{ cursor: 'pointer' }}>Historial de autorizaciones</summary>
+            <HistorialAutorizaciones historial={autorizacionesEdit?.historial} />
+          </details>
 
           <div className="auth-form-divider" style={{ margin: '6px 0 0' }}>ENTRENAMIENTO</div>
 
@@ -2199,7 +2330,7 @@ export default function MiembrosPage() {
               className="btn btn-danger ripple-host"
               onClick={(e) => { desactivarRipple(e); doDeactivate(); }}
             >
-              <span className="material-symbols-outlined icon">person_remove</span>
+              <span className="material-symbols-outlined icon" aria-hidden="true">person_remove</span>
               Sí, desactivar
             </button>
           </>
@@ -2234,7 +2365,7 @@ export default function MiembrosPage() {
               className="btn btn-danger ripple-host"
               onClick={(e) => { desactivarRipple(e); doDelete(); }}
             >
-              <span className="material-symbols-outlined icon">delete_forever</span>
+              <span className="material-symbols-outlined icon" aria-hidden="true">delete_forever</span>
               Sí, eliminar permanentemente
             </button>
           </>
@@ -2324,7 +2455,7 @@ export default function MiembrosPage() {
                 maxWidth: 300
               }}
             >
-              <span className="material-symbols-outlined icon">chat</span>
+              <span className="material-symbols-outlined icon" aria-hidden="true">chat</span>
               Enviar QR por WhatsApp
             </a>
             
@@ -2357,7 +2488,7 @@ export default function MiembrosPage() {
                 maxWidth: 300
               }}
             >
-              <span className="material-symbols-outlined icon">content_copy</span>
+              <span className="material-symbols-outlined icon" aria-hidden="true">content_copy</span>
               Copiar QR
             </button>
           </div>

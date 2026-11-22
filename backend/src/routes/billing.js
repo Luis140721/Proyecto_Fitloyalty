@@ -29,8 +29,9 @@ router.get('/billing/trial-status', authenticate, asyncHandler(async (req, res) 
     if (!gym) throw new AppError(404, 'Gimnasio no encontrado', 'GYM_NOT_FOUND');
 
     const status = trialStatus(gym);
+    // Mismas claves que el gym de login y /auth/me (name, no nombre): el front lee gym.name.
     return res.json({
-      gym: { id: gym.id_gimnasio, nombre: gym.nombre, active: gym.activo },
+      gym: { id: gym.id_gimnasio, name: gym.nombre, active: gym.activo },
       trial: status,
     });
   } catch (err) {

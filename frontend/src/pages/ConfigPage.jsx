@@ -4,6 +4,22 @@ import PageTransition from '../components/PageTransition';
 import Ripple from '../components/Ripple';
 import HitosConfig from '../components/HitosConfig';
 
+/**
+ * Mientras se escribe, un campo de dias puede quedar vacio. Si se rellenara al
+ * instante con su valor por defecto, lo que se escribe despues se pegaria
+ * detras: borrar la alerta amarilla y escribir 10 daba 110.
+ */
+const enteroOVacio = (texto) => (texto === '' ? '' : parseInt(texto, 10));
+
+/** Al guardar, un campo de dias vacio (o en 0) toma su valor por defecto, como antes. */
+const conDefectos = (c) => ({
+  ...c,
+  dias_recordatorio_default: Number(c.dias_recordatorio_default) || 7,
+  umbral_alerta_amarilla: Number(c.umbral_alerta_amarilla) || 1,
+  umbral_alerta_roja: Number(c.umbral_alerta_roja) || 2,
+  dias_prueba: Number(c.dias_prueba) || 7,
+});
+
 export default function ConfigPage() {
   const [config, setConfig] = useState({
     plan_mensual_valor: 0,
@@ -25,6 +41,8 @@ export default function ConfigPage() {
   const [success, setSuccess] = useState('');
 
   const loadConfig = async () => {
+    // Restablecer vuelve a cargar: el error de antes ya no aplica.
+    setError('');
     setLoading(true);
     try {
       const { data } = await api.get('/admin/config');
@@ -42,14 +60,15 @@ export default function ConfigPage() {
     e.preventDefault();
     setError('');
     setSuccess('');
-    if (Number(config.umbral_alerta_roja) <= Number(config.umbral_alerta_amarilla)) {
+    const datos = conDefectos(config);
+    if (datos.umbral_alerta_roja <= datos.umbral_alerta_amarilla) {
       setError('La alerta roja debe ser mayor que la amarilla.');
       return;
     }
     setSaving(true);
 
     try {
-      const { data } = await api.put('/admin/config', config);
+      const { data } = await api.put('/admin/config', datos);
       setSuccess('Configuración guardada exitosamente.');
       setConfig(data.config);
       setTimeout(() => setSuccess(''), 3000);
@@ -66,7 +85,7 @@ export default function ConfigPage() {
     return (
       <PageTransition>
         <div style={{ textAlign: 'center', padding: 100 }}>
-          <span className="material-symbols-outlined anim-spin" style={{ fontSize: 48 }}>refresh</span>
+          <span className="material-symbols-outlined anim-spin" style={{ fontSize: 48 }} aria-hidden="true">refresh</span>
           <p style={{ marginTop: 20 }}>Cargando configuración...</p>
         </div>
       </PageTransition>
@@ -86,14 +105,14 @@ export default function ConfigPage() {
 
       {error && (
         <div className="alert alert-error anim-scale-in" role="alert" style={{ marginBottom: 24 }}>
-          <span className="material-symbols-outlined icon">error</span>
+          <span className="material-symbols-outlined icon" aria-hidden="true">error</span>
           <span>{error}</span>
         </div>
       )}
 
       {success && (
         <div className="alert alert-success anim-scale-in" role="alert" style={{ marginBottom: 24 }}>
-          <span className="material-symbols-outlined icon">check_circle</span>
+          <span className="material-symbols-outlined icon" aria-hidden="true">check_circle</span>
           <span>{success}</span>
         </div>
       )}
@@ -208,6 +227,33 @@ export default function ConfigPage() {
 
           <header className="chart-card__head" style={{ marginTop: 32, paddingTop: 16, borderTop: '1px solid var(--border-subtle)' }}>
             <div>
+              <h3>Check-in con QR</h3>
+              <p>
+                La app del miembro muestra un QR que cambia cada 30 segundos. Si lo exiges, el QR fijo
+                (impreso, en una captura o reenviado) deja de servir; el ingreso por documento sigue funcionando.
+              </p>
+            </div>
+          </header>
+
+          <label className="field" style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <input
+              type="checkbox"
+              checked={!!config.qr_dinamico_obligatorio}
+              // Sin QR_DINAMICO_SECRET en produccion no se puede activar (el backend
+              // responde 409); si ya estaba activo, si se puede apagar.
+              disabled={config.qr_dinamico_disponible === false && !config.qr_dinamico_obligatorio}
+              onChange={(e) => setConfig({ ...config, qr_dinamico_obligatorio: e.target.checked })}
+            />
+            <span className="field-label" style={{ margin: 0 }}>Exigir el QR dinámico de la app (más seguro)</span>
+          </label>
+          {config.qr_dinamico_disponible === false && (
+            <p className="field-hint" role="note" style={{ marginTop: 4 }}>
+              No disponible: falta configurar la clave QR_DINAMICO_SECRET en el servidor.
+            </p>
+          )}
+
+          <header className="chart-card__head" style={{ marginTop: 32, paddingTop: 16, borderTop: '1px solid var(--border-subtle)' }}>
+            <div>
               <h3>Recordatorios de Cobro</h3>
               <p>Configuración para notificaciones de vencimiento de planes.</p>
             </div>
@@ -227,8 +273,8 @@ export default function ConfigPage() {
               <input
                 className="field-input"
                 type="number"
-                value={config.dias_recordatorio_default || 7}
-                onChange={(e) => setConfig({ ...config, dias_recordatorio_default: parseInt(e.target.value) || 7 })}
+                value={config.dias_recordatorio_default ?? 7}
+                onChange={(e) => setConfig({ ...config, dias_recordatorio_default: enteroOVacio(e.target.value) })}
                 min="1"
                 max="30"
                 disabled={!config.recordatorio_cobro_activo}
@@ -264,7 +310,7 @@ export default function ConfigPage() {
                 className="field-input"
                 type="number"
                 value={config.umbral_alerta_amarilla ?? 7}
-                onChange={(e) => setConfig({ ...config, umbral_alerta_amarilla: parseInt(e.target.value, 10) || 1 })}
+                onChange={(e) => setConfig({ ...config, umbral_alerta_amarilla: enteroOVacio(e.target.value) })}
                 min="1"
                 max="365"
               />
@@ -275,7 +321,7 @@ export default function ConfigPage() {
                 className="field-input"
                 type="number"
                 value={config.umbral_alerta_roja ?? 15}
-                onChange={(e) => setConfig({ ...config, umbral_alerta_roja: parseInt(e.target.value, 10) || 2 })}
+                onChange={(e) => setConfig({ ...config, umbral_alerta_roja: enteroOVacio(e.target.value) })}
                 min="2"
                 max="365"
               />
@@ -294,8 +340,8 @@ export default function ConfigPage() {
             <input
               className="field-input"
               type="number"
-              value={config.dias_prueba || 7}
-              onChange={(e) => setConfig({ ...config, dias_prueba: parseInt(e.target.value) || 7 })}
+              value={config.dias_prueba ?? 7}
+              onChange={(e) => setConfig({ ...config, dias_prueba: enteroOVacio(e.target.value) })}
               min="1"
               max="90"
             />
@@ -308,7 +354,7 @@ export default function ConfigPage() {
               onClick={crearRipple}
               disabled={saving}
             >
-              <span className="material-symbols-outlined icon">save</span>
+              <span className="material-symbols-outlined icon" aria-hidden="true">save</span>
               {saving ? 'Guardando...' : 'Guardar Configuración'}
             </button>
             <button
@@ -317,7 +363,7 @@ export default function ConfigPage() {
               onClick={loadConfig}
               disabled={loading}
             >
-              <span className="material-symbols-outlined icon">refresh</span>
+              <span className="material-symbols-outlined icon" aria-hidden="true">refresh</span>
               Restablecer
             </button>
           </div>

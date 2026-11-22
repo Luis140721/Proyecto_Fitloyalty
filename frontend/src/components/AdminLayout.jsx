@@ -50,7 +50,7 @@ function SaludoConReloj({ nombre }) {
         {nombre && <strong>{nombre}</strong>}
       </p>
       <p className="admin-header__fecha">
-        <span className="material-symbols-outlined icon">calendar_today</span>
+        <span className="material-symbols-outlined icon" aria-hidden="true">calendar_today</span>
         <span className="admin-header__dia">{fecha}</span>
         <span className="admin-header__hora">{hora}</span>
       </p>
@@ -93,7 +93,8 @@ export default function AdminLayout({ children }) {
         onClick={() => setSidebarOpen(false)}
         aria-hidden="true"
       />
-      <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      {/* Sidebar cierra el menu con onNavigate (boton Cerrar, enlaces y salir). */}
+      <Sidebar open={sidebarOpen} onNavigate={() => setSidebarOpen(false)} />
 
       <div className="admin-main">
         <header className="admin-header">
@@ -103,7 +104,7 @@ export default function AdminLayout({ children }) {
               onClick={() => setSidebarOpen((o) => !o)}
               aria-label="Abrir menú"
             >
-              <span className="material-symbols-outlined icon">menu</span>
+              <span className="material-symbols-outlined icon" aria-hidden="true">menu</span>
             </button>
             {/* En movil el sidebar es un drawer oculto, asi que la marca
                 desaparece del encabezado. Este icono la mantiene visible. */}
@@ -112,12 +113,12 @@ export default function AdminLayout({ children }) {
             </Link>
             <div className="admin-header__identidad">
               <p className="admin-header__gimnasio">
-                <span className="material-symbols-outlined icon">exercise</span>
+                <span className="material-symbols-outlined icon" aria-hidden="true">exercise</span>
                 <span>{gym?.name || 'Tu gimnasio'}</span>
               </p>
               <SaludoConReloj nombre={user?.name || user?.nombre} />
               <p className="admin-header__seccion">
-                <span className="material-symbols-outlined icon">{meta.icon}</span>
+                <span className="material-symbols-outlined icon" aria-hidden="true">{meta.icon}</span>
                 {meta.title}
               </p>
             </div>
@@ -130,7 +131,7 @@ export default function AdminLayout({ children }) {
             <div className="admin-header__user">
               <MenuPerfil />
               <button className="btn btn-secondary btn-sm" onClick={logout}>
-                <span className="material-symbols-outlined icon">logout</span>
+                <span className="material-symbols-outlined icon" aria-hidden="true">logout</span>
                 <span className="admin-header__label">Salir</span>
               </button>
             </div>
@@ -140,7 +141,7 @@ export default function AdminLayout({ children }) {
         <div className="admin-main__inner">
           {trialVencido && (
             <div className="alert alert-error" role="alert" style={{ marginBottom: 24 }}>
-              <span className="material-symbols-outlined icon">block</span>
+              <span className="material-symbols-outlined icon" aria-hidden="true">block</span>
               <span>
                 <strong>Tu prueba gratuita ha finalizado.</strong> Activa tu plan para seguir usando FitLoyalty.
               </span>
@@ -149,7 +150,7 @@ export default function AdminLayout({ children }) {
           {trialUrgente && !trialVencido && (
             <div className="trial-banner">
               <div className="trial-banner__icon">
-                <span className="material-symbols-outlined icon">schedule</span>
+                <span className="material-symbols-outlined icon" aria-hidden="true">schedule</span>
               </div>
               <div className="trial-banner__text">
                 <strong>Te quedan {trial.daysLeft} {trial.daysLeft === 1 ? 'día' : 'días'} de prueba</strong>
@@ -174,7 +175,7 @@ export default function AdminLayout({ children }) {
                 Para continuar, contacta al equipo de FitLoyalty para activar tu plan.
               </p>
               <a className="btn btn-primary btn-lg" href="mailto:fitloyaltysaas@gmail.com">
-                <span className="material-symbols-outlined icon">mail</span>
+                <span className="material-symbols-outlined icon" aria-hidden="true">mail</span>
                 Contactar al equipo
               </a>
             </article>

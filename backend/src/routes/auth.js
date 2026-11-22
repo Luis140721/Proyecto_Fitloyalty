@@ -198,6 +198,12 @@ router.post('/signup', asyncHandler(async (req, res) => {
       },
     });
   } catch (err) {
+    // Dos registros con el mismo correo pueden pasar el chequeo a la vez: el
+    // segundo choca con el UNIQUE de usuario.email. Es el mismo 409 del chequeo.
+    if (err.code === '23505' && err.constraint === 'usuario_email_key') {
+      try { await client.query('ROLLBACK'); } catch (_) {}
+      throw new AppError(409, 'Ya existe un usuario con ese correo.', 'USER_EMAIL_TAKEN');
+    }
     if (!(err instanceof AppError)) {
       try { await client.query('ROLLBACK'); } catch (_) {}
       console.error('[POST /auth/signup] Error:', err.message, err.stack);

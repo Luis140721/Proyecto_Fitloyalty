@@ -24,6 +24,8 @@ dependencies:
   # Para mostrar el codigo QR del miembro (ademas del que ya viene del backend
   # como imagen base64, esto permite regenerar si hace falta).
   qr_flutter: ^4.1.0
+  # HMAC-SHA256 para calcular el QR dinamico sin internet (utils/qr_dinamico.dart).
+  crypto: ^3.0.6
   # Para abrir la imagen QR en pantalla completa y hacer zoom.
   photo_view: ^0.15.0
   # Para formato de fechas en espanol colombiano.

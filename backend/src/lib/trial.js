@@ -51,9 +51,9 @@ function trialStatus(gimnasio) {
  */
 function requireActiveTrial(pool) {
   return async function (req, res, next) {
-    if (!req.user) return res.status(401).json({ error: 'No autenticado' });
+    if (!req.user) return res.status(401).json({ error: 'No autenticado', code: 'AUTH_REQUIRED' });
     const gymId = req.user.gymId;
-    if (!gymId) return res.status(403).json({ error: 'Usuario sin gimnasio asignado' });
+    if (!gymId) return res.status(403).json({ error: 'Usuario sin gimnasio asignado', code: 'NO_GYM' });
 
     try {
       const { rows } = await pool.query(
@@ -73,7 +73,8 @@ function requireActiveTrial(pool) {
       return next();
     } catch (err) {
       console.error('[requireActiveTrial] Error:', err.message);
-      return res.status(500).json({ error: 'Error al verificar el estado del trial' });
+      // Igual que las demas rutas cuando la base no responde: 503 con codigo.
+      return res.status(503).json({ error: 'No pudimos verificar tu plan. Intenta de nuevo.', code: 'DB_UNREACHABLE' });
     }
   };
 }

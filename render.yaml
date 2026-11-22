@@ -2,8 +2,12 @@ services:
   - type: web
     name: fitloyalty-backend
     env: node
-    buildCommand: cd backend && npm install --omit=dev
-    startCommand: cd backend && npm start
+    # pnpm con la version exacta de "packageManager"; npx lo usa sin instalarlo
+    # global. puppeteer descarga Chrome para WhatsApp igual que con npm
+    # (allowBuilds en backend/pnpm-workspace.yaml).
+    buildCommand: cd backend && npx --yes pnpm@12.15.0 install --frozen-lockfile --prod
+    # Lo mismo que `pnpm start`, sin necesitar pnpm al arrancar.
+    startCommand: cd backend && node src/index.js
     envVars:
       - key: NODE_ENV
         value: production
