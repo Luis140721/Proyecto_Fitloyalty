@@ -306,6 +306,8 @@ export default function MiembrosPage() {
   const comercialesCargados = useRef(null);
   // Cual ficha se pidio de ultima: la respuesta de una anterior no pisa la actual.
   const fichaPedida = useRef(0);
+  // De que miembro es la ficha en pantalla (null si no hay ninguna abierta).
+  const fichaMiembro = useRef(null);
   const [editQr, setEditQr] = useState('');      // imagen del QR en el detalle
   // RQNF-17: autorizaciones del miembro que se edita (vigentes e historial).
   const [autorizacionesEdit, setAutorizacionesEdit] = useState(null);
@@ -700,8 +702,10 @@ export default function MiembrosPage() {
    */
   const openEdit = async (m) => {
     const pedido = ++fichaPedida.current;
+    fichaMiembro.current = m.id_miembro;
     setEditing(m);
     setEditError('');
+    setEditInfo(''); // el «Contrato enviado al…» era de la ficha anterior
     setEditQr('');
     // Precarga con lo que ya tenemos para que el modal abra sin espera.
     setEditForm({ ...empty, ...m, activo: m.activo !== false });
@@ -798,10 +802,13 @@ export default function MiembrosPage() {
       && !window.confirm('¿Congelar la membresía? Mientras esté congelada no contará como vencida y, al descongelarla, el vencimiento se correrá los días que estuvo congelada.')) {
       return;
     }
-    // La ficha desde la que se pulso: si la respuesta llega con otra ficha en
-    // pantalla (o con esta cerrada), ni el plan ni el aviso caen ahi.
+    // La ficha desde la que se pulso: si la respuesta llega con la ficha de
+    // otro miembro en pantalla (o sin ficha), ni el plan ni el aviso caen ahi.
+    // Si es la de este mismo miembro, reabierta, si se entera.
     const pedido = fichaPedida.current;
     const idMiembro = editing.id_miembro;
+    const nombre = editing.nombre;
+    const enPantalla = () => pedido === fichaPedida.current || fichaMiembro.current === idMiembro;
     setPlanError(''); setPlanMsg('');
     setCongelando(true);
     try {
@@ -809,17 +816,20 @@ export default function MiembrosPage() {
         `/admin/miembros/${idMiembro}/${accion}`,
         accion === 'congelar' ? { motivo: motivoCongelar.trim() } : {}
       );
-      if (pedido === fichaPedida.current) {
-        setMotivoCongelar('');
+      if (enPantalla()) {
+        if (pedido === fichaPedida.current) setMotivoCongelar('');
         // El aviso va despues de recargar: cargarPlan limpia planMsg al empezar.
-        await cargarPlan(idMiembro, pedido);
-        if (pedido === fichaPedida.current) {
+        await cargarPlan(idMiembro);
+        if (enPantalla()) {
           setPlanMsg(data.message || (accion === 'congelar' ? 'Membresía congelada.' : 'Membresía descongelada.'));
         }
       }
       await load(q, filtro === 'desactivados');
     } catch (err) {
-      if (pedido === fichaPedida.current) setPlanError(err.message || 'No pudimos cambiar el congelamiento.');
+      const motivo = err.message || 'No pudimos cambiar el congelamiento.';
+      if (enPantalla()) setPlanError(motivo);
+      // Sin su ficha en pantalla, el error va al aviso de la pagina: no se pierde.
+      else setError(`No se pudo ${accion === 'congelar' ? 'congelar' : 'descongelar'} la membresía de ${nombre}: ${motivo}`);
     } finally {
       setCongelando(false);
     }
@@ -862,9 +872,11 @@ export default function MiembrosPage() {
       return setPlanError('Lo pagado no puede superar el valor del plan.');
     }
 
-    // Igual que al congelar: la respuesta solo vale para la ficha desde la que se guardo.
+    // Igual que al congelar: la respuesta solo vale para la ficha de ese miembro.
     const pedido = fichaPedida.current;
     const idMiembro = editing.id_miembro;
+    const nombre = editing.nombre;
+    const enPantalla = () => pedido === fichaPedida.current || fichaMiembro.current === idMiembro;
     setPlanGuardando(true);
     try {
       await api.put(`/admin/miembros/${idMiembro}/plan`, {
@@ -877,13 +889,16 @@ export default function MiembrosPage() {
         referencia_pago: planForm.referencia_pago || '',
         proxima_fecha_cobro: convertToISODate(calcularProximaFechaCobro(planForm.fecha_fin)),
       });
-      if (pedido === fichaPedida.current) {
-        await cargarPlan(idMiembro, pedido);
-        if (pedido === fichaPedida.current) setPlanMsg('Plan actualizado.');
+      if (enPantalla()) {
+        await cargarPlan(idMiembro);
+        if (enPantalla()) setPlanMsg('Plan actualizado.');
       }
       await load(q, filtro === 'desactivados');
     } catch (err) {
-      if (pedido === fichaPedida.current) setPlanError(err.message || 'No pudimos guardar el plan.');
+      const motivo = err.message || 'No pudimos guardar el plan.';
+      if (enPantalla()) setPlanError(motivo);
+      // Sin su ficha en pantalla, el error va al aviso de la pagina: no se pierde.
+      else setError(`No se guardó el plan de ${nombre}: ${motivo}`);
     } finally {
       setPlanGuardando(false);
     }
@@ -960,6 +975,7 @@ export default function MiembrosPage() {
       clearTimeout(avisoQrCopiado.current);
       avisoQrCopiado.current = setTimeout(() => setQrCopiado(false), 2000);
     } catch (_) {
+      if (!montada.current || pedido !== fichaPedida.current) return;
       setEditError('Tu navegador bloqueó el portapapeles. Copia el código a mano.');
     }
   };
@@ -972,6 +988,7 @@ export default function MiembrosPage() {
    */
   const enviarContratoPorWhatsapp = async () => {
     if (!editing?.id_miembro || enviandoContrato) return;
+    const pedido = fichaPedida.current;
     setEnviandoContrato(true);
     setEditError('');
     try {
@@ -979,6 +996,7 @@ export default function MiembrosPage() {
         `/admin/miembros/${editing.id_miembro}/contrato/enviar`,
         { version: 'v1' }
       );
+      if (pedido !== fichaPedida.current) return; // la respuesta llego con otra ficha, o sin ficha
       const data = r.data || r;
       if (data.exito) {
         setEditInfo(`Contrato enviado al ${data.telefono}.`);
@@ -995,6 +1013,7 @@ export default function MiembrosPage() {
         );
       }
     } catch (err) {
+      if (pedido !== fichaPedida.current) return;
       setEditError(err.response?.data?.error || err.message || 'No se pudo enviar el contrato.');
     } finally {
       setEnviandoContrato(false);
@@ -1004,6 +1023,7 @@ export default function MiembrosPage() {
   const closeEdit = () => {
     if (editSaving) return;
     fichaPedida.current += 1; // una respuesta que llegue tarde ya no aplica
+    fichaMiembro.current = null;
     clearTimeout(avisoQrCopiado.current);
     setEditCompleto(false);
     setEditLoading(false);
@@ -1025,6 +1045,9 @@ export default function MiembrosPage() {
     if (!editing || !editCompleto) return;
     setEditError('');
     setEditSaving(true);
+    // Si este guardado llevaba la decision comercial y falla en el cliente,
+    // el servidor pudo haberla aplicado (un corte por tiempo, por ejemplo).
+    let llevabaComerciales = false;
     try {
       /* Solo se envian los campos que el backend acepta actualizar. El
          formulario arrastra claves del objeto `empty` (plan, pagos...) que
@@ -1051,8 +1074,12 @@ export default function MiembrosPage() {
         delete payload.acepta_mensajes_comerciales;
         delete payload.canales_comerciales;
       }
+      llevabaComerciales = 'acepta_mensajes_comerciales' in payload;
       const { data: guardado } = await api.put(`/admin/miembros/${editing.id_miembro}`, payload);
       fichaPedida.current += 1; // lo que llegue tarde de esta ficha ya no aplica
+      fichaMiembro.current = null;
+      setEditLoading(false);
+      setEditInfo('');
       clearTimeout(avisoQrCopiado.current);
       setQrCopiado(false);
       setPlanForm(null);
@@ -1067,6 +1094,9 @@ export default function MiembrosPage() {
       setInfo(guardado?.message || 'Miembro actualizado.');
       load(q);
     } catch (err) {
+      // Ya no se sabe que tiene el servidor: el siguiente guardado manda la
+      // decision que haya en pantalla, aunque sea igual a como llego.
+      if (llevabaComerciales) comercialesCargados.current = null;
       setEditError(err.message || 'No se pudo actualizar.');
     } finally {
       setEditSaving(false);

@@ -440,16 +440,19 @@ describe('MiembrosPage: lo que contesta tarde de la ficha anterior', () => {
     expect(mockPut).toHaveBeenLastCalledWith('/admin/miembros/2/plan', CUERPO_DEL_PLAN_DE_CARLOS);
   });
 
-  test('should show no plan error in the open file when the plan save of the previous file fails late', async () => {
+  // Antes el error tardio se perdia; ahora va al aviso de la pagina, con el nombre de a quien no se le guardo.
+  test('should say in the page whose plan was not saved and show no error in the open file when the plan save of the previous file fails late', async () => {
     // Arrange
     const { ficha, guardado, antes } = await guardarElPlanDeAnaYAbrirACarlos();
 
-    // Act: el guardado de Ana falla, sin mensaje del servidor (la pagina pondria el suyo)
+    // Act: el guardado de Ana falla, sin mensaje del servidor (la pagina pone el suyo)
     await guardado.fallar({ status: 503, code: 'DB_UNREACHABLE' });
     await ficha.findByRole('button', { name: 'Guardar plan' });
 
-    // Assert
-    expect(ficha.queryByText('No pudimos guardar el plan.')).not.toBeInTheDocument();
+    // Assert: el unico aviso de error esta en la pagina, no en la ficha de Carlos
+    expect(within(screen.getByRole('alert')).getByText('No se guardó el plan de Ana Pérez: No pudimos guardar el plan.')).toBeInTheDocument();
+    expect(ficha.queryByRole('alert')).not.toBeInTheDocument();
+    expect(ficha.queryByText(/No pudimos guardar el plan/)).not.toBeInTheDocument();
     conElPlanDeCarlos(ficha);
     expect(pedidas().slice(antes)).toEqual([]);
   });
@@ -491,16 +494,20 @@ describe('MiembrosPage: lo que contesta tarde de la ficha anterior', () => {
     conElPlanDeCarlos(ficha);
   });
 
-  test('should show no freeze error in the open file and keep its typed reason when the freeze of the previous file fails late', async () => {
+  test('should say in the page whose membership could not be frozen and keep the open file as it was when the freeze of the previous file fails late', async () => {
     // Arrange
     const { ficha, congelado, antes } = await congelarAAnaYAbrirACarlos();
 
-    // Act: el congelamiento de Ana falla, sin mensaje del servidor (la pagina pondria el suyo)
+    // Act: el congelamiento de Ana falla, sin mensaje del servidor (la pagina pone el suyo)
     await congelado.fallar({ status: 409, code: 'ALREADY_FROZEN' });
     await ficha.findByRole('button', { name: 'Congelar membresía' });
 
-    // Assert
-    expect(ficha.queryByText('No pudimos cambiar el congelamiento.')).not.toBeInTheDocument();
+    // Assert: el unico aviso de error esta en la pagina, no en la ficha de Carlos
+    expect(within(screen.getByRole('alert')).getByText(
+      'No se pudo congelar la membresía de Ana Pérez: No pudimos cambiar el congelamiento.',
+    )).toBeInTheDocument();
+    expect(ficha.queryByRole('alert')).not.toBeInTheDocument();
+    expect(ficha.queryByText(/No pudimos cambiar el congelamiento/)).not.toBeInTheDocument();
     expect(motivo(ficha)).toHaveValue('Cirugía de Carlos');
     conElPlanDeCarlos(ficha);
     expect(pedidas().slice(antes)).toEqual([]);
@@ -527,6 +534,186 @@ describe('MiembrosPage: lo que contesta tarde de la ficha anterior', () => {
     // Assert
     expect(ficha.queryByText(CONGELADA)).not.toBeInTheDocument();
     conElPlanDeCarlos(ficha);
+  });
+
+  /** En la ficha de Ana se pulsa «Guardar plan» y la ficha se cierra antes de que el servidor conteste. */
+  const guardarElPlanDeAnaYCerrar = async ({ valor } = {}) => {
+    const guardado = retenerLaPrimera();
+    mockPut = guardado.doble;
+    const { user } = await abrirLista();
+    await user.click(filaDe('Ana Pérez'));
+    const guardarPlan = await fichaDe('Ana Pérez').findByRole('button', { name: 'Guardar plan' });
+    if (valor) {
+      await user.clear(valorDelPlan(fichaDe('Ana Pérez')));
+      await user.type(valorDelPlan(fichaDe('Ana Pérez')), valor);
+    }
+    await user.click(guardarPlan);
+    await waitFor(() => expect(mockPut).toHaveBeenCalledTimes(1));
+    await cancelar(user);
+    return { user, guardado };
+  };
+  /** Lo mismo con «Congelar membresía» (o «Descongelar», si el plan de Ana ya esta congelado). */
+  const cambiarElCongelamientoDeAnaYCerrar = async (boton = 'Congelar membresía') => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const congelado = retenerLaPrimera();
+    mockPost = congelado.doble;
+    const { user } = await abrirLista();
+    await user.click(filaDe('Ana Pérez'));
+    await user.click(await fichaDe('Ana Pérez').findByRole('button', { name: boton }));
+    await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1));
+    await cancelar(user);
+    return { user, congelado };
+  };
+  const PLAN_CONGELADO = { ...PLAN_DE_ANA, congelado_desde: '2026-11-20T00:00:00.000Z', dias_congelado: 2 };
+  const FECHA_INVALIDA = { status: 400, code: 'VALIDATION_ERROR', message: 'La fecha de fin no es valida.' };
+  const YA_CONGELADA = { status: 409, code: 'ALREADY_FROZEN', message: 'La membresía ya está congelada.' };
+  const NO_CONGELADA = { status: 409, code: 'NOT_FROZEN', message: 'La membresía no está congelada.' };
+
+  // La ficha del MISMO miembro, cerrada y vuelta a abrir, si se entera de lo que contesta tarde.
+  test('should reload the plan with the saved value and say Plan actualizado when the plan save answers after the same file was closed and opened again', async () => {
+    // Arrange: se guarda el plan de Ana con otro valor, se cierra la ficha y se vuelve a abrir; el servidor aun tiene el plan viejo
+    const { user, guardado } = await guardarElPlanDeAnaYCerrar({ valor: '95000' });
+    expect(mockPut).toHaveBeenCalledWith('/admin/miembros/1/plan', expect.objectContaining({ valor_total: 95000 }));
+    await user.click(filaDe('Ana Pérez'));
+    const ficha = fichaDe('Ana Pérez');
+    await ficha.findByRole('heading', { name: 'Plan y cobro' });
+    expect(valorDelPlan(ficha)).toHaveValue(90000);
+    expect(vecesPedida(PLAN_ANA)).toBe(2);
+
+    // Act: contesta el guardado; desde ahora el servidor devuelve el plan nuevo
+    planDeAna = { ...PLAN_DE_ANA, valor_total: '95000.00' };
+    await guardado.contestar();
+
+    // Assert
+    expect(await ficha.findByText('Plan actualizado.')).toBeInTheDocument();
+    expect(valorDelPlan(ficha)).toHaveValue(95000);
+    expect(vecesPedida(PLAN_ANA)).toBe(3);
+  });
+
+  test('should reload the plan and say the membership was frozen when the freeze answers after the same file was closed and opened again', async () => {
+    // Arrange
+    const { user, congelado } = await cambiarElCongelamientoDeAnaYCerrar();
+    await user.click(filaDe('Ana Pérez'));
+    const ficha = fichaDe('Ana Pérez');
+    await ficha.findByRole('heading', { name: 'Plan y cobro' });
+    expect(ficha.queryByText(/Congelada desde el/)).not.toBeInTheDocument();
+    expect(vecesPedida(PLAN_ANA)).toBe(2);
+
+    // Act: contesta el congelamiento; desde ahora el servidor devuelve el plan congelado
+    planDeAna = PLAN_CONGELADO;
+    await congelado.contestar({ message: CONGELADA });
+
+    // Assert
+    expect(await ficha.findByText(CONGELADA)).toBeInTheDocument();
+    expect(ficha.getByText(/Congelada desde el 20\/11\/2026 \(2 días\)\./)).toBeInTheDocument();
+    expect(ficha.getByRole('button', { name: 'Descongelar membresía' })).toBeInTheDocument();
+    expect(vecesPedida(PLAN_ANA)).toBe(3);
+  });
+
+  test('should show the plan error in the file and nothing in the page when the plan save fails after the same file was closed and opened again', async () => {
+    // Arrange
+    const { user, guardado } = await guardarElPlanDeAnaYCerrar();
+    await user.click(filaDe('Ana Pérez'));
+    const ficha = fichaDe('Ana Pérez');
+    await ficha.findByRole('heading', { name: 'Plan y cobro' });
+
+    // Act
+    await guardado.fallar(FECHA_INVALIDA);
+
+    // Assert: su ficha esta en pantalla, asi que el error sale ahi
+    expect(await ficha.findByText('La fecha de fin no es valida.')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByText(/No se guardó el plan de/)).not.toBeInTheDocument();
+  });
+
+  // Un error que llega sin la ficha de ese miembro en pantalla no se pierde: va al aviso de la pagina, con el nombre.
+  test('should say in the page whose plan was not saved, with the reason, when the plan save fails after its file was closed', async () => {
+    // Arrange
+    const { guardado } = await guardarElPlanDeAnaYCerrar();
+
+    // Act
+    await guardado.fallar(FECHA_INVALIDA);
+
+    // Assert
+    expect(within(await screen.findByRole('alert')).getByText(
+      'No se guardó el plan de Ana Pérez: La fecha de fin no es valida.',
+    )).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(vecesPedida(PLAN_ANA)).toBe(1);
+  });
+
+  test.each([
+    ['frozen', 'Congelar membresía', PLAN_DE_ANA, YA_CONGELADA, 'No se pudo congelar la membresía de Ana Pérez: La membresía ya está congelada.'],
+    ['unfrozen', 'Descongelar membresía', PLAN_CONGELADO, NO_CONGELADA, 'No se pudo descongelar la membresía de Ana Pérez: La membresía no está congelada.'],
+  ])('should say in the page whose membership could not be %s, with the reason, when the request fails after its file was closed', async (_caso, boton, planInicial, error, aviso) => {
+    // Arrange
+    planDeAna = planInicial;
+    const { congelado } = await cambiarElCongelamientoDeAnaYCerrar(boton);
+
+    // Act
+    await congelado.fallar(error);
+
+    // Assert
+    expect(within(await screen.findByRole('alert')).getByText(aviso)).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(vecesPedida(PLAN_ANA)).toBe(1);
+  });
+
+  // Con su propia ficha en pantalla el error sigue saliendo en la ficha, y la pagina no dice nada.
+  test('should show the plan error in the file and nothing in the page when the plan save fails with its file still open', async () => {
+    // Arrange
+    mockPut = vi.fn(async () => { throw FECHA_INVALIDA; });
+    const { user } = await abrirLista();
+    await user.click(filaDe('Ana Pérez'));
+    const ficha = fichaDe('Ana Pérez');
+
+    // Act
+    await user.click(await ficha.findByRole('button', { name: 'Guardar plan' }));
+
+    // Assert
+    expect(await ficha.findByText('La fecha de fin no es valida.')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByText(/No se guardó el plan de/)).not.toBeInTheDocument();
+  });
+
+  test('should show the freeze error in the file and nothing in the page when the freeze fails with its file still open', async () => {
+    // Arrange
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    mockPost = vi.fn(async () => { throw YA_CONGELADA; });
+    const { user } = await abrirLista();
+    await user.click(filaDe('Ana Pérez'));
+    const ficha = fichaDe('Ana Pérez');
+
+    // Act
+    await user.click(await ficha.findByRole('button', { name: 'Congelar membresía' }));
+
+    // Assert
+    expect(await ficha.findByText('La membresía ya está congelada.')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByText(/No se pudo congelar la membresía de/)).not.toBeInTheDocument();
+  });
+
+  test('should not ask for the plan again when the plan save answers after the file was saved and closed', async () => {
+    // Arrange: en la ficha de Ana se pulsa «Guardar plan» (el servidor tarda) y enseguida «Guardar cambios», que la cierra
+    let contestarPlan;
+    mockPut = vi.fn((url) => (url === '/admin/miembros/1/plan'
+      ? new Promise((resolve) => { contestarPlan = resolve; })
+      : Promise.resolve({ data: {} })));
+    const { user } = await abrirLista();
+    await user.click(filaDe('Ana Pérez'));
+    await user.click(await fichaDe('Ana Pérez').findByRole('button', { name: 'Guardar plan' }));
+    await waitFor(() => expect(contestarPlan).toBeTypeOf('function'));
+    await guardarCambios(user);
+    const listaAntes = vecesPedida('/admin/miembros');
+
+    // Act: contesta el guardado del plan, ya sin ficha
+    await act(async () => contestarPlan({ data: {} }));
+    await waitFor(() => expect(vecesPedida('/admin/miembros')).toBe(listaAntes + 1));
+
+    // Assert: se recarga la lista, pero no el plan de una ficha que ya no esta
+    expect(vecesPedida(PLAN_ANA)).toBe(1);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.queryByText('Plan actualizado.')).not.toBeInTheDocument();
   });
 
   // Con la misma ficha abierta todo sigue igual. Que «Guardar plan» recarga el plan y avisa ya lo afirma
@@ -606,5 +793,132 @@ describe('MiembrosPage: la copia del QR de la ficha anterior', () => {
 
     // Assert: antes quedaba aqui el timer de «Copiado», sin ninguna ficha abierta
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  test('should not show the clipboard error in the open file when the copy of the previous file fails late', async () => {
+    // Arrange: en la ficha de Ana se pulsa «Copiar código», el portapapeles tarda y se pasa a la ficha de Carlos
+    const { user } = await abrirLista();
+    await user.click(filaDe('Ana Pérez'));
+    const copiar = await fichaDe('Ana Pérez').findByRole('button', { name: 'Copiar código' });
+    let fallarCopia;
+    vi.spyOn(navigator.clipboard, 'writeText').mockImplementation(() => new Promise((_resolve, reject) => { fallarCopia = reject; }));
+    await user.click(copiar);
+    await cancelar(user);
+    await user.click(filaDe('Carlos Ruiz'));
+    const ficha = fichaDe('Carlos Ruiz');
+    await ficha.findByRole('heading', { name: 'Plan y cobro' });
+
+    // Act: el navegador bloquea la copia del QR de Ana
+    await act(async () => fallarCopia(new Error('NotAllowedError')));
+
+    // Assert
+    expect(screen.queryByText('Tu navegador bloqueó el portapapeles. Copia el código a mano.')).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(ficha.getByRole('button', { name: 'Copiar código' })).toBeInTheDocument();
+  });
+});
+
+describe('MiembrosPage: el contrato de la ficha anterior', () => {
+  // POST /api/admin/miembros/:id/contrato/enviar cuando el WhatsApp del servidor lo entrega.
+  const ENVIADO_A_ANA = { exito: true, telefono: '573001234567', cliente_listo: true };
+  const AVISO_DE_ANA = 'Contrato enviado al 573001234567.';
+
+  test.each(FORMAS_DE_DEJARLA)('should not show the contract notice of the previous file in the next one when that file was %s', async (_caso, dejarLaDeAna) => {
+    // Arrange: en la ficha de Ana se envia el contrato y la ficha lo confirma
+    mockPost = vi.fn(async () => ({ data: ENVIADO_A_ANA }));
+    const { user } = await abrirLista();
+    await user.click(filaDe('Ana Pérez'));
+    await user.click(await fichaDe('Ana Pérez').findByRole('button', { name: 'Enviar contrato' }));
+    expect(await fichaDe('Ana Pérez').findByRole('status')).toHaveTextContent(AVISO_DE_ANA);
+    expect(mockPost).toHaveBeenCalledWith('/admin/miembros/1/contrato/enviar', { version: 'v1' });
+    await dejarLaDeAna(user);
+
+    // Act
+    await user.click(filaDe('Carlos Ruiz'));
+    const ficha = fichaDe('Carlos Ruiz');
+    await ficha.findByRole('heading', { name: 'Plan y cobro' });
+
+    // Assert: a Carlos no se le ha enviado nada, y ese telefono no es el suyo
+    expect(ficha.queryByText(/Contrato enviado al/)).not.toBeInTheDocument();
+    expect(ficha.queryByRole('status')).not.toBeInTheDocument();
+    expect(mockPost).toHaveBeenCalledTimes(1);
+  });
+
+  /** En la ficha de Ana se pulsa «Enviar contrato», se cierra sin esperar y se abre la de Carlos. */
+  const enviarElContratoDeAnaYAbrirACarlos = async () => {
+    const envio = {};
+    mockPost = vi.fn(() => new Promise((resolve, reject) => { Object.assign(envio, { resolve, reject }); }));
+    const { user } = await abrirLista();
+    await user.click(filaDe('Ana Pérez'));
+    await user.click(await fichaDe('Ana Pérez').findByRole('button', { name: 'Enviar contrato' }));
+    await waitFor(() => expect(mockPost).toHaveBeenCalledWith('/admin/miembros/1/contrato/enviar', { version: 'v1' }));
+    await cancelar(user);
+    await user.click(filaDe('Carlos Ruiz'));
+    const ficha = fichaDe('Carlos Ruiz');
+    await ficha.findByRole('heading', { name: 'Plan y cobro' });
+    return { ficha, envio };
+  };
+
+  test('should not say the contract was sent in the open file when the sending of the previous file answers late', async () => {
+    // Arrange
+    const { ficha, envio } = await enviarElContratoDeAnaYAbrirACarlos();
+
+    // Act: contesta el envio del contrato de Ana
+    await act(async () => envio.resolve({ data: ENVIADO_A_ANA }));
+    await ficha.findByRole('button', { name: 'Enviar contrato' });
+
+    // Assert
+    expect(screen.queryByText(AVISO_DE_ANA)).not.toBeInTheDocument();
+    expect(ficha.queryByRole('status')).not.toBeInTheDocument();
+    expect(ficha.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  test.each([
+    ['fails', (envio) => envio.reject({ status: 503, code: 'WHATSAPP_DOWN', message: 'WhatsApp no responde.' }), 'WhatsApp no responde.'],
+    ['says the server has no WhatsApp', (envio) => envio.resolve({ data: { exito: false, cliente_listo: false } }), /El cliente de WhatsApp no esta autenticado/],
+  ])('should show no contract error in the open file when the sending of the previous file %s late', async (_caso, contestar, texto) => {
+    // Arrange
+    const { ficha, envio } = await enviarElContratoDeAnaYAbrirACarlos();
+
+    // Act
+    await act(async () => contestar(envio));
+    await ficha.findByRole('button', { name: 'Enviar contrato' });
+
+    // Assert
+    expect(screen.queryByText(texto)).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+});
+
+describe('MiembrosPage: la ficha que no se pudo guardar', () => {
+  test('should show the plan that was on its way and keep saving it when saving the file fails and the file stays open', async () => {
+    // Arrange: el registro de Ana ya cargo, su plan viene en camino y «Guardar cambios» falla
+    const { llegar } = servidor({ retenidas: [PLAN_ANA] });
+    mockPut = vi.fn(async (url) => {
+      if (url === REGISTRO_DE_ANA) throw { status: 503, code: 'DB_UNREACHABLE', message: 'No pudimos actualizar el miembro. Intenta de nuevo.' };
+      return { data: {} };
+    });
+    const { user } = await abrirLista();
+    await user.click(filaDe('Ana Pérez'));
+    const ficha = fichaDe('Ana Pérez');
+    expect(await ficha.findByRole('textbox', { name: 'Ciudad' })).toHaveValue('Medellín');
+    await waitFor(() => expect(pedidas()).toContain(PLAN_ANA));
+    await user.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+    expect(await ficha.findByRole('alert')).toHaveTextContent('No pudimos actualizar el miembro. Intenta de nuevo.');
+
+    // Act: llega el plan de Ana, que sigue siendo el de la ficha en pantalla
+    await llegar(PLAN_ANA);
+
+    // Assert: se muestra
+    expect(valorDelPlan(ficha)).toHaveValue(90000);
+    expect(ficha.getByText('PARCIAL')).toBeInTheDocument();
+
+    // Act
+    await user.click(ficha.getByRole('button', { name: 'Guardar plan' }));
+
+    // Assert: y se puede guardar, con su aviso
+    expect(await ficha.findByText('Plan actualizado.')).toBeInTheDocument();
+    expect(mockPut).toHaveBeenLastCalledWith('/admin/miembros/1/plan', expect.objectContaining({ tipo_plan: 'MENSUAL', valor_total: 90000, valor_pagado: 45000 }));
+    expect(vecesPedida(PLAN_ANA)).toBe(2);
   });
 });

@@ -641,6 +641,9 @@ describeConBd('RQNF-16 contra la base real', () => {
          VALUES ($1, $2, NOW() - INTERVAL '12 days', 'MANUAL', TRUE)`,
         [dani, gymB]
       );
+      // Y le quedo activo un plan mas viejo: el vigente es el que vence de ultimo.
+      await planVencido(dani, gymB, { venceEn: -40 });
+      const { vence } = await uno("SELECT to_char(CURRENT_DATE - 2, 'DD/MM/YYYY') AS vence");
       const c = await crearCampana({
         canal: 'WHATSAPP',
         mensaje: 'Hola {primer_nombre}, llevas {dias_sin_venir} días sin venir. Tu plan vence el {fecha_vencimiento}.',
@@ -650,7 +653,7 @@ describeConBd('RQNF-16 contra la base real', () => {
       const lista = await llamar('GET', `/api/admin/campanas/${c.id_campana}/destinatarios`, tkAdminB);
       const deLaLista = lista.body.destinatarios.find((d) => d.id_miembro === dani);
       expect(deLaLista).toMatchObject({ estado_envio: 'PENDIENTE' });
-      expect(deLaLista.mensaje).toMatch(/^Hola Dani, llevas 12 días sin venir\. Tu plan vence el \d{2}\/\d{2}\/\d{4}\./);
+      expect(deLaLista.mensaje.startsWith(`Hola Dani, llevas 12 días sin venir. Tu plan vence el ${vence}.`)).toBe(true);
 
       const r = await llamar('POST', `/api/admin/campanas/${c.id_campana}/destinatarios/${dani}/enviado`, tkAdminB, {});
       expect(r.status).toBe(201);

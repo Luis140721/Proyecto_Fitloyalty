@@ -378,7 +378,7 @@ describe('MiembrosPage: los mensajes comerciales en la ficha', () => {
     const cuerpo = await guardar(user);
 
     // Assert: viaja lo que se cambio y lo demas de la ficha, pero no su «si» a los mensajes comerciales
-    expect(cuerpo).toMatchObject({ nombre: 'Ana Pérez', ciudad: 'Bello', direccion: 'Calle 10 # 20-30', autorizo_datos_sensibles: false });
+    expect(cuerpo).toMatchObject({ nombre: 'Ana Pérez', ciudad: 'Bello', direccion: 'Calle 10 # 20-30', telefono: '3001234567' });
     sinDecisionComercial(cuerpo);
   });
 
@@ -457,6 +457,62 @@ describe('MiembrosPage: los mensajes comerciales en la ficha', () => {
 
     // Assert
     sinDecisionComercial(cuerpo);
+  });
+
+  /*
+   * Un guardado que falla en el cliente (se cae la conexion, se acaba el tiempo) pudo haber llegado al
+   * servidor. Si llevaba la decision comercial, ya no se sabe que quedo registrado: el siguiente guardado
+   * manda la decision que haya en pantalla, aunque sea igual a como llego la ficha.
+   */
+  const SIN_CONEXION = { status: 0, code: 'NETWORK', message: 'Sin conexion con el servidor. Verifica tu internet e intenta de nuevo.' };
+  const guardarCambios = () => screen.getByRole('button', { name: 'Guardar cambios' });
+
+  test('should send the decision on screen in the next save when the save that carried a new decision failed and the switch was put back', async () => {
+    // Arrange: Ana no acepta. Se marca WhatsApp, se enciende, se guarda y el guardado falla
+    mockPut = vi.fn()
+      .mockRejectedValueOnce(SIN_CONEXION)
+      .mockResolvedValueOnce({ data: { message: 'Miembro actualizado.' } });
+    const { user } = await abrirFichaDeAna();
+    await user.click(canal('WhatsApp', enFicha()));
+    await user.click(interruptor(enFicha()));
+    await user.click(guardarCambios());
+    expect(await enFicha().findByRole('alert')).toHaveTextContent('Sin conexion con el servidor.');
+    expect(mockPut.mock.calls[0][1]).toMatchObject({ acepta_mensajes_comerciales: true, canales_comerciales: ['WHATSAPP'] });
+
+    // Act: se apaga el interruptor (queda como llego) y se guarda otra vez
+    await user.click(interruptor(enFicha()));
+    expect(interruptor(enFicha())).not.toBeChecked();
+    await user.click(guardarCambios());
+
+    // Assert: el «no» viaja de forma explicita, por si el servidor alcanzo a registrar el «si»
+    expect(await screen.findByText('Miembro actualizado.')).toBeInTheDocument();
+    expect(mockPut).toHaveBeenCalledTimes(2);
+    expect(mockPut.mock.calls[1][0]).toBe('/admin/miembros/1');
+    expect(mockPut.mock.calls[1][1]).toMatchObject({ acepta_mensajes_comerciales: false, canales_comerciales: [] });
+  });
+
+  test('should still not send the commercial decision in the next save when the save that failed did not carry it', async () => {
+    // Arrange: Ana acepto por WhatsApp; solo se le corrige la ciudad, y ese guardado falla
+    ana = { ...ANA_COMPLETA, acepta_mensajes_comerciales: true, canales_comerciales: ['WHATSAPP'] };
+    mockPut = vi.fn()
+      .mockRejectedValueOnce(SIN_CONEXION)
+      .mockResolvedValueOnce({ data: { message: 'Miembro actualizado.' } });
+    const { user } = await abrirFichaDeAna();
+    const ciudad = enFicha().getByRole('textbox', { name: 'Ciudad' });
+    await user.clear(ciudad);
+    await user.type(ciudad, 'Bello');
+    await user.click(guardarCambios());
+    expect(await enFicha().findByRole('alert')).toHaveTextContent('Sin conexion con el servidor.');
+    sinDecisionComercial(mockPut.mock.calls[0][1]);
+
+    // Act: se guarda otra vez, sin tocar nada
+    await user.click(guardarCambios());
+
+    // Assert: va la ciudad, y sigue sin ir una aceptacion que nadie toco
+    expect(await screen.findByText('Miembro actualizado.')).toBeInTheDocument();
+    expect(mockPut).toHaveBeenCalledTimes(2);
+    expect(mockPut.mock.calls[1][1]).toMatchObject({ ciudad: 'Bello' });
+    sinDecisionComercial(mockPut.mock.calls[1][1]);
   });
 
   test('should say that the representative decides and send the acceptance in the name of the minor with the data of the representative when the member is a minor', async () => {
