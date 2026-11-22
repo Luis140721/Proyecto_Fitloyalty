@@ -12,6 +12,7 @@
  * tests habia terminado, Vitest marcaba la corrida con error («window is not
  * defined»). Esos tests usan timers falsos solo para setTimeout.
  */
+import { StrictMode } from 'react';
 import { describe, expect, test, vi, beforeEach, afterEach } from 'vitest';
 import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import ConfigPage from '../src/pages/ConfigPage';
@@ -351,5 +352,62 @@ describe('ConfigPage: el aviso de guardado', () => {
 
     // Assert: antes el timer del aviso seguia vivo 2 s mas, con la pagina ya desmontada
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  test('should create no timer when the answer of the save arrives after the admin left the page', async () => {
+    // Arrange: el servidor tarda en contestar el guardado
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    let responder;
+    mockPut = vi.fn(() => new Promise((resolve) => { responder = resolve; }));
+    const { unmount } = abrirConfig();
+    await act(async () => {});
+    fireEvent.click(guardar());
+    await act(async () => {});
+    act(() => vi.advanceTimersByTime(1000));
+    expect(mockPut).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+
+    // Act: el admin sale de la pagina y despues llega la respuesta
+    unmount();
+    await act(async () => responder({ data: { config: CONFIG } }));
+
+    // Assert: antes se creaba aqui el timer del aviso, con la pagina ya desmontada
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  test('should show the notice and start its 3 seconds when the answer of the save arrives late with the page still open', async () => {
+    // Arrange
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    let responder;
+    mockPut = vi.fn(() => new Promise((resolve) => { responder = resolve; }));
+    abrirConfig();
+    await act(async () => {});
+    fireEvent.click(guardar());
+    await act(async () => {});
+    act(() => vi.advanceTimersByTime(1000));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+
+    // Act
+    await act(async () => responder({ data: { config: CONFIG } }));
+
+    // Assert: la guarda de «ya salio de la pagina» no estorba cuando la pagina sigue abierta
+    expect(screen.getByRole('alert')).toHaveTextContent('Configuración guardada exitosamente.');
+    expect(vi.getTimerCount()).toBe(1);
+    act(() => vi.advanceTimersByTime(3000));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  test('should confirm the save when the page runs inside StrictMode, as the app does', async () => {
+    // Arrange: src/main.jsx monta la app en <StrictMode>, que en desarrollo monta cada pagina, la
+    // desmonta y la vuelve a montar. La pagina no puede quedarse creyendo que ya salieron de ella.
+    const { user } = renderWithProviders(<StrictMode><ConfigPage /></StrictMode>, { route: '/admin/config' });
+    await cargada();
+
+    // Act
+    await user.click(guardar());
+
+    // Assert
+    expect(await screen.findByRole('alert')).toHaveTextContent('Configuración guardada exitosamente.');
+    expect(mockPut).toHaveBeenCalledTimes(1);
   });
 });

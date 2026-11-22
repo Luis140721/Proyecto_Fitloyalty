@@ -205,6 +205,13 @@ const CAMPOS_REPRESENTANTE = [
  * representante. Sin autorizacion de datos sensibles no se mandan condiciones
  * medicas ni alergias; si no es menor, no se manda representante.
  */
+/** RQNF-16: true si la aceptacion comercial de `a` y la de `b` son la misma decision. */
+function mismaDecisionComercial(a, b) {
+  const canales = (x) => [...(x.canales_comerciales || [])].sort().join(',');
+  return Boolean(a.acepta_mensajes_comerciales) === Boolean(b.acepta_mensajes_comerciales)
+    && canales(a) === canales(b);
+}
+
 function payloadLegal(f, menor) {
   const p = { autorizo_datos_sensibles: Boolean(f.autorizo_datos_sensibles) };
   // RQNF-16: aceptacion de mensajes comerciales y sus canales.
@@ -291,6 +298,12 @@ export default function MiembrosPage() {
   // registraba una revocacion (datos sensibles, mensajes comerciales) que
   // nadie decidio. RQNF-16 y RQNF-17.
   const [editCompleto, setEditCompleto] = useState(false);
+  // RQNF-16: la aceptacion comercial tal como llego con el registro. Solo se
+  // manda al guardar si el personal la cambio en esta ficha: si viajara
+  // siempre, guardar otro campo despues de que el miembro se diera de baja
+  // (por el enlace o la app, con la ficha abierta) registraria una aceptacion
+  // que nadie decidio.
+  const comercialesCargados = useRef(null);
   // Cual ficha se pidio de ultima: la respuesta de una anterior no pisa la actual.
   const fichaPedida = useRef(0);
   const [editQr, setEditQr] = useState('');      // imagen del QR en el detalle
@@ -312,7 +325,11 @@ export default function MiembrosPage() {
   // «Copiado» vuelve a «Copiar código» a los 2 s; el timer se cancela al
   // cerrar la ficha o salir de la pagina.
   const avisoQrCopiado = useRef(null);
-  useEffect(() => () => clearTimeout(avisoQrCopiado.current), []);
+  const montada = useRef(true);
+  useEffect(() => {
+    montada.current = true;
+    return () => { montada.current = false; clearTimeout(avisoQrCopiado.current); };
+  }, []);
   const [enviandoContrato, setEnviandoContrato] = useState(false);
   const [editInfo, setEditInfo] = useState('');
   const [error, setError] = useState('');
@@ -689,11 +706,21 @@ export default function MiembrosPage() {
     // Precarga con lo que ya tenemos para que el modal abra sin espera.
     setEditForm({ ...empty, ...m, activo: m.activo !== false });
     setEditCompleto(false);
+    comercialesCargados.current = null;
+    // El plan, las congelaciones y el «Copiado» son de la ficha anterior.
+    setPlanForm(null);
+    setPlanMsg(''); setPlanError('');
+    setCongelaciones([]);
+    setMotivoCongelar('');
+    clearTimeout(avisoQrCopiado.current);
+    setQrCopiado(false);
     setEditLoading(true);
     try {
       const { data } = await api.get(`/admin/miembros/${m.id_miembro}`);
       if (pedido !== fichaPedida.current) return; // ya se abrio otra ficha o se cerro esta
-      const full = data.miembro || m;
+      // Sin el registro no hay ficha completa: no se guarda sobre la fila de la lista.
+      if (!data.miembro) throw new Error('No pudimos cargar los datos completos del miembro.');
+      const full = data.miembro;
       setEditing(full);
       setEditForm({
         ...empty,
@@ -709,12 +736,19 @@ export default function MiembrosPage() {
         canales_comerciales: full.canales_comerciales || [],
       });
       setAutorizacionesEdit(data.autorizaciones || null);
+      comercialesCargados.current = {
+        acepta_mensajes_comerciales: Boolean(full.acepta_mensajes_comerciales),
+        canales_comerciales: full.canales_comerciales || [],
+      };
       setEditCompleto(true);
       if (full.codigo_qr) {
-        try { setEditQr(await QRCode.toDataURL(full.codigo_qr)); }
-        catch (_) { /* si falla el dibujo, igual mostramos el codigo en texto */ }
+        try {
+          const imagen = await QRCode.toDataURL(full.codigo_qr);
+          if (pedido === fichaPedida.current) setEditQr(imagen);
+        } catch (_) { /* si falla el dibujo, igual mostramos el codigo en texto */ }
       }
-      await cargarPlan(m.id_miembro);
+      if (pedido !== fichaPedida.current) return;
+      await cargarPlan(m.id_miembro, pedido);
     } catch (err) {
       if (pedido !== fichaPedida.current) return;
       setEditError(err.message || 'No pudimos cargar los datos completos del miembro.');
@@ -724,10 +758,13 @@ export default function MiembrosPage() {
   };
 
   /** Trae el plan vigente del miembro y lo pasa al formato del formulario. */
-  const cargarPlan = async (idMiembro) => {
+  const cargarPlan = async (idMiembro, pedido = fichaPedida.current) => {
     setPlanError(''); setPlanMsg('');
     try {
       const { data } = await api.get(`/admin/miembros/${idMiembro}/plan`);
+      // El plan de una ficha que ya no esta en pantalla no se muestra en otra:
+      // «Guardar plan» lo guardaria en el miembro equivocado.
+      if (pedido !== fichaPedida.current) return;
       const p = data.plan;
       setPlanForm({
         tipo_plan: p?.tipo_plan || 'MENSUAL',
@@ -744,6 +781,7 @@ export default function MiembrosPage() {
       });
       setCongelaciones(data.congelaciones || []);
     } catch (err) {
+      if (pedido !== fichaPedida.current) return;
       setPlanError('No pudimos cargar el plan de este miembro.');
       setPlanForm(null);
       setCongelaciones([]);
@@ -902,6 +940,7 @@ export default function MiembrosPage() {
     if (!codigo) return;
     try {
       await navigator.clipboard.writeText(codigo);
+      if (!montada.current) return; // la persona salio mientras se copiaba
       setQrCopiado(true);
       clearTimeout(avisoQrCopiado.current);
       avisoQrCopiado.current = setTimeout(() => setQrCopiado(false), 2000);
@@ -992,7 +1031,19 @@ export default function MiembrosPage() {
       // RQNF-17: autorizacion de datos sensibles (desmarcarla la revoca y
       // borra esos datos) y representante legal si es menor.
       Object.assign(payload, payloadLegal(editForm, menorEdit));
+      // RQNF-16: sin cambios en la aceptacion comercial, no viaja (ver comercialesCargados).
+      if (comercialesCargados.current && mismaDecisionComercial(payload, comercialesCargados.current)) {
+        delete payload.acepta_mensajes_comerciales;
+        delete payload.canales_comerciales;
+      }
       const { data: guardado } = await api.put(`/admin/miembros/${editing.id_miembro}`, payload);
+      fichaPedida.current += 1; // lo que llegue tarde de esta ficha ya no aplica
+      clearTimeout(avisoQrCopiado.current);
+      setQrCopiado(false);
+      setPlanForm(null);
+      setPlanMsg(''); setPlanError('');
+      setCongelaciones([]);
+      setMotivoCongelar('');
       setEditCompleto(false);
       setEditing(null);
       setEditForm(empty);

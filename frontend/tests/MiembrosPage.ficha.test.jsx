@@ -11,6 +11,7 @@
  * con la hora de Colombia, como el navegador de recepcion: en UTC, como el CI,
  * el defecto no se veria.
  */
+import { StrictMode } from 'react';
 import { describe, expect, test, vi, beforeAll, beforeEach, afterEach, afterAll } from 'vitest';
 import { act, fireEvent, screen, within, waitFor } from '@testing-library/react';
 import MiembrosPage from '../src/pages/MiembrosPage';
@@ -58,6 +59,7 @@ const EDITABLES = [
   'autorizo_datos_sensibles', 'autoriza_representante', 'representante_nombre', 'representante_tipo_documento',
   'representante_documento', 'representante_parentesco', 'representante_telefono',
   // RQNF-16 (#108): la aceptacion de mensajes comerciales y sus canales (updateSchema de routes/miembros.js).
+  // La API los acepta, pero la ficha solo los manda si la decision se cambio en ella.
   'acepta_mensajes_comerciales', 'canales_comerciales',
 ];
 
@@ -136,8 +138,10 @@ describe('MiembrosPage: la ficha del miembro', () => {
     const [url, cuerpo] = mockPut.mock.calls[0];
     expect(url).toBe('/admin/miembros/1');
     expect(cuerpo).toMatchObject({ telefono: '3007654321', ciudad: 'Medellín', fecha_nacimiento: '1990-05-17', activo: true });
-    // RQNF-16: Ana no ha aceptado mensajes comerciales, y guardar otra cosa no la hace aceptarlos.
-    expect(cuerpo).toMatchObject({ acepta_mensajes_comerciales: false, canales_comerciales: [] });
+    // RQNF-16: la decision sobre los mensajes comerciales no se toco en esta ficha, asi que no viaja:
+    // guardar otro campo no registra una aceptacion ni una baja que nadie decidio.
+    expect(cuerpo).not.toHaveProperty('acepta_mensajes_comerciales');
+    expect(cuerpo).not.toHaveProperty('canales_comerciales');
     expect(Object.keys(cuerpo).filter((k) => !EDITABLES.includes(k))).toEqual([]);
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
@@ -839,13 +843,17 @@ describe('MiembrosPage: la ficha solo se guarda con el registro completo', () =>
     // Act
     await user.click(guardar());
 
-    // Assert: viaja lo del registro completo (la ciudad y la aceptacion no vienen en la lista)
+    // Assert: viaja lo del registro completo (la ciudad, la direccion y la fecha no vienen en la lista)
     expect(await screen.findByText('Miembro actualizado.')).toBeInTheDocument();
     expect(mockPut).toHaveBeenCalledTimes(1);
-    expect(mockPut.mock.calls[0][0]).toBe('/admin/miembros/1');
-    expect(mockPut.mock.calls[0][1]).toMatchObject({
-      ciudad: 'Medellín', fecha_nacimiento: '1990-05-17', acepta_mensajes_comerciales: true, canales_comerciales: ['WHATSAPP'],
+    const [url, cuerpo] = mockPut.mock.calls[0];
+    expect(url).toBe('/admin/miembros/1');
+    expect(cuerpo).toMatchObject({
+      nombre: 'Ana Pérez', ciudad: 'Medellín', direccion: 'Calle 10 # 20-30', fecha_nacimiento: '1990-05-17', contacto_emergencia: 'Luz Pérez',
     });
+    // La aceptacion comercial de Ana no se toco en esta ficha: no viaja.
+    expect(cuerpo).not.toHaveProperty('acepta_mensajes_comerciales');
+    expect(cuerpo).not.toHaveProperty('canales_comerciales');
   });
 
   test('should save when Enter submits the form and the full record is loaded', async () => {
@@ -862,7 +870,72 @@ describe('MiembrosPage: la ficha solo se guarda con el registro completo', () =>
     // Assert
     expect(await screen.findByText('Miembro actualizado.')).toBeInTheDocument();
     expect(mockPut).toHaveBeenCalledTimes(1);
-    expect(mockPut.mock.calls[0][1]).toMatchObject({ acepta_mensajes_comerciales: true, canales_comerciales: ['WHATSAPP'] });
+    const [url, cuerpo] = mockPut.mock.calls[0];
+    expect(url).toBe('/admin/miembros/1');
+    expect(cuerpo).toMatchObject({ nombre: 'Ana Pérez', ciudad: 'Medellín', fecha_nacimiento: '1990-05-17' });
+    expect(cuerpo).not.toHaveProperty('acepta_mensajes_comerciales');
+    expect(cuerpo).not.toHaveProperty('canales_comerciales');
+  });
+
+  test('should treat it as a failed load and not let the file be saved when the server answers without the member', async () => {
+    // Arrange: un 200 sin `miembro`. Antes la ficha quedaba «completa» con la fila de la lista.
+    const getNormal = apiQueResponde();
+    mockGet = vi.fn(async (url) => (url === '/admin/miembros/1' ? { data: { autorizaciones: null } } : getNormal(url)));
+    const { user } = await abrirLista();
+
+    // Act
+    await user.click(filaDe('Ana Pérez'));
+    const ficha_ = within(fichaDe('Ana Pérez'));
+    const error = await ficha_.findByRole('alert');
+    await user.click(guardar());
+    await enviarFormulario();
+
+    // Assert
+    expect(error).toHaveTextContent('No pudimos cargar los datos completos del miembro.');
+    expect(within(ficha_.getByRole('status')).getByText(SIN_REGISTRO)).toBeInTheDocument();
+    expect(ficha_.queryByText(CARGANDO)).not.toBeInTheDocument();
+    expect(guardar()).toBeDisabled();
+    expect(mockPut).not.toHaveBeenCalled();
+    expect(mockGet.mock.calls.map(([url]) => url)).not.toContain('/admin/miembros/1/plan');
+  });
+
+  // Hueco que encontro la revision: en los tests de este bloque la primera ficha nunca llegaba a cargar.
+  // Aqui la de Ana carga completa (queda lista para guardar) y despues se abre la de Carlos: lo que
+  // habilito la ficha de Ana no puede habilitar la de Carlos.
+  test.each([
+    ['cancelled', async (user) => { await user.click(screen.getByRole('button', { name: 'Cancelar' })); }, []],
+    ['saved', async (user) => { await user.click(guardar()); await screen.findByText('Miembro actualizado.'); }, ['/admin/miembros/1']],
+  ])('should keep Guardar cambios disabled while the next file loads and after its load fails when the previous file was fully loaded and then %s', async (_caso, cerrarLaDeAna, guardados) => {
+    // Arrange: la ficha de Ana carga completa y se cierra
+    const registros = conRegistrosPendientes();
+    const { user } = await abrirLista();
+    await user.click(filaDe('Ana Pérez'));
+    await act(async () => registros[1].responder(ANA_ACEPTO));
+    await within(fichaDe('Ana Pérez')).findByRole('heading', { name: 'Plan y cobro' });
+    expect(guardar()).toBeEnabled();
+    await cerrarLaDeAna(user);
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+
+    // Act: se abre la de Carlos, que todavia no carga; un clic en el boton y un Enter en el formulario
+    await user.click(filaDe('Carlos Ruiz'));
+    const ficha_ = within(fichaDe('Carlos Ruiz'));
+    await user.click(guardar());
+    await enviarFormulario();
+
+    // Assert
+    expect(ficha_.getByText(CARGANDO)).toBeInTheDocument();
+    expect(guardar()).toBeDisabled();
+    expect(mockPut.mock.calls.map(([url]) => url)).toEqual(guardados);
+
+    // Act: la carga de Carlos falla; otro clic y otro Enter
+    await act(async () => registros[2].fallar(ERROR_503));
+    await user.click(guardar());
+    await enviarFormulario();
+
+    // Assert: sigue sin poder guardarse, y a Carlos no le llego ningun PUT
+    expect(within(ficha_.getByRole('status')).getByText(SIN_REGISTRO)).toBeInTheDocument();
+    expect(guardar()).toBeDisabled();
+    expect(mockPut.mock.calls.map(([url]) => url)).toEqual(guardados);
   });
 
   test('should leave the second file untouched when the answer of the first one arrives after another file was opened', async () => {
@@ -888,13 +961,16 @@ describe('MiembrosPage: la ficha solo se guarda con el registro completo', () =>
     // Act
     await user.click(guardar());
 
-    // Assert: se guarda a Carlos con lo de Carlos
+    // Assert: se guarda a Carlos con lo de Carlos, y sin la aceptacion comercial de Ana (ni la suya, que no se toco)
     expect(await screen.findByText('Miembro actualizado.')).toBeInTheDocument();
     expect(mockPut).toHaveBeenCalledTimes(1);
-    expect(mockPut.mock.calls[0][0]).toBe('/admin/miembros/2');
-    expect(mockPut.mock.calls[0][1]).toMatchObject({
-      nombre: 'Carlos Ruiz', ciudad: 'Cali', acepta_mensajes_comerciales: false, canales_comerciales: [],
+    const [url, cuerpo] = mockPut.mock.calls[0];
+    expect(url).toBe('/admin/miembros/2');
+    expect(cuerpo).toMatchObject({
+      nombre: 'Carlos Ruiz', documento: '79888777', ciudad: 'Cali', direccion: 'Carrera 5 # 6-7', fecha_nacimiento: '1985-02-03',
     });
+    expect(cuerpo).not.toHaveProperty('acepta_mensajes_comerciales');
+    expect(cuerpo).not.toHaveProperty('canales_comerciales');
   });
 
   test('should keep loading the second file when the answer of the first one arrives before its own', async () => {
@@ -1069,6 +1145,21 @@ describe('MiembrosPage: el aviso «Copiado» del QR', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
+  test('should leave no Copiado timer pending when the file is saved right after copying', async () => {
+    // Arrange
+    await abrirFichaYCopiar();
+
+    // Act: se guarda la ficha y pasa 1 s, lo que tarda en irse la onda del boton (700 ms)
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+    await act(async () => {});
+    act(() => vi.advanceTimersByTime(1000));
+
+    // Assert: a «Copiado» le quedaba 1 s, pero su timer se cancelo al guardar
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(mockPut).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   test('should leave no timer pending when the person leaves the page right after copying', async () => {
     // Arrange
     const { unmount } = await abrirFichaYCopiar();
@@ -1078,5 +1169,112 @@ describe('MiembrosPage: el aviso «Copiado» del QR', () => {
 
     // Assert: antes el timer seguia vivo 2 s mas, con la pagina ya desmontada
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  /** Abre la ficha de Ana con timers falsos y pulsa «Copiar código», pero el portapapeles no contesta hasta que el test lo diga. */
+  const abrirFichaYEmpezarACopiar = async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const pantalla = renderWithProviders(<MiembrosPage />, { route: '/admin/miembros' });
+    await act(async () => {});
+    fireEvent.click(screen.getByRole('row', { name: /Ana Pérez/ }));
+    await act(async () => {});
+    act(() => vi.advanceTimersByTime(100));
+    let terminarCopia;
+    vi.spyOn(navigator.clipboard, 'writeText').mockImplementation(() => new Promise((resolve) => { terminarCopia = resolve; }));
+    fireEvent.click(within(ficha()).getByRole('button', { name: 'Copiar código' }));
+    await act(async () => {});
+    expect(vi.getTimerCount()).toBe(0);
+    return { ...pantalla, terminarCopia: () => act(async () => terminarCopia()) };
+  };
+
+  test('should create no timer when the copy finishes after the person left the page', async () => {
+    // Arrange: el portapapeles todavia no contesto
+    const { unmount, terminarCopia } = await abrirFichaYEmpezarACopiar();
+
+    // Act: la persona sale de la pagina y despues termina la copia
+    unmount();
+    await terminarCopia();
+
+    // Assert: antes se creaba aqui el timer de «Copiado», con la pagina ya desmontada
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  test('should show Copiado and start its 2 seconds when the copy finishes with the file still open', async () => {
+    // Arrange
+    const { terminarCopia } = await abrirFichaYEmpezarACopiar();
+    expect(within(ficha()).getByRole('button', { name: 'Copiar código' })).toBeInTheDocument();
+
+    // Act
+    await terminarCopia();
+
+    // Assert: la guarda de «ya salio de la pagina» no estorba cuando la pagina sigue abierta
+    expect(within(ficha()).getByRole('button', { name: 'Copiado' })).toBeInTheDocument();
+    expect(vi.getTimerCount()).toBe(1);
+  });
+
+  test('should show Copiado when the page runs inside StrictMode, as the app does', async () => {
+    // Arrange: src/main.jsx monta la app en <StrictMode>, que en desarrollo monta cada pagina, la
+    // desmonta y la vuelve a montar. La pagina no puede quedarse creyendo que ya salieron de ella.
+    const { user } = renderWithProviders(<StrictMode><MiembrosPage /></StrictMode>, { route: '/admin/miembros' });
+    await user.click(await screen.findByRole('row', { name: /Ana Pérez/ }));
+    await within(ficha()).findByRole('heading', { name: 'Plan y cobro' });
+    const escribir = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue();
+
+    // Act
+    await user.click(within(ficha()).getByRole('button', { name: 'Copiar código' }));
+
+    // Assert
+    expect(await within(ficha()).findByRole('button', { name: 'Copiado' })).toBeInTheDocument();
+    expect(escribir).toHaveBeenCalledWith('QR-ANA');
+  });
+
+  /** Para abrir despues la ficha de Carlos: su registro completo y sin plan. */
+  const conLaFichaDeCarlos = () => {
+    const getNormal = apiQueResponde();
+    mockGet = vi.fn(async (url) => {
+      if (url === '/admin/miembros/2') return { data: { miembro: { ...CARLOS, tipo_documento: 'CC', ciudad: 'Cali' }, autorizaciones: null } };
+      if (url === '/admin/miembros/2/plan') return { data: { plan: null, congelaciones: [] } };
+      return getNormal(url);
+    });
+  };
+  const abrirFichaDeCarlos = async () => {
+    fireEvent.click(screen.getByRole('row', { name: /Carlos Ruiz/ }));
+    await act(async () => {});
+    return within(screen.getByRole('dialog', { name: 'Editar Carlos Ruiz' }));
+  };
+
+  // Los timers falsos no avanzan solos: si «Copiado» no se limpia al cambiar de ficha, sigue ahi.
+  test.each([
+    ['cancelled', () => screen.getByRole('button', { name: 'Cancelar' })],
+    ['saved', () => screen.getByRole('button', { name: 'Guardar cambios' })],
+  ])('should offer Copiar código in the next file when the previous one was %s right after copying', async (_caso, botonQueCierra) => {
+    // Arrange: «Copiado» en la ficha de Ana, con sus 2 s en marcha
+    conLaFichaDeCarlos();
+    await abrirFichaYCopiar();
+    fireEvent.click(botonQueCierra());
+    await act(async () => {});
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+    // Act: se abre la de Carlos antes de que pasen los 2 s
+    const fichaDeCarlos = await abrirFichaDeCarlos();
+
+    // Assert
+    expect(fichaDeCarlos.getByRole('button', { name: 'Copiar código' })).toBeInTheDocument();
+    expect(fichaDeCarlos.queryByRole('button', { name: 'Copiado' })).not.toBeInTheDocument();
+  });
+
+  test('should offer Copiar código in the next file when the copy of the previous one finished after it was closed', async () => {
+    // Arrange: se pulsa copiar en la ficha de Ana y se cierra antes de que el portapapeles conteste
+    conLaFichaDeCarlos();
+    const { terminarCopia } = await abrirFichaYEmpezarACopiar();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+    await terminarCopia();
+
+    // Act
+    const fichaDeCarlos = await abrirFichaDeCarlos();
+
+    // Assert: el «Copiado» que llego tarde era de la ficha de Ana
+    expect(fichaDeCarlos.getByRole('button', { name: 'Copiar código' })).toBeInTheDocument();
+    expect(fichaDeCarlos.queryByRole('button', { name: 'Copiado' })).not.toBeInTheDocument();
   });
 });

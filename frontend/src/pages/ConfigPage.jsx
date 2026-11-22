@@ -42,7 +42,11 @@ export default function ConfigPage() {
   // El aviso de guardado se quita solo a los 3 s; al salir de la pagina el
   // timer se cancela para que no corra con la pagina ya desmontada.
   const avisoGuardado = useRef(null);
-  useEffect(() => () => clearTimeout(avisoGuardado.current), []);
+  const montada = useRef(true);
+  useEffect(() => {
+    montada.current = true;
+    return () => { montada.current = false; clearTimeout(avisoGuardado.current); };
+  }, []);
 
   const loadConfig = async () => {
     // Restablecer vuelve a cargar: el error de antes ya no aplica.
@@ -73,6 +77,7 @@ export default function ConfigPage() {
 
     try {
       const { data } = await api.put('/admin/config', datos);
+      if (!montada.current) return; // la respuesta llego despues de salir de la pagina
       setSuccess('Configuración guardada exitosamente.');
       setConfig(data.config);
       clearTimeout(avisoGuardado.current);

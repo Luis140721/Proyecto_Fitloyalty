@@ -6,7 +6,9 @@
  * - en el alta (paso 5, «Términos»): por defecto nadie acepta; para aceptar
  *   hay que marcar antes un canal, y solo viajan los canales marcados;
  * - en la ficha: el interruptor muestra la decision vigente; apagarlo y
- *   guardar da de baja al miembro, y queda en el historial;
+ *   guardar da de baja al miembro, y queda en el historial. La decision solo
+ *   viaja en el PUT si se cambio en esa ficha: guardar otro campo no vuelve a
+ *   registrar un «si» que el miembro pudo cancelar entre tanto con el enlace;
  * - si el miembro es menor, la decision la toma su representante legal.
  *
  * Sin esa aceptacion el servidor no deja enviarle campañas ni mensajes de
@@ -339,6 +341,122 @@ describe('MiembrosPage: los mensajes comerciales en la ficha', () => {
     expect(interruptor(enFicha())).toBeDisabled();
     expect(enFicha().getByRole('status')).toHaveTextContent('Al guardar, el miembro deja de recibir campañas y mensajes de retención.');
     expect(await guardar(user)).toMatchObject({ acepta_mensajes_comerciales: false, canales_comerciales: [] });
+  });
+
+  test('should send the acceptance with both channels when a channel is added to the one the member had', async () => {
+    // Arrange
+    ana = { ...ANA_COMPLETA, acepta_mensajes_comerciales: true, canales_comerciales: ['WHATSAPP'] };
+    const { user } = await abrirFichaDeAna();
+
+    // Act
+    await user.click(canal('Correo', enFicha()));
+    const cuerpo = await guardar(user);
+
+    // Assert
+    expect(cuerpo).toMatchObject({ acepta_mensajes_comerciales: true, canales_comerciales: ['WHATSAPP', 'EMAIL'] });
+  });
+
+  /*
+   * La aceptacion comercial solo viaja si se cambio en esta ficha. Si viajara siempre, y el miembro
+   * se diera de baja con el enlace o en la app mientras la ficha esta abierta, guardar cualquier otro
+   * campo le volveria a registrar una aceptacion que el ya habia cancelado (Ley 2300, art. 5).
+   */
+  const sinDecisionComercial = (cuerpo) => {
+    expect(cuerpo).not.toHaveProperty('acepta_mensajes_comerciales');
+    expect(cuerpo).not.toHaveProperty('canales_comerciales');
+  };
+
+  test('should not send the commercial decision when only another field of a member who had accepted is edited', async () => {
+    // Arrange: Ana acepto por WhatsApp; en la ficha solo se le corrige la ciudad
+    ana = { ...ANA_COMPLETA, acepta_mensajes_comerciales: true, canales_comerciales: ['WHATSAPP'] };
+    const { user } = await abrirFichaDeAna();
+    const ciudad = enFicha().getByRole('textbox', { name: 'Ciudad' });
+
+    // Act
+    await user.clear(ciudad);
+    await user.type(ciudad, 'Bello');
+    const cuerpo = await guardar(user);
+
+    // Assert: viaja lo que se cambio y lo demas de la ficha, pero no su «si» a los mensajes comerciales
+    expect(cuerpo).toMatchObject({ nombre: 'Ana Pérez', ciudad: 'Bello', direccion: 'Calle 10 # 20-30', autorizo_datos_sensibles: false });
+    sinDecisionComercial(cuerpo);
+  });
+
+  test('should not send the commercial decision when the file of a member who has not accepted is saved without touching it', async () => {
+    // Arrange
+    const { user } = await abrirFichaDeAna();
+
+    // Act
+    const cuerpo = await guardar(user);
+
+    // Assert: tampoco viaja un «no» que nadie registro
+    expect(cuerpo).toMatchObject({ nombre: 'Ana Pérez', ciudad: 'Medellín' });
+    sinDecisionComercial(cuerpo);
+  });
+
+  test('should not send the commercial decision when the switch is turned off and on again', async () => {
+    // Arrange
+    ana = { ...ANA_COMPLETA, acepta_mensajes_comerciales: true, canales_comerciales: ['WHATSAPP'] };
+    const { user } = await abrirFichaDeAna();
+
+    // Act: se apaga y se vuelve a dejar como estaba
+    await user.click(interruptor(enFicha()));
+    expect(interruptor(enFicha())).not.toBeChecked();
+    await user.click(interruptor(enFicha()));
+    expect(interruptor(enFicha())).toBeChecked();
+    const cuerpo = await guardar(user);
+
+    // Assert
+    sinDecisionComercial(cuerpo);
+  });
+
+  test('should not send the commercial decision when a channel is added and taken away again', async () => {
+    // Arrange
+    ana = { ...ANA_COMPLETA, acepta_mensajes_comerciales: true, canales_comerciales: ['WHATSAPP'] };
+    const { user } = await abrirFichaDeAna();
+
+    // Act
+    await user.click(canal('Correo', enFicha()));
+    await user.click(canal('Correo', enFicha()));
+    expect(canal('WhatsApp', enFicha())).toBeChecked();
+    expect(canal('Correo', enFicha())).not.toBeChecked();
+    const cuerpo = await guardar(user);
+
+    // Assert
+    sinDecisionComercial(cuerpo);
+  });
+
+  test('should not count it as a change when the channels end up the same in another order', async () => {
+    // Arrange: el registro trae los canales en un orden y la ficha los rearma en el suyo (WhatsApp, correo)
+    ana = { ...ANA_COMPLETA, acepta_mensajes_comerciales: true, canales_comerciales: ['EMAIL', 'WHATSAPP'] };
+    const { user } = await abrirFichaDeAna();
+
+    // Act: se quita WhatsApp y se vuelve a marcar
+    await user.click(canal('WhatsApp', enFicha()));
+    await user.click(canal('WhatsApp', enFicha()));
+    expect(interruptor(enFicha())).toBeChecked();
+    expect(canal('WhatsApp', enFicha())).toBeChecked();
+    expect(canal('Correo', enFicha())).toBeChecked();
+    const cuerpo = await guardar(user);
+
+    // Assert
+    sinDecisionComercial(cuerpo);
+  });
+
+  test('should not send the commercial decision when a member who had not accepted gets channels marked but does not accept', async () => {
+    // Arrange
+    const { user } = await abrirFichaDeAna();
+
+    // Act: se marcan los canales, se acepta y se vuelve a apagar: Ana sigue sin aceptar
+    await user.click(canal('WhatsApp', enFicha()));
+    await user.click(interruptor(enFicha()));
+    await user.click(interruptor(enFicha()));
+    expect(interruptor(enFicha())).not.toBeChecked();
+    expect(canal('WhatsApp', enFicha())).toBeChecked();
+    const cuerpo = await guardar(user);
+
+    // Assert
+    sinDecisionComercial(cuerpo);
   });
 
   test('should say that the representative decides and send the acceptance in the name of the minor with the data of the representative when the member is a minor', async () => {
