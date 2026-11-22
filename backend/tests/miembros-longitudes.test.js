@@ -20,7 +20,13 @@ const express = require('express');
 const jwt = require('jsonwebtoken');
 
 const mockQuery = jest.fn();
-jest.mock('../src/db/db', () => ({ query: (...args) => mockQuery(...args) }));
+// Desde el #102 el alta corre en una transaccion (pool.connect, BEGIN, el
+// INSERT del miembro y sus autorizaciones, COMMIT): el cliente falso pasa sus
+// consultas al mismo mockQuery, asi que las aserciones ven el INSERT igual.
+jest.mock('../src/db/db', () => ({
+  query: (...args) => mockQuery(...args),
+  connect: async () => ({ query: (...args) => mockQuery(...args), release: () => {} }),
+}));
 // Los envios no son parte de esta regla: dummies que no hacen nada.
 jest.mock('../src/lib/email', () => ({ sendMemberQR: jest.fn() }));
 jest.mock('../src/lib/whatsapp', () => ({ sendWhatsAppQR: jest.fn() }));
