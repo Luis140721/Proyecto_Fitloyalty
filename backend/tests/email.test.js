@@ -143,7 +143,7 @@ describe('email transport: sender, recipient and content', () => {
     // Assert
     const payload = payloadEnviado();
     expect(payload.to).toEqual([{ email: 'ana@gym.co' }]);
-    expect(payload.subject).toBe('482913 — Tu codigo de recuperacion FitLoyalty ROJO PROVOCADO');
+    expect(payload.subject).toBe('482913 — Tu codigo de recuperacion FitLoyalty');
     expect(payload.textContent).toContain('Tu codigo: 482913');
     expect(payload.textContent).toMatch(/— Equipo FitLoyalty\nfitloyaltysaas@gmail\.com$/);
     expect(resultado).toEqual({ delivered: true, id: 'msg-1' });

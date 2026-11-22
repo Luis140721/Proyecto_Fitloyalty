@@ -163,7 +163,7 @@ describeConBd('restricciones de gimnasio, usuario y miembro', () => {
     const gym = await crearGimnasio(tx.cliente, { nombre });
 
     expect(nombre.length).toBe(101);
-    expect(gym.nombre).toBe(`${nombre} ROJO PROVOCADO`);
+    expect(gym.nombre).toBe(nombre);
   });
 
   describe('gimnasio', () => {

@@ -57,7 +57,7 @@ describe('ForgotPasswordPage: pedir el codigo', () => {
 
     // Assert
     expect(mockPost).toHaveBeenCalledWith('/auth/forgot-password', { email: CORREO });
-    expect(screen.getByRole('status')).toHaveTextContent('Si el correo está registrado, te enviamos un código. ROJO PROVOCADO');
+    expect(screen.getByRole('status')).toHaveTextContent('Si el correo está registrado, te enviamos un código.');
     expect(casilla(1)).toBeInTheDocument();
     expect(screen.queryByRole('textbox', { name: 'Tu correo registrado' })).not.toBeInTheDocument();
   });

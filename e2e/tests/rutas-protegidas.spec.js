@@ -67,7 +67,7 @@ test('should show the gym panel when the saved session is valid', async ({ page,
 
   // Assert: el nombre sale de /api/auth/me, no del token
   await expect(page).toHaveURL(/\/admin\/miembros$/);
-  await expect(page.getByText(`${gymName} ROJO PROVOCADO`)).toBeVisible();
+  await expect(page.getByText(gymName)).toBeVisible();
 });
 
 // Los casos siguientes solo los puede ver el backend. El token tiene la forma de
