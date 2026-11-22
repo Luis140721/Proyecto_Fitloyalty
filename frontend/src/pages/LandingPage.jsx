@@ -272,13 +272,43 @@ export default function LandingPage() {
         <p className="section-lead">
           Ingresos, vencimientos y retos al día, mientras tus miembros entrenan.
         </p>
-        <div className="sala-mosaic">
-          <figure className="sala-photo sala-photo--a">
-            <div className="sala-photo__img">
+        {/* Collage: cada foto se funde con la página y lleva su función debajo. Los avisos son decorativos. */}
+        <ul className="sala-collage">
+          <li className="sala-item sala-item--ingreso">
+            <div className="sala-item__photo">
+              <img
+                src="/images/landing/prensa-960.webp"
+                srcSet="/images/landing/prensa-480.webp 480w, /images/landing/prensa-960.webp 960w"
+                sizes="(max-width: 860px) 100vw, 39vw"
+                width="960"
+                height="1280"
+                alt="Prensa de piernas en la zona de pesas de un gimnasio"
+                loading="lazy"
+                decoding="async"
+              />
+            </div>
+            <div className="sala-chip sala-chip--ingreso" aria-hidden="true">
+              <span className="material-symbols-outlined icon" aria-hidden="true">check_circle</span>
+              <span className="sala-chip__text">
+                <strong>Ingreso registrado</strong>
+                <small>Plan al día · QR</small>
+              </span>
+            </div>
+            <div className="sala-item__text">
+              <div className="sala-item__head">
+                <span className="sala-item__icon"><span className="material-symbols-outlined icon" aria-hidden="true">qr_code_scanner</span></span>
+                <h3>Ingreso con QR</h3>
+              </div>
+              <p>Cada miembro entra con su código, sin listas en papel.</p>
+            </div>
+          </li>
+
+          <li className="sala-item sala-item--reto">
+            <div className="sala-item__photo">
               <img
                 src="/images/landing/boxeo-960.webp"
                 srcSet="/images/landing/boxeo-480.webp 480w, /images/landing/boxeo-960.webp 960w"
-                sizes="(max-width: 860px) 92vw, 31vw"
+                sizes="(max-width: 860px) 100vw, 39vw"
                 width="960"
                 height="1280"
                 alt="Guantes de boxeo colgados sobre un saco en un gimnasio"
@@ -294,61 +324,21 @@ export default function LandingPage() {
                 <span className="sala-chip__bar"><span /></span>
               </span>
             </div>
-          </figure>
-
-          <div className="sala-col">
-            <ul className="sala-points">
-              <li>
-                <span className="sala-points__icon"><span className="material-symbols-outlined icon" aria-hidden="true">qr_code_scanner</span></span>
-                <div>
-                  <h3>Ingreso con QR</h3>
-                  <p>Cada miembro entra con su código, sin listas en papel.</p>
-                </div>
-              </li>
-              <li>
-                <span className="sala-points__icon"><span className="material-symbols-outlined icon" aria-hidden="true">emoji_events</span></span>
-                <div>
-                  <h3>Retos de asistencia</h3>
-                  <p>Metas del mes que dan un motivo para volver.</p>
-                </div>
-              </li>
-              <li>
-                <span className="sala-points__icon"><span className="material-symbols-outlined icon" aria-hidden="true">notifications_active</span></span>
-                <div>
-                  <h3>Avisos de vencimiento</h3>
-                  <p>El aviso sale antes de que el plan venza.</p>
-                </div>
-              </li>
-            </ul>
-            <figure className="sala-photo sala-photo--b">
-              <div className="sala-photo__img">
-                <img
-                  src="/images/landing/prensa-960.webp"
-                  srcSet="/images/landing/prensa-480.webp 480w, /images/landing/prensa-960.webp 960w"
-                  sizes="(max-width: 860px) 92vw, 34vw"
-                  width="960"
-                  height="1280"
-                  alt="Prensa de piernas en la zona de pesas de un gimnasio"
-                  loading="lazy"
-                  decoding="async"
-                />
+            <div className="sala-item__text">
+              <div className="sala-item__head">
+                <span className="sala-item__icon"><span className="material-symbols-outlined icon" aria-hidden="true">emoji_events</span></span>
+                <h3>Retos de asistencia</h3>
               </div>
-              <div className="sala-chip sala-chip--ingreso" aria-hidden="true">
-                <span className="material-symbols-outlined icon" aria-hidden="true">check_circle</span>
-                <span className="sala-chip__text">
-                  <strong>Ingreso registrado</strong>
-                  <small>Plan al día · QR</small>
-                </span>
-              </div>
-            </figure>
-          </div>
+              <p>Metas del mes que dan un motivo para volver.</p>
+            </div>
+          </li>
 
-          <figure className="sala-photo sala-photo--c">
-            <div className="sala-photo__img">
+          <li className="sala-item sala-item--aviso">
+            <div className="sala-item__photo">
               <img
                 src="/images/landing/multipower-960.webp"
                 srcSet="/images/landing/multipower-480.webp 480w, /images/landing/multipower-960.webp 960w"
-                sizes="(max-width: 860px) 92vw, 31vw"
+                sizes="(max-width: 860px) 100vw, 39vw"
                 width="960"
                 height="1280"
                 alt="Máquina multipower frente al espejo de un gimnasio"
@@ -363,8 +353,15 @@ export default function LandingPage() {
                 <small>Aviso enviado por WhatsApp</small>
               </span>
             </div>
-          </figure>
-        </div>
+            <div className="sala-item__text">
+              <div className="sala-item__head">
+                <span className="sala-item__icon"><span className="material-symbols-outlined icon" aria-hidden="true">notifications_active</span></span>
+                <h3>Avisos de vencimiento</h3>
+              </div>
+              <p>El aviso sale antes de que el plan venza.</p>
+            </div>
+          </li>
+        </ul>
       </section>
 
       {/* ---------- CÓMO FUNCIONA ---------- */}

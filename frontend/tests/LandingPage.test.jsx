@@ -194,17 +194,22 @@ describe('LandingPage: las fotos del gimnasio', () => {
   // Vite convierte new URL(ruta, import.meta.url) en una URL http: la carpeta se arma con path
   const enPublic = (ruta) => join(dirname(fileURLToPath(import.meta.url)), '..', 'public', ruta);
 
-  test('should describe the three photos of the gym and leave the hero photo as decoration when the page loads', () => {
+  test('should pair each photo of the gym with the function it illustrates and leave the hero photo as decoration when the page loads', () => {
     // Act
     abrirLanding();
 
-    // Assert: las unicas imagenes que se anuncian son las tres fotos de la seccion
-    const fotos = within(seccionSala()).getAllByRole('img');
-    expect(fotos.map((foto) => foto.getAttribute('alt'))).toEqual([
-      'Guantes de boxeo colgados sobre un saco en un gimnasio',
-      'Prensa de piernas en la zona de pesas de un gimnasio',
-      'Máquina multipower frente al espejo de un gimnasio',
+    // Assert: cada foto se describe y va con su funcion
+    const parejas = within(seccionSala()).getAllByRole('listitem').map((item) => [
+      within(item).getByRole('img').getAttribute('alt'),
+      within(item).getByRole('heading', { level: 3 }).textContent,
     ]);
+    expect(parejas).toEqual([
+      ['Prensa de piernas en la zona de pesas de un gimnasio', 'Ingreso con QR'],
+      ['Guantes de boxeo colgados sobre un saco en un gimnasio', 'Retos de asistencia'],
+      ['Máquina multipower frente al espejo de un gimnasio', 'Avisos de vencimiento'],
+    ]);
+    // Las unicas imagenes que se anuncian son esas tres: la de la portada es adorno
+    const fotos = within(seccionSala()).getAllByRole('img');
     expect(screen.getAllByRole('img').filter((imagen) => imagen.tagName === 'IMG')).toEqual(fotos);
     expect(fotosDeLaLanding()).toHaveLength(4);
   });
@@ -239,16 +244,22 @@ describe('LandingPage: las fotos del gimnasio', () => {
     }
   });
 
-  test('should list the three functions as headings and keep the sample notices away from screen readers when the page loads', () => {
+  test('should explain each function in words and keep the sample notices away from screen readers when the page loads', () => {
     // Act
     abrirLanding();
 
-    // Assert
-    const titulos = within(seccionSala()).getAllByRole('heading', { level: 3 }).map((titulo) => titulo.textContent);
-    expect(titulos).toEqual(['Ingreso con QR', 'Retos de asistencia', 'Avisos de vencimiento']);
+    // Assert: lo que se anuncia de cada funcion es su titulo y su explicacion
+    const sala = seccionSala();
+    expect(within(sala).getByText('Cada miembro entra con su código, sin listas en papel.')).toBeInTheDocument();
+    expect(within(sala).getByText('Metas del mes que dan un motivo para volver.')).toBeInTheDocument();
+    expect(within(sala).getByText('El aviso sale antes de que el plan venza.')).toBeInTheDocument();
     // Los avisos de muestra son adorno con datos de ejemplo: estan en el DOM, pero no se anuncian
     for (const aviso of ['Reto de noviembre', 'Vence en 3 días', '3 planes vencen esta semana']) {
       expect(screen.getByText(aviso).closest('[aria-hidden="true"]')).not.toBeNull();
+    }
+    expect(screen.getAllByText('Ingreso registrado')).toHaveLength(2);
+    for (const aviso of screen.getAllByText('Ingreso registrado')) {
+      expect(aviso.closest('[aria-hidden="true"]')).not.toBeNull();
     }
   });
 });
