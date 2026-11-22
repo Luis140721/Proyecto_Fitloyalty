@@ -192,7 +192,7 @@ pnpm --dir e2e test
 |---|---|---|
 | `backend` (`pnpm test`) | 1329 pasan y 242 se saltan (las de integración), 60 suites | sentencias 92,44 % (90), ramas 86,11 % (84), funciones 91,88 % (89), líneas 93,28 % (91) |
 | `integracion` | 262 de 262, ninguna saltada (10 suites; `ley2300-real` 28, `legal-real` 7, `registro-envio-real` 9) | — |
-| `frontend` (`pnpm test`) | 798 de 798, 46 archivos | líneas y sentencias 87,16 % (85), ramas 93,60 % (92), funciones 95,96 % (93) |
+| `frontend` (`pnpm test`) | 816 de 816, 46 archivos | líneas y sentencias 87,19 % (85), ramas 93,73 % (92), funciones 95,98 % (93) |
 | `e2e` (Playwright) | 44 de 44, ninguna saltada ni inestable | — |
 
 Las dos suites reales que siguen con `TEST_DATABASE_URL` (`retos-campanas-real` y `bandeja-mensajes-real`, de RQF-10 y RQF-12) también pasan contra esa base: 53 de 53. Ningún umbral de cobertura cambió.
@@ -217,14 +217,24 @@ Las dos suites reales que siguen con `TEST_DATABASE_URL` (`retos-campanas-real` 
 | 7 | En la ficha, el plan del miembro anterior seguía en pantalla al abrir otra ficha (siempre después de «Guardar cambios», y también si el plan, «Guardar plan» o «Congelar» de la primera contestaban tarde). «Guardar plan» lo guardaba en el miembro equivocado. Es anterior a este PR | Al abrir una ficha se limpia lo de la anterior, y el plan, el QR, el guardado del plan y el congelamiento recuerdan la ficha desde la que salieron: lo que llega tarde no se muestra en otra | `frontend/src/pages/MiembrosPage.jsx` | `MiembrosPage.entreFichas.test.jsx` (19) |
 | 8 | La ficha mandaba la aceptación de mensajes comerciales en cada guardado, tal como había llegado. Si el miembro se daba de baja por el enlace o la app con la ficha abierta, guardar cualquier otro campo registraba una aceptación nueva (canal PANEL) que nadie decidió | La aceptación solo viaja si el personal la cambió en esa ficha | `frontend/src/pages/MiembrosPage.jsx` (`comercialesCargados`, `mismaDecisionComercial`) | `MiembrosPage.comerciales.test.jsx` (7 nuevas) y cuatro ajustadas en `MiembrosPage.ficha.test.jsx` |
 | 9 | La lista de destinatarios y la constancia del envío a mano leían los datos del mensaje con dos consultas copiadas: así nació el error 1 | Comparten `DATOS_DEL_MENSAJE` y `PLAN_VIGENTE` | `backend/src/lib/campanas.js` | Las del error 1 |
-| 10 | Menores: un 200 sin el registro del miembro habilitaba el guardado con la fila de la lista; los timers del arreglo 6 aún podían nacer si la respuesta llegaba con la página ya desmontada; el 429 del enlace de baja no llevaba `code` | Se trata como carga fallida; no se crea el timer; `code: 'RATE_LIMITED'` | `MiembrosPage.jsx`, `ConfigPage.jsx`, `backend/src/index.js` | `MiembrosPage.ficha.test.jsx`, `ConfigPage.test.jsx`, `contrato-front.test.js` |
+| 10 | Arreglos pequeños: un 200 sin el registro del miembro habilitaba el guardado con la fila de la lista; los timers del arreglo 6 aún podían nacer si la respuesta llegaba con la página ya desmontada; el 429 del enlace de baja no llevaba `code` | Se trata como carga fallida; no se crea el timer; `code: 'RATE_LIMITED'` | `MiembrosPage.jsx`, `ConfigPage.jsx`, `backend/src/index.js` | `MiembrosPage.ficha.test.jsx`, `ConfigPage.test.jsx`, `contrato-front.test.js` |
 
 El arreglo 2 quedó además con prueba contra la base real (`ley2300-real.test.js`: «sin WhatsApp en el servidor, quien no tiene un telefono valido queda FALLIDO…»), que falla si se quita.
 
-**Lo que se vio y no se cambió** (menor; no guarda datos en el miembro equivocado):
+**Sexta revisión independiente (22 de noviembre, sobre `bfccb91`).** Tampoco encontró bloqueos. Comparó el SQL generado por las dos consultas de campañas antes y después de unificarlas (idéntico), probó contra PostgreSQL que el arreglo 8 corrige un defecto real (un PUT de la ficha después de una baja por el enlace ya no registra una aceptación) y corrió 30 cambios temporales propios. De sus observaciones salieron estos ajustes en la ficha del miembro:
+
+| # | Qué pasaba | Arreglo | Prueba |
+|---|---|---|---|
+| 11 | Efecto del arreglo 8: si un guardado que llevaba la decisión comercial fallaba en el cliente (un corte por tiempo, por ejemplo) y el servidor sí lo había aplicado, deshacer el cambio y guardar otra vez no mandaba nada, porque en pantalla quedaba «igual a como llegó» | Tras un guardado fallido que llevaba la decisión, el siguiente manda la que haya en pantalla | `MiembrosPage.comerciales.test.jsx` (2) |
+| 12 | «Contrato enviado al …» seguía en pantalla al abrir la ficha siguiente, con el teléfono del miembro anterior | Se limpia al abrir y al guardar; la respuesta tardía del envío del contrato y el error de la copia del QR no caen en otra ficha | `MiembrosPage.entreFichas.test.jsx` (6) |
+| 13 | Efecto del arreglo 7: la ficha de un miembro, cerrada y vuelta a abrir, no se enteraba de que su «Guardar plan» o «Congelar» anterior había contestado, y mostraba el plan viejo | La respuesta vale para la ficha de ese miembro, aunque se haya reabierto | `MiembrosPage.entreFichas.test.jsx` (3) |
+| 14 | Efecto del arreglo 7: un «Guardar plan» o «Congelar» que fallaba sin su ficha en pantalla no avisaba en ningún lado | El error va al aviso de la página con el nombre del miembro («No se guardó el plan de …») | `MiembrosPage.entreFichas.test.jsx` (7) |
+
+**Lo que se vio y no se cambió.** Los dos primeros puntos registran una decisión que nadie tomó, son anteriores a este PR y van en un PR aparte sobre las autorizaciones:
+- **El alta que se cierra sin crear conserva el borrador, casillas incluidas.** «Cerrar» solo oculta el asistente: al pulsar «Nuevo miembro» reabre en el mismo paso con los datos y las casillas del miembro anterior (contrato, tratamiento de datos y, con este PR, mensajes comerciales y sus canales). Si se escribe encima otro miembro y se crea sin revisar el paso 5, queda con autorizaciones que no dio.
+- **La autorización de datos sensibles (RQNF-17, #102) sí sigue viajando en cada guardado de la ficha**, junto con los datos de salud: si el miembro la revocara desde la app con la ficha abierta, guardar la ficha la volvería a registrar y devolvería los datos borrados. Es el mismo patrón del arreglo 8.
 - En la ficha, «Guardando…» y «Congelando…» son un solo estado para todas las fichas: si se abre otra ficha mientras la anterior sigue guardando su plan, el botón del plan sale ocupado hasta que conteste.
 - Después de guardar un plan o congelar, la lista se recarga con el texto de búsqueda de cuando se pulsó el botón; si entre tanto se cambió la búsqueda, la lista puede no coincidir con el buscador hasta la siguiente búsqueda.
-- La autorización de datos sensibles (RQNF-17, #102) sí sigue viajando en cada guardado de la ficha: si el miembro la revocara desde la app con la ficha abierta, guardar la ficha la volvería a registrar. Es el mismo patrón del arreglo 8 y queda para un PR de RQNF-17.
 - Si un envío sale y su constancia falla, el reintento puede enviarlo otra vez (ver «Entrega al menos una vez» abajo).
 
 ## Límites y riesgos

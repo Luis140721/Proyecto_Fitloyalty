@@ -15,9 +15,9 @@ Al fusionar `develop`, 41 pruebas del bootcamp fallaban: estaban escritas contra
 | Front | `frontend/tests/MiembrosPage.ficha.test.jsx` | 36 | 3 | 62 |
 | Front | `frontend/tests/App.test.jsx` | 10 | 0 | 11 |
 | Front | `frontend/tests/ConfigPage.test.jsx` | 14 | 0 | 20 |
-| Front | seis archivos nuevos (`BajaMensajesPage` 17, `contactoWhatsapp` 9, `AutorizacionesMiembro` 21, `MiembrosPage.comerciales` 20, `MiembrosPage.entreFichas` 19, `autorizaciones` 32) | 0 | — | 118 |
+| Front | seis archivos nuevos (`BajaMensajesPage` 17, `contactoWhatsapp` 9, `AutorizacionesMiembro` 21, `MiembrosPage.comerciales` 22, `MiembrosPage.entreFichas` 35, `autorizaciones` 32) | 0 | — | 136 |
 
-Cada prueba adaptada o nueva se hizo fallar al menos una vez con un cambio temporal en el código (40 cambios en el backend y 95 en el panel, todos revertidos), y las suites pasan con el reloj del sistema en distintos días y zonas horarias: el reloj de la ley va fijo en las pruebas.
+Cada prueba adaptada o nueva se hizo fallar al menos una vez con un cambio temporal en el código (40 cambios en el backend y 115 en el panel, todos revertidos), y las suites pasan con el reloj del sistema en distintos días y zonas horarias: el reloj de la ley va fijo en las pruebas.
 
 ## Backend: pruebas existentes que cambiaron
 
@@ -308,3 +308,37 @@ Todas las siguientes están en `MiembrosPage.entreFichas.test.jsx`:
 | `should reload the plan and show the notice in the same file when the membership is frozen and the file stays open` | (v) Con la misma ficha abierta, congelar vuelve a pedir el plan (dos peticiones), muestra «Congelada desde el 20/11/2026 (2 días).», el aviso y «Descongelar membresía» |
 | `should not show Copiado in the open file nor leave a timer when the copy of the previous file finishes late` | (vi) La copia del QR de Ana termina con la ficha de Carlos abierta: sigue «Copiar código» y `vi.getTimerCount()` queda en 0 |
 | `should leave no timer when the copy finishes with the file already closed` | La copia termina sin ninguna ficha abierta: no se crea el timer |
+
+## Después de la sexta revisión independiente
+
+La sexta revisión (sobre `bfccb91`) tampoco encontró bloqueos. Sus mejoras quedaron en la ficha del miembro (arreglos 11 a 14 de `rqnf-16-ley-2300.md`), con estas pruebas del panel.
+
+### Panel: pruebas que cambiaron
+
+| Archivo | Prueba (antes → después) | Qué afirmaba antes | Qué afirma ahora | Por qué |
+|---|---|---|---|---|
+| MiembrosPage.entreFichas | `should show no plan error in the open file when the plan save of the previous file fails late` → `should say in the page whose plan was not saved and show no error in the open file when the plan save of the previous file fails late` | En la ficha de Carlos no aparece «No pudimos guardar el plan.», su plan sigue igual y no sale ninguna petición | Lo mismo, y además el único aviso de error está en la página, con el texto exacto «No se guardó el plan de Ana Pérez: No pudimos guardar el plan.»; dentro de la ficha de Carlos no hay ningún `role="alert"` | El error tardío ya no se pierde: va al aviso de la página con el nombre |
+| MiembrosPage.entreFichas | `should show no freeze error in the open file and keep its typed reason when the freeze of the previous file fails late` → `should say in the page whose membership could not be frozen and keep the open file as it was when the freeze of the previous file fails late` | En la ficha de Carlos no aparece «No pudimos cambiar el congelamiento.», el motivo escrito sigue y no sale ninguna petición | Lo mismo, y además el aviso de la página dice exactamente «No se pudo congelar la membresía de Ana Pérez: No pudimos cambiar el congelamiento.» | Igual |
+| MiembrosPage.comerciales | `should not send the commercial decision when only another field of a member who had accepted is edited` | Entre «lo demás que sí viaja» afirmaba `autorizo_datos_sensibles: false` | En su lugar afirma el teléfono. Lo de las dos claves comerciales no cambia | Para no dejar fijado que la autorización de datos sensibles viaja sin tocarla (ver el hallazgo 1) |
+
+### Panel: pruebas nuevas
+
+| Archivo | Prueba | Qué comprueba |
+|---|---|---|
+| MiembrosPage.comerciales | `should send the decision on screen in the next save when the save that carried a new decision failed and the switch was put back` | Arreglo 1, la secuencia del revisor: no acepta → marca WhatsApp y enciende → el PUT falla → apaga → el segundo PUT lleva `acepta_mensajes_comerciales: false` y `canales_comerciales: []` |
+| MiembrosPage.comerciales | `should still not send the commercial decision in the next save when the save that failed did not carry it` | Arreglo 1, la otra variante: el guardado fallido solo llevaba la ciudad; el siguiente lleva la ciudad y sigue sin las dos claves |
+| MiembrosPage.entreFichas | `should not show the contract notice of the previous file in the next one when that file was %s` (2 casos: cancelada, guardada) | Arreglo 2: «Contrato enviado al 573001234567.» de Ana no aparece en la ficha de Carlos |
+| MiembrosPage.entreFichas | `should not say the contract was sent in the open file when the sending of the previous file answers late` | Arreglo 2: el envío de Ana contesta con la ficha de Carlos abierta y no pone el aviso ni un error |
+| MiembrosPage.entreFichas | `should show no contract error in the open file when the sending of the previous file %s late` (2 casos: falla; el servidor no tiene WhatsApp) | Arreglo 2: el error tardío del contrato no cae en la ficha de Carlos |
+| MiembrosPage.entreFichas | `should reload the plan with the saved value and say Plan actualizado when the plan save answers after the same file was closed and opened again` | Arreglo 3: se guarda el plan con 95000, se cierra y se reabre la ficha de Ana (muestra 90000); al contestar se pide el plan por tercera vez, sale 95000 y «Plan actualizado.» |
+| MiembrosPage.entreFichas | `should reload the plan and say the membership was frozen when the freeze answers after the same file was closed and opened again` | Arreglo 3 con «Congelar»: tercera petición del plan, «Congelada desde el 20/11/2026 (2 días).», el aviso y «Descongelar membresía» |
+| MiembrosPage.entreFichas | `should show the plan error in the file and nothing in the page when the plan save fails after the same file was closed and opened again` | Arreglos 3 y 4: con la ficha de Ana reabierta, el error sale en la ficha y la página no dice nada |
+| MiembrosPage.entreFichas | `should say in the page whose plan was not saved, with the reason, when the plan save fails after its file was closed` | Arreglo 4, ficha cerrada: aviso exacto «No se guardó el plan de Ana Pérez: La fecha de fin no es valida.»; no se reabre nada ni se pide el plan |
+| MiembrosPage.entreFichas | `should say in the page whose membership could not be %s, with the reason, when the request fails after its file was closed` (2 casos: congelar, descongelar) | Arreglo 4: «No se pudo congelar la membresía de Ana Pérez: La membresía ya está congelada.» y «No se pudo descongelar la membresía de Ana Pérez: La membresía no está congelada.» |
+| MiembrosPage.entreFichas | `should show the plan error in the file and nothing in the page when the plan save fails with its file still open` | Arreglo 4, ficha propia abierta: el error en la ficha y ningún aviso en la página |
+| MiembrosPage.entreFichas | `should show the freeze error in the file and nothing in the page when the freeze fails with its file still open` | Lo mismo con «Congelar» |
+| MiembrosPage.entreFichas | `should not ask for the plan again when the plan save answers after the file was saved and closed` | Arreglo 6: «Guardar plan» contesta después de «Guardar cambios»: se recarga la lista, no el plan, y no sale «Plan actualizado.» |
+| MiembrosPage.entreFichas | `should not show the clipboard error in the open file when the copy of the previous file fails late` | Arreglo 5: el navegador bloquea la copia del QR de Ana con la ficha de Carlos abierta y no aparece «Tu navegador bloqueó el portapapeles…» |
+| MiembrosPage.entreFichas | `should show the plan that was on its way and keep saving it when saving the file fails and the file stays open` | Punto B: el PUT de la ficha falla y la ficha sigue abierta; llega su plan y se muestra (90000, PARCIAL); «Guardar plan» manda el plan y avisa «Plan actualizado.» |
+
+En `backend/tests/ley2300-real.test.js`, la prueba del texto del envío a mano ahora le deja al miembro dos planes activos y comprueba la fecha exacta: el texto usa el plan que vence de último.
