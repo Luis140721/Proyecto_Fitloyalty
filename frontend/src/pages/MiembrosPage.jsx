@@ -205,21 +205,27 @@ const CAMPOS_REPRESENTANTE = [
  * representante. Sin autorizacion de datos sensibles no se mandan condiciones
  * medicas ni alergias; si no es menor, no se manda representante.
  */
-// Lo que una persona escribe o marca en el alta. Lo demas (fechas, estado del
-// pago, valor sugerido) lo calcula el formulario solo y no cuenta como borrador.
+// Lo que una persona escribe, elige o marca en el alta. Lo demas (fechas,
+// estado del pago, valor sugerido del plan) lo calcula el formulario solo y no
+// cuenta como borrador.
 const CAMPOS_DEL_BORRADOR = [
-  'nombre', 'documento', 'fecha_nacimiento', 'genero', 'telefono', 'email', 'direccion',
+  'nombre', 'tipo_documento', 'documento', 'fecha_nacimiento', 'genero', 'telefono', 'email', 'direccion',
   'contacto_emergencia', 'telefono_emergencia', 'condiciones_medicas', 'alergias',
-  'referencia_pago', 'objetivo', 'nivel_experiencia', 'observaciones',
+  'tipo_plan', 'valor_pagado', 'metodo_pago', 'referencia_pago', 'activar_recordatorio',
+  'objetivo', 'nivel_experiencia', 'observaciones',
   ...CAMPOS_REPRESENTANTE,
   'acepto_terminos', 'autorizo_datos', 'autorizo_datos_sensibles', 'autoriza_representante',
-  'acepta_mensajes_comerciales',
+  'acepta_mensajes_comerciales', 'canales_comerciales',
 ];
 
-/** true si en el alta hay algo escrito o marcado. */
+/** true si en el alta hay algo distinto de como viene el formulario en blanco. */
 function hayBorrador(f) {
-  return CAMPOS_DEL_BORRADOR.some((k) => (typeof f[k] === 'string' ? f[k].trim() !== '' : Boolean(f[k])));
+  const comparable = (v) => (Array.isArray(v) ? v.join(',') : String(v ?? '').trim());
+  return CAMPOS_DEL_BORRADOR.some((k) => comparable(f[k]) !== comparable(empty[k]));
 }
+
+// RQNF-17: marca de «no se sabe que quedo en el servidor» para un dato de salud.
+const NO_SE_SABE = Symbol('no se sabe');
 
 /** Dos textos de la ficha son el mismo dato: null, undefined y '' cuentan igual. */
 function mismoTexto(a, b) {
@@ -1080,7 +1086,7 @@ export default function MiembrosPage() {
     // Si este guardado llevaba la decision comercial y falla en el cliente,
     // el servidor pudo haberla aplicado (un corte por tiempo, por ejemplo).
     let llevabaComerciales = false;
-    let llevabaSensibles = false;
+    let llevabaSensibles = [];
     try {
       /* Solo se envian los campos que el backend acepta actualizar. El
          formulario arrastra claves del objeto `empty` (plan, pagos...) que
@@ -1114,12 +1120,12 @@ export default function MiembrosPage() {
       const sensibles = sensiblesCargados.current;
       if (sensibles && Boolean(payload.autorizo_datos_sensibles) === sensibles.autorizo_datos_sensibles) {
         delete payload.autorizo_datos_sensibles;
-        if (mismoTexto(payload.condiciones_medicas, sensibles.condiciones_medicas)) delete payload.condiciones_medicas;
-        if (mismoTexto(payload.alergias, sensibles.alergias)) delete payload.alergias;
+        for (const k of ['condiciones_medicas', 'alergias']) {
+          if (sensibles[k] !== NO_SE_SABE && mismoTexto(payload[k], sensibles[k])) delete payload[k];
+        }
       }
       llevabaComerciales = 'acepta_mensajes_comerciales' in payload;
-      llevabaSensibles = 'autorizo_datos_sensibles' in payload
-        || 'condiciones_medicas' in payload || 'alergias' in payload;
+      llevabaSensibles = ['autorizo_datos_sensibles', 'condiciones_medicas', 'alergias'].filter((k) => k in payload);
       const { data: guardado } = await api.put(`/admin/miembros/${editing.id_miembro}`, payload);
       fichaPedida.current += 1; // lo que llegue tarde de esta ficha ya no aplica
       fichaMiembro.current = null;
@@ -1142,7 +1148,17 @@ export default function MiembrosPage() {
       // Ya no se sabe que tiene el servidor: el siguiente guardado manda la
       // decision que haya en pantalla, aunque sea igual a como llego.
       if (llevabaComerciales) comercialesCargados.current = null;
-      if (llevabaSensibles) sensiblesCargados.current = null;
+      // Lo mismo con los datos sensibles. Si el guardado llevaba la
+      // autorizacion, se olvida todo; si solo llevaba textos de salud, se
+      // olvidan esos textos y la autorizacion sigue sin viajar.
+      if (llevabaSensibles.includes('autorizo_datos_sensibles')) {
+        sensiblesCargados.current = null;
+      } else if (llevabaSensibles.length > 0 && sensiblesCargados.current) {
+        sensiblesCargados.current = {
+          ...sensiblesCargados.current,
+          ...Object.fromEntries(llevabaSensibles.map((k) => [k, NO_SE_SABE])),
+        };
+      }
       setEditError(err.message || 'No se pudo actualizar.');
     } finally {
       setEditSaving(false);
@@ -1169,6 +1185,9 @@ export default function MiembrosPage() {
    * formulario, el siguiente miembro podria salir con autorizaciones que no dio.
    */
   const cerrarAlta = () => {
+    // Con el miembro creandose no se cierra: se crearia igual, y su respuesta
+    // caeria sobre el alta que hubiera abierta en ese momento.
+    if (submitting) return;
     if (hayBorrador(form)
       && !window.confirm('¿Cerrar sin crear el miembro? Se descarta lo que escribiste: el siguiente registro empieza en blanco.')) {
       return;
@@ -1221,7 +1240,7 @@ export default function MiembrosPage() {
       titulo="Sin miembros que mostrar"
       descripcion="No hay miembros que coincidan con el filtro actual."
       ctaLabel="Nuevo miembro"
-      onCta={() => abrirAlta()}
+      onCta={() => { if (!open) abrirAlta(); }}
     />
   );
 

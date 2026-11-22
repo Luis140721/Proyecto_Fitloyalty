@@ -16,7 +16,7 @@
  * alta propone la fecha de hoy y calcula el vencimiento.
  */
 import { describe, expect, test, vi, beforeAll, beforeEach, afterEach, afterAll } from 'vitest';
-import { screen, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import MiembrosPage from '../src/pages/MiembrosPage';
 import { renderWithProviders } from './renderWithProviders';
 
@@ -81,7 +81,10 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(new Date(2026, 10, 19, 10, 0, 0));
   miembros = [ANA];
-  mockGet = vi.fn(async (url) => (url === '/admin/config' ? { data: { config: {} } } : { data: { miembros } }));
+  // El gimnasio tiene precios por plan: al elegir un plan, el formulario propone su valor.
+  mockGet = vi.fn(async (url) => (url === '/admin/config'
+    ? { data: { config: { plan_mensual_valor: '90000.00', plan_anual_valor: '900000.00' } } }
+    : { data: { miembros } }));
   mockPost = vi.fn(async () => { miembros = [...miembros, CREADO]; return { data: { miembro: CREADO } }; });
   mockPut = vi.fn(async () => ({ data: {} }));
   mockDelete = vi.fn(async () => ({ data: {} }));
@@ -327,6 +330,90 @@ describe('MiembrosPage: el alta que se cierra sin crear', () => {
     expect(paso(1)).toBeInTheDocument();
   }, 20000);
 
+  // Lo que la persona elige tambien se pierde al cerrar: el tipo de documento, el plan, lo pagado, el metodo
+  // de pago, el recordatorio y los canales. Con solo eso cambiado (y los textos borrados), se pregunta.
+  test.each([
+    ['the document type', 0, async (user) => { await user.selectOptions(campo(/^Tipo documento/), 'CE'); }],
+    ['the plan type', 2, async (user) => { await user.selectOptions(campo(/^Tipo de plan/), 'ANUAL'); }],
+    ['the amount paid today', 2, async (user) => { await user.clear(campo('Valor pagado hoy')); await user.type(campo('Valor pagado hoy'), '50000'); }],
+    ['the payment method', 2, async (user) => { await user.selectOptions(campo(/^Método de pago/), 'NEQUI'); }],
+    ['the reminder box', 2, async (user) => {
+      // La etiqueta envuelve la casilla y el numero de dias: la casilla se busca por su rol
+      await user.click(screen.getByRole('checkbox', { name: /^Activar recordatorio/ }));
+      expect(screen.getByRole('checkbox', { name: /^Activar recordatorio/ })).toBeChecked();
+    }],
+    ['a channel for commercial messages', 4, async (user) => { await user.click(canal('WhatsApp')); }],
+  ])('should ask before closing when only %s was changed', async (_caso, pasos, cambiar) => {
+    // Arrange: se cambia ese campo y despues se borran los tres textos del paso 1
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const { user } = await abrirAlta();
+    await escribirDatos(user, PEDRO);
+    await avanzar(user, pasos);
+    await cambiar(user);
+    await retroceder(user, pasos);
+    await user.clear(nombre());
+    await user.clear(documento());
+    await user.clear(telefono());
+
+    // Act
+    await user.click(cerrar());
+
+    // Assert
+    expect(window.confirm).toHaveBeenCalledTimes(1);
+    expect(window.confirm).toHaveBeenCalledWith(PREGUNTA);
+    expect(paso(1)).toBeInTheDocument();
+  }, 15000);
+
+  test('should close without asking when the form only has what it computes by itself: the suggested price of the plan and the dates', async () => {
+    // Arrange: se elige el plan anual y se vuelve al mensual. Queda el valor que el formulario propone para
+    // ese plan, con las fechas que calcula; de lo que elige la persona, todo esta como al abrir
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const { user } = await abrirAlta();
+    await escribirDatos(user, PEDRO);
+    await avanzar(user, 2);
+    await user.selectOptions(campo(/^Tipo de plan/), 'ANUAL');
+    expect(campo(/^Valor total del plan/)).toHaveValue(900000);
+    await user.selectOptions(campo(/^Tipo de plan/), 'MENSUAL');
+    expect(campo(/^Valor total del plan/)).toHaveValue(90000);
+    expect(campo(/^Fecha inicio/)).toHaveValue('19/11/2026');
+    expect(campo(/^Fecha fin/)).toHaveValue('19/12/2026');
+    expect(campo('Estado del pago')).toHaveValue('PENDIENTE');
+    await retroceder(user, 2);
+    await user.clear(nombre());
+    await user.clear(documento());
+    await user.clear(telefono());
+
+    // Act
+    await user.click(cerrar());
+
+    // Assert
+    expect(window.confirm).not.toHaveBeenCalled();
+    expect(paso(1)).not.toBeInTheDocument();
+    expect(nuevoMiembro()).toBeInTheDocument();
+  }, 15000);
+
+  test('should close without asking when a channel for commercial messages was marked and unmarked again', async () => {
+    // Arrange
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const { user } = await abrirAlta();
+    await escribirDatos(user, PEDRO);
+    await avanzar(user, 4);
+    await user.click(canal('WhatsApp'));
+    await user.click(canal('WhatsApp'));
+    expect(canal('WhatsApp')).not.toBeChecked();
+    await retroceder(user, 4);
+    await user.clear(nombre());
+    await user.clear(documento());
+    await user.clear(telefono());
+
+    // Act
+    await user.click(cerrar());
+
+    // Assert: no quedo ningun canal marcado
+    expect(window.confirm).not.toHaveBeenCalled();
+    expect(paso(1)).not.toBeInTheDocument();
+  }, 15000);
+
   test('should not show the validation errors of the discarded sign-up when the next one opens', async () => {
     // Arrange: se pulsa Siguiente con el alta vacia (marca los obligatorios) y se cierra
     vi.spyOn(window, 'confirm').mockReturnValue(true);
@@ -346,6 +433,82 @@ describe('MiembrosPage: el alta que se cierra sin crear', () => {
     expect(screen.queryByText('Escribe el teléfono.')).not.toBeInTheDocument();
     expect(nombre()).not.toHaveAttribute('aria-invalid');
   });
+});
+
+/*
+ * Con el POST del alta en camino, el miembro se va a crear igual: cerrar en ese momento no descarta nada, y la
+ * respuesta caeria sobre el alta que hubiera abierta al llegar. Mientras se crea, «Cerrar» no hace nada.
+ */
+describe('MiembrosPage: «Cerrar» mientras se crea el miembro', () => {
+  /** Llena el alta de Maria y pulsa «Crear miembro»; el POST queda sin responder. */
+  async function crearConElPostEnCamino() {
+    let responder, fallar;
+    mockPost = vi.fn(() => new Promise((resolve, reject) => { responder = resolve; fallar = reject; }));
+    const pantalla = await abrirAlta();
+    const { user } = pantalla;
+    await escribirDatos(user, MARIA);
+    await avanzar(user, 4);
+    await user.click(contrato());
+    await user.click(tratamiento());
+    await user.click(screen.getByRole('button', { name: 'Crear miembro' }));
+    await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1));
+    return {
+      user,
+      responder: (respuesta) => act(async () => { responder(respuesta); }),
+      fallar: (error) => act(async () => { fallar(error); }),
+    };
+  }
+
+  test('should neither ask nor close when Cerrar is clicked while the member is being created, and close as usual when the answer arrives', async () => {
+    // Arrange
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const { user, responder } = await crearConElPostEnCamino();
+    expect(screen.getByRole('button', { name: 'Creando miembro...' })).toBeDisabled();
+
+    // Act
+    await user.click(cerrar());
+
+    // Assert: ni pregunta ni cierra; el alta sigue como estaba
+    expect(window.confirm).not.toHaveBeenCalled();
+    expect(paso(5)).toBeInTheDocument();
+    expect(contrato()).toBeChecked();
+    expect(tratamiento()).toBeChecked();
+
+    // Act: llega la respuesta del servidor
+    miembros = [...miembros, CREADO];
+    await responder({ data: { miembro: CREADO } });
+
+    // Assert: el miembro queda creado y el alta cerrada, como siempre
+    const aviso = await screen.findByRole('dialog', { name: '¡Miembro creado exitosamente!' });
+    await user.click(within(aviso).getAllByRole('button', { name: 'Cerrar' }).at(-1));
+    expect(paso(5)).not.toBeInTheDocument();
+    expect(nuevoMiembro()).toBeInTheDocument();
+    expect(await screen.findByRole('row', { name: /María Rojas/ })).toBeInTheDocument();
+    expect(mockPost).toHaveBeenCalledTimes(1);
+    expect(mockPost.mock.calls[0][1]).toMatchObject({ nombre: 'María Rojas', documento: '52999111' });
+    expect(window.confirm).not.toHaveBeenCalled();
+  }, 20000);
+
+  test('should ask again before closing when the creation fails and Cerrar is clicked afterwards', async () => {
+    // Arrange: se pulsa «Cerrar» con el POST en camino (no hace nada) y despues el POST falla
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const { user, fallar } = await crearConElPostEnCamino();
+    await user.click(cerrar());
+    expect(window.confirm).not.toHaveBeenCalled();
+    await fallar({ status: 0, code: 'NETWORK', message: 'Sin conexion con el servidor. Verifica tu internet e intenta de nuevo.' });
+    expect(await screen.findByText(/Sin conexion con el servidor\./)).toBeInTheDocument();
+    expect(paso(5)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Crear miembro' })).toBeEnabled();
+
+    // Act: el miembro no se creo; ahora cerrar si descarta lo escrito
+    await user.click(cerrar());
+
+    // Assert
+    expect(window.confirm).toHaveBeenCalledTimes(1);
+    expect(window.confirm).toHaveBeenCalledWith(PREGUNTA);
+    expect(paso(5)).not.toBeInTheDocument();
+    expect(nuevoMiembro()).toBeInTheDocument();
+  }, 20000);
 });
 
 describe('MiembrosPage: abrir el alta', () => {
@@ -426,4 +589,29 @@ describe('MiembrosPage: abrir el alta', () => {
     expect(documento()).toHaveValue('');
     expect(telefono()).toHaveValue('');
   }, 20000);
+
+  test('should leave the sign-up as it is, without asking, when the Nuevo miembro button of the empty list is clicked with a sign-up half written', async () => {
+    // Arrange: gimnasio sin miembros; el alta esta abierta en el paso 2, con datos y una casilla marcada
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    miembros = [];
+    const { user } = abrirMiembros();
+    await user.click(await botonDeLaListaVacia());
+    await escribirDatos(user, PEDRO);
+    await user.click(siguiente());
+    await user.click(sensibles());
+    await user.type(campo('Contacto de emergencia'), 'Luz Gil');
+
+    // Act: debajo del alta sigue el boton de la lista vacia, y se pulsa
+    await user.click(await botonDeLaListaVacia());
+
+    // Assert: no reinicia el alta ni pregunta
+    expect(window.confirm).not.toHaveBeenCalled();
+    expect(paso(2)).toBeInTheDocument();
+    expect(sensibles()).toBeChecked();
+    expect(campo('Contacto de emergencia')).toHaveValue('Luz Gil');
+    await user.click(anterior());
+    expect(nombre()).toHaveValue('Pedro Gil');
+    expect(documento()).toHaveValue('80123456');
+    expect(telefono()).toHaveValue('3101112233');
+  }, 15000);
 });
