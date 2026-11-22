@@ -27,6 +27,8 @@ function apiQueResponde() {
     if (url === '/admin/config') return { data: { config: { umbral_alerta_amarilla: 9, umbral_alerta_roja: 15 } } };
     if (url === '/admin/hitos') return { data: { hitos: [] } };
     if (url === '/admin/checkin') return { data: { checkins: [] } };
+    // RQNF-16: el enlace de baja de los mensajes comerciales (GET /api/baja/:token).
+    if (url === '/baja/41.7.c2lnbmF0dXJlLWZpcm1hMQ') return { data: { nombre: 'Ana', gimnasio: 'Gimnasio Central', aceptaComerciales: true } };
     return { data: {} };
   });
 }
@@ -86,6 +88,20 @@ describe('App: rutas publicas', () => {
 
     // Assert
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(titulo);
+  });
+
+  // RQNF-16 (Ley 2300 de 2023, art. 5): el enlace que va al final de cada mensaje comercial.
+  test('should open the unsubscribe page without asking for a session when the link of a commercial message is visited', async () => {
+    // Act: sin token guardado, como quien toca el enlace desde WhatsApp
+    abrirEn('/baja/41.7.c2lnbmF0dXJlLWZpcm1hMQ');
+
+    // Assert
+    expect(await screen.findByRole('button', { name: /Dejar de recibir mensajes comerciales$/ })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Mensajes comerciales');
+    expect(screen.getByRole('main')).toHaveTextContent('Hola Ana. Con este botón dejas de recibir mensajes comerciales de Gimnasio Central');
+    expect(window.location.pathname).toBe('/baja/41.7.c2lnbmF0dXJlLWZpcm1hMQ');
+    expect(mockGet).toHaveBeenCalledWith('/baja/41.7.c2lnbmF0dXJlLWZpcm1hMQ');
+    expect(mockGet).not.toHaveBeenCalledWith('/auth/me');
   });
 });
 
