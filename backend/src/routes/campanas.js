@@ -404,7 +404,7 @@ router.post('/admin/campanas/:id/ejecutar', ...soloAdmin, enBase('POST /admin/ca
     );
     return res.status(202).json({
       programada: true,
-      message: `Ahora no se puede enviar. ${resumen.mensaje} La campaña quedó programada para el ${describirInstante(resumen.siguiente)}.`,
+      message: `Ahora no se puede enviar. ${resumen.mensaje} La campaña quedó programada para el ${describirInstante(resumen.siguiente)}`,
       siguiente: resumen.siguiente.toISOString(),
       campana: await campanaDelGimnasio(pool, id, gymId),
     });
@@ -423,7 +423,8 @@ router.post('/admin/campanas/:id/reintentar', ...soloAdmin, enBase('POST /admin/
     return res.json({ message: 'No hay destinatarios pendientes.', campana: actual });
   }
   const resumen = await reanudarCampana(pool, { idCampana: id, gymId, usuarioId: req.user.id }, deps);
-  if (resumen && resumen.fueraDeHorario) {
+  if (!resumen) throw new AppError(409, 'Solo se reintenta una campaña que ya se envió.', 'CAMPANA_NO_EJECUTABLE');
+  if (resumen.fueraDeHorario) {
     throw new AppError(409, `Ahora no se puede enviar. ${resumen.mensaje}`, 'FUERA_DE_HORARIO', {
       siguiente: resumen.siguiente.toISOString(),
     });

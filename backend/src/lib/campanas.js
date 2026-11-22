@@ -32,6 +32,8 @@
  *      - WHATSAPP: si el modulo de WhatsApp esta activo en el servidor, lo
  *        envia solo; si no (Render no tiene Chrome), el destinatario sigue
  *        PENDIENTE y el panel lo envia a mano con wa.me (registrarEnvioManual).
+ *        Con modulo o sin el, quien no tiene telefono queda FALLIDO
+ *        (SIN_TELEFONO): tampoco se le puede escribir a mano.
  *      - Si en medio del envio se cierra la franja, el resto queda PENDIENTE
  *        con motivo FUERA_DE_HORARIO y sale en la siguiente franja.
  *      Cada mensaje lleva al final el enlace de baja (lib/baja-mensajes.js).
@@ -100,7 +102,7 @@ function fueraDeHorario(instante) {
   const siguiente = siguienteHorarioPermitido(instante);
   return {
     siguiente,
-    mensaje: `La Ley 2300 de 2023 solo permite enviar mensajes ${TEXTO_HORARIO}. El siguiente horario permitido es el ${describirInstante(siguiente)}.`,
+    mensaje: `La Ley 2300 de 2023 solo permite enviar mensajes ${TEXTO_HORARIO}. El siguiente horario permitido es el ${describirInstante(siguiente)}`,
   };
 }
 
@@ -220,11 +222,16 @@ async function registrarEntrega(client, { campana, gymId, destinatario, estado, 
 async function entregarPendientes(pool, { campana, gymId, usuarioId }, deps) {
   const r = { procesados: 0, enviados: 0, fallidos: 0, omitidos: 0, cerroFranja: false };
   let whatsappDisponible = campana.canal === 'WHATSAPP' && deps.whatsappActivo();
-  if (campana.canal === 'WHATSAPP' && !whatsappDisponible) return r; // quedan para enviarlos a mano
 
   const pendientes = await destinatariosDeCampana(pool, campana.id_campana, gymId, { soloPendientes: true });
   for (const d of pendientes) {
-    if (campana.canal === 'WHATSAPP' && !whatsappDisponible) break;
+    // Sin el modulo de WhatsApp (o si el cliente dejo de estar listo) no se
+    // intenta ninguna entrega: quien tiene telefono queda PENDIENTE para
+    // enviarle a mano. A quien no tiene telefono tampoco se le puede escribir
+    // a mano: sigue por el camino de siempre y queda FALLIDO (SIN_TELEFONO),
+    // para que no figure como pendiente para siempre.
+    if (campana.canal === 'WHATSAPP' && !whatsappDisponible
+        && telefonoWhatsapp(d.telefono, d.codigo_pais_telefono)) continue;
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -390,10 +397,20 @@ async function registrarEnvioManual(pool, { campana, gymId, idMiembro, usuarioId
   try {
     await client.query('BEGIN');
     const { rows } = await client.query(
+      // Los mismos datos que destinatariosDeCampana: sin fecha_fin ni
+      // dias_sin_venir el texto perdia {fecha_vencimiento} y {dias_sin_venir}
+      // y no era el que el panel habia mostrado.
       `SELECT d.id_campana_destinatario, d.estado_envio, d.motivo, d.fecha_envio,
-              m.id_miembro, m.nombre, m.telefono, m.codigo_pais_telefono, m.email
+              m.id_miembro, m.nombre, m.telefono, m.codigo_pais_telefono, m.email,
+              pc.fecha_fin,
+              (SELECT (${HOY} - ${fechaLocal('MAX(c.fecha_hora)')})::int
+                 FROM checkin c WHERE c.id_miembro = m.id_miembro AND c.valido = TRUE) AS dias_sin_venir
          FROM campana_destinatario d
          JOIN miembro m ON m.id_miembro = d.id_miembro AND m.id_gimnasio = $3
+         LEFT JOIN (
+           SELECT DISTINCT ON (id_miembro) id_miembro, fecha_fin FROM plan_cobro
+            WHERE activo = TRUE ORDER BY id_miembro, fecha_fin DESC NULLS LAST, id_plan_cobro DESC
+         ) pc ON pc.id_miembro = m.id_miembro
         WHERE d.id_campana = $1 AND d.id_miembro = $2
         FOR UPDATE OF d`,
       [campana.id_campana, idMiembro, gymId]
