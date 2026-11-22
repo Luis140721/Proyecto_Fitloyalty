@@ -100,7 +100,7 @@ const clienteLoginLimiter = rateLimit({
 const bajaLimiter = rateLimit({
   windowMs: 60 * 1000, max: 20,
   standardHeaders: true, legacyHeaders: false,
-  message: { error: 'Demasiadas solicitudes. Intenta de nuevo en un minuto.' },
+  message: { error: 'Demasiadas solicitudes. Intenta de nuevo en un minuto.', code: 'RATE_LIMITED' },
 });
 
 app.use('/api/auth/login', loginLimiter);

@@ -903,6 +903,27 @@ describe('POST /api/admin/campanas/:id/ejecutar: send a campaign now', () => {
     expect(transacciones()).toEqual(['BEGIN', 'COMMIT', 'release', 'BEGIN', 'ROLLBACK', 'release', 'BEGIN', 'COMMIT', 'release']);
   });
 
+  test.each([
+    ['has five digits', '12345'],
+    ['has no digits', 'no tiene'],
+  ])('should mark FALLIDO the member whose phone is not valid for WhatsApp and leave PENDIENTE the ones with a valid phone when the WhatsApp module is not active and the phone %s', async (_caso, telefono) => {
+    // Arrange: los tres aceptaron WhatsApp; Dani tiene algo escrito en el telefono, pero
+    // no sirve para WhatsApp (menos de siete digitos), asi que tampoco se le puede escribir a mano
+    deps.whatsappActivo.mockReturnValue(false);
+    responder(...reglasDeEnvio({ miembros: [ANA, { ...DANI, telefono }, CARLA] }));
+
+    // Act
+    const r = await ejecutar();
+
+    // Assert
+    expect(r.status).toBe(200);
+    expect(r.body.resumen).toEqual({ destinatarios: 3, enviados: 0, fallidos: 1, pendientes: 2, canal: 'WHATSAPP', ...SIN_OMITIDOS });
+    expect(deps.enviarWhatsapp).not.toHaveBeenCalled();
+    expect(estadosGuardados()).toEqual([[44, 'FALLIDO', 'SIN_TELEFONO']]);
+    expect(llamadas(/INSERT INTO envio_mensaje/).map(({ params }) => [params[1], params[7]])).toEqual([[44, 'FALLIDO']]);
+    expect(transacciones()).toEqual(Array(2).fill(['BEGIN', 'COMMIT', 'release']).flat());
+  });
+
   test('should mark FALLIDO the member whose WhatsApp fails for another reason and keep sending to the rest', async () => {
     // Arrange
     deps.enviarWhatsapp.mockRejectedValueOnce(new Error('numero invalido'));
@@ -1084,6 +1105,45 @@ describe('POST /api/admin/campanas/:id/reintentar: process again the recipients 
     expect(deps.enviarWhatsapp).not.toHaveBeenCalled();
     expect(estadosGuardados()).toEqual([]);
     expect(transacciones()).toEqual([]);
+  });
+
+  test('should send by WhatsApp to the recipients left PENDIENTE and answer the summary of the retry, not that they are sent by hand, when the campaign is by WhatsApp and the module is active', async () => {
+    // Arrange: la campana por WhatsApp quedo con Ana, Beto (sin telefono) y Carla
+    // PENDIENTE; los tres aceptaron y el modulo del servidor esta activo (beforeEach)
+    const porWhatsapp = { ...CAMPANA, estado: 'ENVIADA', fecha_ejecucion: '2026-11-17T09:00', destinatarios: 3, pendientes: 3 };
+    const despues = { ...porWhatsapp, enviados: 2, fallidos: 1, pendientes: 0 };
+    responder(
+      laCampana(filas([porWhatsapp]), filas([despues])),
+      paraReanudar(filas([{ ...PARA_REANUDAR, canal: 'WHATSAPP' }])),
+      ...destinatariosEnMemoria([ANA, BETO, CARLA], [
+        { id_campana: 4, id_miembro: 41, estado_envio: 'PENDIENTE' },
+        { id_campana: 4, id_miembro: 42, estado_envio: 'PENDIENTE' },
+        { id_campana: 4, id_miembro: 43, estado_envio: 'PENDIENTE' },
+      ]),
+      bloqueoDeContacto,
+      todosAceptan([ANA, BETO, CARLA]),
+      ...contactos(),
+      guardarEnvio(),
+    );
+
+    // Act
+    const r = await reintentar();
+
+    // Assert
+    expect(r.status).toBe(200);
+    expect(r.body).toEqual({
+      resumen: {
+        destinatarios: 3, enviados: 2, fallidos: 1, pendientes: 0, canal: 'WHATSAPP',
+        omitidos: 0, omitidosPorMotivo: {}, cerroFranja: false, procesados: 3,
+      },
+      message: 'Reintento hecho: 2 enviados, 0 pendientes, 1 fallidos y 0 omitidos.',
+      campana: despues,
+    });
+    expect(deps.enviarWhatsapp.mock.calls).toEqual([
+      ['573001234567', `Hola Ana, llevas 12 días sin venir a Gym Norte.${baja(41)}`],
+      ['573109876543', `Hola Carla, llevas 30 días sin venir a Gym Norte.${baja(43)}`],
+    ]);
+    expect(estadosGuardados()).toEqual([[41, 'ENVIADO', null], [42, 'FALLIDO', 'SIN_TELEFONO'], [43, 'ENVIADO', null]]);
   });
 
   test.each([

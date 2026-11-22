@@ -658,6 +658,32 @@ describeConBd('RQNF-16 contra la base real', () => {
       const guardado = await uno('SELECT mensaje_copiado FROM envio_mensaje WHERE id_campana = $1 AND id_miembro = $2', [c.id_campana, dani]);
       expect(guardado.mensaje_copiado).toBe(deLaLista.mensaje);
     });
+
+    // Sin el modulo de WhatsApp el servidor no envia: quien tiene telefono
+    // queda PENDIENTE para el envio a mano. A quien no tiene un telefono
+    // valido tampoco se le puede escribir a mano: queda FALLIDO de una vez.
+    test('sin WhatsApp en el servidor, quien no tiene un telefono valido queda FALLIDO y los demas PENDIENTE; reintentar no duplica', async () => {
+      fijar(co('2026-12-23 10:00')); // otra semana
+      const fabio = await crearMiembro(gymB, 'Fabio SinTelefono');
+      await aceptar(fabio, gymB, ['WHATSAPP']);
+      await pool.query("UPDATE miembro SET telefono = '12345' WHERE id_miembro = $1", [fabio]);
+      const enviadosAntes = whatsapps.length;
+
+      const c = await crearCampana({ canal: 'WHATSAPP' }, tkAdminB);
+      const ej = await llamar('POST', `/api/admin/campanas/${c.id_campana}/ejecutar`, tkAdminB);
+      expect(ej.status).toBe(200);
+      expect(ej.body.resumen).toMatchObject({ enviados: 0, fallidos: 1, pendientes: 2 }); // Ana y Dani esperan el envio a mano
+      const filas = await destinatarios(c.id_campana);
+      expect(filas.find((d) => d.id_miembro === fabio)).toEqual({ id_miembro: fabio, estado_envio: 'FALLIDO', motivo: 'SIN_TELEFONO' });
+      expect(filas.filter((d) => d.estado_envio === 'PENDIENTE').map((d) => d.id_miembro).sort()).toEqual([ana, dani].sort());
+
+      // Tres reintentos a la vez: Fabio sigue con una sola constancia y no sale ningun WhatsApp.
+      const reintentos = await Promise.all([1, 2, 3].map(() => llamar('POST', `/api/admin/campanas/${c.id_campana}/reintentar`, tkAdminB)));
+      expect(reintentos.map((r) => r.status)).toEqual([200, 200, 200]);
+      expect(await todas('SELECT estado FROM envio_mensaje WHERE id_campana = $1 AND id_miembro = $2', [c.id_campana, fabio])).toEqual([{ estado: 'FALLIDO' }]);
+      expect((await destinatarios(c.id_campana)).filter((d) => d.estado_envio === 'PENDIENTE')).toHaveLength(2);
+      expect(whatsapps.length).toBe(enviadosAntes);
+    });
   });
 
   // ============================================================ vencimientos

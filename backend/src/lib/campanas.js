@@ -165,6 +165,19 @@ async function congelarDestinatarios(pool, { idCampana, gymId, instante }) {
   }
 }
 
+// Lo que se lee de cada destinatario para personalizar su mensaje: el
+// vencimiento del plan vigente y los dias sin venir (hora de Colombia). La
+// lista (destinatariosDeCampana) y la constancia del envio a mano
+// (registrarEnvioManual) usan estos mismos trozos: si cada una leyera a su
+// manera, el texto registrado dejaria de ser el que el panel mostro.
+const DATOS_DEL_MENSAJE = `pc.fecha_fin,
+            (SELECT (${HOY} - ${fechaLocal('MAX(c.fecha_hora)')})::int
+               FROM checkin c WHERE c.id_miembro = m.id_miembro AND c.valido = TRUE) AS dias_sin_venir`;
+const PLAN_VIGENTE = `LEFT JOIN (
+         SELECT DISTINCT ON (id_miembro) id_miembro, fecha_fin FROM plan_cobro
+          WHERE activo = TRUE ORDER BY id_miembro, fecha_fin DESC NULLS LAST, id_plan_cobro DESC
+       ) pc ON pc.id_miembro = m.id_miembro`;
+
 /**
  * Destinatarios de una campana con los datos para personalizar el mensaje
  * (hora de Colombia para los dias sin venir). Con `soloPendientes`, solo los
@@ -174,15 +187,10 @@ async function destinatariosDeCampana(db, idCampana, gymId, { soloPendientes = f
   const { rows } = await db.query(
     `SELECT d.id_campana_destinatario, d.estado_envio, d.motivo, d.fecha_envio,
             m.id_miembro, m.nombre, m.telefono, m.codigo_pais_telefono, m.email,
-            pc.fecha_fin,
-            (SELECT (${HOY} - ${fechaLocal('MAX(c.fecha_hora)')})::int
-               FROM checkin c WHERE c.id_miembro = m.id_miembro AND c.valido = TRUE) AS dias_sin_venir
+            ${DATOS_DEL_MENSAJE}
        FROM campana_destinatario d
        JOIN miembro m ON m.id_miembro = d.id_miembro AND m.id_gimnasio = $2
-       LEFT JOIN (
-         SELECT DISTINCT ON (id_miembro) id_miembro, fecha_fin FROM plan_cobro
-          WHERE activo = TRUE ORDER BY id_miembro, fecha_fin DESC NULLS LAST, id_plan_cobro DESC
-       ) pc ON pc.id_miembro = m.id_miembro
+       ${PLAN_VIGENTE}
       WHERE d.id_campana = $1 ${soloPendientes ? "AND d.estado_envio = 'PENDIENTE'" : ''}
       ORDER BY ${soloPendientes ? 'd.id_campana_destinatario' : "(d.estado_envio = 'PENDIENTE') DESC, m.nombre"}`,
     [idCampana, gymId]
@@ -397,20 +405,15 @@ async function registrarEnvioManual(pool, { campana, gymId, idMiembro, usuarioId
   try {
     await client.query('BEGIN');
     const { rows } = await client.query(
-      // Los mismos datos que destinatariosDeCampana: sin fecha_fin ni
-      // dias_sin_venir el texto perdia {fecha_vencimiento} y {dias_sin_venir}
-      // y no era el que el panel habia mostrado.
+      // Los mismos datos que destinatariosDeCampana (DATOS_DEL_MENSAJE): sin
+      // fecha_fin ni dias_sin_venir el texto perdia {fecha_vencimiento} y
+      // {dias_sin_venir} y no era el que el panel habia mostrado.
       `SELECT d.id_campana_destinatario, d.estado_envio, d.motivo, d.fecha_envio,
               m.id_miembro, m.nombre, m.telefono, m.codigo_pais_telefono, m.email,
-              pc.fecha_fin,
-              (SELECT (${HOY} - ${fechaLocal('MAX(c.fecha_hora)')})::int
-                 FROM checkin c WHERE c.id_miembro = m.id_miembro AND c.valido = TRUE) AS dias_sin_venir
+              ${DATOS_DEL_MENSAJE}
          FROM campana_destinatario d
          JOIN miembro m ON m.id_miembro = d.id_miembro AND m.id_gimnasio = $3
-         LEFT JOIN (
-           SELECT DISTINCT ON (id_miembro) id_miembro, fecha_fin FROM plan_cobro
-            WHERE activo = TRUE ORDER BY id_miembro, fecha_fin DESC NULLS LAST, id_plan_cobro DESC
-         ) pc ON pc.id_miembro = m.id_miembro
+         ${PLAN_VIGENTE}
         WHERE d.id_campana = $1 AND d.id_miembro = $2
         FOR UPDATE OF d`,
       [campana.id_campana, idMiembro, gymId]
