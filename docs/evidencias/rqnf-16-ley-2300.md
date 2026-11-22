@@ -142,7 +142,7 @@ Antes de los ajustes del #108 eran 647, después de la primera ronda 671 (dos co
 | `fitloyalty_cliente/test/preferencias_comerciales_test.dart` | 5 | Widget de la app: sin canal el interruptor no se enciende y no se marca WhatsApp solo; marcar con el interruptor apagado no guarda; al encenderlo se guarda solo el canal marcado; apagarlo cancela; no se puede quitar el último canal; un menor no puede encenderlo pero sí apagarlo |
 | `frontend/tests/formularioMiembro.test.js` | 9 | Panel, alta de miembro: `cambiarCanalComercial` (marca solo lo marcado, quitar el último canal apaga la aceptación, sin canal no se enciende); dos cambios en el mismo evento con `setForm((prev) => …)` dejan todo apagado y sin canales, y la versión anterior (`{ ...form }`) reproduce el defecto; el precio sugerido por plan y el estado del pago siguen igual, y un precio con centavos (`NUMERIC(10,2)`) se redondea al peso |
 | `backend/tests/expiracion.test.js` | 24 (10 nuevas) | Domingo, festivo, antes de las 7:00, sábado a las 3:00 p. m., sábado a las 8:00, contacto de hoy, otro canal esta semana, semana pasada, sin permiso comercial, hora y transacción |
-| `backend/tests/ley2300-real.test.js` | 27 (26 contra la base) | Columnas y CHECK de 017 y 018 (y que el CHECK viejo ya no está), miembro existente sin fila, app, doble toque concurrente, enlace, panel, ajustes (1) y (2), RQF-09 con `vencida` y el plan al día (409 comercial) y `por-vencer` confirmado; «vencida» hace 30 días es AVISO con el texto del servidor y hace 31 o «vence hoy» es comercial; la campana ofrece la de 30 y no la de 31, con el mismo texto que registra el POST; «acceso bloqueado» con un bloqueo de hace 23 h es AVISO, de hace 25 h u otra notificación (otro tipo, otro título o para la app del miembro) no; un miembro inactivo no confirma el aviso (409 con la razón y sin constancia); un FALLIDO de hoy que no cuenta y un aviso automático de hoy que sí, campaña con los tres motivos y la hora del reloj, otro canal en la semana, «Enviar ahora» un sábado a las 4:00 p. m. (queda programada para el lunes 23 a las 7:00 a. m.), programar en domingo, GET que no ejecuta y scheduler por gimnasio, reintento concurrente (botón y scheduler) sin duplicar, doble clic concurrente, avisos de vencimiento (domingo, frecuencia, miércoles) |
+| `backend/tests/ley2300-real.test.js` | 27 (26 contra la base; desde el 22 de noviembre, 27 y todas contra la base) | Columnas y CHECK de 017 y 018 (y que el CHECK viejo ya no está), miembro existente sin fila, app, doble toque concurrente, enlace, panel, ajustes (1) y (2), RQF-09 con `vencida` y el plan al día (409 comercial) y `por-vencer` confirmado; «vencida» hace 30 días es AVISO con el texto del servidor y hace 31 o «vence hoy» es comercial; la campana ofrece la de 30 y no la de 31, con el mismo texto que registra el POST; «acceso bloqueado» con un bloqueo de hace 23 h es AVISO, de hace 25 h u otra notificación (otro tipo, otro título o para la app del miembro) no; un miembro inactivo no confirma el aviso (409 con la razón y sin constancia); un FALLIDO de hoy que no cuenta y un aviso automático de hoy que sí, campaña con los tres motivos y la hora del reloj, otro canal en la semana, «Enviar ahora» un sábado a las 4:00 p. m. (queda programada para el lunes 23 a las 7:00 a. m.), programar en domingo, GET que no ejecuta y scheduler por gimnasio, reintento concurrente (botón y scheduler) sin duplicar, doble clic concurrente, avisos de vencimiento (domingo, frecuencia, miércoles) |
 | `backend/tests/registro-envio-real.test.js`, `retos-campanas-real.test.js`, `legal-real.test.js`, `registro-envio.test.js`, `autorizaciones.test.js`, `miembros-update.test.js`, `retos-campanas.test.js` | ajustadas | Reloj fijo, aceptación comercial de sus miembros, textos v2 y contrato v3. En RQF-09, los cinco envíos a la vez al mismo miembro ahora dan un 201 y cuatro 409 `FRECUENCIA` (antes eran cinco 201): es el bloqueo de contacto funcionando |
 
 Además: `esbuild` compila los `.jsx` cambiados y el bundle de `src/main.jsx` con todos sus imports; `flutter analyze` sobre una copia con el SDK relajado a `^3.12.0` (Flutter 3.44.8, Dart 3.12.2): **No issues found**, y `flutter test`: 23 de 23 (en la copia se creó un `assets/.env` vacío para que no avise por el asset; no se copió el `.env` real). Arranque del `app` completo de Express: `/api/baja/abc` responde 404 `ENLACE_INVALIDO` y `/api/cliente/preferencias` sin token, 401.
@@ -172,6 +172,45 @@ Además: `esbuild` compila los `.jsx` cambiados y el bundle de `src/main.jsx` co
 | La prueba de Eva con las fechas de Colombia en JS en vez de `CURRENT_DATE` (se muta la prueba, no el código) | — (es real) | falla (1) |
 
 Las cinco que sobreviven sin base son de SQL (las cuatro de la segunda ronda y la de `destinatario`) y solo las mata la base real, que es donde se prueba el SQL. El arreglo del alta del panel no se puede mutar desde `node --test` (está en un `.jsx`); la prueba reproduce las dos versiones con un arnés que encola las actualizaciones como React y muestra que la anterior deja WhatsApp marcado y la nueva no.
+
+## Después de fusionar el bootcamp de pruebas (2026-11-22)
+
+El 22 de noviembre se fusionó en esta rama `develop` con el bootcamp de pruebas (#48, `d9e5c8d`) y después con las fotos de la landing (#114, `f3a1a71`). Lo de «Cómo se probó» describe la verificación original; esto es lo que cambió.
+
+**Cómo se corre ahora.** El proyecto pasó de npm a pnpm y las pruebas contra base real ya no leen `TEST_DATABASE_URL`: usan la BD de pruebas del proyecto (`backend/tests/integracion/bd-pruebas.js`: `DATABASE_URL` del entorno del proceso, solo `127.0.0.1:5433` y una base terminada en `_test`). `ley2300-real.test.js` se pasó a esa guardia y se sumó a `test:integracion` (`backend/package.json`), así que **el job `integracion` del CI la corre contra PostgreSQL 16 y falla si alguna prueba se salta**. Su prueba propia de la guardia se quitó (la guardia se prueba en `tests/integracion/guardia-bd.test.js`): quedan 27, todas contra la base.
+
+```bash
+pnpm --dir backend test                # sin base: las de integración se saltan
+DATABASE_URL=postgres://fitloyalty_test:fitloyalty_test@127.0.0.1:5433/fitloyalty_test   pnpm --dir backend run test:integracion
+TZ=UTC pnpm --dir frontend test
+pnpm --dir e2e test
+```
+
+**Cifras del 22 de noviembre** (Windows 11, Node 24; integración y E2E en contenedores con PostgreSQL 16.15, sin puertos publicados):
+
+| Job del CI | Resultado | Cobertura (umbral) |
+|---|---|---|
+| `backend` (`pnpm test`) | 1325 pasan y 241 se saltan (las de integración), 60 suites | sentencias 92,43 % (90), ramas 86,11 % (84), funciones 91,88 % (89), líneas 93,28 % (91) |
+| `integracion` | 261 de 261, ninguna saltada (10 suites; `ley2300-real` 27, `legal-real` 7, `registro-envio-real` 9) | — |
+| `frontend` (`pnpm test`) | 759 de 759, 45 archivos | líneas y sentencias 87,08 % (85), ramas 93,51 % (92), funciones 95,94 % (93) |
+| `e2e` (Playwright) | 44 de 44, ninguna saltada ni inestable | — |
+
+Las dos suites reales que siguen con `TEST_DATABASE_URL` (`retos-campanas-real` y `bandeja-mensajes-real`, de RQF-10 y RQF-12) también pasan contra esa base: 53 de 53. Ningún umbral de cobertura cambió.
+
+**Pruebas del bootcamp adaptadas.** 41 pruebas del bootcamp estaban escritas contra el comportamiento anterior a la Ley 2300 y fallaban (25 en el backend, 16 en el panel). Se adaptaron sin quitar casos, y el código nuevo del panel quedó cubierto con pruebas en el estilo del bootcamp. La tabla prueba por prueba (qué afirmaba, qué afirma y por qué) está en [`rqnf-16-pruebas-bootcamp.md`](rqnf-16-pruebas-bootcamp.md).
+
+**Errores que destaparon esas pruebas, corregidos en este PR:**
+
+| # | Qué pasaba | Arreglo | Dónde | Prueba |
+|---|---|---|---|---|
+| 1 | El envío a mano de una campaña armaba el texto sin la fecha de vencimiento ni los días sin venir: la constancia y el chat decían «llevas varios días sin venir… Tu plan vence el .», distinto de lo que el panel había mostrado. Afectaba todo WhatsApp a mano, que es el único camino en Render | `registrarEnvioManual` trae los mismos datos que `destinatariosDeCampana` | `backend/src/lib/campanas.js` | `campanas-rutas.test.js` («…exactly the message the recipients list shows…») y `ley2300-real.test.js` («el texto que se registra es el de la lista…»), que falla si se quita el arreglo |
+| 2 | Sin el módulo de WhatsApp en el servidor, un destinatario sin teléfono quedaba `PENDIENTE` para siempre: el panel no ofrece el botón y nada lo sacaba de ahí. Antes de este PR quedaba `FALLIDO` | Con módulo o sin él, quien no tiene teléfono queda `FALLIDO` (`SIN_TELEFONO`); quien sí tiene sigue `PENDIENTE` para el envío a mano | `backend/src/lib/campanas.js` (`entregarPendientes`) | Las tres pruebas del bootcamp que lo afirmaban vuelven a su forma original (`fallidos: 1, pendientes: 2`) |
+| 3 | En la ficha del miembro, «Guardar cambios» estaba activo mientras cargaba el registro, o si la carga fallaba. El formulario era entonces la fila de la lista, y guardarlo vaciaba campos y registraba una revocación (datos sensibles y, con este PR, mensajes comerciales) que nadie decidió | El botón espera al registro completo, se avisa si no cargó, y la respuesta tardía de otra ficha no pisa la que está en pantalla | `frontend/src/pages/MiembrosPage.jsx` | `MiembrosPage.ficha.test.jsx`, bloque «la ficha solo se guarda con el registro completo» (9 pruebas) |
+| 4 | `POST /admin/campanas/:id/reintentar` respondía 503 si la campaña dejaba de estar `ENVIADA` entre la lectura y el reintento | 409 `CAMPANA_NO_EJECUTABLE` | `backend/src/routes/campanas.js` | `campanas-rutas.test.js` (2 casos) |
+| 5 | Los mensajes de horario terminaban en «a. m..» | La frase ya no agrega otro punto | `backend/src/lib/campanas.js`, `backend/src/routes/campanas.js`, `frontend/src/pages/CampanasPage.jsx` | Las pruebas comparan el texto completo |
+| 6 | El aviso de guardado de Configuración (3 s) y el «Copiado» del QR (2 s) dejaban un timer vivo al salir de la página; en la corrida de pruebas podía dispararse con la página ya desmontada y tumbarla («window is not defined») | El timer se guarda y se cancela al salir (y al cerrar la ficha) | `frontend/src/pages/ConfigPage.jsx`, `frontend/src/pages/MiembrosPage.jsx` | `ConfigPage.test.jsx` (3) y `MiembrosPage.ficha.test.jsx` (5) |
+
+**Lo que se vio y queda para otro PR** (anterior a este, no es de la Ley 2300): en la ficha, el editor del plan no usa la misma guarda. Si se abre una ficha mientras llega el plan de otra, o justo después de guardar otra, «Plan y cobro» puede mostrar por un momento el plan del miembro anterior, y «Guardar plan» lo guardaría en el miembro equivocado.
 
 ## Límites y riesgos
 
