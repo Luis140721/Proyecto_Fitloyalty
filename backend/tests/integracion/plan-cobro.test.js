@@ -166,7 +166,10 @@ describeConBd('plan_cobro contra la BD de pruebas', () => {
       // Arrange: la lista sale del createSchema de routes/miembros.js, no de una
       // copia. Si alguien agrega un plan al zod y no al CHECK, el alta
       // responderia 500 y este test falla con 23514.
-      const tipos = createSchema.shape.tipo_plan.removeDefault().options;
+      // Desde el #102 createSchema termina en .superRefine (el menor de edad),
+      // que lo envuelve en un ZodEffects: la forma esta en innerType().
+      const objeto = typeof createSchema.innerType === 'function' ? createSchema.innerType() : createSchema;
+      const tipos = objeto.shape.tipo_plan.removeDefault().options;
       const { gymId, idMiembro } = await gimnasioConMiembro();
 
       // Act
