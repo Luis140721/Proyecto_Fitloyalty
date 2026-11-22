@@ -198,15 +198,16 @@ describe('LandingPage: las fotos del gimnasio', () => {
     // Act
     abrirLanding();
 
-    // Assert: cada foto se describe y va con su funcion
+    // Assert: cada foto (su archivo) se describe con su texto y va con su funcion
     const parejas = within(seccionSala()).getAllByRole('listitem').map((item) => [
+      within(item).getByRole('img').getAttribute('src'),
       within(item).getByRole('img').getAttribute('alt'),
       within(item).getByRole('heading', { level: 3 }).textContent,
     ]);
     expect(parejas).toEqual([
-      ['Prensa de piernas en la zona de pesas de un gimnasio', 'Ingreso con QR'],
-      ['Guantes de boxeo colgados sobre un saco en un gimnasio', 'Retos de asistencia'],
-      ['Máquina multipower frente al espejo de un gimnasio', 'Avisos de vencimiento'],
+      ['/images/landing/prensa-960.webp', 'Prensa de piernas en la zona de pesas de un gimnasio', 'Ingreso con QR'],
+      ['/images/landing/boxeo-960.webp', 'Guantes de boxeo colgados sobre un saco en un gimnasio', 'Retos de asistencia'],
+      ['/images/landing/multipower-960.webp', 'Máquina multipower frente al espejo de un gimnasio', 'Avisos de vencimiento'],
     ]);
     // Las unicas imagenes que se anuncian son esas tres: la de la portada es adorno
     const fotos = within(seccionSala()).getAllByRole('img');
@@ -227,6 +228,11 @@ describe('LandingPage: las fotos del gimnasio', () => {
     for (const ruta of rutas) {
       expect(existsSync(enPublic(ruta)), `falta ${ruta} en public`).toBe(true);
     }
+    // Las dos medidas de cada foto son de la misma foto: no se mezcla una con otra
+    for (const foto of fotosDeLaLanding()) {
+      const nombre = foto.getAttribute('src').replace(/-960\.webp$/, '');
+      expect(foto).toHaveAttribute('srcset', `${nombre}-480.webp 480w, ${nombre}-960.webp 960w`);
+    }
   });
 
   test('should load the hero photo right away and the photos below the fold lazily when the page loads', () => {
@@ -237,6 +243,8 @@ describe('LandingPage: las fotos del gimnasio', () => {
     const [portada, ...resto] = fotosDeLaLanding();
     expect(portada).toHaveAttribute('src', '/images/landing/sala-960.webp');
     expect(portada).not.toHaveAttribute('loading');
+    expect(portada).toHaveAttribute('fetchpriority', 'high');
+    expect(resto).toHaveLength(3);
     for (const foto of resto) expect(foto).toHaveAttribute('loading', 'lazy');
     for (const foto of [portada, ...resto]) {
       expect(foto).toHaveAttribute('width', '960');
@@ -261,5 +269,9 @@ describe('LandingPage: las fotos del gimnasio', () => {
     for (const aviso of screen.getAllByText('Ingreso registrado')) {
       expect(aviso.closest('[aria-hidden="true"]')).not.toBeNull();
     }
+    // Los iconos son ligaduras de Material Symbols: su nombre («qr_code_scanner») es texto y no debe leerse
+    const iconos = [...sala.querySelectorAll('.material-symbols-outlined')];
+    expect(iconos).toHaveLength(6);
+    for (const icono of iconos) expect(icono.closest('[aria-hidden="true"]')).not.toBeNull();
   });
 });

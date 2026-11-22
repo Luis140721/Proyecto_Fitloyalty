@@ -156,6 +156,8 @@ export default function LandingPage() {
             height="1280"
             alt=""
             decoding="async"
+            // Es lo mas grande que se ve al entrar: que el navegador la pida primero.
+            fetchpriority="high"
           />
         </div>
         <div>
@@ -273,7 +275,8 @@ export default function LandingPage() {
           Ingresos, vencimientos y retos al día, mientras tus miembros entrenan.
         </p>
         {/* Collage: cada foto se funde con la página y lleva su función debajo. Los avisos son decorativos. */}
-        <ul className="sala-collage">
+        {/* role="list": con list-style: none, Safari deja de anunciar la lista. */}
+        <ul className="sala-collage" role="list">
           <li className="sala-item sala-item--ingreso">
             <div className="sala-item__photo">
               <img
