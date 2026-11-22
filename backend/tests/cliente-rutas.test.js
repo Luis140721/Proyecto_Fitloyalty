@@ -33,6 +33,7 @@ jest.mock('../src/db/db', () => ({ query: (...a) => mockEjecutar(...a) }));
 const clienteRouter = require('../src/routes/cliente');
 const { errorHandler } = require('../src/middleware/errorHandler');
 const { generarTokenCliente } = require('../src/lib/auth-helpers');
+const { datosParaApp } = require('../src/lib/qr-dinamico');
 
 const app = express();
 app.use(express.json());
@@ -329,7 +330,11 @@ describe('PUT /api/cliente/me: what the member can edit', () => {
 
 // ---------------------------------------------------------------------------
 describe('GET /api/cliente/qr: the QR to show at the door', () => {
-  const conQr = (fila) => responder([/SELECT codigo_qr, qr_imagen FROM miembro/, filas(fila ? [fila] : [])]);
+  // La fila trae el id del miembro y si su gimnasio exige el QR dinamico (migracion 015).
+  const conQr = (fila) => responder([
+    /SELECT m\.id_miembro, m\.codigo_qr, m\.qr_imagen, g\.qr_dinamico_obligatorio\s+FROM miembro m\s+JOIN gimnasio g/,
+    filas(fila ? [{ id_miembro: 41, qr_dinamico_obligatorio: false, ...fila }] : []),
+  ]);
 
   test.each([
     ['the database has the raw base64', 'iVBORw0KGgo', 'data:image/png;base64,iVBORw0KGgo'],
@@ -342,9 +347,14 @@ describe('GET /api/cliente/qr: the QR to show at the door', () => {
     // Act
     const r = await pedir('get', '/qr');
 
-    // Assert
+    // Assert: ademas del QR fijo, lo que la app necesita para el QR dinamico del miembro
     expect(r.status).toBe(200);
-    expect(r.body).toEqual({ codigo: 'QR-ANA', imagenDataUrl: dataUrl });
+    expect(r.body).toEqual({
+      dinamico: datosParaApp(41, 'QR-ANA', r.body.dinamico.hora_servidor_ms),
+      solo_dinamico: false,
+      codigo: 'QR-ANA',
+      imagenDataUrl: dataUrl,
+    });
     expect(llamadas(/FROM miembro/)[0].params).toEqual([41, 7]);
   });
 

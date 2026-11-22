@@ -23,6 +23,7 @@ import 'package:provider/provider.dart';
 
 import 'cliente/config/environment.dart';
 import 'cliente/providers/auth_provider.dart';
+import 'cliente/providers/mensajes_provider.dart';
 import 'cliente/providers/perfil_provider.dart';
 import 'cliente/screens/home_screen.dart';
 import 'cliente/screens/login_screen.dart';
@@ -57,6 +58,8 @@ class FitLoyaltyClienteApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => PerfilProvider()),
+        // Bandeja de mensajes del gimnasio y su contador (issue #46, RQF-12).
+        ChangeNotifierProvider(create: (_) => MensajesProvider()),
       ],
       child: MaterialApp(
         title: Environment.appName,

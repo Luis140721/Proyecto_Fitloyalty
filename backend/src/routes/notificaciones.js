@@ -34,6 +34,7 @@ const { AppError } = require('../lib/errors');
 const { ULTIMO_PLAN } = require('../lib/planes');
 const { telefonoWhatsapp, mensajeParaMiembro } = require('../lib/mensajes');
 const { TIPO_ACCESO_BLOQUEADO, TITULO_ACCESO_BLOQUEADO } = require('../lib/accesos');
+const { TITULO_RETO_COMPLETADO } = require('../lib/retos');
 const { z } = require('zod');
 const { formatZodError } = require('../lib/validators');
 
@@ -96,9 +97,11 @@ router.get(
       // inactividad no, porque son de retencion y no de plata.
       const vacio = { rows: [] };
 
-      const [bloqueados, vencidas, porVencer, enRiesgo] = await Promise.all([
+      const [bloqueados, vencidas, porVencer, enRiesgo, retosCompletados] = await Promise.all([
         // Intentos de ingreso bloqueados de las ultimas 24 h que nadie ha marcado
         // como vistos. Si el miembro ya renovo, el aviso deja de aplicar solo.
+        // Solo los avisos para el gimnasio: los mensajes para la app del
+        // miembro (destinatario MIEMBRO, migracion 016) no salen en la campana.
         pool.query(
           `SELECT n.id_notificacion, mb.id_miembro, mb.nombre, mb.telefono, mb.codigo_pais_telefono,
                   GREATEST(0, EXTRACT(EPOCH FROM (NOW() - n.fecha_creacion)) / 60)::int AS minutos,
@@ -107,7 +110,8 @@ router.get(
              FROM notificacion n
              INNER JOIN miembro mb ON mb.id_miembro = n.id_miembro AND mb.id_gimnasio = n.id_gimnasio
              LEFT JOIN ${ULTIMO_PLAN} pc ON pc.id_miembro = mb.id_miembro
-            WHERE n.id_gimnasio = $1 AND n.tipo = $2 AND n.titulo = $4 AND n.leida = FALSE
+            WHERE n.id_gimnasio = $1 AND n.destinatario = 'GIMNASIO'
+              AND n.tipo = $2 AND n.titulo = $4 AND n.leida = FALSE
               AND n.fecha_creacion > NOW() - INTERVAL '24 hours'
               AND (pc.fecha_fin IS NULL OR pc.fecha_fin < CURRENT_DATE OR pc.congelado_desde IS NOT NULL)
             ORDER BY n.fecha_creacion DESC
@@ -158,6 +162,24 @@ router.get(
             LIMIT $2`,
           [gymId, TOPE]
         ),
+
+        // Retos completados (RQF-12) de los ultimos 7 dias que nadie ha marcado
+        // como vistos: el administrador entrega la recompensa y puede felicitar
+        // al miembro por WhatsApp. Solo el aviso del gimnasio: el mensaje que le
+        // llega al miembro (destinatario MIEMBRO) es otra fila y no sale aqui.
+        // Si la consulta falla, la campana sigue.
+        pool.query(
+          `SELECT n.id_notificacion, n.mensaje AS texto_reto, mb.id_miembro, mb.nombre,
+                  mb.telefono, mb.codigo_pais_telefono
+             FROM notificacion n
+             INNER JOIN miembro mb ON mb.id_miembro = n.id_miembro AND mb.id_gimnasio = n.id_gimnasio
+            WHERE n.id_gimnasio = $1 AND n.destinatario = 'GIMNASIO'
+              AND n.tipo = 'RETO' AND n.titulo = $2 AND n.leida = FALSE
+              AND n.fecha_creacion > NOW() - INTERVAL '7 days'
+            ORDER BY n.fecha_creacion DESC
+            LIMIT $3`,
+          [gymId, TITULO_RETO_COMPLETADO, TOPE]
+        ).catch(() => vacio),
       ]);
 
       const armar = (fila, tipo, icono, titulo, detalle, textoMensaje) => ({
@@ -212,6 +234,17 @@ router.get(
           // Para que el envio quede ligado a la alerta (envio_mensaje.id_alerta).
           idAlerta: r.id_alerta,
         })),
+        ...((retosCompletados && retosCompletados.rows) || []).map((r) => {
+          const reto = (/«([^»]+)»/.exec(r.texto_reto || '') || [])[1] || 'del gimnasio';
+          return {
+            ...armar(r, 'reto-completado', 'emoji_events',
+              `${r.nombre} completó un reto`,
+              r.texto_reto || 'Reto completado',
+              `«${reto}»`),
+            id: `reto-completado-${r.id_notificacion}`,
+            idNotificacion: r.id_notificacion,
+          };
+        }),
       ];
 
       return res.json({ total: avisos.length, avisos, umbrales });
@@ -236,7 +269,8 @@ router.post(
     try {
       const { rowCount } = await pool.query(
         `UPDATE notificacion SET leida = TRUE
-          WHERE id_notificacion = $1 AND id_gimnasio = $2 AND tipo = $3 AND titulo = $4`,
+          WHERE id_notificacion = $1 AND id_gimnasio = $2 AND destinatario = 'GIMNASIO'
+            AND tipo = $3 AND titulo = $4`,
         [id, req.user.gymId, TIPO_ACCESO_BLOQUEADO, TITULO_ACCESO_BLOQUEADO]
       );
       if (rowCount === 0) throw new AppError(404, 'Aviso no encontrado.', 'NOT_FOUND');
@@ -244,6 +278,33 @@ router.post(
     } catch (err) {
       if (err instanceof AppError) throw err;
       console.error('[POST /admin/notificaciones/acceso-bloqueado/:id/leida] Error:', err.message);
+      throw new AppError(503, 'No pudimos marcar el aviso. Intenta de nuevo.', 'DB_UNREACHABLE');
+    }
+  })
+);
+
+// ---------------------------------------------------------------------------
+// POST /api/admin/notificaciones/reto/:id/leida  (RQF-12)
+// ---------------------------------------------------------------------------
+router.post(
+  '/admin/notificaciones/reto/:id/leida',
+  authenticate,
+  authorize('admin', 'receptionist'),
+  asyncHandler(async (req, res) => {
+    const id = Number.parseInt(req.params.id, 10);
+    if (!Number.isInteger(id) || id <= 0) throw new AppError(400, 'Id invalido', 'VALIDATION_ERROR');
+    try {
+      const { rowCount } = await pool.query(
+        `UPDATE notificacion SET leida = TRUE
+          WHERE id_notificacion = $1 AND id_gimnasio = $2 AND destinatario = 'GIMNASIO'
+            AND tipo = 'RETO' AND titulo = $3`,
+        [id, req.user.gymId, TITULO_RETO_COMPLETADO]
+      );
+      if (rowCount === 0) throw new AppError(404, 'Aviso no encontrado.', 'NOT_FOUND');
+      return res.json({ message: 'Aviso marcado como visto.' });
+    } catch (err) {
+      if (err instanceof AppError) throw err;
+      console.error('[POST /admin/notificaciones/reto/:id/leida] Error:', err.message);
       throw new AppError(503, 'No pudimos marcar el aviso. Intenta de nuevo.', 'DB_UNREACHABLE');
     }
   })
@@ -378,3 +439,6 @@ router.post(
 );
 
 module.exports = router;
+
+// Lo reutilizan las campanas (RQF-10) para dejar constancia de cada envio.
+module.exports.canalDelGimnasio = canalDelGimnasio;

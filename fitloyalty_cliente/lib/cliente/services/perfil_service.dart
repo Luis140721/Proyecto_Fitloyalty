@@ -1,23 +1,28 @@
 // lib/cliente/services/perfil_service.dart
 //
 // Capa de red para la pantalla de perfil y edicion.
-//   - getQr:        GET  /api/cliente/qr
+//   - getQr:        GET  /api/cliente/qr (QR fijo y datos del QR dinamico)
 //   - getMembresia: GET  /api/cliente/membresia
 //   - updatePerfil: PUT  /api/cliente/me
 
 import '../models/membresia.dart';
 import '../models/miembro.dart';
+import '../utils/qr_dinamico.dart';
 import 'api_client.dart';
 
 class PerfilService {
   final ApiClient _api;
   PerfilService({ApiClient? api}) : _api = api ?? ApiClient();
 
-  Future<({String codigo, String? imagenDataUrl})> getQr() async {
+  Future<({String codigo, String? imagenDataUrl, QrDinamico? dinamico, bool soloDinamico})> getQr() async {
     final data = await _api.get('/cliente/qr');
+    final raw = data['dinamico'];
     return (
       codigo:       data['codigo']        as String? ?? '',
       imagenDataUrl: data['imagenDataUrl'] as String?,
+      // QR que cambia cada 30 s; null si el servidor es anterior a esta version.
+      dinamico:     raw is Map<String, dynamic> ? QrDinamico.fromJson(raw) : null,
+      soloDinamico: data['solo_dinamico'] == true,
     );
   }
 

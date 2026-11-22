@@ -26,6 +26,8 @@ const TABLAS = ['gimnasio', 'usuario', 'miembro'];
 const NO_NULOS = [
   ['gimnasio', 'nombre'], ['gimnasio', 'telefono'], ['gimnasio', 'activo'], ['gimnasio', 'fecha_registro'],
   ['gimnasio', 'plan_activo'], ['gimnasio', 'dias_aviso_vencimiento'],
+  // Si el gimnasio exige el QR dinamico en el check-in (migracion 015).
+  ['gimnasio', 'qr_dinamico_obligatorio'],
   ['usuario', 'id_gimnasio'], ['usuario', 'nombre'], ['usuario', 'email'], ['usuario', 'password_hash'],
   ['usuario', 'rol'], ['usuario', 'activo'], ['usuario', 'debe_cambiar_clave'], ['usuario', 'fecha_creacion'],
   ['miembro', 'id_gimnasio'], ['miembro', 'nombre'], ['miembro', 'documento'], ['miembro', 'codigo_qr'],

@@ -36,6 +36,9 @@ function mensajeParaMiembro(tipo, gym, nombre, dato) {
   if (tipo === 'vencida') {
     return `${saludo} Tu plan vencio ${dato}. Pasa cuando quieras y lo renovamos para que no pierdas el ritmo.`;
   }
+  if (tipo === 'reto-completado') {
+    return `${saludo} ¡Felicitaciones! Completaste el reto ${dato}. Pasa por recepcion a reclamar tu recompensa.`;
+  }
   if (tipo === 'por-vencer') {
     return `${saludo} Te recordamos que tu plan vence ${dato}. Puedes renovarlo en recepcion o escribirnos por aqui.`;
   }
