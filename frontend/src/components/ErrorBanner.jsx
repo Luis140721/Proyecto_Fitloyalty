@@ -64,20 +64,23 @@ function ErrorBannerContainer({ items, dismiss }) {
   return (
     <div className="error-banner-stack" role="region" aria-live="polite" aria-label="Notificaciones de error">
       {items.map((it) => (
-        <ErrorBanner key={it.id} item={it} onDismiss={() => dismiss(it.id)} />
+        <ErrorBanner key={it.id} item={it} dismiss={dismiss} />
       ))}
     </div>
   );
 }
 
-function ErrorBanner({ item, onDismiss }) {
+function ErrorBanner({ item, dismiss }) {
   const navigate = useNavigate();
+  const onDismiss = () => dismiss(item.id);
 
+  // Depende de `dismiss` (estable) y no de una funcion nueva en cada render:
+  // si no, cada error que llega reinicia los 6 s de los que ya estaban.
   useEffect(() => {
     if (item.persistent) return undefined;
-    const t = setTimeout(onDismiss, AUTO_DISMISS_MS);
+    const t = setTimeout(() => dismiss(item.id), AUTO_DISMISS_MS);
     return () => clearTimeout(t);
-  }, [item, onDismiss]);
+  }, [item, dismiss]);
 
   const { status, message } = item;
 

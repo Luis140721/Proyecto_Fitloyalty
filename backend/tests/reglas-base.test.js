@@ -208,13 +208,14 @@ describe('trial', () => {
       expect(r.status).toHaveBeenCalledWith(402);
     });
 
-    test('la base falla: 500 y no deja pasar', async () => {
+    test('la base falla: 503 DB_UNREACHABLE y no deja pasar', async () => {
       const spy = jest.spyOn(console, 'error').mockImplementation(() => {});
       const r = res();
       const next = jest.fn();
       const pool = { query: jest.fn().mockRejectedValue(new Error('caida')) };
       await requireActiveTrial(pool)({ user: { gymId: 7 } }, r, next);
-      expect(r.status).toHaveBeenCalledWith(500);
+      expect(r.status).toHaveBeenCalledWith(503);
+      expect(r.json).toHaveBeenCalledWith(expect.objectContaining({ code: 'DB_UNREACHABLE' }));
       expect(next).not.toHaveBeenCalled();
       spy.mockRestore();
     });

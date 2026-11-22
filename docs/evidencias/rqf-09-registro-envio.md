@@ -104,6 +104,8 @@ De las cinco pruebas de `/enviado` que había en `checkin-notificaciones.test.js
 
 ### Prueba contra el esquema real: `backend/tests/registro-envio-real.test.js` (18)
 
+> **Actualización (semana 8 del bootcamp, 2026-11-19).** Lo que sigue describe la prueba tal como se verificó para RQF-09. Desde la semana 8 la prueba usa la conexión de `backend/tests/integracion/bd-pruebas.js`. Ahora lee `DATABASE_URL` del entorno del proceso, no `TEST_DATABASE_URL`, y acepta solo la BD de pruebas local (`127.0.0.1:5433`, BD terminada en `_test`). También aplica las migraciones y corre en el job `integracion` del CI. Su guardia propia, que aceptaba cualquier base local, se quitó: con `DATABASE_URL` habría dejado correr la prueba contra la BD de desarrollo. Los comandos de abajo ya no aplican; los vigentes están en el README de la raíz.
+
 Levanta los routers reales de notificaciones y de miembros sobre la base de `TEST_DATABASE_URL`, crea tres gimnasios propios (con personal, miembros, una alerta y, en uno, un canal inactivo) y al final borra todo lo que creó, tabla por tabla. Sin `TEST_DATABASE_URL` las 9 pruebas contra la base se saltan (`:101`), así que en CI quedan saltadas.
 
 **Guardia** (`:36-60`): el host se toma del mismo parser que usa pg (`pg/lib/connection-parameters`), que obedece `?host=` en la query y las variables `PG*`, y no del hostname de `new URL`. Se revisa dos veces antes de conectarse: la URL tal cual (`:51`) y la configuración que `db.js` le pasa a pg (`:59`), porque `db.js` reescribe la URL al quitar `sslmode`. Solo pasa `localhost`, `127.0.0.1` o `::1`. Sus 9 pruebas no se conectan a nada y corren siempre, también en CI (`:62-99`):

@@ -45,7 +45,7 @@ services:
 
   # ----------------------------------------------------------------------
   # Backend Node 24 + Express. Espera a db, luego corre migraciones idempotentes
-  # y levanta `npm start` (node src/index.js).
+  # y levanta `node src/index.js` (el CMD del Dockerfile).
   # ----------------------------------------------------------------------
   backend:
     build:

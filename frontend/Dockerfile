@@ -2,11 +2,16 @@
 FROM node:24-alpine AS build
 WORKDIR /app
 
-COPY package.json package-lock.json* ./
-RUN npm install --no-audit --no-fund
+# pnpm con la misma version exacta de "packageManager" en package.json.
+RUN npm install -g pnpm@12.15.0 --no-audit --no-fund
+
+# pnpm-workspace.yaml trae allowBuilds (esbuild): sin el, pnpm falla al
+# encontrar un script de instalacion sin decidir.
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN pnpm install --frozen-lockfile
 
 COPY . .
-RUN npm run build
+RUN pnpm run build
 
 # Etapa runtime: nginx sirve el build estatico. SPA fallback a index.html para React Router.
 FROM nginx:alpine

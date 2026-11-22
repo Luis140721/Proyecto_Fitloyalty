@@ -5,6 +5,8 @@
 # --- Dependencias
 node_modules/
 **/node_modules/
+# El proyecto usa pnpm (pnpm-lock.yaml por carpeta); este aparece si alguien corre npm install.
+package-lock.json
 
 # --- Build artifacts
 dist/

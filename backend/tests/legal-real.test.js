@@ -2,37 +2,36 @@
  * RQNF-17 y RQNF-18 contra una base de datos real.
  *
  * Levanta los routers reales de miembros, de la app del miembro y del
- * contrato sobre la base de TEST_DATABASE_URL y los llama por HTTP. Comprueba
- * las filas que quedan en miembro, autorizacion_miembro (migracion 019) y
+ * contrato sobre la BD de pruebas y los llama por HTTP. Comprueba las filas
+ * que quedan en miembro, autorizacion_miembro (migracion 019) y
  * contrato_enviado (migracion 020), y que las restricciones de las dos
  * migraciones existen de verdad.
  *
- * Sirve con las dos formas de crear la base:
- *   - ConsultasDB/Query_Inicial_Crear_Tablas.sql y luego las migraciones (asi
- *     es produccion: el servidor aplica las migraciones al arrancar)
- *   - solo las migraciones de backend/migrations (Docker)
- *
- * Seguridad (la misma guardia de registro-envio-real.test.js):
- *   - Sin TEST_DATABASE_URL se salta entera; solo corren las pruebas de la
- *     guardia, que no se conectan a nada.
- *   - Se niega a correr si la conexion no va a localhost, 127.0.0.1 o ::1,
- *     mirando el destino como lo calcula pg (obedece ?host=) y despues de que
- *     db.js reescribe la URL.
+ * La conexion es la de los tests de integracion (tests/integracion/bd-pruebas.js),
+ * como en registro-envio-real.test.js:
+ *   - Sin DATABASE_URL en el entorno del proceso se salta entera (asi queda en
+ *     el job backend del CI); la DATABASE_URL de backend/.env no la activa.
+ *   - Solo acepta la BD de pruebas local (127.0.0.1:5433, BD terminada en
+ *     _test), revisa antes de conectarse el destino que pg va a usar de verdad
+ *     y aplica las migraciones de backend/migrations. Las pruebas de esa
+ *     guardia estan en tests/integracion/guardia-bd.test.js.
  *   - WhatsApp y el correo estan simulados: no sale ningun mensaje.
  *   - Crea sus propios gimnasios y al final borra todo lo que creo, tabla por
  *     tabla (en ConsultasDB las FK de miembro no tienen ON DELETE CASCADE).
  *
- * Uso (desde backend/):
+ * Corre en el job integracion del CI. Uso (desde la raiz, con db-test levantada):
  *
- *   TEST_DATABASE_URL=postgres://postgres:...@127.0.0.1:55439/fl_consultas \
- *   npx jest tests/legal-real.test.js
+ *   DATABASE_URL=postgres://fitloyalty_test:fitloyalty_test@127.0.0.1:5433/fitloyalty_test \
+ *   pnpm --dir backend run test:integracion
  */
 jest.setTimeout(30000); // base real: con la maquina cargada los hooks pasan de 5 s
 const crypto = require('crypto');
 const express = require('express');
 const jwt = require('jsonwebtoken');
-const ConnectionParameters = require('pg/lib/connection-parameters');
 const { CONTRATO_VERSION } = require('../src/lib/mensajes');
+// La guardia de la BD de pruebas y la DATABASE_URL del entorno del proceso:
+// ver tests/integracion/bd-pruebas.js.
+const { describeConBd, prepararBdDePruebas } = require('./integracion/bd-pruebas');
 
 jest.mock('../src/lib/whatsapp', () => ({
   sendWhatsAppText: jest.fn(async () => {}),
@@ -41,65 +40,10 @@ jest.mock('../src/lib/whatsapp', () => ({
 }));
 jest.mock('../src/lib/email', () => ({ sendMemberQR: jest.fn(async () => {}) }));
 
-const HOSTS_LOCALES = ['localhost', '127.0.0.1', '::1', '[::1]'];
+// El secreto con el que esta prueba firma sus tokens. Solo vale en este archivo.
+process.env.JWT_SECRET = 'prueba-real-local';
 
-function exigirBaseLocal(config) {
-  const { host } = new ConnectionParameters(typeof config === 'string' ? { connectionString: config } : config);
-  if (!HOSTS_LOCALES.includes(host)) {
-    throw new Error(`Me niego: TEST_DATABASE_URL lleva a "${host}" y esta prueba solo corre contra una base local (localhost o 127.0.0.1).`);
-  }
-}
-
-const URL_PRUEBA = process.env.TEST_DATABASE_URL;
-let poolReal;
-if (URL_PRUEBA) {
-  exigirBaseLocal(URL_PRUEBA);
-  process.env.DATABASE_URL = URL_PRUEBA;
-  process.env.DB_SSL = 'false';
-  process.env.JWT_SECRET = 'prueba-real-local';
-  poolReal = require('../src/db/db');
-  exigirBaseLocal(poolReal.options);
-}
-
-describe('guardia de la base de pruebas', () => {
-  test.each([
-    'postgres://u:c@127.0.0.1:55439/fl_consultas',
-    'postgres://u:c@localhost/fl_consultas',
-    'postgres://u:c@[::1]:55439/fl_consultas',
-  ])('acepta una base local: %s', (url) => {
-    expect(() => exigirBaseLocal(url)).not.toThrow();
-  });
-
-  test.each([
-    ['una base remota', 'postgres://u:c@ep-algo.us-east-2.aws.neon.tech/neondb'],
-    ['?host= remoto con hostname local', 'postgres://u:c@127.0.0.1:55439/fl_consultas?host=ep-algo.neon.tech'],
-    ['?host= de socket', 'postgres:///fl_consultas?host=/tmp'],
-    ['varios hosts', 'postgres://u:c@127.0.0.1,ep-x.neon.tech:5432/fl_consultas'],
-  ])('rechaza %s', (_caso, url) => {
-    expect(() => exigirBaseLocal(url)).toThrow(/Me niego/);
-  });
-
-  test('rechaza una URL que db.js reescribe hacia otro host al quitar sslmode', () => {
-    const url = 'postgres://u:c@127.0.0.1:55439/fl_consultas?sslmode=disable#&host=ep-algo.neon.tech';
-    expect(() => exigirBaseLocal(url)).not.toThrow();
-    const antes = { url: process.env.DATABASE_URL, ssl: process.env.DB_SSL };
-    let pool;
-    try {
-      process.env.DATABASE_URL = url;
-      process.env.DB_SSL = 'false';
-      jest.isolateModules(() => { pool = require('../src/db/db'); });
-      expect(() => exigirBaseLocal(pool.options)).toThrow(/Me niego: .*ep-algo\.neon\.tech/);
-    } finally {
-      if (antes.url === undefined) delete process.env.DATABASE_URL; else process.env.DATABASE_URL = antes.url;
-      if (antes.ssl === undefined) delete process.env.DB_SSL; else process.env.DB_SSL = antes.ssl;
-      if (pool) pool.end();
-    }
-  });
-});
-
-const describeReal = URL_PRUEBA ? describe : describe.skip;
-
-describeReal('RQNF-17 y RQNF-18 contra la base real', () => {
+describeConBd('RQNF-17 y RQNF-18 contra la base real', () => {
   let pool, server, base, establecerBusquedaPersonal;
   const gimnasios = [];
   let gymA, gymB, recepA, adminA, recepB, adminB, tokA, tokAdminA, tokB, tokAdminB;
@@ -174,7 +118,7 @@ describeReal('RQNF-17 y RQNF-18 contra la base real', () => {
   }
 
   beforeAll(async () => {
-    pool = poolReal;
+    pool = await prepararBdDePruebas();
     ({ establecerBusquedaPersonal } = require('../src/middleware/auth'));
     const { errorHandler } = require('../src/middleware/errorHandler');
     // Igual que en registro-envio-real: el usuario de ConsultasDB no tiene

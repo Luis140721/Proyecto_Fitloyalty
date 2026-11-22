@@ -1,0 +1,440 @@
+/**
+ * Bootcamp semana 4 (Front, Luis): CheckinPage desde la recepcion: el
+ * historial del dia, el ingreso por documento (arreglo del #56), el QR pegado
+ * o leido con la camara y los mensajes cuando se niega la entrada.
+ *
+ * El API y useAuth se simulan con vi.mock. Las respuestas tienen la forma de
+ * POST y GET /api/admin/checkin (backend/src/routes/checkin.js): la membresia
+ * vencida o congelada llega con 200 y miembro.estado; el miembro que no existe,
+ * con 404 MEMBER_NOT_FOUND.
+ *
+ * html5-qrcode abre la camara: el doble guarda el callback de lectura para que
+ * el test "lea" un QR.
+ *
+ * Semana 7: los defectos de tiempos que encontraron los E2E de
+ * e2e/tests/checkin-tiempos.spec.js, aqui sin red ni backend (promesas que se
+ * resuelven cuando el test quiere).
+ */
+import { describe, expect, test, vi, beforeEach, afterEach } from 'vitest';
+import { act, screen, waitFor, within } from '@testing-library/react';
+import CheckinPage from '../src/pages/CheckinPage';
+import { renderWithProviders } from './renderWithProviders';
+
+// Un vi.fn nuevo por test, como en LoginPage.test.jsx.
+let mockGet, mockPost, mockMarcarActividad, escaner;
+vi.mock('../src/api', () => ({ api: { get: (...a) => mockGet(...a), post: (...a) => mockPost(...a) } }));
+vi.mock('../src/context/AuthContext', () => ({ useAuth: () => ({ marcarActividad: (...a) => mockMarcarActividad(...a) }) }));
+vi.mock('html5-qrcode', () => ({
+  Html5QrcodeScanner: class {
+    constructor(elementId) { escaner = { elementId, leer: null, cerrado: false }; }
+    render(alLeer) { escaner.leer = alLeer; }
+    clear() { escaner.cerrado = true; return Promise.resolve(); }
+  },
+}));
+
+// Fila de GET /api/admin/checkin.
+const INGRESO_ANA = { id_checkin: 90, fecha_hora: '2026-10-28T13:00:00.000Z', metodo: 'QR', valido: true, id_miembro: 1, nombre: 'Ana Pérez', documento: '1020304050', codigo_qr: 'QR-ANA' };
+const CARLOS = { id: 2, nombre: 'Carlos Ruiz', documento: '79123456' };
+
+/** Respuesta 201 de POST /api/admin/checkin con la racha que calcula lib/gamificacion.js. */
+const registrado = (gamificacion = { racha: 1, totalAsistencias: 1, hitosNuevos: [], proximoHito: null, mensaje: '¡Buen entrenamiento! Vuelve mañana y empieza tu racha.' }) => ({
+  data: {
+    message: 'Ingreso registrado.',
+    duplicado: false,
+    checkin: { id_checkin: 91, fecha_hora: '2026-10-28T14:00:00.000Z', metodo: 'MANUAL' },
+    gamificacion,
+    miembro: { ...CARLOS, codigo_qr: 'QR-CARLOS', qr_imagen: null },
+    membresia: { tipo_plan: 'MENSUAL', fecha_fin: '2026-11-20', estado_pago: 'PAGADO', congelado_desde: null },
+    advertencia: null,
+  },
+});
+
+const abrirCheckin = () => renderWithProviders(<CheckinPage />, { route: '/admin/checkin' });
+const campoQr = () => screen.getByRole('textbox', { name: 'Código QR' });
+const campoDocumento = () => screen.getByRole('textbox', { name: 'O por documento' });
+const aviso = () => screen.findByRole('status');
+
+// Respuesta 200 del antirrebote: el miembro ya entro hace un momento.
+const REPETIDO = { data: { message: 'Carlos Ruiz ya registro su ingreso hace un momento.', duplicado: true, miembro: CARLOS, advertencia: null } };
+
+/** jsdom no tiene navigator.vibrate: se pone un espia solo en el test que lo pide. */
+function espiarVibracion() {
+  const vibrar = vi.fn(() => true);
+  Object.defineProperty(navigator, 'vibrate', { value: vibrar, configurable: true, writable: true });
+  return vibrar;
+}
+
+beforeEach(() => {
+  escaner = null;
+  mockGet = vi.fn(async () => ({ data: { checkins: [INGRESO_ANA] } }));
+  mockPost = vi.fn(async () => registrado());
+  mockMarcarActividad = vi.fn();
+});
+afterEach(() => {
+  vi.useRealTimers();
+  delete navigator.vibrate;
+});
+
+describe('CheckinPage: el historial', () => {
+  test('should list the check-ins of today with the method and the document when the page opens', async () => {
+    // Act
+    abrirCheckin();
+
+    // Assert
+    expect(await screen.findByText('Ana Pérez')).toBeInTheDocument();
+    expect(screen.getByText('QR · 1020304050')).toBeInTheDocument();
+    expect(mockGet).toHaveBeenCalledWith('/admin/checkin', { params: { limit: 20 } });
+  });
+
+  test('should show the API error when the history cannot be loaded', async () => {
+    // Arrange: error ya normalizado por buildError
+    mockGet = vi.fn(async () => { throw { status: 503, code: 'DB_UNREACHABLE', message: 'No pudimos cargar el historial. Intenta de nuevo.' }; });
+
+    // Act
+    abrirCheckin();
+
+    // Assert
+    expect(await screen.findByRole('alert')).toHaveTextContent('No pudimos cargar el historial. Intenta de nuevo.');
+  });
+});
+
+describe('CheckinPage: el ingreso por documento', () => {
+  test('should register the document as MANUAL when the user types it and presses Enter', async () => {
+    // Arrange
+    const vibrar = espiarVibracion();
+    const { user } = abrirCheckin();
+    await screen.findByText('Ana Pérez');
+
+    // Act
+    await user.type(campoDocumento(), ' 79123456 {Enter}');
+
+    // Assert
+    expect(await aviso()).toHaveTextContent('Ingreso registrado.Carlos Ruiz (79123456)');
+    expect(mockPost).toHaveBeenCalledWith('/admin/checkin', { metodo: 'MANUAL', documento: '79123456' });
+    expect(screen.getByRole('status')).toHaveTextContent('Racha: 1 día · Asistencias: 1');
+    expect(vibrar).toHaveBeenCalledWith(80);
+    expect(mockMarcarActividad).toHaveBeenCalledTimes(1);
+    expect(campoDocumento()).toHaveValue('');
+    await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(2));
+  });
+
+  test('should register by document when Enter is pressed in the document field and the QR field has text', async () => {
+    // Arrange
+    const { user } = abrirCheckin();
+    await user.type(campoQr(), 'QR-A-MEDIAS');
+
+    // Act
+    await user.type(campoDocumento(), '79123456{Enter}');
+
+    // Assert
+    await aviso();
+    expect(mockPost).toHaveBeenCalledTimes(1);
+    expect(mockPost).toHaveBeenCalledWith('/admin/checkin', { metodo: 'MANUAL', documento: '79123456' });
+  });
+
+  test('should keep the method chosen by the user when it is Código barras and the user clicks Registrar', async () => {
+    // Arrange
+    const { user } = abrirCheckin();
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Método de ingreso' }), 'Método: Código barras');
+    await user.type(campoDocumento(), '79123456');
+
+    // Act
+    await user.click(screen.getByRole('button', { name: 'Registrar' }));
+
+    // Assert
+    await aviso();
+    expect(mockPost).toHaveBeenCalledWith('/admin/checkin', { metodo: 'CODIGOBARRAS', documento: '79123456' });
+  });
+
+  test('should ask for the QR code or the document when the user clicks Registrar with both fields empty', async () => {
+    // Arrange
+    const { user } = abrirCheckin();
+    await screen.findByText('Ana Pérez');
+
+    // Act
+    await user.click(screen.getByRole('button', { name: 'Registrar' }));
+
+    // Assert
+    expect(await screen.findByRole('alert')).toHaveTextContent('Escribe el código QR o el documento.');
+    expect(mockPost).not.toHaveBeenCalled();
+  });
+});
+
+describe('CheckinPage: el QR y la respuesta del backend', () => {
+  test('should send the pasted QR without spaces when Enter is pressed in the QR field', async () => {
+    // Arrange
+    const { user } = abrirCheckin();
+
+    // Act
+    await user.type(campoQr(), '  QR-CARLOS  {Enter}');
+
+    // Assert
+    await aviso();
+    expect(mockPost).toHaveBeenCalledWith('/admin/checkin', { metodo: 'QR', codigo: 'QR-CARLOS' });
+    expect(campoQr()).toHaveValue('');
+  });
+
+  test('should deny the entry with the expired message when the membership is overdue', async () => {
+    // Arrange: el backend niega con 200 y miembro.estado
+    const vibrar = espiarVibracion();
+    mockPost = vi.fn(async () => ({ data: { miembro: { ...CARLOS, estado: 'VENCIDO' } } }));
+    const { user } = abrirCheckin();
+
+    // Act
+    await user.type(campoDocumento(), '79123456{Enter}');
+
+    // Assert
+    expect(await screen.findByRole('alert')).toHaveTextContent('Acceso denegado: Membresía vencida');
+    expect(screen.getByRole('status')).toHaveClass('alert-error');
+    expect(screen.getByRole('status')).toHaveTextContent('Carlos Ruiz (79123456)');
+    expect(vibrar).toHaveBeenCalledWith([200, 100, 200]);
+    expect(mockMarcarActividad).not.toHaveBeenCalled();
+  });
+
+  test('should show the message of the backend when the membership is frozen', async () => {
+    // Arrange
+    const mensaje = 'Tu membresía está congelada. Pide en recepción que la reactiven para poder ingresar.';
+    mockPost = vi.fn(async () => ({ data: { message: mensaje, miembro: { ...CARLOS, estado: 'CONGELADO' } } }));
+    const { user } = abrirCheckin();
+
+    // Act
+    await user.type(campoDocumento(), '79123456{Enter}');
+
+    // Assert
+    expect(await screen.findByRole('alert')).toHaveTextContent(mensaje);
+    expect(screen.queryByText(/Membresía vencida/)).not.toBeInTheDocument();
+  });
+
+  test('should show the API message when no member has that document', async () => {
+    // Arrange
+    mockPost = vi.fn(async () => { throw { status: 404, code: 'MEMBER_NOT_FOUND', message: 'Miembro no encontrado en este gimnasio.' }; });
+    const { user } = abrirCheckin();
+
+    // Act
+    await user.type(campoDocumento(), '11111111{Enter}');
+
+    // Assert
+    expect(await screen.findByRole('alert')).toHaveTextContent('Miembro no encontrado en este gimnasio.');
+    expect(screen.getByRole('status')).toHaveClass('alert-error');
+    expect(campoDocumento()).toHaveValue('11111111');
+  });
+
+  test('should warn instead of celebrating when the member already checked in a moment ago', async () => {
+    // Arrange: respuesta del antirrebote del backend
+    const vibrar = espiarVibracion();
+    mockPost = vi.fn(async () => REPETIDO);
+    const { user } = abrirCheckin();
+
+    // Act
+    await user.type(campoDocumento(), '79123456{Enter}');
+
+    // Assert
+    const estado = await aviso();
+    expect(estado).toHaveTextContent('Carlos Ruiz ya registro su ingreso hace un momento.');
+    expect(estado).toHaveClass('alert-warning');
+    expect(vibrar).not.toHaveBeenCalled();
+  });
+
+  test('should name the new milestone and count the streak in plural when the backend sends them', async () => {
+    // Arrange
+    mockPost = vi.fn(async () => registrado({
+      racha: 5,
+      totalAsistencias: 10,
+      hitosNuevos: [{ id: 3, nombre: '10 asistencias', tipo: 'ASISTENCIAS', valor: 10, mensaje: '¡Llegaste a 10 asistencias!' }],
+      proximoHito: null,
+      mensaje: '¡Llegaste a 10 asistencias!',
+    }));
+    const { user } = abrirCheckin();
+
+    // Act
+    await user.type(campoDocumento(), '79123456{Enter}');
+
+    // Assert
+    const estado = await aviso();
+    expect(estado).toHaveTextContent('🏆 Hito logrado: 10 asistencias');
+    expect(estado).toHaveTextContent('¡Llegaste a 10 asistencias!');
+    expect(estado).toHaveTextContent('Racha: 5 días · Asistencias: 10');
+  });
+});
+
+describe('CheckinPage: la cámara', () => {
+  test('should register a QR read by the camera once and read it again only after four seconds', async () => {
+    // Arrange: hora fija para medir la espera entre lecturas del mismo QR
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-28T14:00:00.000Z'));
+    const { user } = abrirCheckin();
+    await user.click(screen.getByRole('button', { name: 'Activar cámara' }));
+
+    // Act: el mismo QR tres veces; la tercera, 4,5 s despues
+    await act(async () => escaner.leer('QR-CARLOS'));
+    await aviso();
+    await act(async () => escaner.leer('QR-CARLOS'));
+    vi.setSystemTime(new Date('2026-10-28T14:00:04.500Z'));
+    await act(async () => escaner.leer('QR-CARLOS'));
+
+    // Assert
+    expect(escaner.elementId).toBe('qr-reader');
+    expect(mockPost).toHaveBeenCalledTimes(2);
+    expect(mockPost).toHaveBeenNthCalledWith(1, '/admin/checkin', { metodo: 'QR', codigo: 'QR-CARLOS' });
+    expect(mockMarcarActividad).toHaveBeenCalledTimes(2);
+  });
+
+  test('should warn without the success vibration when the camera reads a member who already checked in', async () => {
+    // Arrange
+    const vibrar = espiarVibracion();
+    mockPost = vi.fn(async () => REPETIDO);
+    const { user } = abrirCheckin();
+    await user.click(screen.getByRole('button', { name: 'Activar cámara' }));
+
+    // Act
+    await act(async () => escaner.leer('QR-CARLOS'));
+
+    // Assert
+    const estado = await aviso();
+    expect(estado).toHaveTextContent('Carlos Ruiz ya registro su ingreso hace un momento.');
+    expect(estado).toHaveClass('alert-warning');
+    expect(vibrar).not.toHaveBeenCalled();
+  });
+
+  test('should say that the QR does not belong to a member when the camera reads an unknown code', async () => {
+    // Arrange
+    mockPost = vi.fn(async () => { throw { status: 404, code: 'MEMBER_NOT_FOUND', message: 'Miembro no encontrado en este gimnasio.' }; });
+    const { user } = abrirCheckin();
+    await user.click(screen.getByRole('button', { name: 'Activar cámara' }));
+
+    // Act
+    await act(async () => escaner.leer('QR-DE-OTRO-GYM'));
+
+    // Assert
+    expect(await screen.findByRole('alert')).toHaveTextContent('Usuario no encontrado. Verifica que el QR sea correcto.');
+  });
+
+  test('should close the scanner when the user turns the camera off', async () => {
+    // Arrange
+    const { user } = abrirCheckin();
+    await user.click(screen.getByRole('button', { name: 'Activar cámara' }));
+
+    // Act
+    await user.click(screen.getByRole('button', { name: 'Desactivar cámara' }));
+
+    // Assert
+    expect(escaner.cerrado).toBe(true);
+    expect(screen.getByRole('button', { name: 'Activar cámara' })).toBeInTheDocument();
+  });
+});
+
+/** Promesa que el test resuelve cuando quiere: la respuesta "llega" en ese momento. */
+function pendiente() {
+  let resolver;
+  const promesa = new Promise((r) => { resolver = r; });
+  return { promesa, resolver };
+}
+
+const INGRESO_CARLOS = { id_checkin: 91, fecha_hora: '2026-10-28T14:00:00.000Z', metodo: 'MANUAL', valido: true, id_miembro: 2, nombre: 'Carlos Ruiz', documento: '79123456', codigo_qr: 'QR-CARLOS' };
+
+describe('CheckinPage: tiempos (semana 7)', () => {
+  test('should send a single check-in when Enter is pressed twice while the first one is on its way', async () => {
+    // Arrange: el POST no responde todavia
+    mockPost = vi.fn(() => new Promise(() => {}));
+    const { user } = abrirCheckin();
+
+    // Act
+    await user.type(campoDocumento(), '79123456{Enter}{Enter}');
+
+    // Assert
+    expect(mockPost).toHaveBeenCalledTimes(1);
+  });
+
+  test('should send a single check-in when Registrar is double-clicked while the first one is on its way', async () => {
+    // Arrange
+    mockPost = vi.fn(() => new Promise(() => {}));
+    const { user } = abrirCheckin();
+    await user.type(campoDocumento(), '79123456');
+
+    // Act
+    await user.dblClick(screen.getByRole('button', { name: 'Registrar' }));
+
+    // Assert
+    expect(mockPost).toHaveBeenCalledTimes(1);
+  });
+
+  test('should enable Registrar again when the check-in is done and the history is still loading', async () => {
+    // Arrange: la primera carga llega; la recarga despues del ingreso no
+    mockGet = vi.fn()
+      .mockImplementationOnce(async () => ({ data: { checkins: [INGRESO_ANA] } }))
+      .mockImplementation(() => new Promise(() => {}));
+    const { user } = abrirCheckin();
+    await screen.findByText('Ana Pérez');
+
+    // Act
+    await user.type(campoDocumento(), '79123456{Enter}');
+
+    // Assert: el ingreso ya termino, el siguiente miembro no espera al historial.
+    // El boton se busca con sus dos textos para que el fallo diga "disabled".
+    expect(await aviso()).toHaveTextContent('Ingreso registrado.');
+    const boton = screen.getByRole('button', { name: /^(Registrar|Validando\.\.\.)$/ });
+    expect(boton).toBeEnabled();
+    expect(boton).toHaveAccessibleName('Registrar');
+  });
+
+  test('should read the next QR with the camera while the history is still loading', async () => {
+    // Arrange: la recarga del historial despues del primer ingreso no llega
+    mockGet = vi.fn()
+      .mockImplementationOnce(async () => ({ data: { checkins: [INGRESO_ANA] } }))
+      .mockImplementation(() => new Promise(() => {}));
+    const { user } = abrirCheckin();
+    await screen.findByText('Ana Pérez');
+    await user.click(screen.getByRole('button', { name: 'Activar cámara' }));
+    await act(async () => escaner.leer('QR-CARLOS'));
+    await aviso();
+
+    // Act: otro miembro pasa su QR
+    await act(async () => escaner.leer('QR-ANA'));
+
+    // Assert
+    expect(mockPost).toHaveBeenCalledTimes(2);
+    expect(mockPost).toHaveBeenLastCalledWith('/admin/checkin', { metodo: 'QR', codigo: 'QR-ANA' });
+  });
+
+  // La guarda de la camara (enviandoRef en el callback de lectura): una lectura
+  // con otro ingreso en camino se descarta sin tocar la memoria del ultimo QR.
+  // Sin ella, el QR de Ana quedaba como "recien leido" y la camara, que lo lee
+  // 10 veces por segundo, lo ignoraba mientras Ana siguiera frente a ella.
+  test('should register the QR read while the previous check-in was on its way once that check-in is done', async () => {
+    // Arrange: el ingreso de Carlos no responde hasta que el test quiera
+    const ingresoCarlos = pendiente();
+    mockPost = vi.fn()
+      .mockImplementationOnce(() => ingresoCarlos.promesa)
+      .mockImplementation(async () => registrado());
+    const { user } = abrirCheckin();
+    await user.click(screen.getByRole('button', { name: 'Activar cámara' }));
+    await act(async () => escaner.leer('QR-CARLOS'));
+
+    // Act: la camara ve el QR de Ana con Carlos en camino, Carlos termina y Ana sigue frente a la camara
+    await act(async () => escaner.leer('QR-ANA'));
+    await act(async () => ingresoCarlos.resolver(registrado()));
+    await aviso();
+    await act(async () => escaner.leer('QR-ANA'));
+
+    // Assert
+    expect(mockPost.mock.calls.map(([, cuerpo]) => cuerpo.codigo)).toEqual(['QR-CARLOS', 'QR-ANA']);
+  });
+
+  test('should keep the newest history when the first load answers after the reload of a check-in', async () => {
+    // Arrange: la carga inicial tarda; la recarga del ingreso ya trae a Carlos
+    const cargaInicial = pendiente();
+    mockGet = vi.fn()
+      .mockImplementationOnce(() => cargaInicial.promesa)
+      .mockImplementation(async () => ({ data: { checkins: [INGRESO_CARLOS, INGRESO_ANA] } }));
+    const { user } = abrirCheckin();
+    await user.type(campoDocumento(), '79123456{Enter}');
+    const ingresos = screen.getByRole('list', { name: 'Ingresos de hoy' });
+    await within(ingresos).findByText('Carlos Ruiz');
+
+    // Act: llega la carga inicial, calculada antes del ingreso de Carlos
+    await act(async () => cargaInicial.resolver({ data: { checkins: [INGRESO_ANA] } }));
+
+    // Assert
+    expect(within(ingresos).getByText('Carlos Ruiz')).toBeInTheDocument();
+  });
+});

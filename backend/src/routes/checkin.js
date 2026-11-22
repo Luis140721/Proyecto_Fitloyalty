@@ -58,6 +58,55 @@ function parse(schema, payload) {
   return { ok: true, data: result.data };
 }
 
+/**
+ * Busca un ingreso del miembro dentro de la ventana del antirrebote y, si no
+ * hay, guarda uno. Devuelve { repetido } o { nuevo }.
+ *
+ * Las dos consultas van en una transaccion que empieza con un bloqueo por
+ * miembro (pg_advisory_xact_lock, se suelta solo con el COMMIT o el ROLLBACK).
+ * Antes eran dos consultas sueltas: dos peticiones casi a la vez (dos
+ * recepciones, o la camara y el teclado) pasaban las dos la busqueda antes de
+ * que cualquiera insertara y quedaban dos ingresos (#80). Con el bloqueo, la
+ * segunda espera el COMMIT de la primera y encuentra su ingreso. Un indice
+ * unico no sirve: la ventana de 90 s es movil.
+ */
+async function registrarSinRepetir({ idMiembro, gymId, metodo, idUsuario, observacion }) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query("SELECT pg_advisory_xact_lock(hashtext('checkin'), $1)", [idMiembro]);
+
+    const { rows: repetido } = await client.query(
+      `SELECT id_checkin, fecha_hora, metodo
+         FROM checkin
+        WHERE id_miembro = $1
+          AND id_gimnasio = $2
+          AND fecha_hora > NOW() - ($3 || ' seconds')::interval
+        ORDER BY fecha_hora DESC
+        LIMIT 1`,
+      [idMiembro, gymId, VENTANA_ANTIREBOTE_SEG]
+    );
+    if (repetido.length > 0) {
+      await client.query('COMMIT');
+      return { repetido: repetido[0] };
+    }
+
+    const { rows } = await client.query(
+      `INSERT INTO checkin (id_miembro, id_gimnasio, metodo, id_usuario, observacion, valido)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id_checkin, fecha_hora, metodo`,
+      [idMiembro, gymId, metodo, idUsuario, observacion || null, true]
+    );
+    await client.query('COMMIT');
+    return { nuevo: rows[0] };
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 // ---------------------------------------------------------------------------
 // POST /api/admin/checkin
 // ---------------------------------------------------------------------------
@@ -207,22 +256,19 @@ router.post(
       }
       // --- FIN DEL BLOQUEO ABSOLUTO ---
 
-      const { rows: repetido } = await pool.query(
-        `SELECT id_checkin, fecha_hora, metodo
-           FROM checkin
-          WHERE id_miembro = $1
-            AND id_gimnasio = $2
-            AND fecha_hora > NOW() - ($3 || ' seconds')::interval
-          ORDER BY fecha_hora DESC
-          LIMIT 1`,
-        [miembro.id_miembro, gymId, VENTANA_ANTIREBOTE_SEG]
-      );
+      const { repetido, nuevo } = await registrarSinRepetir({
+        idMiembro: miembro.id_miembro,
+        gymId,
+        metodo,
+        idUsuario: req.user.id,
+        observacion,
+      });
 
-      if (repetido.length > 0) {
+      if (repetido) {
         return res.status(200).json({
           message: `${miembro.nombre} ya registro su ingreso hace un momento.`,
           duplicado: true,
-          checkin: repetido[0],
+          checkin: repetido,
           miembro: {
             id: miembro.id_miembro,
             nombre: miembro.nombre,
@@ -235,13 +281,6 @@ router.post(
         });
       }
 
-      const { rows } = await pool.query(
-        `INSERT INTO checkin (id_miembro, id_gimnasio, metodo, id_usuario, observacion, valido)
-         VALUES ($1, $2, $3, $4, $5, $6)
-         RETURNING id_checkin, fecha_hora, metodo`,
-        [miembro.id_miembro, gymId, metodo, req.user.id, observacion || null, true]
-      );
-
       // Racha y hitos (RQF-11). No frena el ingreso: si falla, devuelve null.
       const gamificacion = await calcularGamificacion(pool, { gymId, idMiembro: miembro.id_miembro });
 
@@ -252,7 +291,7 @@ router.post(
       return res.status(201).json({
         message: 'Ingreso registrado.',
         duplicado: false,
-        checkin: rows[0],
+        checkin: nuevo,
         gamificacion,
         retos,
         mensaje_retos: mensajeRetos(retos),
