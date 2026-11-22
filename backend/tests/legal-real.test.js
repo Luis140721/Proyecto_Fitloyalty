@@ -293,6 +293,43 @@ describeConBd('RQNF-17 y RQNF-18 contra la base real', () => {
     expect(entregas).toEqual([{ canal: 'APP', telefono_destino: null, plantilla_version: CONTRATO_VERSION, exito: true, contenido: c1.body.contrato }]);
   });
 
+  // El panel ya no manda la autorizacion de datos sensibles ni los datos de
+  // salud si no se tocaron en la ficha. Si el miembro la revoco desde la app
+  // con la ficha abierta, guardar otro campo no la vuelve a registrar ni
+  // devuelve los datos que se borraron.
+  test('revocada en la app, guardar la ficha sin tocar los datos sensibles no la devuelve ni restaura los datos de salud', async () => {
+    const r = await pedir('POST', '/api/admin/miembros', tokA, alta({ autorizo_datos_sensibles: true }));
+    const id = r.body.miembro.id_miembro;
+    const tokCliente = jwt.sign({ role: 'cliente', idMiembro: id, gymId: gymA }, process.env.JWT_SECRET, { expiresIn: '1h' });
+    expect((await pedir('PATCH', '/api/cliente/autorizaciones/datos-sensibles', tokCliente, { otorgada: false })).status).toBe(200);
+    const sensibles = async () => (await autorizaciones(id)).filter((a) => a.tipo === 'DATOS_SENSIBLES');
+    const salud = async () => (await pool.query('SELECT ciudad, condiciones_medicas, alergias FROM miembro WHERE id_miembro = $1', [id])).rows[0];
+    expect((await sensibles()).map((a) => [a.otorgada, a.canal])).toEqual([[true, 'PANEL'], [false, 'APP']]);
+
+    // La ficha de ahora: solo viaja lo que se cambio.
+    const soloCiudad = await pedir('PUT', `/api/admin/miembros/${id}`, tokA, { ciudad: 'Cali' });
+    expect(soloCiudad.status).toBe(200);
+    expect(await sensibles()).toHaveLength(2);
+    expect(await salud()).toEqual({ ciudad: 'Cali', condiciones_medicas: null, alergias: null });
+    expect((await pedir('GET', '/api/cliente/autorizaciones', tokCliente)).body.vigentes.DATOS_SENSIBLES).toMatchObject({ otorgada: false, canal: 'APP' });
+
+    // Si alguien edita solo un dato de salud, viaja sin la autorizacion y el
+    // servidor decide con la vigente: revocada, no lo guarda ni registra nada.
+    const soloSalud = await pedir('PUT', `/api/admin/miembros/${id}`, tokA, { condiciones_medicas: 'Asma' });
+    expect(soloSalud.status).toBe(200);
+    expect(await sensibles()).toHaveLength(2);
+    expect(await salud()).toEqual({ ciudad: 'Cali', condiciones_medicas: null, alergias: null });
+
+    // La ficha de antes mandaba siempre lo que habia cargado: con eso el
+    // servidor la registraba otra vez por el panel y volvia a guardar los datos.
+    const comoAntes = await pedir('PUT', `/api/admin/miembros/${id}`, tokA, {
+      ciudad: 'Cali', autorizo_datos_sensibles: true, condiciones_medicas: 'Asma', alergias: 'Penicilina',
+    });
+    expect(comoAntes.status).toBe(200);
+    expect((await sensibles()).map((a) => [a.otorgada, a.canal])).toEqual([[true, 'PANEL'], [false, 'APP'], [true, 'PANEL']]);
+    expect(await salud()).toEqual({ ciudad: 'Cali', condiciones_medicas: 'Asma', alergias: 'Penicilina' });
+  });
+
   test('envio por WhatsApp: guarda canal y texto; un WHATSAPP sin telefono lo rechaza el CHECK', async () => {
     const r = await pedir('POST', '/api/admin/miembros', tokA, alta());
     const id = r.body.miembro.id_miembro;

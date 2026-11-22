@@ -205,6 +205,27 @@ const CAMPOS_REPRESENTANTE = [
  * representante. Sin autorizacion de datos sensibles no se mandan condiciones
  * medicas ni alergias; si no es menor, no se manda representante.
  */
+// Lo que una persona escribe o marca en el alta. Lo demas (fechas, estado del
+// pago, valor sugerido) lo calcula el formulario solo y no cuenta como borrador.
+const CAMPOS_DEL_BORRADOR = [
+  'nombre', 'documento', 'fecha_nacimiento', 'genero', 'telefono', 'email', 'direccion',
+  'contacto_emergencia', 'telefono_emergencia', 'condiciones_medicas', 'alergias',
+  'referencia_pago', 'objetivo', 'nivel_experiencia', 'observaciones',
+  ...CAMPOS_REPRESENTANTE,
+  'acepto_terminos', 'autorizo_datos', 'autorizo_datos_sensibles', 'autoriza_representante',
+  'acepta_mensajes_comerciales',
+];
+
+/** true si en el alta hay algo escrito o marcado. */
+function hayBorrador(f) {
+  return CAMPOS_DEL_BORRADOR.some((k) => (typeof f[k] === 'string' ? f[k].trim() !== '' : Boolean(f[k])));
+}
+
+/** Dos textos de la ficha son el mismo dato: null, undefined y '' cuentan igual. */
+function mismoTexto(a, b) {
+  return String(a ?? '').trim() === String(b ?? '').trim();
+}
+
 /** RQNF-16: true si la aceptacion comercial de `a` y la de `b` son la misma decision. */
 function mismaDecisionComercial(a, b) {
   const canales = (x) => [...(x.canales_comerciales || [])].sort().join(',');
@@ -304,6 +325,11 @@ export default function MiembrosPage() {
   // (por el enlace o la app, con la ficha abierta) registraria una aceptacion
   // que nadie decidio.
   const comercialesCargados = useRef(null);
+  // RQNF-17: lo mismo con la autorizacion de datos sensibles y los datos de
+  // salud, tal como llegaron con el registro. El miembro puede revocarla desde
+  // la app: si viajara siempre, guardar otro campo con la ficha abierta la
+  // volveria a registrar y devolveria los datos de salud que se borraron.
+  const sensiblesCargados = useRef(null);
   // Cual ficha se pidio de ultima: la respuesta de una anterior no pisa la actual.
   const fichaPedida = useRef(0);
   // De que miembro es la ficha en pantalla (null si no hay ninguna abierta).
@@ -711,6 +737,7 @@ export default function MiembrosPage() {
     setEditForm({ ...empty, ...m, activo: m.activo !== false });
     setEditCompleto(false);
     comercialesCargados.current = null;
+    sensiblesCargados.current = null;
     // El plan, las congelaciones y el «Copiado» son de la ficha anterior.
     setPlanForm(null);
     setPlanMsg(''); setPlanError('');
@@ -743,6 +770,11 @@ export default function MiembrosPage() {
       comercialesCargados.current = {
         acepta_mensajes_comerciales: Boolean(full.acepta_mensajes_comerciales),
         canales_comerciales: full.canales_comerciales || [],
+      };
+      sensiblesCargados.current = {
+        autorizo_datos_sensibles: Boolean(full.autorizo_datos_sensibles),
+        condiciones_medicas: full.condiciones_medicas,
+        alergias: full.alergias,
       };
       setEditCompleto(true);
       if (full.codigo_qr) {
@@ -1048,6 +1080,7 @@ export default function MiembrosPage() {
     // Si este guardado llevaba la decision comercial y falla en el cliente,
     // el servidor pudo haberla aplicado (un corte por tiempo, por ejemplo).
     let llevabaComerciales = false;
+    let llevabaSensibles = false;
     try {
       /* Solo se envian los campos que el backend acepta actualizar. El
          formulario arrastra claves del objeto `empty` (plan, pagos...) que
@@ -1074,7 +1107,19 @@ export default function MiembrosPage() {
         delete payload.acepta_mensajes_comerciales;
         delete payload.canales_comerciales;
       }
+      // RQNF-17: sin cambios en la autorizacion de datos sensibles, no viaja; y
+      // sin cambios en los datos de salud, tampoco viajan (ver sensiblesCargados).
+      // Si solo cambian los datos de salud, van sin la autorizacion: el servidor
+      // los guarda o los descarta segun la que este vigente en ese momento.
+      const sensibles = sensiblesCargados.current;
+      if (sensibles && Boolean(payload.autorizo_datos_sensibles) === sensibles.autorizo_datos_sensibles) {
+        delete payload.autorizo_datos_sensibles;
+        if (mismoTexto(payload.condiciones_medicas, sensibles.condiciones_medicas)) delete payload.condiciones_medicas;
+        if (mismoTexto(payload.alergias, sensibles.alergias)) delete payload.alergias;
+      }
       llevabaComerciales = 'acepta_mensajes_comerciales' in payload;
+      llevabaSensibles = 'autorizo_datos_sensibles' in payload
+        || 'condiciones_medicas' in payload || 'alergias' in payload;
       const { data: guardado } = await api.put(`/admin/miembros/${editing.id_miembro}`, payload);
       fichaPedida.current += 1; // lo que llegue tarde de esta ficha ya no aplica
       fichaMiembro.current = null;
@@ -1097,10 +1142,39 @@ export default function MiembrosPage() {
       // Ya no se sabe que tiene el servidor: el siguiente guardado manda la
       // decision que haya en pantalla, aunque sea igual a como llego.
       if (llevabaComerciales) comercialesCargados.current = null;
+      if (llevabaSensibles) sensiblesCargados.current = null;
       setEditError(err.message || 'No se pudo actualizar.');
     } finally {
       setEditSaving(false);
     }
+  };
+
+  /** Deja el asistente del alta en blanco: de un miembro al siguiente no pasa nada. */
+  const reiniciarAlta = () => {
+    setForm(formularioVacio());
+    setFormErrors({});
+    setActiveSection('personales');
+  };
+
+  /** Abre el alta, siempre en blanco y con la fecha de hoy. */
+  const abrirAlta = () => {
+    reiniciarAlta();
+    setOpen(true);
+  };
+
+  /**
+   * Cierra el alta sin crear al miembro y descarta lo escrito. Los datos y las
+   * autorizaciones (contrato, tratamiento de datos, datos sensibles, mensajes
+   * comerciales) son de la persona que se estaba registrando: si quedaran en el
+   * formulario, el siguiente miembro podria salir con autorizaciones que no dio.
+   */
+  const cerrarAlta = () => {
+    if (hayBorrador(form)
+      && !window.confirm('¿Cerrar sin crear el miembro? Se descarta lo que escribiste: el siguiente registro empieza en blanco.')) {
+      return;
+    }
+    reiniciarAlta();
+    setOpen(false);
   };
 
   const filtrados = useMemo(() => {
@@ -1147,7 +1221,7 @@ export default function MiembrosPage() {
       titulo="Sin miembros que mostrar"
       descripcion="No hay miembros que coincidan con el filtro actual."
       ctaLabel="Nuevo miembro"
-      onCta={() => setOpen(true)}
+      onCta={() => abrirAlta()}
     />
   );
 
@@ -1165,12 +1239,7 @@ export default function MiembrosPage() {
           </button>
           <button
             className="btn btn-primary"
-            onClick={() => setOpen((o) => {
-              /* Al abrir, refresca la fecha de inicio por si la pestana
-                 llevaba horas abierta y ya cambio el dia. */
-              if (!o) setForm((f) => ({ ...f, fecha_inicio: hoyEnTexto() }));
-              return !o;
-            })}
+            onClick={() => (open ? cerrarAlta() : abrirAlta())}
           >
             <span className="material-symbols-outlined icon" aria-hidden="true">{open ? 'close' : 'person_add'}</span>
             {open ? 'Cerrar' : 'Nuevo miembro'}
