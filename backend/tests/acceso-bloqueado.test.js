@@ -6,7 +6,17 @@ const express = require('express');
 const jwt = require('jsonwebtoken');
 
 const mockQuery = jest.fn();
-jest.mock('../src/db/db', () => ({ query: (...a) => mockQuery(...a) }));
+// El check-in busca el ingreso repetido e inserta con un cliente del pool, en
+// una transaccion (#80): el cliente usa la misma base falsa, y BEGIN, COMMIT,
+// ROLLBACK y el bloqueo no devuelven filas.
+const mockSinFilas = /^(BEGIN|COMMIT|ROLLBACK)$|pg_advisory_xact_lock/;
+jest.mock('../src/db/db', () => ({
+  query: (...a) => mockQuery(...a),
+  connect: async () => ({
+    query: (sql, ...r) => (mockSinFilas.test(sql) ? Promise.resolve({ rows: [] }) : mockQuery(sql, ...r)),
+    release: () => {},
+  }),
+}));
 
 process.env.JWT_SECRET = 'secreto-de-pruebas';
 

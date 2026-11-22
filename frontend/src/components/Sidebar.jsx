@@ -39,7 +39,7 @@ export default function Sidebar({ open, onNavigate }) {
         aria-label="Cerrar menú"
         onClick={onNavigate}
       >
-        <span className="material-symbols-outlined icon">close</span>
+        <span className="material-symbols-outlined icon" aria-hidden="true">close</span>
       </button>
 
       <NavLink to="/" className="admin-sidebar__brand" aria-label="Inicio FitLoyalty" onClick={onNavigate}>
@@ -56,7 +56,7 @@ export default function Sidebar({ open, onNavigate }) {
               onClick={onNavigate}
               className={({ isActive }) => `admin-nav__item${isActive ? ' admin-nav__item--active' : ''}`}
             >
-              <span className="material-symbols-outlined icon">{l.icon}</span>
+              <span className="material-symbols-outlined icon" aria-hidden="true">{l.icon}</span>
               <span>{l.label}</span>
             </NavLink>
           ))}
@@ -77,7 +77,7 @@ export default function Sidebar({ open, onNavigate }) {
           onClick={handleLogout}
           title="Cerrar sesión"
         >
-          <span className="material-symbols-outlined icon">logout</span>
+          <span className="material-symbols-outlined icon" aria-hidden="true">logout</span>
         </button>
       </div>
     </aside>

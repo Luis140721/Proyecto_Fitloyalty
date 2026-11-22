@@ -55,9 +55,20 @@ export default function CheckinPage() {
   const knownIdsRef = useRef(new Set());
   const [frameFlash, setFrameFlash] = useState(null); 
 
+  // Cada carga del historial lleva un numero, en el orden en que se pide. Con
+  // la red lenta las respuestas pueden llegar en otro orden: la carga inicial,
+  // calculada antes de un ingreso, llegaba despues de la recarga de ese ingreso
+  // y lo borraba de "Ingresos de hoy". Solo se muestra una respuesta mas nueva
+  // que la que ya esta en pantalla.
+  const ultimaCargaPedidaRef = useRef(0);
+  const cargaEnPantallaRef = useRef(0);
+
   const loadRecent = async () => {
+    const carga = ++ultimaCargaPedidaRef.current;
     try {
       const { data } = await api.get('/admin/checkin', { params: { limit: 20 } });
+      if (carga < cargaEnPantallaRef.current) return false;
+      cargaEnPantallaRef.current = carga;
       const next = data.checkins || [];
       const previousIds = knownIdsRef.current;
       const newOnTop = next.length > 0 && previousIds.size > 0 && !previousIds.has(next[0].id_checkin);
@@ -68,6 +79,7 @@ export default function CheckinPage() {
       next.forEach((c) => previousIds.add(c.id_checkin));
       return newOnTop;
     } catch (err) {
+      if (carga < cargaEnPantallaRef.current) return false;
       setError(err.message || 'No se pudo cargar el historial.');
       return false;
     }
@@ -153,7 +165,7 @@ export default function CheckinPage() {
         vibrate([200, 100, 200]); // Patrón de vibración de error para el celular
         ultimoCodigoRef.current = null;
         setCodigo('');
-        await loadRecent();
+        loadRecent();
         return; // Detiene el flujo para bloquear la entrada
       }
       // --- FIN BLOQUEO ---
@@ -172,9 +184,12 @@ export default function CheckinPage() {
       if (fbType === 'success') vibrate(80);
       marcarActividad();
       setCodigo('');
-      await loadRecent();
+      // Sin await: el historial se recarga aparte y el siguiente QR no lo espera.
+      loadRecent();
     } catch (err) {
-      const errorMsg = err.response?.status === 404
+      // El interceptor de api.js ya normalizo el error: el status viene en
+      // err.status (buildError), no en err.response.
+      const errorMsg = err.status === 404
         ? 'Usuario no encontrado. Verifica que el QR sea correcto.'
         : err.message || 'No se pudo registrar el check-in.';
       setError(errorMsg);
@@ -192,6 +207,9 @@ export default function CheckinPage() {
   // aunque haya texto en el campo del QR.
   const submit = async (e, porDocumento = false) => {
     e.preventDefault();
+    // Un segundo Enter con el primer ingreso en camino no envia otro: el boton
+    // se deshabilita, pero el campo del documento sigue aceptando Enter.
+    if (enviandoRef.current) return;
     setError(''); setFeedback(null);
     // Un documento escrito en el campo del QR (donde arranca el cursor) se
     // registra por documento, como ingreso manual (RQNF-04, lib/checkin.js).
@@ -201,6 +219,7 @@ export default function CheckinPage() {
       return;
     }
 
+    enviandoRef.current = true;
     setSubmitting(true);
     try {
       const { data } = await api.post('/admin/checkin', payload);
@@ -215,12 +234,13 @@ export default function CheckinPage() {
         vibrate([200, 100, 200]);
         ultimoCodigoRef.current = null;
         setCodigo(''); setDocumento('');
-        await loadRecent();
+        loadRecent();
         return;
       }
       // --- FIN BLOQUEO ---
 
-      const fbType = data.advertencia ? 'warning' : 'success';
+      // El antirrebote del backend (duplicado) es un aviso, como en la camara.
+      const fbType = (data.duplicado || data.advertencia) ? 'warning' : 'success';
       setFeedback({
         type: fbType,
         msg: data.message,
@@ -234,12 +254,15 @@ export default function CheckinPage() {
       if (fbType === 'success') vibrate(80);
       marcarActividad();
       setCodigo(''); setDocumento('');
-      await loadRecent();
+      // Sin await: el ingreso ya termino y el siguiente miembro no espera al
+      // historial, que con la red lenta puede tardar segundos.
+      loadRecent();
     } catch (err) {
       setError(err.message || 'No se pudo registrar el check-in.');
       setFeedback({ type: 'error', msg: err.message || 'Ingreso denegado', advertencia: true });
       setFrameFlash({ type: 'error', key: Date.now() });
     } finally {
+      enviandoRef.current = false;
       setSubmitting(false);
       prepararSiguiente();
     }
@@ -272,7 +295,7 @@ export default function CheckinPage() {
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
           <button className="btn btn-ghost" onClick={loadRecent}>
-            <span className="material-symbols-outlined icon">refresh</span>
+            <span className="material-symbols-outlined icon" aria-hidden="true">refresh</span>
             Actualizar
           </button>
         </div>
@@ -280,7 +303,7 @@ export default function CheckinPage() {
 
       {error && (
         <div className="alert alert-error anim-scale-in" role="alert" style={{ marginBottom: 24 }}>
-          <span className="material-symbols-outlined icon">error</span>
+          <span className="material-symbols-outlined icon" aria-hidden="true">error</span>
           <span>{error}</span>
         </div>
       )}
@@ -294,9 +317,11 @@ export default function CheckinPage() {
                 <p>Apunta el lector al QR del miembro o pega el código abajo.</p>
               </div>
               <div style={{ display: 'flex', gap: 6 }}>
+                {/* Sin label visible: aria-label le da nombre al lector de pantalla. */}
                 <select
                   value={metodo}
                   onChange={(e) => setMetodo(e.target.value)}
+                  aria-label="Método de ingreso"
                   className="field-input"
                   style={{ width: 160, padding: '8px 12px', fontSize: 13 }}
                 >
@@ -316,7 +341,7 @@ export default function CheckinPage() {
                   <i className="left" /><i className="right" />
                   <span className="checkin-frame__scan" />
                   <div className="checkin-frame__qr">
-                    <span className="material-symbols-outlined anim-spin-slow">qr_code_2</span>
+                    <span className="material-symbols-outlined anim-spin-slow" aria-hidden="true">qr_code_2</span>
                   </div>
                 </>
               ) : (
@@ -340,14 +365,14 @@ export default function CheckinPage() {
                 className={`btn ${cameraEnabled ? 'btn-danger' : 'btn-secondary'}`}
                 onClick={toggleCamera}
               >
-                <span className="material-symbols-outlined icon">{cameraEnabled ? 'videocam_off' : 'videocam'}</span>
+                <span className="material-symbols-outlined icon" aria-hidden="true">{cameraEnabled ? 'videocam_off' : 'videocam'}</span>
                 {cameraEnabled ? 'Desactivar cámara' : 'Activar cámara'}
               </button>
             </div>
 
             {scannerError && (
               <div className="alert alert-error" style={{ marginTop: 12 }}>
-                <span className="material-symbols-outlined icon">error</span>
+                <span className="material-symbols-outlined icon" aria-hidden="true">error</span>
                 <span>{scannerError}</span>
               </div>
             )}
@@ -358,11 +383,12 @@ export default function CheckinPage() {
                 value={codigo}
                 onChange={(e) => setCodigo(e.target.value)}
                 onKeyDown={onScan}
+                aria-label="Código QR"
                 placeholder="Escanea o pega el código QR aquí"
                 autoFocus
               />
               <button type="submit" className="btn btn-primary ripple-host" onClick={registrarRipple} disabled={submitting}>
-                <span className="material-symbols-outlined icon">login</span>
+                <span className="material-symbols-outlined icon" aria-hidden="true">login</span>
                 {submitting ? 'Validando...' : 'Registrar'}
               </button>
             </form>
@@ -381,7 +407,7 @@ export default function CheckinPage() {
               </label>
               <div style={{ display: 'flex', alignItems: 'flex-end' }}>
                 <button type="button" className="btn btn-secondary btn-block" onClick={() => { setCodigo(''); setDocumento(''); setFeedback(null); setError(''); }}>
-                  <span className="material-symbols-outlined icon">cleaning_services</span>
+                  <span className="material-symbols-outlined icon" aria-hidden="true">cleaning_services</span>
                   Limpiar
                 </button>
               </div>
@@ -395,7 +421,7 @@ export default function CheckinPage() {
               role="status"
               style={{ marginTop: 18 }}
             >
-              <span className="material-symbols-outlined icon">
+              <span className="material-symbols-outlined icon" aria-hidden="true">
                 {feedback.type === 'error' ? 'block' : feedback.type === 'warning' ? 'warning' : 'check_circle'}
               </span>
               <span style={{ lineHeight: 1.5 }}>
@@ -435,15 +461,20 @@ export default function CheckinPage() {
         <article className="table-card" style={{ padding: 0, alignSelf: 'flex-start' }}>
           <div style={{ padding: '20px 24px 8px' }}>
             <div className="checkin-feed__head">
-              <h3>Ingresos de hoy</h3>
+              <h3 id="checkin-ingresos-titulo">Ingresos de hoy</h3>
               <span className="checkin-feed__live anim-pulse">EN VIVO</span>
             </div>
           </div>
-          <div style={{ padding: '8px 24px 24px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {/* Lista con nombre: el lector de pantalla la anuncia como "Ingresos de hoy" y cuenta las filas. */}
+          <div
+            role="list"
+            aria-labelledby="checkin-ingresos-titulo"
+            style={{ padding: '8px 24px 24px', display: 'flex', flexDirection: 'column', gap: 12 }}
+          >
             {recent.map((c, idx) => {
               const denied = c.advertencia || c.denegado;
               return (
-                <div className={`checkin-tile ${denied ? 'checkin-tile--denied' : ''}`} key={c.id_checkin}>
+                <div role="listitem" className={`checkin-tile ${denied ? 'checkin-tile--denied' : ''}`} key={c.id_checkin}>
                   <span className={`avatar ${denied ? 'avatar-error' : 'avatar-primary'}`}>{initialsOf(c.nombre)}</span>
                   <div className="checkin-tile__meta">
                     <strong>{c.nombre}</strong>

@@ -94,7 +94,12 @@ const express = require('express');
 const jwt = require('jsonwebtoken');
 
 const mockQuery = jest.fn();
-jest.mock('../src/db/db', () => ({ query: (...a) => mockQuery(...a) }));
+// El check-in busca el ingreso repetido e inserta con un cliente del pool, en
+// una transaccion (#80): el cliente usa la misma base falsa.
+jest.mock('../src/db/db', () => ({
+  query: (...a) => mockQuery(...a),
+  connect: async () => ({ query: (...a) => mockQuery(...a), release: () => {} }),
+}));
 process.env.JWT_SECRET = 'secreto-de-pruebas';
 
 const checkinRouter = require('../src/routes/checkin');

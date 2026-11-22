@@ -39,6 +39,44 @@ const QRCode = require('qrcode');
 
 const router = express.Router();
 
+// Topes de las columnas que escriben el alta y el PUT del plan (migraciones 002
+// y 004). Sin ellos un dato que no cabe llegaba a PostgreSQL y la ruta respondia
+// 500 o 503 DB_UNREACHABLE (hallazgo de la integracion de la semana 6).
+//   - MAX_VALOR_PLAN: plan_cobro.valor_total y valor_pagado son NUMERIC(10,2).
+//   - cabeEnLaColumna: un VARCHAR(n) se mide en caracteres; .length cuenta
+//     unidades UTF-16 y un emoji vale 2, por eso [...texto] (como en
+//     lib/validators.js).
+//   - valorQueCabe: el alta recibe los valores como texto y los lee con parseFloat.
+const MAX_VALOR_PLAN = 99999999.99;
+const MENSAJE_VALOR_PLAN = 'El valor del plan no puede pasar de 99.999.999,99';
+const cabeEnLaColumna = (n, etiqueta) => [(texto) => [...texto].length <= n, { message: `${etiqueta} admite máximo ${n} caracteres` }];
+const valorQueCabe = () => [(texto) => !(parseFloat(texto) > MAX_VALOR_PLAN), { message: MENSAJE_VALOR_PLAN }];
+
+// El id de un miembro en la URL, en todas las rutas de este archivo: un entero
+// escrito completo que cabe en miembro.id_miembro, INTEGER (hasta 2147483647).
+// Sin esto, un id como "abc" llegaba a PostgreSQL (500 con su mensaje en las
+// rutas del plan) y uno como 2147483648 tambien (22003, y la ruta respondia
+// 503 "intenta de nuevo").
+const ID_MAXIMO = 2147483647;
+const esIdDeMiembro = (texto) => /^\d+$/.test(String(texto)) && Number(texto) <= ID_MAXIMO;
+function idDeMiembro(texto) {
+  if (!esIdDeMiembro(texto)) throw new AppError(400, 'Id inválido', 'VALIDATION_ERROR');
+  return Number(texto);
+}
+
+// La BD no responde: un error de red de Node, una de las clases de conexion de
+// PostgreSQL (08, 57P01 a 57P03 y 53300) o lo que pg lanza sin codigo cuando se
+// corta la conexion o el pool no la consigue a tiempo. Solo eso es 503 "intenta
+// de nuevo"; cualquier otro error (un dato, una columna, un fallo del codigo) es
+// real y sigue al errorHandler (500).
+const CODIGOS_DE_RED = new Set(['ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT', 'EPIPE', 'ENOTFOUND', 'EHOSTUNREACH', 'ENETUNREACH', 'EAI_AGAIN']);
+const PG_SIN_CONEXION = /Connection terminated|timeout exceeded when trying to connect|Client has encountered a connection error/i;
+function esErrorDeConexion(err) {
+  const codigo = err && err.code;
+  if (codigo) return CODIGOS_DE_RED.has(codigo) || /^08/.test(codigo) || /^57P0[1-3]$/.test(codigo) || codigo === '53300';
+  return PG_SIN_CONEXION.test((err && err.message) || '');
+}
+
 // Clave secreta para cifrar QR (en producción debería estar en variables de entorno)
 const QR_ENCRYPTION_KEY = process.env.QR_ENCRYPTION_KEY || 'FitLoyalty2024SecretKey';
 
@@ -92,25 +130,25 @@ const createSchema = z.object({
   email:     z.string().email().optional().or(z.literal('').transform(() => undefined)),
   direccion: z.string().optional(),
   // Salud y emergencia
-  contacto_emergencia: z.string().optional(),
-  telefono_emergencia: z.string().optional(),
+  contacto_emergencia: z.string().refine(...cabeEnLaColumna(100, 'El contacto de emergencia')).optional(),
+  telefono_emergencia: z.string().refine(...cabeEnLaColumna(20, 'El teléfono de emergencia')).optional(),
   condiciones_medicas: z.string().optional(),
   alergias: z.string().optional(),
   // Plan y cobros
   tipo_plan: z.enum(['MENSUAL', 'TRIMESTRAL', 'SEMESTRAL', 'ANUAL', 'CLASES_SUELTAS', 'ILIMITADO', 'OTRO']).default('MENSUAL'),
   fecha_inicio: z.string().optional(),
   fecha_fin: z.string().optional(),
-  valor_total: z.string().optional(),
-  valor_pagado: z.string().default('0'),
+  valor_total: z.string().refine(...valorQueCabe()).optional(),
+  valor_pagado: z.string().refine(...valorQueCabe()).default('0'),
   metodo_pago: z.enum(['EFECTIVO', 'TRANSFERENCIA', 'TARJETA', 'PSE', 'NEQUI', 'DAVIPLATA', 'OTRO']).default('EFECTIVO'),
-  referencia_pago: z.string().optional(),
+  referencia_pago: z.string().refine(...cabeEnLaColumna(100, 'La referencia del pago')).optional(),
   estado_pago: z.enum(['PENDIENTE', 'PAGADO', 'PARCIAL']).default('PENDIENTE'),
   proxima_fecha_cobro: z.string().optional(),
   activar_recordatorio: z.boolean().default(false),
   dias_recordatorio: z.number().default(7),
   // Info adicional
-  objetivo: z.string().optional(),
-  nivel_experiencia: z.string().optional(),
+  objetivo: z.string().refine(...cabeEnLaColumna(50, 'El objetivo')).optional(),
+  nivel_experiencia: z.string().refine(...cabeEnLaColumna(30, 'El nivel de experiencia')).optional(),
   observaciones: z.string().optional(),
   // Términos
   acepto_terminos: z.boolean().default(false),
@@ -238,6 +276,18 @@ const updateSchema = z.object({
   representante_telefono:       vacioANull(z.string().max(20)),
 });
 
+// El mensaje por defecto de zod para el correo es "Invalid email" y el front lo
+// muestra tal cual. Se cambia por el mismo texto del formulario (MiembrosPage.jsx,
+// EMAIL_RE), que deja pasar correos que zod rechaza, como "ana..perez@correo.co".
+// Va en parse() y no en cada .email() de los esquemas: vale para el alta y la
+// edicion, y un mensaje puesto en el esquema sigue ganando.
+const CORREO_INVALIDO = 'Este correo no tiene un formato válido.';
+
+function mensajesDeValidacion(issue, ctx) {
+  if (issue.code === 'invalid_string' && issue.validation === 'email') return { message: CORREO_INVALIDO };
+  return { message: ctx.defaultError };
+}
+
 /** Claves de updateSchema que no son columnas de miembro. */
 const NO_COLUMNAS = new Set(['autorizo_datos_sensibles', 'autoriza_representante']);
 
@@ -257,7 +307,7 @@ function tocaAutorizaciones(d) {
 }
 
 function parse(schema, payload) {
-  const result = schema.safeParse(payload || {});
+  const result = schema.safeParse(payload || {}, { errorMap: mensajesDeValidacion });
   if (!result.success) return { ok: false, status: 400, error: formatZodError(result.error), issues: result.error.issues };
   return { ok: true, data: result.data };
 }
@@ -730,7 +780,8 @@ router.post(
           throw new AppError(409, 'Ya existe un miembro con ese documento, correo o código en este gimnasio (puede estar desactivado).', 'MEMBER_DUPLICATED');
         }
         console.error('[POST /admin/miembros] Error al guardar el miembro:', dbErr);
-        throw new AppError(500, 'No pudimos crear el miembro. Intenta de nuevo.', 'DB_UNREACHABLE');
+        // 503 como el resto del API cuando la BD falla (#92); develop decia 500.
+        throw new AppError(503, 'No pudimos crear el miembro. Intenta de nuevo.', 'DB_UNREACHABLE');
       } finally {
         client.release();
       }
@@ -857,8 +908,7 @@ router.get(
   requireActiveTrial(pool),
   asyncHandler(async (req, res) => {
     const gymId = req.user.gymId;
-    const id = parseInt(req.params.id, 10);
-    if (!Number.isFinite(id)) throw new AppError(400, 'Id invalido', 'VALIDATION_ERROR');
+    const id = idDeMiembro(req.params.id);
 
     try {
       const { rows } = await pool.query(
@@ -910,8 +960,7 @@ router.put(
   asyncHandler(async (req, res) => {
     const parsed = parse(updateSchema, req.body);
     if (!parsed.ok) throw new AppError(parsed.status, parsed.error, 'VALIDATION_ERROR', { issues: parsed.issues });
-    const id = parseInt(req.params.id, 10);
-    if (!Number.isFinite(id)) throw new AppError(400, 'Id invalido', 'VALIDATION_ERROR');
+    const id = idDeMiembro(req.params.id);
 
     // RQNF-17: si la edicion toca autorizaciones, edad, representante o datos
     // de salud, va por la transaccion que lo valida y deja constancia.
@@ -996,8 +1045,7 @@ router.delete(
   authorize('admin'),
   requireActiveTrial(pool),
   asyncHandler(async (req, res) => {
-    const id = parseInt(req.params.id, 10);
-    if (!Number.isFinite(id)) throw new AppError(400, 'Id invalido', 'VALIDATION_ERROR');
+    const id = idDeMiembro(req.params.id);
 
     try {
       const { rows } = await pool.query(
@@ -1025,8 +1073,7 @@ router.delete(
   authorize('admin'),
   requireActiveTrial(pool),
   asyncHandler(async (req, res) => {
-    const id = parseInt(req.params.id, 10);
-    if (!Number.isFinite(id)) throw new AppError(400, 'Id invalido', 'VALIDATION_ERROR');
+    const id = idDeMiembro(req.params.id);
     const gymId = req.user.gymId;
 
     let client;
@@ -1064,11 +1111,13 @@ router.delete(
 // PUT  /api/admin/miembros/:id/plan   -> cambia o renueva el plan
 // ---------------------------------------------------------------------------
 
+// valor_total lleva el tope de NUMERIC(10,2) (MAX_VALOR_PLAN, arriba).
+// valor_pagado no necesita uno propio: la ruta exige que no supere a valor_total.
 const planSchema = z.object({
   tipo_plan: z.enum(['MENSUAL', 'TRIMESTRAL', 'SEMESTRAL', 'ANUAL', 'CLASES_SUELTAS', 'ILIMITADO', 'OTRO']),
   fecha_inicio: z.string().min(10),
   fecha_fin: z.string().min(10),
-  valor_total: z.coerce.number().min(0),
+  valor_total: z.coerce.number().min(0).max(MAX_VALOR_PLAN, MENSAJE_VALOR_PLAN),
   valor_pagado: z.coerce.number().min(0),
   metodo_pago: z.enum(['EFECTIVO', 'TRANSFERENCIA', 'TARJETA', 'PSE', 'NEQUI', 'DAVIPLATA', 'OTRO']),
   referencia_pago: z.string().max(80).optional().or(z.literal('')),
@@ -1079,32 +1128,40 @@ router.get(
   '/admin/miembros/:id/plan',
   authenticate,
   authorize('admin', 'receptionist'),
+  requireActiveTrial(pool),
   asyncHandler(async (req, res) => {
-    const { rows } = await pool.query(
-      `SELECT pc.id_plan_cobro, pc.tipo_plan, pc.fecha_inicio, pc.fecha_fin,
-              pc.valor_total, pc.valor_pagado, pc.metodo_pago, pc.referencia_pago,
-              pc.estado_pago, pc.proxima_fecha_cobro, pc.congelado_desde,
-              (CURRENT_DATE - pc.congelado_desde)::int AS dias_congelado
-         FROM plan_cobro pc
-         INNER JOIN miembro m ON m.id_miembro = pc.id_miembro
-        WHERE pc.id_miembro = $1 AND m.id_gimnasio = $2 AND pc.activo = TRUE
-        ORDER BY pc.fecha_fin DESC NULLS LAST, pc.id_plan_cobro DESC
-        LIMIT 1`,
-      [req.params.id, req.user.gymId]
-    );
-    // Ultimos congelamientos del miembro (HU-39: fecha y responsable de cada uno).
-    const { rows: congelaciones } = await pool.query(
-      `SELECT cp.id_congelacion, cp.fecha_inicio, cp.fecha_fin, cp.dias, cp.motivo,
-              uc.nombre AS congelada_por, ud.nombre AS descongelada_por
-         FROM congelacion_plan cp
-         LEFT JOIN usuario uc ON uc.id_usuario = cp.congelada_por
-         LEFT JOIN usuario ud ON ud.id_usuario = cp.descongelada_por
-        WHERE cp.id_miembro = $1 AND cp.id_gimnasio = $2
-        ORDER BY cp.creada_en DESC
-        LIMIT 5`,
-      [req.params.id, req.user.gymId]
-    );
-    return res.json({ plan: rows[0] || null, congelaciones });
+    if (!esIdDeMiembro(req.params.id)) throw new AppError(400, 'Id inválido', 'VALIDATION_ERROR');
+    try {
+      const { rows } = await pool.query(
+        `SELECT pc.id_plan_cobro, pc.tipo_plan, pc.fecha_inicio, pc.fecha_fin,
+                pc.valor_total, pc.valor_pagado, pc.metodo_pago, pc.referencia_pago,
+                pc.estado_pago, pc.proxima_fecha_cobro, pc.congelado_desde,
+                (CURRENT_DATE - pc.congelado_desde)::int AS dias_congelado
+           FROM plan_cobro pc
+           INNER JOIN miembro m ON m.id_miembro = pc.id_miembro
+          WHERE pc.id_miembro = $1 AND m.id_gimnasio = $2 AND pc.activo = TRUE
+          ORDER BY pc.fecha_fin DESC NULLS LAST, pc.id_plan_cobro DESC
+          LIMIT 1`,
+        [req.params.id, req.user.gymId]
+      );
+      // Ultimos congelamientos del miembro (HU-39: fecha y responsable de cada uno).
+      const { rows: congelaciones } = await pool.query(
+        `SELECT cp.id_congelacion, cp.fecha_inicio, cp.fecha_fin, cp.dias, cp.motivo,
+                uc.nombre AS congelada_por, ud.nombre AS descongelada_por
+           FROM congelacion_plan cp
+           LEFT JOIN usuario uc ON uc.id_usuario = cp.congelada_por
+           LEFT JOIN usuario ud ON ud.id_usuario = cp.descongelada_por
+          WHERE cp.id_miembro = $1 AND cp.id_gimnasio = $2
+          ORDER BY cp.creada_en DESC
+          LIMIT 5`,
+        [req.params.id, req.user.gymId]
+      );
+      return res.json({ plan: rows[0] || null, congelaciones });
+    } catch (err) {
+      if (!esErrorDeConexion(err)) throw err;
+      console.error('[GET /admin/miembros/:id/plan] Error:', err.message);
+      throw new AppError(503, 'No pudimos cargar el plan. Intenta de nuevo.', 'DB_UNREACHABLE');
+    }
   })
 );
 
@@ -1145,8 +1202,7 @@ router.post(
   asyncHandler(async (req, res) => {
     const parsed = parse(congelarSchema, req.body);
     if (!parsed.ok) throw new AppError(parsed.status, parsed.error, 'VALIDATION_ERROR', { issues: parsed.issues });
-    const id = parseInt(req.params.id, 10);
-    if (!Number.isFinite(id)) throw new AppError(400, 'Id invalido', 'VALIDATION_ERROR');
+    const id = idDeMiembro(req.params.id);
     const { motivo, fecha_inicio: fechaPedida } = parsed.data;
 
     const client = await pool.connect();
@@ -1202,8 +1258,7 @@ router.post(
   authorize('admin'),
   requireActiveTrial(pool),
   asyncHandler(async (req, res) => {
-    const id = parseInt(req.params.id, 10);
-    if (!Number.isFinite(id)) throw new AppError(400, 'Id invalido', 'VALIDATION_ERROR');
+    const id = idDeMiembro(req.params.id);
 
     const client = await pool.connect();
     try {
@@ -1260,6 +1315,7 @@ router.put(
   authorize('admin', 'receptionist'),
   requireActiveTrial(pool),
   asyncHandler(async (req, res) => {
+    if (!esIdDeMiembro(req.params.id)) throw new AppError(400, 'Id inválido', 'VALIDATION_ERROR');
     const parsed = parse(planSchema, req.body);
     if (!parsed.ok) throw new AppError(parsed.status, parsed.error, 'VALIDATION_ERROR', { issues: parsed.issues });
     const d = parsed.data;
@@ -1272,51 +1328,57 @@ router.put(
       throw new AppError(400, 'Lo pagado no puede superar el valor del plan.', 'VALIDATION_ERROR');
     }
 
-    const { rows: duenio } = await pool.query(
-      'SELECT id_miembro FROM miembro WHERE id_miembro = $1 AND id_gimnasio = $2',
-      [req.params.id, gymId]
-    );
-    if (duenio.length === 0) throw new AppError(404, 'Miembro no encontrado.', 'MEMBER_NOT_FOUND');
-
-    const estado = d.valor_pagado >= d.valor_total && d.valor_total > 0
-      ? 'PAGADO'
-      : d.valor_pagado > 0 ? 'PARCIAL' : 'PENDIENTE';
-
-    const { rows: actual } = await pool.query(
-      `SELECT id_plan_cobro FROM plan_cobro
-        WHERE id_miembro = $1 AND activo = TRUE
-        ORDER BY fecha_fin DESC NULLS LAST, id_plan_cobro DESC LIMIT 1`,
-      [req.params.id]
-    );
-
     let plan;
-    if (actual.length > 0) {
-      const { rows } = await pool.query(
-        `UPDATE plan_cobro
-            SET tipo_plan = $1, fecha_inicio = $2, fecha_fin = $3, valor_total = $4,
-                valor_pagado = $5, metodo_pago = $6, referencia_pago = $7,
-                estado_pago = $8, proxima_fecha_cobro = $9,
-                actualizado_por = $10, fecha_actualizacion = NOW()
-          WHERE id_plan_cobro = $11
-        RETURNING *`,
-        [d.tipo_plan, d.fecha_inicio, d.fecha_fin, d.valor_total, d.valor_pagado,
-         d.metodo_pago, d.referencia_pago || null, estado, d.proxima_fecha_cobro || null,
-         req.user.id, actual[0].id_plan_cobro]
+    try {
+      const { rows: duenio } = await pool.query(
+        'SELECT id_miembro FROM miembro WHERE id_miembro = $1 AND id_gimnasio = $2',
+        [req.params.id, gymId]
       );
-      plan = rows[0];
-    } else {
-      const { rows } = await pool.query(
-        `INSERT INTO plan_cobro
-           (id_miembro, id_gimnasio, tipo_plan, fecha_inicio, fecha_fin, valor_total,
-            valor_pagado, metodo_pago, referencia_pago, estado_pago, proxima_fecha_cobro,
-            activo, actualizado_por)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,TRUE,$12)
-        RETURNING *`,
-        [req.params.id, gymId, d.tipo_plan, d.fecha_inicio, d.fecha_fin, d.valor_total,
-         d.valor_pagado, d.metodo_pago, d.referencia_pago || null, estado,
-         d.proxima_fecha_cobro || null, req.user.id]
+      if (duenio.length === 0) throw new AppError(404, 'Miembro no encontrado.', 'MEMBER_NOT_FOUND');
+
+      const estado = d.valor_pagado >= d.valor_total && d.valor_total > 0
+        ? 'PAGADO'
+        : d.valor_pagado > 0 ? 'PARCIAL' : 'PENDIENTE';
+
+      const { rows: actual } = await pool.query(
+        `SELECT id_plan_cobro FROM plan_cobro
+          WHERE id_miembro = $1 AND activo = TRUE
+          ORDER BY fecha_fin DESC NULLS LAST, id_plan_cobro DESC LIMIT 1`,
+        [req.params.id]
       );
-      plan = rows[0];
+
+      if (actual.length > 0) {
+        const { rows } = await pool.query(
+          `UPDATE plan_cobro
+              SET tipo_plan = $1, fecha_inicio = $2, fecha_fin = $3, valor_total = $4,
+                  valor_pagado = $5, metodo_pago = $6, referencia_pago = $7,
+                  estado_pago = $8, proxima_fecha_cobro = $9,
+                  actualizado_por = $10, fecha_actualizacion = NOW()
+            WHERE id_plan_cobro = $11
+          RETURNING *`,
+          [d.tipo_plan, d.fecha_inicio, d.fecha_fin, d.valor_total, d.valor_pagado,
+           d.metodo_pago, d.referencia_pago || null, estado, d.proxima_fecha_cobro || null,
+           req.user.id, actual[0].id_plan_cobro]
+        );
+        plan = rows[0];
+      } else {
+        const { rows } = await pool.query(
+          `INSERT INTO plan_cobro
+             (id_miembro, id_gimnasio, tipo_plan, fecha_inicio, fecha_fin, valor_total,
+              valor_pagado, metodo_pago, referencia_pago, estado_pago, proxima_fecha_cobro,
+              activo, actualizado_por)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,TRUE,$12)
+          RETURNING *`,
+          [req.params.id, gymId, d.tipo_plan, d.fecha_inicio, d.fecha_fin, d.valor_total,
+           d.valor_pagado, d.metodo_pago, d.referencia_pago || null, estado,
+           d.proxima_fecha_cobro || null, req.user.id]
+        );
+        plan = rows[0];
+      }
+    } catch (err) {
+      if (err instanceof AppError || !esErrorDeConexion(err)) throw err;
+      console.error('[PUT /admin/miembros/:id/plan] Error:', err.message);
+      throw new AppError(503, 'No pudimos guardar el plan. Intenta de nuevo.', 'DB_UNREACHABLE');
     }
 
     return res.json({ message: 'Plan actualizado.', plan });

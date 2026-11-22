@@ -19,55 +19,15 @@ import {
 import { esMenor, edadEnAnios, isoADate, erroresRepresentante } from '../lib/autorizaciones';
 import QRCode from 'qrcode';
 
-// Componente personalizado para input de fecha con formato automático DD/MM/YYYY
-function DateInputWithAutoFormat({ value, onChange, placeholder, ...props }) {
-  const formatDateString = (input) => {
-    // Remover todos los caracteres que no sean dígitos
-    const cleaned = input.replace(/\D/g, '');
-    
-    // Limitar a 8 dígitos máximo
-    const truncated = cleaned.slice(0, 8);
-    
-    // Aplicar formato DD/MM/YYYY
-    let formatted = '';
-    if (truncated.length > 0) {
-      formatted += truncated.slice(0, 2);
-    }
-    if (truncated.length > 2) {
-      formatted += '/' + truncated.slice(2, 4);
-    }
-    if (truncated.length > 4) {
-      formatted += '/' + truncated.slice(4, 8);
-    }
-    
-    return formatted;
-  };
-
-  const handleChange = (e) => {
-    const rawValue = e.target.value;
-    const formatted = formatDateString(rawValue);
-    onChange(formatted);
-  };
-
-  return (
-    <input
-      {...props}
-      type="text"
-      value={value}
-      onChange={handleChange}
-      placeholder={placeholder || "DD/MM/YYYY"}
-      maxLength={10}
-      inputMode="numeric"
-    />
-  );
-}
+// CampoFecha usa locale="es": sin registrarlo, el calendario sale en ingles.
+registerLocale('es', es);
 
 /** Mensaje de error bajo un campo. No renderiza nada si no hay error. */
 function ErrorCampo({ msg }) {
   if (!msg) return null;
   return (
     <span className="field-error" role="alert">
-      <span className="material-symbols-outlined icon">error</span>
+      <span className="material-symbols-outlined icon" aria-hidden="true">error</span>
       {msg}
     </span>
   );
@@ -143,6 +103,10 @@ function CampoFecha({ value, onChange, placeholder, anosAtras = 100, ...props })
       }}
       value={value}
       dateFormat="dd/MM/yyyy"
+      /* Sin esto, al teclear el primer digito react-datepicker leia "1" como
+         el dia 1 del mes actual y el campo se quedaba en 01/11/2026. Asi solo
+         acepta una fecha escrita completa (DD/MM/AAAA). */
+      strictParsing
       placeholderText={placeholder || 'DD/MM/YYYY'}
       className="field-input"
       showMonthDropdown
@@ -167,17 +131,6 @@ function convertToISODate(dateString) {
   
   const [day, month, year] = parts;
   return `${year}-${month}-${day}`;
-}
-
-// Función para convertir formato ISO a DD/MM/YYYY
-function convertFromISODate(isoDate) {
-  if (!isoDate || isoDate.length !== 10) return isoDate;
-  
-  const parts = isoDate.split('-');
-  if (parts.length !== 3) return isoDate;
-  
-  const [year, month, day] = parts;
-  return `${day}/${month}/${year}`;
 }
 
 /* Duracion de cada plan, en dias. Lo que no este aqui dura un mes. */
@@ -343,6 +296,9 @@ export default function MiembrosPage() {
   const [enviandoContrato, setEnviandoContrato] = useState(false);
   const [editInfo, setEditInfo] = useState('');
   const [error, setError] = useState('');
+  // Por que no se pudo traer la lista. Va aparte de `error` (alta, desactivar...)
+  // para que una carga buena lo quite sin borrar otros avisos.
+  const [errorCarga, setErrorCarga] = useState('');
   const [info, setInfo] = useState('');
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -452,17 +408,29 @@ export default function MiembrosPage() {
   const guardarRipple = Ripple({ opacity: 0.30 });
   const desactivarRipple = Ripple({ opacity: 0.30 });
 
+  /*
+   * Numero de la ultima carga pedida. Con la red lenta las respuestas pueden
+   * llegar en desorden: si la carga inicial respondia despues de la recarga que
+   * sigue a un alta, su lista (sin el miembro nuevo) reemplazaba a la buena.
+   * Ahora solo cuenta la respuesta de la ultima carga pedida.
+   */
+  const ultimaCargaRef = useRef(0);
+
   const load = async (query = '', includeInactive = false) => {
+    const carga = ++ultimaCargaRef.current;
     setLoading(true);
     try {
       const { data } = await api.get('/admin/miembros', { 
         params: { q: query, pageSize: 100, includeInactive } 
       });
+      if (carga !== ultimaCargaRef.current) return;
       setItems(data.miembros);
+      setErrorCarga('');
     } catch (err) {
-      setError(err.message || 'Error al cargar miembros.');
+      if (carga !== ultimaCargaRef.current) return;
+      setErrorCarga(err.message || 'Error al cargar miembros.');
     } finally {
-      setLoading(false);
+      if (carga === ultimaCargaRef.current) setLoading(false);
     }
   };
 
@@ -495,28 +463,6 @@ export default function MiembrosPage() {
     setFiltro(nuevoFiltro);
     const includeInactive = nuevoFiltro === 'desactivados';
     load(q, includeInactive);
-  };
-
-  // Desactivar miembro (soft delete)
-  const desactivar = async (id) => {
-    try {
-      await api.delete(`/admin/miembros/${id}`);
-      setConfirmDeactivate(null);
-      load(q, filtro === 'desactivados' ? true : false);
-    } catch (err) {
-      setError(err.message || 'No se pudo desactivar el miembro.');
-    }
-  };
-
-  // Eliminar miembro permanentemente (hard delete)
-  const eliminarPermanentemente = async (id) => {
-    try {
-      await api.delete(`/admin/miembros/${id}/permanent`);
-      setConfirmDelete(null);
-      load(q, filtro === 'desactivados' ? true : false);
-    } catch (err) {
-      setError(err.message || 'No se pudo eliminar el miembro permanentemente.');
-    }
   };
 
   const askDeactivate = (m) => setConfirmDeactivate(m);
@@ -816,9 +762,10 @@ export default function MiembrosPage() {
         `/admin/miembros/${editing.id_miembro}/${accion}`,
         accion === 'congelar' ? { motivo: motivoCongelar.trim() } : {}
       );
-      setPlanMsg(data.message || (accion === 'congelar' ? 'Membresía congelada.' : 'Membresía descongelada.'));
       setMotivoCongelar('');
+      // El aviso va despues de recargar: cargarPlan limpia planMsg al empezar.
       await cargarPlan(editing.id_miembro);
+      setPlanMsg(data.message || (accion === 'congelar' ? 'Membresía congelada.' : 'Membresía descongelada.'));
       await load(q, filtro === 'desactivados');
     } catch (err) {
       setPlanError(err.message || 'No pudimos cambiar el congelamiento.');
@@ -876,8 +823,8 @@ export default function MiembrosPage() {
         referencia_pago: planForm.referencia_pago || '',
         proxima_fecha_cobro: convertToISODate(calcularProximaFechaCobro(planForm.fecha_fin)),
       });
-      setPlanMsg('Plan actualizado.');
       await cargarPlan(editing.id_miembro);
+      setPlanMsg('Plan actualizado.');
       await load(q, filtro === 'desactivados');
     } catch (err) {
       setPlanError(err.message || 'No pudimos guardar el plan.');
@@ -1026,7 +973,9 @@ export default function MiembrosPage() {
       for (const k of EDITABLES) {
         if (editForm[k] !== undefined) payload[k] = editForm[k];
       }
-      if (!payload.email) delete payload.email;
+      // Un correo vacio se envia tal cual: el backend lo guarda como null
+      // (updateSchema de routes/miembros.js). Si se quitara del payload, borrar
+      // el correo en la ficha no tendria efecto y el viejo seguiria guardado.
       // RQNF-17: autorizacion de datos sensibles (desmarcarla la revoca y
       // borra esos datos) y representante legal si es menor.
       Object.assign(payload, payloadLegal(editForm, menorEdit));
@@ -1067,6 +1016,31 @@ export default function MiembrosPage() {
     desactivados: items.filter(m => !m.activo).length,
   }), [items]);
 
+  /*
+   * Lo que se ve en la tabla y en las tarjetas cuando no hay filas. Si la
+   * ultima carga fallo no se sabe si el gimnasio tiene miembros: antes salia
+   * "Sin miembros que mostrar" con el API caido. Ahora se dice que no se
+   * pudieron cargar y se ofrece reintentar con la misma busqueda y filtro.
+   */
+  const sinFilas = errorCarga ? (
+    <EmptyState
+      icono="cloud_off"
+      titulo="No pudimos cargar los miembros"
+      descripcion="Revisa la conexión y vuelve a intentarlo."
+      ctaLabel="Reintentar"
+      ctaIcono="refresh"
+      onCta={() => load(q, filtro === 'desactivados')}
+    />
+  ) : (
+    <EmptyState
+      icono="group_off"
+      titulo="Sin miembros que mostrar"
+      descripcion="No hay miembros que coincidan con el filtro actual."
+      ctaLabel="Nuevo miembro"
+      onCta={() => setOpen(true)}
+    />
+  );
+
   return (
     <PageTransition>
       <header className="admin-page-head">
@@ -1076,7 +1050,7 @@ export default function MiembrosPage() {
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
           <button className="btn btn-ghost" onClick={() => load(q)} disabled={loading}>
-            <span className="material-symbols-outlined icon">refresh</span>
+            <span className="material-symbols-outlined icon" aria-hidden="true">refresh</span>
             Actualizar
           </button>
           <button
@@ -1088,21 +1062,27 @@ export default function MiembrosPage() {
               return !o;
             })}
           >
-            <span className="material-symbols-outlined icon">{open ? 'close' : 'person_add'}</span>
+            <span className="material-symbols-outlined icon" aria-hidden="true">{open ? 'close' : 'person_add'}</span>
             {open ? 'Cerrar' : 'Nuevo miembro'}
           </button>
         </div>
       </header>
 
+      {errorCarga && (
+        <div className="alert alert-error anim-scale-in" role="alert">
+          <span className="material-symbols-outlined icon" aria-hidden="true">error</span>
+          <span>{errorCarga}</span>
+        </div>
+      )}
       {error && (
         <div className="alert alert-error anim-scale-in" role="alert">
-          <span className="material-symbols-outlined icon">error</span>
+          <span className="material-symbols-outlined icon" aria-hidden="true">error</span>
           <span>{error}</span>
         </div>
       )}
       {info && (
         <div className="alert alert-success anim-scale-in" role="status">
-          <span className="material-symbols-outlined icon">check_circle</span>
+          <span className="material-symbols-outlined icon" aria-hidden="true">check_circle</span>
           <span>{info}</span>
         </div>
       )}
@@ -1283,12 +1263,14 @@ export default function MiembrosPage() {
                   <label className="field">
                     <span className="field-label">Teléfono emergencia</span>
                     <input
-                      className="field-input"
+                      className={`field-input${formErrors.telefono_emergencia ? ' field-input--error' : ''}`}
                       value={form.telefono_emergencia}
                       onChange={(e) => handleFormChange('telefono_emergencia', e.target.value)}
                       placeholder="3001234567"
                       inputMode="numeric"
+                      aria-invalid={formErrors.telefono_emergencia ? 'true' : undefined}
                     />
+                    <ErrorCampo msg={formErrors.telefono_emergencia} />
                   </label>
                 </div>
                 {/* RQNF-17: autorizacion separada y opcional de datos sensibles */}
@@ -1330,7 +1312,7 @@ export default function MiembrosPage() {
             {activeSection === 'cobros' && (
               <div className="form-section anim-fade-up" style={{ border: '2px solid var(--primary)', borderRadius: 'var(--radius)', padding: 20, background: 'var(--surface-container-low)' }}>
                 <h4 style={{ marginBottom: 16, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span className="material-symbols-outlined icon">payments</span>
+                  <span className="material-symbols-outlined icon" aria-hidden="true">payments</span>
                   Plan y COBROS
                 </h4>
                 <p style={{ marginBottom: 16, fontSize: 13, color: 'var(--on-surface-variant)' }}>
@@ -1373,30 +1355,35 @@ export default function MiembrosPage() {
                       placeholder="Calculada automáticamente"
                       readOnly
                     />
+                    <ErrorCampo msg={formErrors.fecha_fin} />
                   </label>
                   <label className="field">
                     <span className="field-label">Valor total del plan *</span>
                     <input
-                      className="field-input"
+                      className={`field-input${formErrors.valor_total ? ' field-input--error' : ''}`}
                       type="number"
                       required value={form.valor_total}
                       onChange={(e) => handleFormChange('valor_total', e.target.value)}
                       placeholder="0.00"
                       step="0.01"
+                      aria-invalid={formErrors.valor_total ? 'true' : undefined}
                     />
+                    <ErrorCampo msg={formErrors.valor_total} />
                   </label>
                 </div>
                 <div className="auth-form-row">
                   <label className="field">
                     <span className="field-label">Valor pagado hoy</span>
                     <input
-                      className="field-input"
+                      className={`field-input${formErrors.valor_pagado ? ' field-input--error' : ''}`}
                       type="number"
                       value={form.valor_pagado}
                       onChange={(e) => handleFormChange('valor_pagado', e.target.value)}
                       placeholder="0.00"
                       step="0.01"
+                      aria-invalid={formErrors.valor_pagado ? 'true' : undefined}
                     />
+                    <ErrorCampo msg={formErrors.valor_pagado} />
                   </label>
                   <label className="field">
                     <span className="field-label">Estado del pago</span>
@@ -1582,8 +1569,15 @@ export default function MiembrosPage() {
                 Paso {SECCIONES.indexOf(activeSection) + 1} de {SECCIONES.length}
               </div>
               
+              {/* Cada boton con su key: sin ella React reutilizaba el mismo
+                  <button> y, durante el clic en "Siguiente" del paso 4, le
+                  cambiaba el tipo a "submit"; el navegador enviaba entonces el
+                  formulario con un solo clic (los terminos salian en rojo, o el
+                  miembro se creaba si ya estaban marcados). Con la key se monta
+                  un boton nuevo y el del clic sale del formulario. */}
               {activeSection !== 'terminos' ? (
                 <button
+                  key="siguiente"
                   type="button"
                   className="btn btn-secondary"
                   onClick={() => {
@@ -1595,9 +1589,17 @@ export default function MiembrosPage() {
                 </button>
               ) : (
                 <button
+                  key="crear"
                   type="submit"
                   className="btn btn-primary"
                   disabled={submitting}
+                  /* El segundo clic de un doble clic en "Siguiente →" del paso 4
+                     puede caer aqui: con la pagina desplazada hasta el final, el
+                     paso 5 es mas bajo, el navegador sube el desplazamiento y este
+                     boton queda justo bajo el puntero. event.detail cuenta los
+                     clics seguidos (1 en un clic normal, 0 con el teclado), asi
+                     que solo se ignora el segundo de un doble clic. */
+                  onClick={(e) => { if (e.detail > 1) e.preventDefault(); }}
                 >
                   {submitting ? 'Creando miembro...' : 'Crear miembro'}
                 </button>
@@ -1609,7 +1611,7 @@ export default function MiembrosPage() {
 
       <div className="filter-bar">
         <form onSubmit={onSearch} className="search-input filter-bar__search" role="search">
-          <span className="material-symbols-outlined icon">search</span>
+          <span className="material-symbols-outlined icon" aria-hidden="true">search</span>
           <input
             placeholder="Buscar por nombre, documento, correo o código QR"
             value={q}
@@ -1639,7 +1641,8 @@ export default function MiembrosPage() {
       </div>
 
       <section className="table-card miembros-table">
-        {loading && <div className="bar-loader" />}
+        {/* La barra sola no le dice nada a un lector de pantalla: se anuncia como progreso. */}
+        {loading && <div className="bar-loader" role="progressbar" aria-label="Cargando miembros" />}
         <div className="table-scroll">
           <table className="table">
             <thead>
@@ -1658,13 +1661,7 @@ export default function MiembrosPage() {
               {!loading && filtrados.length === 0 && (
                 <tr>
                   <td colSpan={6} style={{ padding: 24 }}>
-                    <EmptyState
-                      icono="group_off"
-                      titulo="Sin miembros que mostrar"
-                      descripcion="No hay miembros que coincidan con el filtro actual."
-                      ctaLabel="Nuevo miembro"
-                      onCta={() => setOpen(true)}
-                    />
+                    {sinFilas}
                   </td>
                 </tr>
               )}
@@ -1718,7 +1715,7 @@ export default function MiembrosPage() {
                           onClick={(e) => { e.stopPropagation(); askDeactivate(m); }}
                           aria-label={`Desactivar a ${m.nombre}`}
                         >
-                          <span className="material-symbols-outlined icon">person_remove</span>
+                          <span className="material-symbols-outlined icon" aria-hidden="true">person_remove</span>
                         </button>
                       ) : (
                         <>
@@ -1728,7 +1725,7 @@ export default function MiembrosPage() {
                             aria-label={`Eliminar permanentemente a ${m.nombre}`}
                             title="Eliminar permanentemente"
                           >
-                            <span className="material-symbols-outlined icon" style={{ color: 'var(--error)' }}>delete_forever</span>
+                            <span className="material-symbols-outlined icon" aria-hidden="true" style={{ color: 'var(--error)' }}>delete_forever</span>
                           </button>
                           <button
                             className="btn btn-ghost btn-sm"
@@ -1736,7 +1733,7 @@ export default function MiembrosPage() {
                             aria-label={`Reactivar a ${m.nombre}`}
                             title="Reactivar"
                           >
-                            <span className="material-symbols-outlined icon" style={{ color: 'var(--success)' }}>person_add</span>
+                            <span className="material-symbols-outlined icon" aria-hidden="true" style={{ color: 'var(--success)' }}>person_add</span>
                           </button>
                         </>
                       )}
@@ -1751,13 +1748,7 @@ export default function MiembrosPage() {
             En escritorio se muestra la tabla original; CSS decide cual se ve. */}
         <div className="miembros-cards">
           {filtrados.length === 0 && !loading && (
-            <EmptyState
-              icono="group_off"
-              titulo="Sin miembros que mostrar"
-              descripcion="No hay miembros que coincidan con el filtro actual."
-              ctaLabel="Nuevo miembro"
-              onCta={() => setOpen(true)}
-            />
+            sinFilas
           )}
           {filtrados.map((m) => {
             const initials = (m.nombre || '?').split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase();
@@ -1791,10 +1782,10 @@ export default function MiembrosPage() {
                 <footer className="miembro-card__actions">
                   <button
                     className="btn btn-ghost btn-sm"
-                    onClick={() => onDelete(m)}
+                    onClick={() => askDeactivate(m)}
                     aria-label={`Desactivar a ${m.nombre}`}
                   >
-                    <span className="material-symbols-outlined icon">person_remove</span>
+                    <span className="material-symbols-outlined icon" aria-hidden="true">person_remove</span>
                     Desactivar
                   </button>
                 </footer>
@@ -1830,7 +1821,7 @@ export default function MiembrosPage() {
               onClick={guardarRipple}
               disabled={editSaving}
             >
-              <span className="material-symbols-outlined icon">save</span>
+              <span className="material-symbols-outlined icon" aria-hidden="true">save</span>
               {editSaving ? 'Guardando...' : 'Guardar cambios'}
             </button>
           </>
@@ -1839,13 +1830,13 @@ export default function MiembrosPage() {
         <form id="miembros-edit-form" className="auth-form" onSubmit={onSaveEdit} noValidate>
           {editError && (
             <div className="alert alert-error" role="alert" style={{ marginBottom: 12 }}>
-              <span className="material-symbols-outlined icon">error</span>
+              <span className="material-symbols-outlined icon" aria-hidden="true">error</span>
               <span>{editError}</span>
             </div>
           )}
           {editInfo && (
             <div className="alert alert-success" role="status" style={{ marginBottom: 12 }}>
-              <span className="material-symbols-outlined icon">check_circle</span>
+              <span className="material-symbols-outlined icon" aria-hidden="true">check_circle</span>
               <span>{editInfo}</span>
             </div>
           )}
@@ -1859,14 +1850,14 @@ export default function MiembrosPage() {
               {editQr
                 ? <img src={editQr} alt={`Código QR de ${editing.nombre}`} className="miembro-qr-panel__img" />
                 : <div className="miembro-qr-panel__img miembro-qr-panel__img--vacio">
-                    <span className="material-symbols-outlined">qr_code_2</span>
+                    <span className="material-symbols-outlined" aria-hidden="true">qr_code_2</span>
                   </div>}
               <div className="miembro-qr-panel__body">
                 <span className="field-label">Código QR</span>
                 <code className="miembro-qr-panel__codigo">{editing.codigo_qr}</code>
                 <div className="miembro-qr-panel__acciones">
                   <button type="button" className="btn btn-secondary btn-sm" onClick={copiarCodigoQr}>
-                    <span className="material-symbols-outlined icon">
+                    <span className="material-symbols-outlined icon" aria-hidden="true">
                       {qrCopiado ? 'check' : 'content_copy'}
                     </span>
                     {qrCopiado ? 'Copiado' : 'Copiar código'}
@@ -1877,7 +1868,7 @@ export default function MiembrosPage() {
                       href={editQr}
                       download={`qr-${editing.documento || editing.codigo_qr}.png`}
                     >
-                      <span className="material-symbols-outlined icon">download</span>
+                      <span className="material-symbols-outlined icon" aria-hidden="true">download</span>
                       Descargar
                     </a>
                   )}
@@ -1888,7 +1879,7 @@ export default function MiembrosPage() {
                     disabled={enviandoContrato || !editing?.id_miembro}
                     title="Envia el contrato de membresia por WhatsApp al miembro"
                   >
-                    <span className="material-symbols-outlined icon">
+                    <span className="material-symbols-outlined icon" aria-hidden="true">
                       {enviandoContrato ? 'hourglass_empty' : 'description'}
                     </span>
                     {enviandoContrato ? 'Enviando...' : 'Enviar contrato'}
@@ -1907,6 +1898,8 @@ export default function MiembrosPage() {
           {/* --- Plan del miembro ------------------------------------------
               Vive en otra tabla, asi que tiene su propio boton de guardar y
               no viaja con el resto de la ficha. */}
+          {/* Si el plan no cargo no hay editor, pero el motivo se ve igual. */}
+          {!planForm && planError && <p className="field-error">{planError}</p>}
           {planForm && (
             <section className="plan-editor">
               <header className="plan-editor__cabecera">
@@ -2010,7 +2003,7 @@ export default function MiembrosPage() {
                 onClick={guardarPlan}
                 disabled={planGuardando}
               >
-                <span className="material-symbols-outlined icon">savings</span>
+                <span className="material-symbols-outlined icon" aria-hidden="true">savings</span>
                 {planGuardando ? 'Guardando…' : 'Guardar plan'}
               </button>
 
@@ -2019,7 +2012,7 @@ export default function MiembrosPage() {
                 <div className="plan-congelar" style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid rgba(255,255,255,0.08)' }}>
                   {planForm.congelado_desde ? (
                     <p style={{ fontSize: 13, marginBottom: 10 }}>
-                      <span className="material-symbols-outlined icon" style={{ verticalAlign: 'middle', marginRight: 6 }}>ac_unit</span>
+                      <span className="material-symbols-outlined icon" aria-hidden="true" style={{ verticalAlign: 'middle', marginRight: 6 }}>ac_unit</span>
                       Congelada desde el {formatearFechaDia(planForm.congelado_desde)}
                       {` (${planForm.dias_congelado} ${planForm.dias_congelado === 1 ? 'día' : 'días'}).`}
                       {' '}Al descongelarla, el vencimiento se correrá esos días.
@@ -2035,7 +2028,7 @@ export default function MiembrosPage() {
                     planForm.congelado_desde ? (
                       <button type="button" className="btn btn-secondary btn-sm"
                         onClick={() => cambiarCongelamiento('descongelar')} disabled={congelando}>
-                        <span className="material-symbols-outlined icon">sunny</span>
+                        <span className="material-symbols-outlined icon" aria-hidden="true">sunny</span>
                         {congelando ? 'Descongelando…' : 'Descongelar membresía'}
                       </button>
                     ) : (
@@ -2051,7 +2044,7 @@ export default function MiembrosPage() {
                         />
                         <button type="button" className="btn btn-secondary btn-sm"
                           onClick={() => cambiarCongelamiento('congelar')} disabled={congelando}>
-                          <span className="material-symbols-outlined icon">ac_unit</span>
+                          <span className="material-symbols-outlined icon" aria-hidden="true">ac_unit</span>
                           {congelando ? 'Congelando…' : 'Congelar membresía'}
                         </button>
                       </div>
@@ -2337,7 +2330,7 @@ export default function MiembrosPage() {
               className="btn btn-danger ripple-host"
               onClick={(e) => { desactivarRipple(e); doDeactivate(); }}
             >
-              <span className="material-symbols-outlined icon">person_remove</span>
+              <span className="material-symbols-outlined icon" aria-hidden="true">person_remove</span>
               Sí, desactivar
             </button>
           </>
@@ -2372,7 +2365,7 @@ export default function MiembrosPage() {
               className="btn btn-danger ripple-host"
               onClick={(e) => { desactivarRipple(e); doDelete(); }}
             >
-              <span className="material-symbols-outlined icon">delete_forever</span>
+              <span className="material-symbols-outlined icon" aria-hidden="true">delete_forever</span>
               Sí, eliminar permanentemente
             </button>
           </>
@@ -2462,7 +2455,7 @@ export default function MiembrosPage() {
                 maxWidth: 300
               }}
             >
-              <span className="material-symbols-outlined icon">chat</span>
+              <span className="material-symbols-outlined icon" aria-hidden="true">chat</span>
               Enviar QR por WhatsApp
             </a>
             
@@ -2495,7 +2488,7 @@ export default function MiembrosPage() {
                 maxWidth: 300
               }}
             >
-              <span className="material-symbols-outlined icon">content_copy</span>
+              <span className="material-symbols-outlined icon" aria-hidden="true">content_copy</span>
               Copiar QR
             </button>
           </div>
