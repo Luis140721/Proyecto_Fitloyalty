@@ -798,20 +798,28 @@ export default function MiembrosPage() {
       && !window.confirm('¿Congelar la membresía? Mientras esté congelada no contará como vencida y, al descongelarla, el vencimiento se correrá los días que estuvo congelada.')) {
       return;
     }
+    // La ficha desde la que se pulso: si la respuesta llega con otra ficha en
+    // pantalla (o con esta cerrada), ni el plan ni el aviso caen ahi.
+    const pedido = fichaPedida.current;
+    const idMiembro = editing.id_miembro;
     setPlanError(''); setPlanMsg('');
     setCongelando(true);
     try {
       const { data } = await api.post(
-        `/admin/miembros/${editing.id_miembro}/${accion}`,
+        `/admin/miembros/${idMiembro}/${accion}`,
         accion === 'congelar' ? { motivo: motivoCongelar.trim() } : {}
       );
-      setMotivoCongelar('');
-      // El aviso va despues de recargar: cargarPlan limpia planMsg al empezar.
-      await cargarPlan(editing.id_miembro);
-      setPlanMsg(data.message || (accion === 'congelar' ? 'Membresía congelada.' : 'Membresía descongelada.'));
+      if (pedido === fichaPedida.current) {
+        setMotivoCongelar('');
+        // El aviso va despues de recargar: cargarPlan limpia planMsg al empezar.
+        await cargarPlan(idMiembro, pedido);
+        if (pedido === fichaPedida.current) {
+          setPlanMsg(data.message || (accion === 'congelar' ? 'Membresía congelada.' : 'Membresía descongelada.'));
+        }
+      }
       await load(q, filtro === 'desactivados');
     } catch (err) {
-      setPlanError(err.message || 'No pudimos cambiar el congelamiento.');
+      if (pedido === fichaPedida.current) setPlanError(err.message || 'No pudimos cambiar el congelamiento.');
     } finally {
       setCongelando(false);
     }
@@ -854,9 +862,12 @@ export default function MiembrosPage() {
       return setPlanError('Lo pagado no puede superar el valor del plan.');
     }
 
+    // Igual que al congelar: la respuesta solo vale para la ficha desde la que se guardo.
+    const pedido = fichaPedida.current;
+    const idMiembro = editing.id_miembro;
     setPlanGuardando(true);
     try {
-      await api.put(`/admin/miembros/${editing.id_miembro}/plan`, {
+      await api.put(`/admin/miembros/${idMiembro}/plan`, {
         tipo_plan: planForm.tipo_plan,
         fecha_inicio: convertToISODate(planForm.fecha_inicio),
         fecha_fin: convertToISODate(planForm.fecha_fin),
@@ -866,11 +877,13 @@ export default function MiembrosPage() {
         referencia_pago: planForm.referencia_pago || '',
         proxima_fecha_cobro: convertToISODate(calcularProximaFechaCobro(planForm.fecha_fin)),
       });
-      await cargarPlan(editing.id_miembro);
-      setPlanMsg('Plan actualizado.');
+      if (pedido === fichaPedida.current) {
+        await cargarPlan(idMiembro, pedido);
+        if (pedido === fichaPedida.current) setPlanMsg('Plan actualizado.');
+      }
       await load(q, filtro === 'desactivados');
     } catch (err) {
-      setPlanError(err.message || 'No pudimos guardar el plan.');
+      if (pedido === fichaPedida.current) setPlanError(err.message || 'No pudimos guardar el plan.');
     } finally {
       setPlanGuardando(false);
     }
@@ -938,9 +951,11 @@ export default function MiembrosPage() {
   const copiarCodigoQr = async () => {
     const codigo = editing?.codigo_qr;
     if (!codigo) return;
+    const pedido = fichaPedida.current;
     try {
       await navigator.clipboard.writeText(codigo);
-      if (!montada.current) return; // la persona salio mientras se copiaba
+      // La persona salio, cerro la ficha o abrio otra mientras se copiaba.
+      if (!montada.current || pedido !== fichaPedida.current) return;
       setQrCopiado(true);
       clearTimeout(avisoQrCopiado.current);
       avisoQrCopiado.current = setTimeout(() => setQrCopiado(false), 2000);
