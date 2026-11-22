@@ -1114,12 +1114,15 @@ export default function MiembrosPage() {
         delete payload.canales_comerciales;
       }
       // RQNF-17: sin cambios en la autorizacion de datos sensibles, no viaja; y
-      // sin cambios en los datos de salud, tampoco viajan (ver sensiblesCargados).
-      // Si solo cambian los datos de salud, van sin la autorizacion: el servidor
-      // los guarda o los descarta segun la que este vigente en ese momento.
+      // cada dato de salud solo viaja si cambio (ver sensiblesCargados), tambien
+      // cuando la autorizacion si cambia: al otorgarla el servidor conserva lo
+      // que haya, y al revocarla lo borra todo. Si solo cambian datos de salud,
+      // van sin la autorizacion y el servidor decide con la vigente.
       const sensibles = sensiblesCargados.current;
-      if (sensibles && Boolean(payload.autorizo_datos_sensibles) === sensibles.autorizo_datos_sensibles) {
-        delete payload.autorizo_datos_sensibles;
+      if (sensibles) {
+        if (Boolean(payload.autorizo_datos_sensibles) === sensibles.autorizo_datos_sensibles) {
+          delete payload.autorizo_datos_sensibles;
+        }
         for (const k of ['condiciones_medicas', 'alergias']) {
           if (sensibles[k] !== NO_SE_SABE && mismoTexto(payload[k], sensibles[k])) delete payload[k];
         }
@@ -1145,19 +1148,25 @@ export default function MiembrosPage() {
       setInfo(guardado?.message || 'Miembro actualizado.');
       load(q);
     } catch (err) {
-      // Ya no se sabe que tiene el servidor: el siguiente guardado manda la
-      // decision que haya en pantalla, aunque sea igual a como llego.
-      if (llevabaComerciales) comercialesCargados.current = null;
-      // Lo mismo con los datos sensibles. Si el guardado llevaba la
-      // autorizacion, se olvida todo; si solo llevaba textos de salud, se
-      // olvidan esos textos y la autorizacion sigue sin viajar.
-      if (llevabaSensibles.includes('autorizo_datos_sensibles')) {
-        sensiblesCargados.current = null;
-      } else if (llevabaSensibles.length > 0 && sensiblesCargados.current) {
-        sensiblesCargados.current = {
-          ...sensiblesCargados.current,
-          ...Object.fromEntries(llevabaSensibles.map((k) => [k, NO_SE_SABE])),
-        };
+      // Si el servidor rechazo el guardado (400 a 499), no aplico nada: lo
+      // cargado sigue valiendo. Con cualquier otro fallo (sin conexion, corte
+      // por tiempo, 5xx) ya no se sabe que quedo en el servidor.
+      const rechazado = err.status >= 400 && err.status < 500;
+      if (!rechazado) {
+        // El siguiente guardado manda la decision que haya en pantalla, aunque
+        // sea igual a como llego.
+        if (llevabaComerciales) comercialesCargados.current = null;
+        // Lo mismo con los datos sensibles. Si el guardado llevaba la
+        // autorizacion, se olvida todo; si solo llevaba textos de salud, se
+        // olvidan esos textos y la autorizacion sigue sin viajar.
+        if (llevabaSensibles.includes('autorizo_datos_sensibles')) {
+          sensiblesCargados.current = null;
+        } else if (llevabaSensibles.length > 0 && sensiblesCargados.current) {
+          sensiblesCargados.current = {
+            ...sensiblesCargados.current,
+            ...Object.fromEntries(llevabaSensibles.map((k) => [k, NO_SE_SABE])),
+          };
+        }
       }
       setEditError(err.message || 'No se pudo actualizar.');
     } finally {
@@ -1169,6 +1178,7 @@ export default function MiembrosPage() {
   const reiniciarAlta = () => {
     setForm(formularioVacio());
     setFormErrors({});
+    setError(''); // «Revisa los campos marcados…» o el error del servidor eran del alta anterior
     setActiveSection('personales');
   };
 
@@ -1259,6 +1269,7 @@ export default function MiembrosPage() {
           <button
             className="btn btn-primary"
             onClick={() => (open ? cerrarAlta() : abrirAlta())}
+            disabled={open && submitting}
           >
             <span className="material-symbols-outlined icon" aria-hidden="true">{open ? 'close' : 'person_add'}</span>
             {open ? 'Cerrar' : 'Nuevo miembro'}

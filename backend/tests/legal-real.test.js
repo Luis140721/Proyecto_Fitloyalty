@@ -306,8 +306,20 @@ describeConBd('RQNF-17 y RQNF-18 contra la base real', () => {
     const salud = async () => (await pool.query('SELECT ciudad, condiciones_medicas, alergias FROM miembro WHERE id_miembro = $1', [id])).rows[0];
     expect((await sensibles()).map((a) => [a.otorgada, a.canal])).toEqual([[true, 'PANEL'], [false, 'APP']]);
 
-    // La ficha de ahora: solo viaja lo que se cambio.
-    const soloCiudad = await pedir('PUT', `/api/admin/miembros/${id}`, tokA, { ciudad: 'Cali' });
+    // El cuerpo que arma la ficha: todos los campos editables (con el tipo de
+    // documento y la fecha de nacimiento, que llevan el guardado por el camino
+    // de las autorizaciones), sin las tres claves de los datos sensibles.
+    const { miembro: cargado } = (await pedir('GET', `/api/admin/miembros/${id}`, tokA)).body;
+    const ficha = (cambios) => ({
+      nombre: cargado.nombre, documento: cargado.documento, telefono: cargado.telefono, email: '', activo: true,
+      tipo_documento: cargado.tipo_documento, fecha_nacimiento: String(cargado.fecha_nacimiento).slice(0, 10),
+      genero: '', codigo_pais_telefono: cargado.codigo_pais_telefono, ciudad: '', direccion: '',
+      contacto_emergencia: '', telefono_emergencia: '', objetivo: '', nivel_experiencia: '', observaciones: '',
+      ...cambios,
+    });
+
+    // La ficha de ahora: lo sensible solo viaja si se cambio.
+    const soloCiudad = await pedir('PUT', `/api/admin/miembros/${id}`, tokA, ficha({ ciudad: 'Cali' }));
     expect(soloCiudad.status).toBe(200);
     expect(await sensibles()).toHaveLength(2);
     expect(await salud()).toEqual({ ciudad: 'Cali', condiciones_medicas: null, alergias: null });
@@ -315,16 +327,16 @@ describeConBd('RQNF-17 y RQNF-18 contra la base real', () => {
 
     // Si alguien edita solo un dato de salud, viaja sin la autorizacion y el
     // servidor decide con la vigente: revocada, no lo guarda ni registra nada.
-    const soloSalud = await pedir('PUT', `/api/admin/miembros/${id}`, tokA, { condiciones_medicas: 'Asma' });
+    const soloSalud = await pedir('PUT', `/api/admin/miembros/${id}`, tokA, ficha({ ciudad: 'Cali', condiciones_medicas: 'Asma' }));
     expect(soloSalud.status).toBe(200);
     expect(await sensibles()).toHaveLength(2);
     expect(await salud()).toEqual({ ciudad: 'Cali', condiciones_medicas: null, alergias: null });
 
     // La ficha de antes mandaba siempre lo que habia cargado: con eso el
     // servidor la registraba otra vez por el panel y volvia a guardar los datos.
-    const comoAntes = await pedir('PUT', `/api/admin/miembros/${id}`, tokA, {
+    const comoAntes = await pedir('PUT', `/api/admin/miembros/${id}`, tokA, ficha({
       ciudad: 'Cali', autorizo_datos_sensibles: true, condiciones_medicas: 'Asma', alergias: 'Penicilina',
-    });
+    }));
     expect(comoAntes.status).toBe(200);
     expect((await sensibles()).map((a) => [a.otorgada, a.canal])).toEqual([[true, 'PANEL'], [false, 'APP'], [true, 'PANEL']]);
     expect(await salud()).toEqual({ ciudad: 'Cali', condiciones_medicas: 'Asma', alergias: 'Penicilina' });

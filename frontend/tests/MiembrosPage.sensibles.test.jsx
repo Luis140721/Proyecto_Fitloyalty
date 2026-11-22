@@ -11,15 +11,21 @@
  * Ahora la autorizacion solo viaja si se cambio en esa ficha, y cada dato de
  * salud solo viaja si cambio:
  * - sin cambios, ninguna de las tres claves va en el PUT;
- * - otorgar manda true con los dos textos; revocar manda false con los dos
- *   textos vacios (el servidor borra los datos);
+ * - al otorgar o revocar viaja la autorizacion y, con ella, solo los textos
+ *   que cambiaron: otorgar sin tocar los textos manda solo true (el servidor
+ *   conserva lo que haya, tambien lo que otra persona guardo entre tanto);
+ *   revocar con datos guardados manda false y los dos textos vacios; revocar
+ *   sin datos guardados manda solo false;
  * - si solo cambia un texto, va ese texto sin la autorizacion: el servidor lo
  *   guarda o lo descarta segun la que este vigente;
  * - un registro anterior con datos de salud y sin autorizacion manda los dos
  *   textos vacios: se borran, como dice el aviso de la ficha;
- * - si un guardado que llevaba algo de esto falla, ya no se sabe que quedo en
- *   el servidor: el siguiente vuelve a mandar eso mismo como este en pantalla
- *   (la autorizacion, solo si el guardado fallido la llevaba).
+ * - si un guardado que llevaba algo de esto falla sin respuesta del servidor
+ *   (sin conexion, corte por tiempo) o con un 5xx, ya no se sabe que quedo
+ *   guardado: el siguiente vuelve a mandar eso mismo como este en pantalla
+ *   (la autorizacion, solo si el guardado fallido la llevaba);
+ * - si el servidor lo rechazo (400 a 499), no guardo nada: lo cargado sigue
+ *   valiendo y el siguiente guardado no reenvia lo que quedo como estaba.
  *
  * El API, useAuth y qrcode se simulan con vi.mock. La fecha se fija (solo
  * Date; los timers siguen reales para user-event): la ficha calcula si el
@@ -226,7 +232,23 @@ describe('MiembrosPage: los datos sensibles en la ficha, cuando cambian', () => 
     expect(cuerpo).toMatchObject({ autorizo_datos_sensibles: true, condiciones_medicas: 'Asma', alergias: 'Polen' });
   });
 
-  test('should send the authorization with the health data that was already stored when a member of a previous record authorizes', async () => {
+  // Lo que no se escribio no viaja: si otra persona guardo «Condiciones médicas» mientras esta ficha estaba
+  // abierta, este guardado no se las borra con un texto vacio.
+  test('should send the authorization with only the text that was written when the member authorizes and only «Alergias» is written', async () => {
+    // Arrange: Ana llega sin autorizacion y sin datos de salud
+    const { user } = await abrirFichaDeAna();
+
+    // Act
+    await user.click(autorizacion());
+    await user.type(alergias(), 'Polen');
+    const cuerpo = await guardar(user);
+
+    // Assert
+    expect(cuerpo).toMatchObject({ autorizo_datos_sensibles: true, alergias: 'Polen' });
+    expect(cuerpo).not.toHaveProperty('condiciones_medicas');
+  });
+
+  test('should send only the authorization, without the health data that was already stored, when a member of a previous record authorizes', async () => {
     // Arrange: datos de salud guardados antes de que existiera la autorizacion separada
     ana = REGISTRO_ANTERIOR;
     const { user } = await abrirFichaDeAna();
@@ -237,26 +259,44 @@ describe('MiembrosPage: los datos sensibles en la ficha, cuando cambian', () => 
     expect(alergias()).toHaveValue('Polen');
     const cuerpo = await guardar(user);
 
-    // Assert: la autorizacion cambio, asi que los textos van aunque sean los mismos
-    expect(cuerpo).toMatchObject({ autorizo_datos_sensibles: true, condiciones_medicas: 'Asma', alergias: 'Polen' });
+    // Assert: los textos no cambiaron, asi que no viajan; el servidor conserva los que tiene
+    expect(cuerpo).toMatchObject({ autorizo_datos_sensibles: true });
+    expect(cuerpo).not.toHaveProperty('condiciones_medicas');
+    expect(cuerpo).not.toHaveProperty('alergias');
   });
 
-  test.each([
-    ['with health data stored', AUTORIZADA],
-    ['with no health data stored', { ...AUTORIZADA, condiciones_medicas: null, alergias: null }],
-  ])('should warn and send the revocation with the two health texts empty when the authorization is unmarked (%s)', async (_caso, miembro) => {
+  const AVISO_DE_REVOCACION = 'Al guardar se revoca la autorización y se borran las condiciones médicas y las alergias. Queda constancia en el historial.';
+
+  test('should warn and send the revocation with the two health texts empty when the authorization is unmarked and there was health data stored', async () => {
     // Arrange
-    ana = miembro;
+    ana = AUTORIZADA;
     const { user } = await abrirFichaDeAna();
     expect(enFicha().queryByText(/^Al guardar se revoca la autorización/)).not.toBeInTheDocument();
 
     // Act
     await user.click(autorizacion());
 
-    // Assert
-    expect(enFicha().getByText('Al guardar se revoca la autorización y se borran las condiciones médicas y las alergias. Queda constancia en el historial.')).toBeInTheDocument();
+    // Assert: los textos pasan de «Asma» y «Polen» a vacios, asi que viajan
+    expect(enFicha().getByText(AVISO_DE_REVOCACION)).toBeInTheDocument();
     const cuerpo = await guardar(user);
     expect(cuerpo).toMatchObject({ autorizo_datos_sensibles: false, condiciones_medicas: '', alergias: '' });
+  });
+
+  test('should warn and send only the revocation, without the health texts, when the authorization is unmarked and there was no health data stored', async () => {
+    // Arrange: autorizo, pero no tiene condiciones medicas ni alergias guardadas
+    ana = { ...AUTORIZADA, condiciones_medicas: null, alergias: null };
+    const { user } = await abrirFichaDeAna();
+    expect(enFicha().queryByText(/^Al guardar se revoca la autorización/)).not.toBeInTheDocument();
+
+    // Act
+    await user.click(autorizacion());
+
+    // Assert: no habia textos y sigue sin haberlos, asi que no viajan
+    expect(enFicha().getByText(AVISO_DE_REVOCACION)).toBeInTheDocument();
+    const cuerpo = await guardar(user);
+    expect(cuerpo).toMatchObject({ autorizo_datos_sensibles: false });
+    expect(cuerpo).not.toHaveProperty('condiciones_medicas');
+    expect(cuerpo).not.toHaveProperty('alergias');
   });
 
   test.each([
@@ -442,6 +482,93 @@ describe('MiembrosPage: los datos sensibles en la ficha, despues de un guardado 
     const cuerpo = await guardar(user, 2);
 
     // Assert: va la ciudad, y sigue sin ir una autorizacion que nadie toco
+    expect(await screen.findByText('Miembro actualizado.')).toBeInTheDocument();
+    expect(cuerpo).toMatchObject({ ciudad: 'Bello' });
+    sinDatosSensibles(cuerpo);
+  });
+});
+
+/*
+ * Un rechazo del servidor (400 a 499) no es un guardado a medias: el servidor contesto y no guardo nada, asi
+ * que lo cargado sigue valiendo y no se reenvia lo que la persona dejo como estaba. Con un 5xx, igual que sin
+ * conexion, no se sabe que alcanzo a quedar guardado.
+ */
+describe('MiembrosPage: los datos sensibles en la ficha, cuando el servidor rechaza el guardado', () => {
+  const DATOS_INVALIDOS = { status: 400, code: 'VALIDATION_ERROR', message: 'Datos inválidos.' };
+  const DOCUMENTO_REPETIDO = { status: 409, code: 'DUPLICATE_DOCUMENT', message: 'Ya existe un miembro con ese documento.' };
+  const ERROR_INTERNO = { status: 500, code: 'INTERNAL', message: 'Error interno del servidor.' };
+  const SIN_BASE = { status: 503, code: 'DB_UNREACHABLE', message: 'No pudimos actualizar el miembro. Intenta de nuevo.' };
+
+  /** Ana autorizo y tiene «Asma» y «Polen». Se revoca, el guardado falla con `fallo`, y la casilla se vuelve a marcar. */
+  async function revocarFallarYVolverAMarcar(fallo) {
+    ana = AUTORIZADA;
+    mockPut = vi.fn()
+      .mockRejectedValueOnce(fallo)
+      .mockResolvedValueOnce({ data: { message: 'Miembro actualizado.' } });
+    const pantalla = await abrirFichaDeAna();
+    const { user } = pantalla;
+    await user.click(autorizacion());
+    await user.click(guardarCambios());
+    expect(await enFicha().findByRole('alert')).toHaveTextContent(fallo.message);
+    expect(mockPut.mock.calls[0][1]).toMatchObject({ autorizo_datos_sensibles: false, condiciones_medicas: '', alergias: '' });
+    await user.click(autorizacion());
+    expect(autorizacion()).toBeChecked();
+    expect(condiciones()).toHaveValue('Asma');
+    expect(alergias()).toHaveValue('Polen');
+    return pantalla;
+  }
+
+  test.each([
+    [400, DATOS_INVALIDOS],
+    [409, DOCUMENTO_REPETIDO],
+  ])('should not send the authorization nor the health data in the next save when the server rejected with %i the save that carried the revocation and the box was marked again', async (_status, rechazo) => {
+    // Arrange
+    const { user } = await revocarFallarYVolverAMarcar(rechazo);
+
+    // Act: todo queda como llego; solo se corrige la ciudad
+    await cambiarCiudad(user);
+    const cuerpo = await guardar(user, 2);
+
+    // Assert: el servidor no guardo la revocacion, asi que no hay nada que deshacer
+    expect(await screen.findByText('Miembro actualizado.')).toBeInTheDocument();
+    expect(cuerpo).toMatchObject({ ciudad: 'Bello' });
+    sinDatosSensibles(cuerpo);
+  });
+
+  test.each([
+    [0, SIN_CONEXION],
+    [500, ERROR_INTERNO],
+    [503, SIN_BASE],
+  ])('should send the authorization and the health data on screen in the next save when the save that carried the revocation failed with %i and the box was marked again', async (_status, fallo) => {
+    // Arrange
+    const { user } = await revocarFallarYVolverAMarcar(fallo);
+
+    // Act
+    const cuerpo = await guardar(user, 2);
+
+    // Assert: por si el servidor alcanzo a revocar y a borrar los datos
+    expect(await screen.findByText('Miembro actualizado.')).toBeInTheDocument();
+    expect(cuerpo).toMatchObject({ autorizo_datos_sensibles: true, condiciones_medicas: 'Asma', alergias: 'Polen' });
+  });
+
+  test('should not send the restored text in the next save when the server rejected with 400 the save that carried only a health text', async () => {
+    // Arrange: solo cambia «Condiciones médicas», y el servidor rechaza el guardado
+    ana = AUTORIZADA;
+    mockPut = vi.fn()
+      .mockRejectedValueOnce(DATOS_INVALIDOS)
+      .mockResolvedValueOnce({ data: { message: 'Miembro actualizado.' } });
+    const { user } = await abrirFichaDeAna();
+    await reemplazar(user, condiciones(), 'Rinitis');
+    await user.click(guardarCambios());
+    expect(await enFicha().findByRole('alert')).toHaveTextContent('Datos inválidos.');
+    expect(mockPut.mock.calls[0][1]).toMatchObject({ condiciones_medicas: 'Rinitis' });
+
+    // Act: se vuelve a escribir lo que habia y se corrige la ciudad
+    await reemplazar(user, condiciones(), 'Asma');
+    await cambiarCiudad(user);
+    const cuerpo = await guardar(user, 2);
+
+    // Assert: el servidor sigue teniendo «Asma»
     expect(await screen.findByText('Miembro actualizado.')).toBeInTheDocument();
     expect(cuerpo).toMatchObject({ ciudad: 'Bello' });
     sinDatosSensibles(cuerpo);

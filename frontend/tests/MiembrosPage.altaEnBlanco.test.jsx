@@ -311,7 +311,8 @@ describe('MiembrosPage: el alta que se cierra sin crear', () => {
     await avanzar(user, 4);
     await user.click(screen.getByRole('checkbox', { name: /^Representante legal/ }));
     await retroceder(user, 4);
-    // Se borra todo lo escrito: solo queda la casilla
+    // Se borra todo lo escrito y el tipo de documento vuelve a ser la cedula: lo unico distinto de un
+    // formulario en blanco es la casilla, que sigue marcada aunque con la cedula ya no se vea
     await user.clear(nombre());
     await user.clear(documento());
     await user.clear(telefono());
@@ -320,6 +321,8 @@ describe('MiembrosPage: el alta que se cierra sin crear', () => {
     await user.clear(campo(/^Número de documento/));
     await user.selectOptions(campo(/^Parentesco/), '');
     await user.clear(campo(/^Teléfono del representante/));
+    await user.selectOptions(campo(/^Tipo documento/), 'CC');
+    expect(screen.queryByLabelText(/^Nombre del representante legal/)).not.toBeInTheDocument();
 
     // Act
     await user.click(cerrar());
@@ -363,6 +366,80 @@ describe('MiembrosPage: el alta que se cierra sin crear', () => {
     expect(window.confirm).toHaveBeenCalledWith(PREGUNTA);
     expect(paso(1)).toBeInTheDocument();
   }, 15000);
+
+  // Lo mismo con cada dato que se escribe o se elige: con solo ese (y los tres textos del paso 1 borrados), se
+  // pregunta. Las condiciones medicas y las alergias se escriben con la casilla de datos sensibles marcada y
+  // despues se desmarca: el campo se ve vacio, pero el texto sigue en el formulario (reaparece al marcarla).
+  test.each([
+    ['the email', 0, async (user) => { await user.type(campo('Email'), 'pedro@correo.co'); }],
+    ['the address', 0, async (user) => { await user.type(campo('Dirección completa'), 'Carrera 9 # 10-11'); }],
+    ['the birth date', 0, async (user) => { await user.type(campo('Fecha nacimiento'), '01011990'); }],
+    ['the gender', 0, async (user) => { await user.selectOptions(campo('Género'), 'Masculino'); }],
+    ['the emergency contact', 1, async (user) => { await user.type(campo('Contacto de emergencia'), 'Luz Gil'); }],
+    ['the emergency phone', 1, async (user) => { await user.type(campo('Teléfono emergencia'), '3110000000'); }],
+    ['the medical conditions', 1, async (user) => {
+      await user.click(sensibles());
+      await user.type(campo('Condiciones médicas / lesiones'), 'Asma');
+      await user.click(sensibles());
+      expect(sensibles()).not.toBeChecked();
+    }],
+    ['the allergies', 1, async (user) => {
+      await user.click(sensibles());
+      await user.type(campo('Alergias'), 'Polen');
+      await user.click(sensibles());
+      expect(sensibles()).not.toBeChecked();
+    }],
+    ['the payment reference', 2, async (user) => { await user.type(campo('Referencia / comprobante'), 'TRX-PEDRO'); }],
+    ['the goal', 3, async (user) => { await user.selectOptions(campo('Objetivo principal'), 'Resistencia'); }],
+    ['the experience level', 3, async (user) => { await user.selectOptions(campo('Nivel de experiencia'), 'Avanzado'); }],
+    ['the notes of the trainer', 3, async (user) => { await user.type(campo('Observaciones / notas del entrenador'), 'Viene de noche'); }],
+  ])('should ask before closing when only %s was filled in', async (_caso, pasos, llenar) => {
+    // Arrange: se llena ese campo y despues se borran los tres textos del paso 1
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const { user } = await abrirAlta();
+    await escribirDatos(user, PEDRO);
+    await avanzar(user, pasos);
+    await llenar(user);
+    await retroceder(user, pasos);
+    await user.clear(nombre());
+    await user.clear(documento());
+    await user.clear(telefono());
+
+    // Act
+    await user.click(cerrar());
+
+    // Assert
+    expect(window.confirm).toHaveBeenCalledTimes(1);
+    expect(window.confirm).toHaveBeenCalledWith(PREGUNTA);
+    expect(paso(1)).toBeInTheDocument();
+  }, 15000);
+
+  // Los datos del representante solo se ven con un menor (aqui, la tarjeta de identidad). Para que lo unico
+  // distinto sea ese dato, despues de escribirlo el tipo de documento vuelve a la cedula: el dato sigue en el
+  // formulario aunque ya no se vea.
+  test.each([
+    ['the name', async (user) => { await user.type(campo(/^Nombre del representante legal/), 'Marta Ruiz'); }],
+    ['the document type', async (user) => { await user.selectOptions(campo(/^Tipo de documento/), 'CC'); }],
+    ['the document', async (user) => { await user.type(campo(/^Número de documento/), '52111222'); }],
+    ['the relationship', async (user) => { await user.selectOptions(campo(/^Parentesco/), 'Madre'); }],
+    ['the phone', async (user) => { await user.type(campo(/^Teléfono del representante/), '3104445566'); }],
+  ])('should ask before closing when only %s of the legal representative was filled in', async (_caso, llenar) => {
+    // Arrange
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const { user } = await abrirAlta();
+    await user.selectOptions(campo(/^Tipo documento/), 'TI');
+    await llenar(user);
+    await user.selectOptions(campo(/^Tipo documento/), 'CC');
+    expect(screen.queryByLabelText(/^Nombre del representante legal/)).not.toBeInTheDocument();
+
+    // Act
+    await user.click(cerrar());
+
+    // Assert
+    expect(window.confirm).toHaveBeenCalledTimes(1);
+    expect(window.confirm).toHaveBeenCalledWith(PREGUNTA);
+    expect(paso(1)).toBeInTheDocument();
+  });
 
   test('should close without asking when the form only has what it computes by itself: the suggested price of the plan and the dates', async () => {
     // Arrange: se elige el plan anual y se vuelve al mensual. Queda el valor que el formulario propone para
@@ -433,11 +510,201 @@ describe('MiembrosPage: el alta que se cierra sin crear', () => {
     expect(screen.queryByText('Escribe el teléfono.')).not.toBeInTheDocument();
     expect(nombre()).not.toHaveAttribute('aria-invalid');
   });
+
+  // El aviso general sale arriba de la pagina, fuera del asistente: si no se retira, queda sobre el alta siguiente.
+  test('should not show the general notice of the discarded sign-up when it was closed after trying to create without the boxes', async () => {
+    // Arrange: se pulsa «Crear miembro» sin aceptar nada y sale el aviso general
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const { user } = await abrirAlta();
+    await escribirDatos(user, PEDRO);
+    await avanzar(user, 4);
+    await user.click(screen.getByRole('button', { name: 'Crear miembro' }));
+    expect(screen.getByText('Revisa los campos marcados antes de guardar.')).toBeInTheDocument();
+    expect(screen.getByText('Debes aceptar los términos para registrar al miembro.')).toBeInTheDocument();
+
+    // Act
+    await user.click(cerrar());
+
+    // Assert: el aviso se va con el alta descartada...
+    expect(screen.queryByText('Revisa los campos marcados antes de guardar.')).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+
+    // Act
+    await user.click(nuevoMiembro());
+
+    // Assert: ...y no esta en la siguiente
+    expect(paso(1)).toBeInTheDocument();
+    expect(screen.queryByText('Revisa los campos marcados antes de guardar.')).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  }, 15000);
+
+  test('should not show the error of the server of the discarded sign-up when it was closed after the creation was rejected', async () => {
+    // Arrange: el servidor rechaza el alta de Pedro porque el documento ya existe
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    mockPost = vi.fn(async () => { throw { status: 409, code: 'DUPLICATE_DOCUMENT', message: 'Ya existe un miembro con ese documento.' }; });
+    const { user } = await abrirAlta();
+    await escribirDatos(user, PEDRO);
+    await avanzar(user, 4);
+    await user.click(contrato());
+    await user.click(tratamiento());
+    await user.click(screen.getByRole('button', { name: 'Crear miembro' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Ya existe un miembro con ese documento.');
+
+    // Act
+    await user.click(cerrar());
+
+    // Assert
+    expect(screen.queryByText('Ya existe un miembro con ese documento.')).not.toBeInTheDocument();
+
+    // Act
+    await user.click(nuevoMiembro());
+
+    // Assert
+    expect(paso(1)).toBeInTheDocument();
+    expect(screen.queryByText('Ya existe un miembro con ese documento.')).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(documento()).toHaveValue('');
+  }, 15000);
+
+  // RQNF-17: la autorizacion del representante legal es de ese representante y para ese menor.
+  test('should not carry the legal representative nor the authorization of the representative to the next sign-up when the sign-up of a minor was closed', async () => {
+    // Arrange: alta de Pedro, menor (tarjeta de identidad), con los cinco datos de su representante y la
+    // casilla de la representante marcada. Se cierra sin crear
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const { user } = await abrirAlta();
+    await escribirDatos(user, PEDRO);
+    await user.selectOptions(campo(/^Tipo documento/), 'TI');
+    await user.type(campo(/^Nombre del representante legal/), 'Marta Ruiz');
+    await user.selectOptions(campo(/^Tipo de documento/), 'CC');
+    await user.type(campo(/^Número de documento/), '52111222');
+    await user.selectOptions(campo(/^Parentesco/), 'Madre');
+    await user.type(campo(/^Teléfono del representante/), '3104445566');
+    await avanzar(user, 4);
+    await user.click(screen.getByRole('checkbox', { name: /^Representante legal/ }));
+    expect(screen.getByRole('checkbox', { name: /^Representante legal/ })).toBeChecked();
+    await user.click(cerrar());
+
+    // Act: llega Maria, que tambien es menor
+    await user.click(nuevoMiembro());
+
+    // Assert: el tipo de documento vuelve a ser la cedula y no hay nada del representante de Pedro
+    expect(paso(1)).toBeInTheDocument();
+    expect(campo(/^Tipo documento/)).toHaveValue('CC');
+    await escribirDatos(user, MARIA);
+    await user.selectOptions(campo(/^Tipo documento/), 'TI');
+    expect(campo(/^Nombre del representante legal/)).toHaveValue('');
+    expect(campo(/^Tipo de documento/)).toHaveValue('');
+    expect(campo(/^Número de documento/)).toHaveValue('');
+    expect(campo(/^Parentesco/)).toHaveValue('');
+    expect(campo(/^Teléfono del representante/)).toHaveValue('');
+
+    // Act: se intenta seguir sin representante
+    await user.click(siguiente());
+
+    // Assert: no deja; con los datos de la representante de Pedro habria pasado
+    expect(paso(1)).toBeInTheDocument();
+    expect(screen.getByText('Escribe el nombre completo del representante legal.')).toBeInTheDocument();
+    expect(screen.getByText('Elige el tipo de documento.')).toBeInTheDocument();
+    expect(screen.getByText('Escribe el documento del representante.')).toBeInTheDocument();
+    expect(screen.getByText('Indica el parentesco con el menor.')).toBeInTheDocument();
+    expect(screen.getByText('Debe tener entre 7 y 15 dígitos.')).toBeInTheDocument();
+
+    // Act: se escriben los datos del representante de Maria y se llega a los terminos
+    await user.type(campo(/^Nombre del representante legal/), 'Rosa Rojas');
+    await user.selectOptions(campo(/^Tipo de documento/), 'CE');
+    await user.type(campo(/^Número de documento/), '41222333');
+    await user.selectOptions(campo(/^Parentesco/), 'Padre');
+    await user.type(campo(/^Teléfono del representante/), '3157778899');
+    await avanzar(user, 4);
+
+    // Assert: la casilla del representante no viene marcada, y sin ella no se crea
+    expect(paso(5)).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: /^Representante legal/ })).not.toBeChecked();
+    await user.click(contrato());
+    await user.click(tratamiento());
+    await user.click(screen.getByRole('button', { name: 'Crear miembro' }));
+    expect(screen.getByText('El miembro es menor de edad: falta la autorización de su representante legal.')).toBeInTheDocument();
+    expect(mockPost).not.toHaveBeenCalled();
+
+    // Act: el representante de Maria autoriza
+    await user.click(screen.getByRole('checkbox', { name: /^Representante legal/ }));
+    await user.click(screen.getByRole('button', { name: 'Crear miembro' }));
+
+    // Assert: el POST lleva al representante de Maria y nada del de Pedro
+    expect(await screen.findByRole('dialog', { name: '¡Miembro creado exitosamente!' })).toBeInTheDocument();
+    const cuerpo = mockPost.mock.calls[0][1];
+    expect(cuerpo).toMatchObject({
+      nombre: 'María Rojas', tipo_documento: 'TI', autoriza_representante: true,
+      representante_nombre: 'Rosa Rojas', representante_tipo_documento: 'CE', representante_documento: '41222333',
+      representante_parentesco: 'Padre', representante_telefono: '3157778899',
+    });
+    expect(JSON.stringify(cuerpo)).not.toMatch(/Marta|52111222|3104445566|Madre|Pedro/);
+  }, 30000);
+
+  test('should not carry the plan, the amounts, the payment method, the reminder nor the other choices of the discarded sign-up to the next one', async () => {
+    // Arrange: en el alta de Pedro se eligen la fecha de nacimiento, el genero, el telefono de emergencia, el
+    // plan anual (el formulario propone su valor), lo pagado, el metodo, el recordatorio, el objetivo y el nivel
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const { user } = await abrirAlta();
+    await escribirDatos(user, PEDRO);
+    await user.type(campo('Fecha nacimiento'), '01011990');
+    await user.selectOptions(campo('Género'), 'Masculino');
+    await user.click(siguiente());
+    await user.type(campo('Teléfono emergencia'), '3110000000');
+    await user.click(siguiente());
+    await user.selectOptions(campo(/^Tipo de plan/), 'ANUAL');
+    expect(campo(/^Valor total del plan/)).toHaveValue(900000);
+    await user.clear(campo('Valor pagado hoy'));
+    await user.type(campo('Valor pagado hoy'), '50000');
+    await user.selectOptions(campo(/^Método de pago/), 'NEQUI');
+    await user.click(screen.getByRole('checkbox', { name: /^Activar recordatorio/ }));
+    await user.click(siguiente());
+    await user.selectOptions(campo('Objetivo principal'), 'Resistencia');
+    await user.selectOptions(campo('Nivel de experiencia'), 'Avanzado');
+    await user.click(cerrar());
+
+    // Act: se abre el alta de Maria y se recorre paso a paso
+    await user.click(nuevoMiembro());
+
+    // Assert: cada eleccion esta como en un formulario recien abierto
+    expect(paso(1)).toBeInTheDocument();
+    expect(campo('Fecha nacimiento')).toHaveValue('');
+    expect(campo('Género')).toHaveValue('');
+    await escribirDatos(user, MARIA);
+    await user.click(siguiente());
+    expect(campo('Teléfono emergencia')).toHaveValue('');
+    await user.click(siguiente());
+    expect(campo(/^Tipo de plan/)).toHaveValue('MENSUAL');
+    expect(campo(/^Valor total del plan/)).toHaveValue(null);
+    expect(campo('Valor pagado hoy')).toHaveValue(0);
+    expect(campo(/^Método de pago/)).toHaveValue('EFECTIVO');
+    expect(screen.getByRole('checkbox', { name: /^Activar recordatorio/ })).not.toBeChecked();
+    expect(campo(/^Fecha fin/)).toHaveValue('19/12/2026');
+    await user.click(siguiente());
+    expect(campo('Objetivo principal')).toHaveValue('');
+    expect(campo('Nivel de experiencia')).toHaveValue('');
+
+    // Act: se crea a Maria sin elegir nada de eso
+    await user.click(siguiente());
+    await user.click(contrato());
+    await user.click(tratamiento());
+    await user.click(screen.getByRole('button', { name: 'Crear miembro' }));
+
+    // Assert: el POST lleva los valores de un formulario en blanco, no los de Pedro
+    expect(await screen.findByRole('dialog', { name: '¡Miembro creado exitosamente!' })).toBeInTheDocument();
+    const cuerpo = mockPost.mock.calls[0][1];
+    expect(cuerpo).toMatchObject({
+      nombre: 'María Rojas', tipo_plan: 'MENSUAL', valor_total: '', valor_pagado: '0', metodo_pago: 'EFECTIVO',
+      activar_recordatorio: false, fecha_nacimiento: '', genero: '', telefono_emergencia: '', objetivo: '', nivel_experiencia: '',
+    });
+    expect(JSON.stringify(cuerpo)).not.toMatch(/ANUAL|900000|50000|NEQUI|1990|Masculino|3110000000|Resistencia|Avanzado/);
+  }, 30000);
 });
 
 /*
  * Con el POST del alta en camino, el miembro se va a crear igual: cerrar en ese momento no descarta nada, y la
- * respuesta caeria sobre el alta que hubiera abierta al llegar. Mientras se crea, «Cerrar» no hace nada.
+ * respuesta caeria sobre el alta que hubiera abierta al llegar. Mientras se crea, «Cerrar» queda deshabilitado
+ * y no hace nada.
  */
 describe('MiembrosPage: «Cerrar» mientras se crea el miembro', () => {
   /** Llena el alta de Maria y pulsa «Crear miembro»; el POST queda sin responder. */
@@ -459,13 +726,16 @@ describe('MiembrosPage: «Cerrar» mientras se crea el miembro', () => {
     };
   }
 
-  test('should neither ask nor close when Cerrar is clicked while the member is being created, and close as usual when the answer arrives', async () => {
+  test('should keep Cerrar disabled, without asking nor closing, while the member is being created, and close as usual when the answer arrives', async () => {
     // Arrange
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     const { user, responder } = await crearConElPostEnCamino();
     expect(screen.getByRole('button', { name: 'Creando miembro...' })).toBeDisabled();
 
-    // Act
+    // Assert: con el POST en camino, «Cerrar» esta deshabilitado
+    expect(cerrar()).toBeDisabled();
+
+    // Act: aun asi se pulsa
     await user.click(cerrar());
 
     // Assert: ni pregunta ni cierra; el alta sigue como estaba
@@ -482,23 +752,25 @@ describe('MiembrosPage: «Cerrar» mientras se crea el miembro', () => {
     const aviso = await screen.findByRole('dialog', { name: '¡Miembro creado exitosamente!' });
     await user.click(within(aviso).getAllByRole('button', { name: 'Cerrar' }).at(-1));
     expect(paso(5)).not.toBeInTheDocument();
-    expect(nuevoMiembro()).toBeInTheDocument();
+    expect(nuevoMiembro()).toBeEnabled();
     expect(await screen.findByRole('row', { name: /María Rojas/ })).toBeInTheDocument();
     expect(mockPost).toHaveBeenCalledTimes(1);
     expect(mockPost.mock.calls[0][1]).toMatchObject({ nombre: 'María Rojas', documento: '52999111' });
     expect(window.confirm).not.toHaveBeenCalled();
   }, 20000);
 
-  test('should ask again before closing when the creation fails and Cerrar is clicked afterwards', async () => {
-    // Arrange: se pulsa «Cerrar» con el POST en camino (no hace nada) y despues el POST falla
+  test('should enable Cerrar again and ask before closing when the creation fails and Cerrar is clicked afterwards', async () => {
+    // Arrange: con el POST en camino «Cerrar» esta deshabilitado (pulsarlo no hace nada); despues el POST falla
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     const { user, fallar } = await crearConElPostEnCamino();
+    expect(cerrar()).toBeDisabled();
     await user.click(cerrar());
     expect(window.confirm).not.toHaveBeenCalled();
     await fallar({ status: 0, code: 'NETWORK', message: 'Sin conexion con el servidor. Verifica tu internet e intenta de nuevo.' });
     expect(await screen.findByText(/Sin conexion con el servidor\./)).toBeInTheDocument();
     expect(paso(5)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Crear miembro' })).toBeEnabled();
+    expect(cerrar()).toBeEnabled();
 
     // Act: el miembro no se creo; ahora cerrar si descarta lo escrito
     await user.click(cerrar());
