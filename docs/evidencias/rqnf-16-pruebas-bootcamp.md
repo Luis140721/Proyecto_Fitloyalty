@@ -6,17 +6,18 @@ Al fusionar `develop`, 41 pruebas del bootcamp fallaban: estaban escritas contra
 
 | Capa | Archivo | Pruebas en `develop` | Fallaban | Pruebas ahora |
 |---|---|---|---|---|
-| API | `backend/tests/campanas-rutas.test.js` | 69 | 23 | 120 |
+| API | `backend/tests/campanas-rutas.test.js` | 69 | 23 | 123 |
 | API | `backend/tests/miembros-rutas.test.js` | 87 | 1 | 89 |
 | API | `backend/tests/miembros-api-crud.test.js` | 15 | 1 | 15 |
+| API | `backend/tests/contrato-front.test.js` | 25 | 0 | 26 |
 | Front | `frontend/tests/CampanasPage.test.jsx` | 42 | 11 | 61 |
 | Front | `frontend/tests/MenuNotificaciones.test.jsx` | 13 | 2 | 17 |
-| Front | `frontend/tests/MiembrosPage.ficha.test.jsx` | 36 | 3 | 52 |
+| Front | `frontend/tests/MiembrosPage.ficha.test.jsx` | 36 | 3 | 62 |
 | Front | `frontend/tests/App.test.jsx` | 10 | 0 | 11 |
-| Front | `frontend/tests/ConfigPage.test.jsx` | 14 | 0 | 17 |
-| Front | cinco archivos nuevos (`BajaMensajesPage`, `contactoWhatsapp`, `AutorizacionesMiembro`, `MiembrosPage.comerciales`, `autorizaciones`) | 0 | — | 92 |
+| Front | `frontend/tests/ConfigPage.test.jsx` | 14 | 0 | 20 |
+| Front | seis archivos nuevos (`BajaMensajesPage` 17, `contactoWhatsapp` 9, `AutorizacionesMiembro` 21, `MiembrosPage.comerciales` 20, `MiembrosPage.entreFichas` 19, `autorizaciones` 32) | 0 | — | 118 |
 
-Cada prueba adaptada o nueva se hizo fallar al menos una vez con un cambio temporal en el código (34 cambios en el backend y 62 en el panel, todos revertidos), y las suites pasan con el reloj del sistema en distintos días y zonas horarias: el reloj de la ley va fijo en las pruebas.
+Cada prueba adaptada o nueva se hizo fallar al menos una vez con un cambio temporal en el código (40 cambios en el backend y 95 en el panel, todos revertidos), y las suites pasan con el reloj del sistema en distintos días y zonas horarias: el reloj de la ley va fijo en las pruebas.
 
 ## Backend: pruebas existentes que cambiaron
 
@@ -231,3 +232,79 @@ Las marcadas con **(2.ª)** cubren los arreglos de `frontend/src` que salieron d
 | autorizaciones | `should accept the representative when every piece of data is complete, with the phone written with spaces` | Representante válido |
 | autorizaciones | `should explain what is missing in each field when the representative is empty` | Los cinco mensajes |
 | autorizaciones | `should reject only that field when the representative has %s` (5 casos) | Teléfono de 6 o 16 dígitos, TI como documento, nombre o documento cortos |
+
+## Después de la quinta revisión independiente
+
+La quinta revisión del PR no encontró bloqueos; dejó observaciones que se cerraron en esta misma rama (ver «Después de fusionar el bootcamp de pruebas» en `rqnf-16-ley-2300.md`). Estas son las pruebas que cambiaron o se agregaron con ellas.
+
+### Backend: pruebas nuevas
+
+Cubren tres cambios que, quitados del código, no hacían fallar ninguna prueba: el teléfono que no es válido para WhatsApp cuando el servidor no tiene el módulo, el mensaje del reintento con el módulo activo y el 429 del enlace de baja.
+
+| Archivo | Bloque | Prueba | Casos |
+|---|---|---|---|
+| `campanas-rutas.test.js` | ejecutar | `should mark FALLIDO the member whose phone is not valid for WhatsApp and leave PENDIENTE the ones with a valid phone when the WhatsApp module is not active and the phone %s` (`has five digits` = «12345», `has no digits` = «no tiene») | 2 |
+| `campanas-rutas.test.js` | reintentar | `should send by WhatsApp to the recipients left PENDIENTE and answer the summary of the retry, not that they are sent by hand, when the campaign is by WhatsApp and the module is active` | 1 |
+| `contrato-front.test.js` | `GET /api/baja/:token (BajaMensajesPage)` (bloque nuevo) | `should answer 429 with error and code RATE_LIMITED when the twenty-first request arrives within a minute` | 1 |
+
+Además, `backend/tests/ley2300-real.test.js` suma dos pruebas contra PostgreSQL (28 en total): el texto del envío a mano igual al de la lista, y quien no tiene un teléfono válido queda `FALLIDO` sin módulo, con tres reintentos a la vez que no duplican la constancia.
+
+### Panel: pruebas que cambiaron
+
+La aceptación de mensajes comerciales dejó de viajar en cada guardado de la ficha: solo viaja si se cambió. Las pruebas que afirmaban lo contrario se ajustaron (la fila 16 es la de la tabla de arriba; las otras tres son pruebas agregadas en esta misma rama).
+
+| # | Archivo | Prueba | Qué afirmaba antes | Qué afirma ahora | Por qué |
+|---|---|---|---|---|---|
+| 16 | MiembrosPage.ficha | `should send only the fields the API accepts when the user saves the changes` | En el HEAD original: el PUT no lleva claves fuera de la lista de editables. En la primera pasada: además lleva `acepta_mensajes_comerciales: false` y `canales_comerciales: []` | El PUT lleva teléfono, ciudad, fecha y `activo`, ninguna clave fuera de la lista de editables, y **no trae** `acepta_mensajes_comerciales` ni `canales_comerciales` (`not.toHaveProperty`). La lista de editables sigue incluyendo las dos, porque la API las acepta | La decisión comercial solo viaja si se cambió en esa ficha. Si viajara siempre, guardar otro campo volvería a registrar un «sí» que el miembro pudo cancelar con el enlace (art. 5) |
+| 19 | MiembrosPage.ficha | `should enable Guardar cambios and save the data of the full record when it arrives` | El PUT llevaba ciudad, fecha y `acepta_mensajes_comerciales: true`, `['WHATSAPP']` | El PUT a `/admin/miembros/1` lleva nombre, ciudad, dirección, fecha y contacto de emergencia del registro completo, y **no trae** las dos claves comerciales | Igual que la 16 |
+| 20 | MiembrosPage.ficha | `should save when Enter submits the form and the full record is loaded` | El PUT llevaba `true`, `['WHATSAPP']` | El PUT va a `/admin/miembros/1` con nombre, ciudad y fecha, y **no trae** las dos claves | Igual que la 16 |
+| 21 | MiembrosPage.ficha | `should leave the second file untouched when the answer of the first one arrives after another file was opened` | El PUT a `/admin/miembros/2` llevaba nombre, ciudad y `false`, `[]` | El PUT a `/admin/miembros/2` lleva nombre, documento, ciudad, dirección y fecha de Carlos, y **no trae** las dos claves | Igual que la 16 |
+
+| Archivo | Prueba | Qué afirmaba antes | Qué afirma ahora | Por qué |
+|---|---|---|---|---|
+| MiembrosPage.entreFichas | `should not show the plan of the closed file when its plan save finished after it was closed and the next file is loading` | En el Arrange esperaba que la página volviera a pedir el plan de Ana (dos peticiones). Después, que la ficha de Carlos, cargando, no mostrara ese plan ni «Plan actualizado.» | Cuando el guardado contesta con la ficha cerrada se recarga la lista (dos peticiones a `/admin/miembros`) y el plan de Ana se pidió **una sola vez**; se comprueba antes y después de abrir la de Carlos. La ficha de Carlos no muestra el plan de Ana ni «Plan actualizado.» | El guardado que contesta sin su ficha en pantalla ya no vuelve a pedir el plan de ese miembro |
+
+### Panel: pruebas nuevas
+
+| Archivo | Prueba | Qué comprueba |
+|---|---|---|
+| MiembrosPage.comerciales | `should send the acceptance with both channels when a channel is added to the one the member had` | Agregar un canal sí viaja: `true`, `['WHATSAPP','EMAIL']` |
+| MiembrosPage.comerciales | `should not send the commercial decision when only another field of a member who had accepted is edited` | El caso del hallazgo: registro con `true` y `['WHATSAPP']`, se cambia solo la ciudad; el PUT lleva la ciudad y no trae las dos claves |
+| MiembrosPage.comerciales | `should not send the commercial decision when the file of a member who has not accepted is saved without touching it` | Tampoco viaja un «no» que nadie registró |
+| MiembrosPage.comerciales | `should not send the commercial decision when the switch is turned off and on again` | Cambiar y volver a dejarlo como estaba no viaja |
+| MiembrosPage.comerciales | `should not send the commercial decision when a channel is added and taken away again` | Lo mismo con un canal |
+| MiembrosPage.comerciales | `should not count it as a change when the channels end up the same in another order` | El registro trae `['EMAIL','WHATSAPP']`; quitar y volver a marcar WhatsApp los deja en otro orden y no viaja |
+| MiembrosPage.comerciales | `should not send the commercial decision when a member who had not accepted gets channels marked but does not accept` | Marcar canales, aceptar y volver a apagar deja al miembro sin aceptar: no viaja |
+| MiembrosPage.ficha | `should treat it as a failed load and not let the file be saved when the server answers without the member` | (b) Un 200 sin `miembro`: error «No pudimos cargar los datos completos del miembro.», aviso exacto de no guardar, botón deshabilitado, ningún PUT, y no se pide el plan |
+| MiembrosPage.ficha | `should keep Guardar cambios disabled while the next file loads and after its load fails when the previous file was fully loaded and then %s` (2 casos: cancelada, guardada) | El hueco del revisor: la ficha de Ana carga completa y se cierra; la de Carlos queda deshabilitada mientras carga y cuando su carga falla, y a Carlos no le llega ningún PUT ni con clic ni con Enter |
+| MiembrosPage.ficha | `should leave no Copiado timer pending when the file is saved right after copying` | Tras «Guardar cambios» no queda el timer de «Copiado» |
+| MiembrosPage.ficha | `should create no timer when the copy finishes after the person left the page` | (d) El portapapeles contesta después de desmontar y `vi.getTimerCount()` queda en 0 |
+| MiembrosPage.ficha | `should show Copiado and start its 2 seconds when the copy finishes with the file still open` | La guarda de `montada` no estorba con la página abierta |
+| MiembrosPage.ficha | `should show Copiado when the page runs inside StrictMode, as the app does` | `main.jsx` monta la app en `StrictMode` (monta, desmonta y vuelve a montar): «Copiado» sigue saliendo |
+| MiembrosPage.ficha | `should offer Copiar código in the next file when the previous one was %s right after copying` (2 casos: cancelada, guardada) | (a-iv) El «Copiado» de una ficha no aparece en la siguiente, abierta antes de 2 s |
+| MiembrosPage.ficha | `should offer Copiar código in the next file when the copy of the previous one finished after it was closed` | La copia que termina con la ficha ya cerrada no deja «Copiado» en la siguiente |
+| MiembrosPage.entreFichas | `should not show the plan of the saved file nor a way to save it when the next file is loading or fails to load` | (a-i) Tras guardar la ficha de Ana, la de Carlos no muestra «Plan y cobro», «Guardar plan», el valor ni la congelación de Ana, ni mientras carga ni si su carga falla; no sale ningún PUT de plan |
+| MiembrosPage.entreFichas | `should show only the plan of the next member and save it for that member when the previous file was %s` (2 casos) | (a-v) Mientras el plan de Carlos tarda no se ve el de Ana ni su congelación; al llegar, «Guardar plan» manda a `/admin/miembros/2/plan` el plan de Carlos, con el cuerpo exacto |
+| MiembrosPage.entreFichas | `should keep the plan of the open file when the plan of the previous one arrives late and that file was %s` (2 casos) | (a-ii) El plan de Ana llega con la ficha de Carlos abierta: sigue el de Carlos, y «Guardar plan» guarda el de Carlos |
+| MiembrosPage.entreFichas | `should keep the plan of the open file and show no plan error when the plan of the previous one fails late` | (a-iii) El plan de Ana falla tarde: ni aparece el error ni se pierde el editor del plan de Carlos |
+| MiembrosPage.entreFichas | `should not show the plan error of the saved file when the next file is still loading` | El error de plan de la ficha guardada no queda en la siguiente |
+| MiembrosPage.entreFichas | `should not show the plan of the closed file when its plan save finished after it was closed and the next file is loading` | «Guardar plan» contesta con la ficha ya cerrada; la siguiente ficha no muestra ese plan ni «Plan actualizado.» |
+| MiembrosPage.entreFichas | `should not keep the freeze reason typed in the saved file when the next file opens` | El motivo de congelamiento escrito en una ficha no queda en la siguiente |
+| MiembrosPage.entreFichas | `should show the QR of the open file and not ask for the plan of the previous one when its QR image is drawn late` | La imagen del QR de Ana, dibujada tarde, no reemplaza la de Carlos, y ya no se pide el plan de Ana |
+| ConfigPage | `should create no timer when the answer of the save arrives after the admin left the page` | (e) El PUT contesta después de desmontar y `vi.getTimerCount()` queda en 0 |
+| ConfigPage | `should show the notice and start its 3 seconds when the answer of the save arrives late with the page still open` | La guarda de `montada` no estorba con la página abierta |
+| ConfigPage | `should confirm the save when the page runs inside StrictMode, as the app does` | En `StrictMode` el aviso de guardado sigue saliendo |
+
+Todas las siguientes están en `MiembrosPage.entreFichas.test.jsx`:
+
+| Prueba | Qué comprueba |
+|---|---|
+| `should keep the plan of the open file and ask for no plan again when the plan save of the previous file answers late` | (i) «Guardar plan» de Ana contesta con la ficha de Carlos abierta y su plan cargado. La única petición nueva es la lista; la ficha de Carlos conserva su plan y no dice «Plan actualizado.». El siguiente «Guardar plan» manda a `/admin/miembros/2/plan` el cuerpo exacto del plan de Carlos |
+| `should show no plan error in the open file when the plan save of the previous file fails late` | (ii) El guardado de Ana falla tarde: no aparece «No pudimos guardar el plan.» en la ficha de Carlos, su plan sigue igual y no sale ninguna petición |
+| `should not say Plan actualizado in the open file when the file changed while the saved plan was being reloaded` | El guardado contesta a tiempo, pero la recarga del plan de Ana tarda y se cambia de ficha: la de Carlos no dice «Plan actualizado.» |
+| `should keep the plan and the typed reason of the open file when the freeze of the previous file answers late` | (iii) «Congelar membresía» de Ana contesta tarde: la única petición nueva es la lista; en la ficha de Carlos no aparece «Membresía congelada desde hoy.» ni el plan de Ana, y el motivo que se estaba escribiendo no se borra |
+| `should show no freeze error in the open file and keep its typed reason when the freeze of the previous file fails late` | (iv) El congelamiento de Ana falla tarde: no aparece «No pudimos cambiar el congelamiento.», el motivo sigue y no sale ninguna petición |
+| `should not say the membership was frozen in the open file when the file changed while the frozen plan was being reloaded` | El congelamiento contesta a tiempo, pero la recarga del plan tarda y se cambia de ficha: la de Carlos no muestra el aviso |
+| `should reload the plan and show the notice in the same file when the membership is frozen and the file stays open` | (v) Con la misma ficha abierta, congelar vuelve a pedir el plan (dos peticiones), muestra «Congelada desde el 20/11/2026 (2 días).», el aviso y «Descongelar membresía» |
+| `should not show Copiado in the open file nor leave a timer when the copy of the previous file finishes late` | (vi) La copia del QR de Ana termina con la ficha de Carlos abierta: sigue «Copiar código» y `vi.getTimerCount()` queda en 0 |
+| `should leave no timer when the copy finishes with the file already closed` | La copia termina sin ninguna ficha abierta: no se crea el timer |
