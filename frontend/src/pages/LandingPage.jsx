@@ -185,7 +185,21 @@ export default function LandingPage() {
             </li>
           </ul>
         </div>
-        <HeroMock />
+        {/* Foto de la sala con el panel encima: el producto en su contexto. */}
+        <div className="hero-visual">
+          <div className="hero-photo">
+            <img
+              src="/images/landing/sala-960.webp"
+              srcSet="/images/landing/sala-480.webp 480w, /images/landing/sala-960.webp 960w"
+              sizes="(max-width: 960px) 92vw, 46vw"
+              width="960"
+              height="1280"
+              alt="Sala de máquinas de un gimnasio con luces moradas"
+              decoding="async"
+            />
+          </div>
+          <HeroMock />
+        </div>
       </section>
 
       {/* ---------- DOLOR ---------- */}
@@ -231,6 +245,67 @@ export default function LandingPage() {
               <p>{s.text}</p>
             </article>
           ))}
+        </div>
+      </section>
+
+      {/* ---------- EN TU SALA (fotos) ---------- */}
+      <section className="section" aria-labelledby="fotos-title">
+        <span className="section-eyebrow">EN TU SALA</span>
+        <h2 className="section-title" id="fotos-title">
+          Tú atiendes la sala. FitLoyalty lleva el resto.
+        </h2>
+        <p className="section-lead">
+          Ingresos, vencimientos y retos al día, mientras tus miembros entrenan.
+        </p>
+        <div className="photo-band">
+          <figure className="photo-card">
+            <img
+              src="/images/landing/prensa-960.webp"
+              srcSet="/images/landing/prensa-480.webp 480w, /images/landing/prensa-960.webp 960w"
+              sizes="(max-width: 720px) 92vw, 31vw"
+              width="960"
+              height="1280"
+              alt="Prensa de piernas en la zona de pesas de un gimnasio"
+              loading="lazy"
+              decoding="async"
+            />
+            <figcaption>
+              <strong>Ingreso con QR</strong>
+              <span>Cada miembro entra con su código, sin listas en papel.</span>
+            </figcaption>
+          </figure>
+          <figure className="photo-card">
+            <img
+              src="/images/landing/boxeo-960.webp"
+              srcSet="/images/landing/boxeo-480.webp 480w, /images/landing/boxeo-960.webp 960w"
+              sizes="(max-width: 720px) 92vw, 31vw"
+              width="960"
+              height="1280"
+              alt="Guantes de boxeo colgados sobre un saco en un gimnasio"
+              loading="lazy"
+              decoding="async"
+            />
+            <figcaption>
+              <strong>Retos de asistencia</strong>
+              <span>Metas del mes que dan un motivo para volver.</span>
+            </figcaption>
+          </figure>
+          <figure className="photo-card">
+            <img
+              src="/images/landing/multipower-960.webp"
+              srcSet="/images/landing/multipower-480.webp 480w, /images/landing/multipower-960.webp 960w"
+              sizes="(max-width: 720px) 92vw, 31vw"
+              width="960"
+              height="1280"
+              alt="Máquina multipower frente al espejo de un gimnasio"
+              loading="lazy"
+              decoding="async"
+            />
+            <figcaption>
+              <strong>Avisos de vencimiento</strong>
+              <span>El aviso sale antes de que el plan venza.</span>
+            </figcaption>
+          </figure>
         </div>
       </section>
 

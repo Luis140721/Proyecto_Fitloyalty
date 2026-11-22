@@ -274,6 +274,57 @@
 }
 .hero-mock-chart svg { width: 100%; height: 100%; }
 
+/* ---------- Foto del hero ----------
+   La foto de la sala va detrás y el panel de muestra se monta sobre su
+   esquina inferior izquierda. El espacio de abajo lo reserva .hero-visual. */
+.hero-visual {
+  position: relative;
+  min-width: 0;
+  padding-bottom: clamp(40px, 6vw, 72px);
+}
+.hero-photo {
+  position: relative;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-subtle);
+  overflow: hidden;
+  box-shadow: 0 0 60px rgba(168, 85, 247, 0.14);
+  animation: fade-in-up var(--dur-slow) var(--ease-out) both;
+  animation-delay: 120ms;
+}
+.hero-photo img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 4 / 5;
+  max-height: min(76vh, 700px);
+  object-fit: cover;
+  object-position: 50% 38%;
+}
+/* Velo oscuro abajo: sobre él se lee el panel de muestra. */
+.hero-photo::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(180deg, rgba(10, 8, 20, 0) 40%, rgba(10, 8, 20, 0.78) 100%);
+  pointer-events: none;
+}
+.hero-visual .hero-mock {
+  position: absolute;
+  left: clamp(-24px, -2vw, -10px);
+  bottom: 0;
+  width: min(74%, 400px);
+  /* Vidrio oscuro: sobre la foto, el fondo translúcido normal no se lee. */
+  background: var(--surface-glass);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.55), 0 0 60px rgba(168, 85, 247, 0.16);
+}
+@media (max-width: 960px) {
+  /* En una columna el panel baja más, para que no tape la foto. */
+  .hero-visual { padding-bottom: 124px; }
+  .hero-photo img { aspect-ratio: 1 / 1; max-height: 460px; object-position: 50% 40%; }
+  .hero-visual .hero-mock { left: 12px; width: min(82%, 380px); }
+}
+
 /* ---------- Section base ---------- */
 .section {
   width: 100%;
@@ -425,6 +476,72 @@
     grid-column: 1;
     grid-row: auto;
   }
+}
+
+/* ---------- Fotos «En tu sala» ----------
+   Tres fotos verticales con la función encima. En celular se apilan
+   recortadas a lo ancho, para que la sección no quede demasiado larga. */
+.photo-band {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+.photo-card {
+  position: relative;
+  margin: 0;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-subtle);
+  background: var(--surface);
+  overflow: hidden;
+}
+.photo-card img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 4 / 5;
+  object-fit: cover;
+  transition: transform var(--dur-slow) var(--ease-out);
+}
+.photo-card:hover img { transform: scale(1.03); }
+.photo-card::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(180deg, rgba(8, 6, 16, 0) 42%, rgba(8, 6, 16, 0.9) 100%);
+  pointer-events: none;
+}
+.photo-card figcaption {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 18px;
+}
+.photo-card figcaption strong {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 17px;
+  letter-spacing: -0.01em;
+  color: #fff;
+}
+.photo-card figcaption span {
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.84);
+}
+@media (max-width: 720px) {
+  .photo-band { grid-template-columns: 1fr; }
+  .photo-card img { aspect-ratio: 3 / 2; }
+  /* La foto es más baja: el velo empieza antes para que el texto se lea. */
+  .photo-card::after {
+    background: linear-gradient(180deg, rgba(8, 6, 16, 0) 18%, rgba(8, 6, 16, 0.92) 100%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .photo-card img { transition: none; }
+  .photo-card:hover img { transform: none; }
+  .hero-photo { animation: none; }
 }
 
 /* ---------- Howto ---------- */
