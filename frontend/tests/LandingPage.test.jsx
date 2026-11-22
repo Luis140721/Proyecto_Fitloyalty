@@ -6,6 +6,9 @@
  * Sin API ni sesion. jsdom no implementa scrollTo ni matchMedia: se simulan
  * solo en este archivo.
  */
+import { existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, test, vi, beforeEach, afterEach } from 'vitest';
 import { screen, within, fireEvent } from '@testing-library/react';
 import LandingPage from '../src/pages/LandingPage';
@@ -182,5 +185,70 @@ describe('LandingPage: el boton de volver arriba', () => {
 
     // Assert
     expect(screen.queryByRole('button', { name: 'Volver arriba' })).not.toBeInTheDocument();
+  });
+});
+
+describe('LandingPage: las fotos del gimnasio', () => {
+  const seccionSala = () => screen.getByRole('region', { name: 'Tú atiendes la sala. FitLoyalty lleva el resto.' });
+  const fotosDeLaLanding = () => [...document.querySelectorAll('img[src^="/images/landing/"]')];
+  // Vite convierte new URL(ruta, import.meta.url) en una URL http: la carpeta se arma con path
+  const enPublic = (ruta) => join(dirname(fileURLToPath(import.meta.url)), '..', 'public', ruta);
+
+  test('should describe the three photos of the gym and leave the hero photo as decoration when the page loads', () => {
+    // Act
+    abrirLanding();
+
+    // Assert: las unicas imagenes que se anuncian son las tres fotos de la seccion
+    const fotos = within(seccionSala()).getAllByRole('img');
+    expect(fotos.map((foto) => foto.getAttribute('alt'))).toEqual([
+      'Guantes de boxeo colgados sobre un saco en un gimnasio',
+      'Prensa de piernas en la zona de pesas de un gimnasio',
+      'Máquina multipower frente al espejo de un gimnasio',
+    ]);
+    expect(screen.getAllByRole('img').filter((imagen) => imagen.tagName === 'IMG')).toEqual(fotos);
+    expect(fotosDeLaLanding()).toHaveLength(4);
+  });
+
+  test('should point every photo to a file that exists in public when the page loads', () => {
+    // Act
+    abrirLanding();
+
+    // Assert: jsdom no descarga imagenes, asi que una foto rota solo se ve mirando el disco
+    const rutas = fotosDeLaLanding().flatMap((foto) => [
+      foto.getAttribute('src'),
+      ...foto.getAttribute('srcset').split(',').map((entrada) => entrada.trim().split(' ')[0]),
+    ]);
+    expect(rutas).toHaveLength(12);
+    for (const ruta of rutas) {
+      expect(existsSync(enPublic(ruta)), `falta ${ruta} en public`).toBe(true);
+    }
+  });
+
+  test('should load the hero photo right away and the photos below the fold lazily when the page loads', () => {
+    // Act
+    abrirLanding();
+
+    // Assert: la de la portada se ve al entrar; ancho y alto evitan el salto de la pagina al cargar
+    const [portada, ...resto] = fotosDeLaLanding();
+    expect(portada).toHaveAttribute('src', '/images/landing/sala-960.webp');
+    expect(portada).not.toHaveAttribute('loading');
+    for (const foto of resto) expect(foto).toHaveAttribute('loading', 'lazy');
+    for (const foto of [portada, ...resto]) {
+      expect(foto).toHaveAttribute('width', '960');
+      expect(foto).toHaveAttribute('height', '1280');
+    }
+  });
+
+  test('should list the three functions as headings and keep the sample notices away from screen readers when the page loads', () => {
+    // Act
+    abrirLanding();
+
+    // Assert
+    const titulos = within(seccionSala()).getAllByRole('heading', { level: 3 }).map((titulo) => titulo.textContent);
+    expect(titulos).toEqual(['Ingreso con QR', 'Retos de asistencia', 'Avisos de vencimiento']);
+    // Los avisos de muestra son adorno con datos de ejemplo: estan en el DOM, pero no se anuncian
+    for (const aviso of ['Reto de noviembre', 'Vence en 3 días', '3 planes vencen esta semana']) {
+      expect(screen.getByText(aviso).closest('[aria-hidden="true"]')).not.toBeNull();
+    }
   });
 });
