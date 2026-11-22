@@ -200,7 +200,7 @@ export default function LandingPage() {
         {/* El panel de muestra y dos avisos flotan sobre la foto. Son decorativos. */}
         <div className="hero-visual" aria-hidden="true">
           <div className="hero-chip hero-chip--ingreso">
-            <span className="material-symbols-outlined icon">check_circle</span>
+            <span className="material-symbols-outlined icon" aria-hidden="true">check_circle</span>
             <span className="hero-chip__text">
               <strong>Ingreso registrado</strong>
               <small>Camila R. · QR · hace 1 min</small>
@@ -208,7 +208,7 @@ export default function LandingPage() {
           </div>
           <HeroMock />
           <div className="hero-chip hero-chip--aviso">
-            <span className="material-symbols-outlined icon">notifications_active</span>
+            <span className="material-symbols-outlined icon" aria-hidden="true">notifications_active</span>
             <span className="hero-chip__text">
               <strong>3 planes vencen esta semana</strong>
               <small>Avisos programados</small>
@@ -287,7 +287,7 @@ export default function LandingPage() {
               />
             </div>
             <div className="sala-chip sala-chip--reto" aria-hidden="true">
-              <span className="material-symbols-outlined icon">emoji_events</span>
+              <span className="material-symbols-outlined icon" aria-hidden="true">emoji_events</span>
               <span className="sala-chip__text">
                 <strong>Reto de noviembre</strong>
                 <small>8 de 12 asistencias</small>
@@ -299,21 +299,21 @@ export default function LandingPage() {
           <div className="sala-col">
             <ul className="sala-points">
               <li>
-                <span className="sala-points__icon"><span className="material-symbols-outlined icon">qr_code_scanner</span></span>
+                <span className="sala-points__icon"><span className="material-symbols-outlined icon" aria-hidden="true">qr_code_scanner</span></span>
                 <div>
                   <h3>Ingreso con QR</h3>
                   <p>Cada miembro entra con su código, sin listas en papel.</p>
                 </div>
               </li>
               <li>
-                <span className="sala-points__icon"><span className="material-symbols-outlined icon">emoji_events</span></span>
+                <span className="sala-points__icon"><span className="material-symbols-outlined icon" aria-hidden="true">emoji_events</span></span>
                 <div>
                   <h3>Retos de asistencia</h3>
                   <p>Metas del mes que dan un motivo para volver.</p>
                 </div>
               </li>
               <li>
-                <span className="sala-points__icon"><span className="material-symbols-outlined icon">notifications_active</span></span>
+                <span className="sala-points__icon"><span className="material-symbols-outlined icon" aria-hidden="true">notifications_active</span></span>
                 <div>
                   <h3>Avisos de vencimiento</h3>
                   <p>El aviso sale antes de que el plan venza.</p>
@@ -334,7 +334,7 @@ export default function LandingPage() {
                 />
               </div>
               <div className="sala-chip sala-chip--ingreso" aria-hidden="true">
-                <span className="material-symbols-outlined icon">check_circle</span>
+                <span className="material-symbols-outlined icon" aria-hidden="true">check_circle</span>
                 <span className="sala-chip__text">
                   <strong>Ingreso registrado</strong>
                   <small>Plan al día · QR</small>
@@ -357,7 +357,7 @@ export default function LandingPage() {
               />
             </div>
             <div className="sala-chip sala-chip--aviso" aria-hidden="true">
-              <span className="material-symbols-outlined icon">notifications_active</span>
+              <span className="material-symbols-outlined icon" aria-hidden="true">notifications_active</span>
               <span className="sala-chip__text">
                 <strong>Vence en 3 días</strong>
                 <small>Aviso enviado por WhatsApp</small>
