@@ -312,7 +312,7 @@ export default function CampanasPage() {
         <span className="material-symbols-outlined icon">schedule</span>
         <span>
           {horario && !horario.permitido
-            ? `Ahora no se pueden enviar mensajes: la Ley 2300 de 2023 solo lo permite ${TEXTO_HORARIO}. Si pulsas «Enviar ahora», la campaña queda programada para el ${horario.siguiente_texto}.`
+            ? `Ahora no se pueden enviar mensajes: la Ley 2300 de 2023 solo lo permite ${TEXTO_HORARIO}. Si pulsas «Enviar ahora», la campaña queda programada para el ${horario.siguiente_texto}`
             : `Las campañas solo salen ${TEXTO_HORARIO}, y solo a quienes aceptaron mensajes comerciales por ese canal (Ley 2300 de 2023).`}
         </span>
       </div>

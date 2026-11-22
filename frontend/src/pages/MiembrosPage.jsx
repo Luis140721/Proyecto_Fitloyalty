@@ -286,6 +286,13 @@ export default function MiembrosPage() {
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState('');
   const [editLoading, setEditLoading] = useState(false);
+  // La ficha solo se guarda con el registro completo ya cargado: antes de eso
+  // el formulario es la fila de la lista, y guardarla vaciaba campos y
+  // registraba una revocacion (datos sensibles, mensajes comerciales) que
+  // nadie decidio. RQNF-16 y RQNF-17.
+  const [editCompleto, setEditCompleto] = useState(false);
+  // Cual ficha se pidio de ultima: la respuesta de una anterior no pisa la actual.
+  const fichaPedida = useRef(0);
   const [editQr, setEditQr] = useState('');      // imagen del QR en el detalle
   // RQNF-17: autorizaciones del miembro que se edita (vigentes e historial).
   const [autorizacionesEdit, setAutorizacionesEdit] = useState(null);
@@ -302,6 +309,10 @@ export default function MiembrosPage() {
   const [motivoCongelar, setMotivoCongelar] = useState('');
   const [congelando, setCongelando] = useState(false);
   const [qrCopiado, setQrCopiado] = useState(false);
+  // «Copiado» vuelve a «Copiar código» a los 2 s; el timer se cancela al
+  // cerrar la ficha o salir de la pagina.
+  const avisoQrCopiado = useRef(null);
+  useEffect(() => () => clearTimeout(avisoQrCopiado.current), []);
   const [enviandoContrato, setEnviandoContrato] = useState(false);
   const [editInfo, setEditInfo] = useState('');
   const [error, setError] = useState('');
@@ -671,14 +682,17 @@ export default function MiembrosPage() {
    * para poder mostrarla junto al formulario.
    */
   const openEdit = async (m) => {
+    const pedido = ++fichaPedida.current;
     setEditing(m);
     setEditError('');
     setEditQr('');
     // Precarga con lo que ya tenemos para que el modal abra sin espera.
     setEditForm({ ...empty, ...m, activo: m.activo !== false });
+    setEditCompleto(false);
     setEditLoading(true);
     try {
       const { data } = await api.get(`/admin/miembros/${m.id_miembro}`);
+      if (pedido !== fichaPedida.current) return; // ya se abrio otra ficha o se cerro esta
       const full = data.miembro || m;
       setEditing(full);
       setEditForm({
@@ -695,15 +709,17 @@ export default function MiembrosPage() {
         canales_comerciales: full.canales_comerciales || [],
       });
       setAutorizacionesEdit(data.autorizaciones || null);
+      setEditCompleto(true);
       if (full.codigo_qr) {
         try { setEditQr(await QRCode.toDataURL(full.codigo_qr)); }
         catch (_) { /* si falla el dibujo, igual mostramos el codigo en texto */ }
       }
       await cargarPlan(m.id_miembro);
     } catch (err) {
+      if (pedido !== fichaPedida.current) return;
       setEditError(err.message || 'No pudimos cargar los datos completos del miembro.');
     } finally {
-      setEditLoading(false);
+      if (pedido === fichaPedida.current) setEditLoading(false);
     }
   };
 
@@ -887,7 +903,8 @@ export default function MiembrosPage() {
     try {
       await navigator.clipboard.writeText(codigo);
       setQrCopiado(true);
-      setTimeout(() => setQrCopiado(false), 2000);
+      clearTimeout(avisoQrCopiado.current);
+      avisoQrCopiado.current = setTimeout(() => setQrCopiado(false), 2000);
     } catch (_) {
       setEditError('Tu navegador bloqueó el portapapeles. Copia el código a mano.');
     }
@@ -932,6 +949,10 @@ export default function MiembrosPage() {
 
   const closeEdit = () => {
     if (editSaving) return;
+    fichaPedida.current += 1; // una respuesta que llegue tarde ya no aplica
+    clearTimeout(avisoQrCopiado.current);
+    setEditCompleto(false);
+    setEditLoading(false);
     setEditing(null);
     setPlanForm(null);
     setPlanMsg(''); setPlanError('');
@@ -947,7 +968,7 @@ export default function MiembrosPage() {
 
   const onSaveEdit = async (e) => {
     e.preventDefault();
-    if (!editing) return;
+    if (!editing || !editCompleto) return;
     setEditError('');
     setEditSaving(true);
     try {
@@ -972,6 +993,7 @@ export default function MiembrosPage() {
       // borra esos datos) y representante legal si es menor.
       Object.assign(payload, payloadLegal(editForm, menorEdit));
       const { data: guardado } = await api.put(`/admin/miembros/${editing.id_miembro}`, payload);
+      setEditCompleto(false);
       setEditing(null);
       setEditForm(empty);
       setEditQr('');
@@ -1819,7 +1841,7 @@ export default function MiembrosPage() {
               form="miembros-edit-form"
               className="btn btn-primary ripple-host"
               onClick={guardarRipple}
-              disabled={editSaving}
+              disabled={editSaving || !editCompleto}
             >
               <span className="material-symbols-outlined icon" aria-hidden="true">save</span>
               {editSaving ? 'Guardando...' : 'Guardar cambios'}
@@ -1892,6 +1914,11 @@ export default function MiembrosPage() {
           {editLoading && (
             <p className="field-hint" style={{ marginBottom: 12 }}>
               Cargando los datos completos del miembro…
+            </p>
+          )}
+          {editing && !editLoading && !editCompleto && (
+            <p className="field-hint" role="status" style={{ marginBottom: 12 }}>
+              No se cargaron los datos completos del miembro, así que no se pueden guardar cambios. Cierra la ficha y vuelve a abrirla.
             </p>
           )}
 
