@@ -6,6 +6,9 @@
  * Sin API ni sesion. jsdom no implementa scrollTo ni matchMedia: se simulan
  * solo en este archivo.
  */
+import { existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, test, vi, beforeEach, afterEach } from 'vitest';
 import { screen, within, fireEvent } from '@testing-library/react';
 import LandingPage from '../src/pages/LandingPage';
@@ -182,5 +185,93 @@ describe('LandingPage: el boton de volver arriba', () => {
 
     // Assert
     expect(screen.queryByRole('button', { name: 'Volver arriba' })).not.toBeInTheDocument();
+  });
+});
+
+describe('LandingPage: las fotos del gimnasio', () => {
+  const seccionSala = () => screen.getByRole('region', { name: 'Tú atiendes la sala. FitLoyalty lleva el resto.' });
+  const fotosDeLaLanding = () => [...document.querySelectorAll('img[src^="/images/landing/"]')];
+  // Vite convierte new URL(ruta, import.meta.url) en una URL http: la carpeta se arma con path
+  const enPublic = (ruta) => join(dirname(fileURLToPath(import.meta.url)), '..', 'public', ruta);
+
+  test('should pair each photo of the gym with the function it illustrates and leave the hero photo as decoration when the page loads', () => {
+    // Act
+    abrirLanding();
+
+    // Assert: cada foto (su archivo) se describe con su texto y va con su funcion
+    const parejas = within(seccionSala()).getAllByRole('listitem').map((item) => [
+      within(item).getByRole('img').getAttribute('src'),
+      within(item).getByRole('img').getAttribute('alt'),
+      within(item).getByRole('heading', { level: 3 }).textContent,
+    ]);
+    expect(parejas).toEqual([
+      ['/images/landing/prensa-960.webp', 'Prensa de piernas en la zona de pesas de un gimnasio', 'Ingreso con QR'],
+      ['/images/landing/boxeo-960.webp', 'Guantes de boxeo colgados sobre un saco en un gimnasio', 'Retos de asistencia'],
+      ['/images/landing/multipower-960.webp', 'Máquina multipower frente al espejo de un gimnasio', 'Avisos de vencimiento'],
+    ]);
+    // Las unicas imagenes que se anuncian son esas tres: la de la portada es adorno
+    const fotos = within(seccionSala()).getAllByRole('img');
+    expect(screen.getAllByRole('img').filter((imagen) => imagen.tagName === 'IMG')).toEqual(fotos);
+    expect(fotosDeLaLanding()).toHaveLength(4);
+  });
+
+  test('should point every photo to a file that exists in public when the page loads', () => {
+    // Act
+    abrirLanding();
+
+    // Assert: jsdom no descarga imagenes, asi que una foto rota solo se ve mirando el disco
+    const rutas = fotosDeLaLanding().flatMap((foto) => [
+      foto.getAttribute('src'),
+      ...foto.getAttribute('srcset').split(',').map((entrada) => entrada.trim().split(' ')[0]),
+    ]);
+    expect(rutas).toHaveLength(12);
+    for (const ruta of rutas) {
+      expect(existsSync(enPublic(ruta)), `falta ${ruta} en public`).toBe(true);
+    }
+    // Las dos medidas de cada foto son de la misma foto: no se mezcla una con otra
+    for (const foto of fotosDeLaLanding()) {
+      const nombre = foto.getAttribute('src').replace(/-960\.webp$/, '');
+      expect(foto).toHaveAttribute('srcset', `${nombre}-480.webp 480w, ${nombre}-960.webp 960w`);
+    }
+  });
+
+  test('should load the hero photo right away and the photos below the fold lazily when the page loads', () => {
+    // Act
+    abrirLanding();
+
+    // Assert: la de la portada se ve al entrar; ancho y alto evitan el salto de la pagina al cargar
+    const [portada, ...resto] = fotosDeLaLanding();
+    expect(portada).toHaveAttribute('src', '/images/landing/sala-960.webp');
+    expect(portada).not.toHaveAttribute('loading');
+    expect(portada).toHaveAttribute('fetchpriority', 'high');
+    expect(resto).toHaveLength(3);
+    for (const foto of resto) expect(foto).toHaveAttribute('loading', 'lazy');
+    for (const foto of [portada, ...resto]) {
+      expect(foto).toHaveAttribute('width', '960');
+      expect(foto).toHaveAttribute('height', '1280');
+    }
+  });
+
+  test('should explain each function in words and keep the sample notices away from screen readers when the page loads', () => {
+    // Act
+    abrirLanding();
+
+    // Assert: lo que se anuncia de cada funcion es su titulo y su explicacion
+    const sala = seccionSala();
+    expect(within(sala).getByText('Cada miembro entra con su código, sin listas en papel.')).toBeInTheDocument();
+    expect(within(sala).getByText('Metas del mes que dan un motivo para volver.')).toBeInTheDocument();
+    expect(within(sala).getByText('El aviso sale antes de que el plan venza.')).toBeInTheDocument();
+    // Los avisos de muestra son adorno con datos de ejemplo: estan en el DOM, pero no se anuncian
+    for (const aviso of ['Reto de noviembre', 'Vence en 3 días', '3 planes vencen esta semana']) {
+      expect(screen.getByText(aviso).closest('[aria-hidden="true"]')).not.toBeNull();
+    }
+    expect(screen.getAllByText('Ingreso registrado')).toHaveLength(2);
+    for (const aviso of screen.getAllByText('Ingreso registrado')) {
+      expect(aviso.closest('[aria-hidden="true"]')).not.toBeNull();
+    }
+    // Los iconos son ligaduras de Material Symbols: su nombre («qr_code_scanner») es texto y no debe leerse
+    const iconos = [...sala.querySelectorAll('.material-symbols-outlined')];
+    expect(iconos).toHaveLength(6);
+    for (const icono of iconos) expect(icono.closest('[aria-hidden="true"]')).not.toBeNull();
   });
 });
