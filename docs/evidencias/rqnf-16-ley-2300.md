@@ -230,9 +230,11 @@ El arreglo 2 quedó además con prueba contra la base real (`ley2300-real.test.j
 | 13 | Efecto del arreglo 7: la ficha de un miembro, cerrada y vuelta a abrir, no se enteraba de que su «Guardar plan» o «Congelar» anterior había contestado, y mostraba el plan viejo | La respuesta vale para la ficha de ese miembro, aunque se haya reabierto | `MiembrosPage.entreFichas.test.jsx` (3) |
 | 14 | Efecto del arreglo 7: un «Guardar plan» o «Congelar» que fallaba sin su ficha en pantalla no avisaba en ningún lado | El error va al aviso de la página con el nombre del miembro («No se guardó el plan de …») | `MiembrosPage.entreFichas.test.jsx` (7) |
 
-**Lo que se vio y no se cambió.** Los dos primeros puntos registran una decisión que nadie tomó, son anteriores a este PR y van en un PR aparte sobre las autorizaciones:
-- **El alta que se cierra sin crear conserva el borrador, casillas incluidas.** «Cerrar» solo oculta el asistente: al pulsar «Nuevo miembro» reabre en el mismo paso con los datos y las casillas del miembro anterior (contrato, tratamiento de datos y, con este PR, mensajes comerciales y sus canales). Si se escribe encima otro miembro y se crea sin revisar el paso 5, queda con autorizaciones que no dio.
-- **La autorización de datos sensibles (RQNF-17, #102) sí sigue viajando en cada guardado de la ficha**, junto con los datos de salud: si el miembro la revocara desde la app con la ficha abierta, guardar la ficha la volvería a registrar y devolvería los datos borrados. Es el mismo patrón del arreglo 8.
+**Lo que se vio y se corrigió aparte** (anterior a este PR; rama `fix/autorizaciones-sin-arrastre`, ver «Las autorizaciones no se arrastran» en `rqnf-17-datos-sensibles-menores.md`):
+- El alta que se cerraba sin crear conservaba el borrador, casillas incluidas (también la de mensajes comerciales y sus canales): el siguiente miembro podía quedar con autorizaciones que no dio. Ahora «Nuevo miembro» abre siempre en blanco.
+- La autorización de datos sensibles (RQNF-17, #102) viajaba en cada guardado de la ficha, junto con los datos de salud: el mismo patrón del arreglo 8. Ahora solo viaja si se cambió.
+
+**Lo que se vio y no se cambió** (menor; no guarda datos en el miembro equivocado ni registra decisiones):
 - En la ficha, «Guardando…» y «Congelando…» son un solo estado para todas las fichas: si se abre otra ficha mientras la anterior sigue guardando su plan, el botón del plan sale ocupado hasta que conteste.
 - Después de guardar un plan o congelar, la lista se recarga con el texto de búsqueda de cuando se pulsó el botón; si entre tanto se cambió la búsqueda, la lista puede no coincidir con el buscador hasta la siguiente búsqueda.
 - Si un envío sale y su constancia falla, el reintento puede enviarlo otra vez (ver «Entrega al menos una vez» abajo).

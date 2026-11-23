@@ -515,6 +515,63 @@ describe('MiembrosPage: los mensajes comerciales en la ficha', () => {
     sinDecisionComercial(mockPut.mock.calls[1][1]);
   });
 
+  /*
+   * Un rechazo del servidor (400 a 499) no es un guardado a medias: contesto y no registro nada, asi que la
+   * decision cargada sigue valiendo. Con un 5xx, igual que sin conexion, no se sabe que alcanzo a registrar.
+   */
+  /** Ana no acepta. Se marca WhatsApp, se enciende, el guardado falla con `fallo` y el interruptor se vuelve a apagar. */
+  const aceptarFallarYApagar = async (fallo) => {
+    mockPut = vi.fn()
+      .mockRejectedValueOnce(fallo)
+      .mockResolvedValueOnce({ data: { message: 'Miembro actualizado.' } });
+    const pantalla = await abrirFichaDeAna();
+    const { user } = pantalla;
+    await user.click(canal('WhatsApp', enFicha()));
+    await user.click(interruptor(enFicha()));
+    await user.click(guardarCambios());
+    expect(await enFicha().findByRole('alert')).toHaveTextContent(fallo.message);
+    expect(mockPut.mock.calls[0][1]).toMatchObject({ acepta_mensajes_comerciales: true, canales_comerciales: ['WHATSAPP'] });
+    await user.click(interruptor(enFicha()));
+    expect(interruptor(enFicha())).not.toBeChecked();
+    return pantalla;
+  };
+
+  test.each([
+    [400, { status: 400, code: 'VALIDATION_ERROR', message: 'Datos inválidos.' }],
+    [409, { status: 409, code: 'DUPLICATE_DOCUMENT', message: 'Ya existe un miembro con ese documento.' }],
+  ])('should not send the commercial decision in the next save when the server rejected with %i the save that carried a new decision and the switch was put back', async (_status, rechazo) => {
+    // Arrange
+    const { user } = await aceptarFallarYApagar(rechazo);
+
+    // Act: la decision queda como llego; solo se corrige la ciudad
+    const ciudad = enFicha().getByRole('textbox', { name: 'Ciudad' });
+    await user.clear(ciudad);
+    await user.type(ciudad, 'Bello');
+    await user.click(guardarCambios());
+
+    // Assert: el servidor no registro el «si», asi que no hay nada que deshacer
+    expect(await screen.findByText('Miembro actualizado.')).toBeInTheDocument();
+    expect(mockPut).toHaveBeenCalledTimes(2);
+    expect(mockPut.mock.calls[1][1]).toMatchObject({ ciudad: 'Bello' });
+    sinDecisionComercial(mockPut.mock.calls[1][1]);
+  });
+
+  test.each([
+    [500, { status: 500, code: 'INTERNAL', message: 'Error interno del servidor.' }],
+    [503, { status: 503, code: 'DB_UNREACHABLE', message: 'No pudimos actualizar el miembro. Intenta de nuevo.' }],
+  ])('should send the decision on screen in the next save when the save that carried a new decision failed with %i and the switch was put back', async (_status, fallo) => {
+    // Arrange
+    const { user } = await aceptarFallarYApagar(fallo);
+
+    // Act
+    await user.click(guardarCambios());
+
+    // Assert: el «no» viaja de forma explicita, por si el servidor alcanzo a registrar el «si»
+    expect(await screen.findByText('Miembro actualizado.')).toBeInTheDocument();
+    expect(mockPut).toHaveBeenCalledTimes(2);
+    expect(mockPut.mock.calls[1][1]).toMatchObject({ acepta_mensajes_comerciales: false, canales_comerciales: [] });
+  });
+
   test('should say that the representative decides and send the acceptance in the name of the minor with the data of the representative when the member is a minor', async () => {
     // Arrange: sin fecha de nacimiento, la tarjeta de identidad dice que es menor
     ana = { ...ANA_COMPLETA, tipo_documento: 'TI', fecha_nacimiento: null, menor_de_edad: true };
