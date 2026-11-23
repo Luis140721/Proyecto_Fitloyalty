@@ -82,7 +82,7 @@ verificar: [defectos.md](defectos.md).
 
 **Hallazgos de esta ejecución:**
 
-1. **D-10 (nuevo):** CP-12 detectó que un nombre de 101 caracteres responde
+1. **D-10 (nuevo, #117):** CP-12 detectó que un nombre de 101 caracteres responde
    503 en vez de 400. Corrección en el PR #83, verificada contra su rama.
 2. **D-04 (#95) ya está corregido** en `develop` desde el PR #102, aunque el
    issue seguía abierto. Se verificó con una prueba de integración nueva; se
@@ -91,6 +91,6 @@ verificar: [defectos.md](defectos.md).
 ## Pendientes antes de la entrega (2026-11-26)
 
 - Fusionar el PR #83 y volver a correr la colección: CP-12 debe pasar.
-- Correr `docs/pruebas/registrar-defectos.ps1` para dejar la severidad y el
-  estado en GitHub, y crear el issue de D-10.
+- ~~Correr `registrar-defectos.ps1`~~: hecho el 2026-11-22 (etiquetas en los
+  9 issues, D-10 creado como #117 y comentario de verificación en #95).
 - Cerrar #95 cuando se fusione la rama de este reporte.

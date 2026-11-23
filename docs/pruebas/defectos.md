@@ -20,7 +20,7 @@ una de **estado** (criterios en el [plan](plan-de-pruebas.md#6-gestión-de-defec
 | D-07 | [#99](https://github.com/Luis140721/Proyecto_Fitloyalty/issues/99) | Cualquier error de la BD se responde 503 `DB_UNREACHABLE` y esconde la causa real | Revisión de código | Media | 🔴 Abierto | — |
 | D-08 | [#111](https://github.com/Luis140721/Proyecto_Fitloyalty/issues/111) | Un WhatsApp de campaña enviado queda como FALLIDO si falla guardar su constancia | Revisión de código | Media | 🔴 Abierto | — |
 | D-09 | [#88](https://github.com/Luis140721/Proyecto_Fitloyalty/issues/88) | Los hitos muestran el error de validación en inglés; un id no numérico da 503 | Prueba de valores límite | Baja | 🔴 Abierto | — |
-| D-10 | *(issue nuevo, lo crea el script)* | Alta de miembro con nombre de 101 caracteres responde 503 en vez de 400 | **Postman CP-12** (2026-11-22) | Media | 🟠 En corrección | PR #83 (Santiago), sin fusionar |
+| D-10 | #117 | Alta de miembro con nombre de 101 caracteres responde 503 en vez de 400 | **Postman CP-12** (2026-11-22) | Media | 🟠 En corrección | PR #83 (Santiago), sin fusionar |
 
 **Totales:** 10 defectos · 2 verificados · 1 corregido pendiente de cerrar ·
 1 en corrección · 6 abiertos · ninguno de severidad crítica.
