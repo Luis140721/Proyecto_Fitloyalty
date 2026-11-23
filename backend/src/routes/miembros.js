@@ -25,7 +25,7 @@ const asyncHandler = require('../lib/asyncHandler');
 const { AppError } = require('../lib/errors');
 const { requireActiveTrial } = require('../lib/trial');
 const { z } = require('zod');
-const { formatZodError } = require('../lib/validators');
+const { formatZodError, largoEnCaracteres } = require('../lib/validators');
 const { ULTIMO_PLAN } = require('../lib/planes');
 const { telefonoWhatsapp, mensajeParaMiembro, enPalabras } = require('../lib/mensajes');
 const {
@@ -43,13 +43,10 @@ const router = express.Router();
 // y 004). Sin ellos un dato que no cabe llegaba a PostgreSQL y la ruta respondia
 // 500 o 503 DB_UNREACHABLE (hallazgo de la integracion de la semana 6).
 //   - MAX_VALOR_PLAN: plan_cobro.valor_total y valor_pagado son NUMERIC(10,2).
-//   - cabeEnLaColumna: un VARCHAR(n) se mide en caracteres; .length cuenta
-//     unidades UTF-16 y un emoji vale 2, por eso [...texto] (como en
-//     lib/validators.js).
+//   - Los VARCHAR(n) se miden en caracteres con hasta(), mas abajo.
 //   - valorQueCabe: el alta recibe los valores como texto y los lee con parseFloat.
 const MAX_VALOR_PLAN = 99999999.99;
 const MENSAJE_VALOR_PLAN = 'El valor del plan no puede pasar de 99.999.999,99';
-const cabeEnLaColumna = (n, etiqueta) => [(texto) => [...texto].length <= n, { message: `${etiqueta} admite máximo ${n} caracteres` }];
 const valorQueCabe = () => [(texto) => !(parseFloat(texto) > MAX_VALOR_PLAN), { message: MENSAJE_VALOR_PLAN }];
 
 // El id de un miembro en la URL, en todas las rutas de este archivo: un entero
@@ -115,23 +112,35 @@ function decryptQrCode(encrypted) {
   }
 }
 
+/**
+ * Largo maximo de una columna VARCHAR(n) de miembro. Con uno mas
+ * la BD rechaza el INSERT (22001) y el API respondia 500 DB_UNREACHABLE
+ * (hallazgo de la integracion de la semana 6, restricciones-miembro.test.js).
+ *
+ * No se usa .max() de zod: cuenta unidades UTF-16 (un emoji vale 2) y
+ * PostgreSQL cuenta caracteres, asi que un nombre que cabe en la columna
+ * quedaba rechazado. largoEnCaracteres mide igual que la BD.
+ */
+const hasta = (schema, n, campo) =>
+  schema.refine((v) => largoEnCaracteres(v) <= n, { message: `${campo} admite máximo ${n} caracteres` });
+
 const createSchema = z.object({
   // Datos personales
-  nombre:     z.string().min(2, 'El nombre es requerido'),
+  nombre:     hasta(z.string().min(2, 'El nombre es requerido'), 100, 'El nombre'),
   tipo_documento: z.enum(['CC', 'TI', 'NIT', 'CE', 'PP']).default('CC'),
-  documento: z.string().min(4, 'El documento es requerido'),
+  documento: hasta(z.string().min(4, 'El documento es requerido'), 20, 'El documento'),
   fecha_nacimiento: z.string().optional(),
   // El select de genero puede quedar en "Seleccionar...", que llega como
   // cadena vacia: se traduce a "sin dato" en vez de romper la validacion.
   genero: z.enum(['Masculino', 'Femenino', 'Otro', 'Prefiero no decir'])
     .optional()
     .or(z.literal('').transform(() => undefined)),
-  telefono:  z.string().min(7, 'El telefono es requerido'),
-  email:     z.string().email().optional().or(z.literal('').transform(() => undefined)),
+  telefono:  hasta(z.string().min(7, 'El telefono es requerido'), 20, 'El teléfono'),
+  email:     hasta(z.string().email(), 150, 'El correo').optional().or(z.literal('').transform(() => undefined)),
   direccion: z.string().optional(),
   // Salud y emergencia
-  contacto_emergencia: z.string().refine(...cabeEnLaColumna(100, 'El contacto de emergencia')).optional(),
-  telefono_emergencia: z.string().refine(...cabeEnLaColumna(20, 'El teléfono de emergencia')).optional(),
+  contacto_emergencia: hasta(z.string(), 100, 'El contacto de emergencia').optional(),
+  telefono_emergencia: hasta(z.string(), 20, 'El teléfono de emergencia').optional(),
   condiciones_medicas: z.string().optional(),
   alergias: z.string().optional(),
   // Plan y cobros
@@ -141,14 +150,14 @@ const createSchema = z.object({
   valor_total: z.string().refine(...valorQueCabe()).optional(),
   valor_pagado: z.string().refine(...valorQueCabe()).default('0'),
   metodo_pago: z.enum(['EFECTIVO', 'TRANSFERENCIA', 'TARJETA', 'PSE', 'NEQUI', 'DAVIPLATA', 'OTRO']).default('EFECTIVO'),
-  referencia_pago: z.string().refine(...cabeEnLaColumna(100, 'La referencia del pago')).optional(),
+  referencia_pago: hasta(z.string(), 100, 'La referencia del pago').optional(),
   estado_pago: z.enum(['PENDIENTE', 'PAGADO', 'PARCIAL']).default('PENDIENTE'),
   proxima_fecha_cobro: z.string().optional(),
   activar_recordatorio: z.boolean().default(false),
   dias_recordatorio: z.number().default(7),
   // Info adicional
-  objetivo: z.string().refine(...cabeEnLaColumna(50, 'El objetivo')).optional(),
-  nivel_experiencia: z.string().refine(...cabeEnLaColumna(30, 'El nivel de experiencia')).optional(),
+  objetivo: hasta(z.string(), 50, 'El objetivo').optional(),
+  nivel_experiencia: hasta(z.string(), 30, 'El nivel de experiencia').optional(),
   observaciones: z.string().optional(),
   // Términos
   acepto_terminos: z.boolean().default(false),
@@ -227,30 +236,30 @@ const vacioANull = (schema) =>
   z.literal('').transform(() => null).or(schema.optional()).nullable();
 
 const updateSchema = z.object({
-  nombre:    z.string().min(2).optional(),
-  documento: z.string().min(3).optional(),
-  telefono:  z.string().min(7).optional(),
-  email:     z.string().email().optional().or(z.literal('').transform(() => null)).nullable(),
+  nombre:    hasta(z.string().min(2), 100, 'El nombre').optional(),
+  documento: hasta(z.string().min(3), 20, 'El documento').optional(),
+  telefono:  hasta(z.string().min(7), 20, 'El teléfono').optional(),
+  email:     hasta(z.string().email(), 150, 'El correo').optional().or(z.literal('').transform(() => null)).nullable(),
   activo:    z.boolean().optional(),
   qr_imagen: z.string().optional(),
 
   // Datos personales
-  tipo_documento:      vacioANull(z.string().max(10)),
+  tipo_documento:      vacioANull(hasta(z.string(), 10, 'El tipo de documento')),
   fecha_nacimiento:    vacioANull(z.string()),
-  genero:              vacioANull(z.string().max(20)),
-  codigo_pais_telefono: vacioANull(z.string().max(5)),
-  ciudad:              vacioANull(z.string().max(100)),
+  genero:              vacioANull(hasta(z.string(), 20, 'El género')),
+  codigo_pais_telefono: vacioANull(hasta(z.string(), 5, 'El código de país')),
+  ciudad:              vacioANull(hasta(z.string(), 100, 'La ciudad')),
   direccion:           vacioANull(z.string()),
 
   // Salud y emergencia
-  contacto_emergencia:  vacioANull(z.string().max(100)),
-  telefono_emergencia:  vacioANull(z.string().max(20)),
+  contacto_emergencia:  vacioANull(hasta(z.string(), 100, 'El contacto de emergencia')),
+  telefono_emergencia:  vacioANull(hasta(z.string(), 20, 'El teléfono de emergencia')),
   condiciones_medicas:  vacioANull(z.string()),
   alergias:             vacioANull(z.string()),
 
   // Perfil de entrenamiento
-  objetivo:             vacioANull(z.string().max(50)),
-  nivel_experiencia:    vacioANull(z.string().max(30)),
+  objetivo:             vacioANull(hasta(z.string(), 50, 'El objetivo')),
+  nivel_experiencia:    vacioANull(hasta(z.string(), 30, 'El nivel de experiencia')),
   observaciones:        vacioANull(z.string()),
 
   // App móvil del cliente
@@ -1387,3 +1396,7 @@ router.put(
 
 // LÍNEA OBLIGATORIA PARA EXPORTAR EL ROUTER Y EVITAR EL ERROR DE EXPRESS
 module.exports = router;
+// Los esquemas, para que los tests lean de aqui las listas (por ejemplo, los
+// tipo_plan que acepta el alta) en vez de copiarlas.
+module.exports.createSchema = createSchema;
+module.exports.updateSchema = updateSchema;
