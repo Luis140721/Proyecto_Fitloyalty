@@ -192,6 +192,8 @@ describe('POST /api/admin/miembros: creating a member', () => {
       [/SELECT 1 FROM miembro WHERE codigo_qr/, () => ({ rows: (revisados++ < qrOcupados) ? [{}] : [] })],
       [/INSERT INTO miembro/, (p) => ({ rows: [{ id_miembro: 88, nombre: p[1], documento: p[3], codigo_qr: p[18] }] })],
       [/INSERT INTO plan_cobro/, filas([])],
+      // El #102 (RQNF-17) registra las autorizaciones del alta en la misma transaccion.
+      [/INSERT INTO autorizacion_miembro/, (p) => ({ rows: [{ id_autorizacion: 1, tipo: p[2], otorgada: p[3], version_texto: p[4], canal: p[5], fecha: new Date('2026-11-17T15:00:00Z') }] })],
       [/SELECT nombre FROM gimnasio/, filas(gym)],
     );
   };
@@ -484,14 +486,20 @@ describe('GET /api/admin/miembros/lookup: finding a member for the check-in', ()
 describe('GET /api/admin/miembros/:id: the member detail', () => {
   test('should return the member of the gym when the id exists', async () => {
     // Arrange
-    responder([/FROM miembro WHERE id_miembro = \$1 AND id_gimnasio = \$2/, filas([{ id_miembro: 88, nombre: 'Ana' }])]);
+    // El #102 (RQNF-17) suma las autorizaciones vigentes y su historial.
+    responder(
+      [/FROM miembro WHERE id_miembro = \$1 AND id_gimnasio = \$2/, filas([{ id_miembro: 88, nombre: 'Ana' }])],
+      [/FROM autorizacion_miembro/, filas([])],
+    );
 
     // Act
     const r = await pedir('get', '/admin/miembros/88');
 
     // Assert
     expect(r.status).toBe(200);
-    expect(r.body.miembro).toEqual({ id_miembro: 88, nombre: 'Ana' });
+    expect(r.body.miembro).toEqual({
+      id_miembro: 88, nombre: 'Ana', autorizo_datos_sensibles: false, menor_de_edad: false, datos_sensibles_sin_autorizacion: false,
+    });
     expect(llamadas(/FROM miembro WHERE id_miembro/)[0].params).toEqual([88, 7]);
   });
 
@@ -561,7 +569,7 @@ describe('PUT /api/admin/miembros/:id: editing a member', () => {
 
   test.each([
     ['the body has nothing to change', '88', {}, 'Nada que actualizar'],
-    ['the id is not a number', 'abc', { nombre: 'Ana Maria' }, 'Id invalido'],
+    ['the id is not a number', 'abc', { nombre: 'Ana Maria' }, 'Id inválido'],
     ['the new password is too short', '88', { password: '123' }, 'La contrasena debe tener minimo 6 caracteres'],
   ])('should answer 400 and update nothing when %s', async (_caso, id, cuerpo, mensaje) => {
     // Arrange

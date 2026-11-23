@@ -14,6 +14,7 @@ const { AppError } = require('../lib/errors');
 const { requireActiveTrial } = require('../lib/trial');
 const { z } = require('zod');
 const { formatZodError } = require('../lib/validators');
+const { puedeExigirse: puedeExigirseQrDinamico, MENSAJE_SIN_SECRETO } = require('../lib/qr-dinamico');
 
 const router = express.Router();
 
@@ -35,6 +36,9 @@ const configSchema = z.object({
   // configuracion_gimnasio; la roja siempre es mayor que la amarilla.
   umbral_alerta_amarilla: z.number().int().min(1).max(365).optional(),
   umbral_alerta_roja: z.number().int().min(2).max(365).optional(),
+  // Vive en la tabla gimnasio (migracion 015). Si es true, el check-in solo
+  // acepta el QR dinamico de la app (o el documento), no el QR fijo.
+  qr_dinamico_obligatorio: z.boolean().optional(),
 });
 
 const UMBRALES_POR_DEFECTO = { umbral_alerta_amarilla: 7, umbral_alerta_roja: 15 };
@@ -43,7 +47,7 @@ const UMBRALES_POR_DEFECTO = { umbral_alerta_amarilla: 7, umbral_alerta_roja: 15
 // umbrales de las alertas de abandono.
 async function conDiasAviso(gymId, cfg) {
   const [{ rows }, { rows: umbrales }] = await Promise.all([
-    pool.query('SELECT dias_aviso_vencimiento FROM gimnasio WHERE id_gimnasio = $1', [gymId]),
+    pool.query('SELECT dias_aviso_vencimiento, qr_dinamico_obligatorio FROM gimnasio WHERE id_gimnasio = $1', [gymId]),
     pool.query(
       'SELECT umbral_alerta_amarilla, umbral_alerta_roja FROM configuracion_gimnasio WHERE id_gimnasio = $1',
       [gymId]
@@ -52,6 +56,9 @@ async function conDiasAviso(gymId, cfg) {
   return {
     ...cfg,
     dias_aviso_vencimiento: rows[0] ? rows[0].dias_aviso_vencimiento : 3,
+    qr_dinamico_obligatorio: rows[0] ? rows[0].qr_dinamico_obligatorio === true : false,
+    // false en produccion sin QR_DINAMICO_SECRET: la pantalla no deja activarlo.
+    qr_dinamico_disponible: puedeExigirseQrDinamico(),
     ...UMBRALES_POR_DEFECTO,
     ...(umbrales[0] || {}),
   };
@@ -144,6 +151,7 @@ router.put(
       dias_aviso_vencimiento: diasAviso,
       umbral_alerta_amarilla: umbralAmarilla,
       umbral_alerta_roja: umbralRoja,
+      qr_dinamico_obligatorio: qrDinamico,
       ...data
     } = parsed.data;
     const hayUmbrales = umbralAmarilla !== undefined || umbralRoja !== undefined;
@@ -157,7 +165,7 @@ router.put(
       campos.push(`${k} = $${params.length}`);
     }
     
-    if (campos.length === 0 && diasAviso === undefined && !hayUmbrales) {
+    if (campos.length === 0 && diasAviso === undefined && qrDinamico === undefined && !hayUmbrales) {
       throw new AppError(400, 'Nada que actualizar', 'VALIDATION_ERROR');
     }
 
@@ -165,6 +173,20 @@ router.put(
 
     try {
       // Primero lo que puede rechazar la peticion, para no guardar a medias.
+
+      // QR dinamico: en produccion sin QR_DINAMICO_SECRET no se puede activar
+      // (lib/qr-dinamico.js). Apagarlo, o reenviarlo encendido si ya lo estaba
+      // (la pantalla manda toda la configuracion), si se puede.
+      if (qrDinamico === true && !puedeExigirseQrDinamico()) {
+        const { rows: gym } = await pool.query(
+          'SELECT qr_dinamico_obligatorio FROM gimnasio WHERE id_gimnasio = $1',
+          [gymId]
+        );
+        if (!(gym[0] && gym[0].qr_dinamico_obligatorio === true)) {
+          throw new AppError(409, MENSAJE_SIN_SECRETO, 'QR_DINAMICO_SIN_SECRETO');
+        }
+      }
+
       if (hayUmbrales) {
         await guardarUmbrales(gymId, req.user.id, {
           umbral_alerta_amarilla: umbralAmarilla,
@@ -176,6 +198,13 @@ router.put(
         await pool.query(
           'UPDATE gimnasio SET dias_aviso_vencimiento = $1 WHERE id_gimnasio = $2',
           [diasAviso, gymId]
+        );
+      }
+
+      if (qrDinamico !== undefined) {
+        await pool.query(
+          'UPDATE gimnasio SET qr_dinamico_obligatorio = $1 WHERE id_gimnasio = $2',
+          [qrDinamico, gymId]
         );
       }
 

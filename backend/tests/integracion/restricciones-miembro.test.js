@@ -26,6 +26,8 @@ const TABLAS = ['gimnasio', 'usuario', 'miembro'];
 const NO_NULOS = [
   ['gimnasio', 'nombre'], ['gimnasio', 'telefono'], ['gimnasio', 'activo'], ['gimnasio', 'fecha_registro'],
   ['gimnasio', 'plan_activo'], ['gimnasio', 'dias_aviso_vencimiento'],
+  // Si el gimnasio exige el QR dinamico en el check-in (migracion 015).
+  ['gimnasio', 'qr_dinamico_obligatorio'],
   ['usuario', 'id_gimnasio'], ['usuario', 'nombre'], ['usuario', 'email'], ['usuario', 'password_hash'],
   ['usuario', 'rol'], ['usuario', 'activo'], ['usuario', 'debe_cambiar_clave'], ['usuario', 'fecha_creacion'],
   ['miembro', 'id_gimnasio'], ['miembro', 'nombre'], ['miembro', 'documento'], ['miembro', 'codigo_qr'],
@@ -35,8 +37,15 @@ const NO_NULOS = [
 // Columnas VARCHAR(n). Hallazgos: con uno mas, POST /api/auth/signup respondia
 // 500 en gimnasio.nombre, gimnasio.email, usuario.nombre y usuario.email
 // (corregido en lib/validators.js, con su test unitario en
-// signup-longitudes.test.js), y POST /api/admin/miembros responde 500
-// DB_UNREACHABLE en miembro.nombre y miembro.documento (sin corregir).
+// signup-longitudes.test.js), y POST /api/admin/miembros respondia 500
+// DB_UNREACHABLE en las columnas de miembro:
+//   - contacto_emergencia, telefono_emergencia, objetivo y nivel_experiencia,
+//     y en plan_cobro referencia_pago, valor_total y valor_pagado: corregido
+//     en createSchema de routes/miembros.js, con su test unitario en
+//     miembros-alta-topes.test.js;
+//   - nombre, documento, telefono y email: los corrige el #83 (createSchema y
+//     updateSchema, con su test unitario en miembros-longitudes.test.js),
+//     todavia sin fusionar.
 const LARGOS = [
   ['gimnasio', 'nombre', 100], ['gimnasio', 'nit', 20], ['gimnasio', 'direccion', 200], ['gimnasio', 'telefono', 20],
   ['gimnasio', 'email', 150], ['gimnasio', 'plan_activo', 20],
@@ -45,6 +54,14 @@ const LARGOS = [
   ['miembro', 'codigo_qr', 100], ['miembro', 'tipo_documento', 10], ['miembro', 'genero', 20],
   ['miembro', 'codigo_pais_telefono', 5], ['miembro', 'ciudad', 100], ['miembro', 'contacto_emergencia', 100],
   ['miembro', 'telefono_emergencia', 20], ['miembro', 'objetivo', 50], ['miembro', 'nivel_experiencia', 30],
+];
+// Los del representante legal llegaron con el #102 (RQNF-17, migracion 019). Por
+// ahora solo entran en la comparacion con la BD migrada; sus tests de largo vienen
+// con los del #102.
+const LARGOS_DEL_REPRESENTANTE = [
+  ['miembro', 'representante_nombre', 100], ['miembro', 'representante_tipo_documento', 10],
+  ['miembro', 'representante_documento', 20], ['miembro', 'representante_parentesco', 40],
+  ['miembro', 'representante_telefono', 20],
 ];
 
 // UNIQUE, llaves foraneas y CHECK de las tres tablas, cada una con su test abajo.
@@ -117,7 +134,7 @@ describeConBd('restricciones de gimnasio, usuario y miembro', () => {
     const largos = columnas.filter((c) => c.largo !== null).map((c) => `${c.tabla}.${c.columna}:${c.largo}`);
 
     expect(ordenar(noNulos)).toEqual(ordenar(NO_NULOS.map(([t, c]) => `${t}.${c}`)));
-    expect(ordenar(largos)).toEqual(ordenar(LARGOS.map(([t, c, n]) => `${t}.${c}:${n}`)));
+    expect(ordenar(largos)).toEqual(ordenar([...LARGOS, ...LARGOS_DEL_REPRESENTANTE].map(([t, c, n]) => `${t}.${c}:${n}`)));
     expect(ordenar(restricciones.map((r) => r.conname))).toEqual(ordenar(RESTRICCIONES));
   });
 
@@ -300,8 +317,9 @@ describeConBd('restricciones de gimnasio, usuario y miembro', () => {
 
     // PostgreSQL frente a MySQL: id_miembro es INTEGER (hasta 2147483647). MySQL
     // compara 2147483648 y no encuentra la fila; PostgreSQL rechaza el valor.
-    // Hallazgo sin corregir: GET y DELETE /admin/miembros/2147483648 responden 503
-    // DB_UNREACHABLE en vez de 404, porque parseInt + Number.isFinite lo dejan pasar.
+    // Hallazgo: /admin/miembros/2147483648 respondia 503 DB_UNREACHABLE, porque
+    // parseInt + Number.isFinite lo dejan pasar. Corregido: todas las rutas de
+    // routes/miembros.js responden 400 "Id inválido" (miembros-id-rango.test.js).
     test('buscar un id que no cabe en INTEGER es un error en PostgreSQL, no una fila vacia', async () => {
       const gym = await crearGimnasio(tx.cliente);
       const BUSCAR = 'SELECT id_miembro FROM miembro WHERE id_miembro = $1 AND id_gimnasio = $2';

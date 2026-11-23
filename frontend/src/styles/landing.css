@@ -274,6 +274,117 @@
 }
 .hero-mock-chart svg { width: 100%; height: 100%; }
 
+/* ---------- Foto del hero ----------
+   La foto de la sala es el fondo de la mitad derecha de la portada. Una
+   máscara la funde con la página hacia la izquierda y hacia abajo, y un
+   tinte morado la une con el resto del tema. Encima flotan el panel de
+   muestra y dos avisos. */
+.landing-hero > .hero-backdrop {
+  position: absolute;
+  z-index: 0;
+  top: 0; right: 0; bottom: 0;
+  width: min(64%, 1100px);
+  pointer-events: none;
+  -webkit-mask-image:
+    linear-gradient(90deg, transparent 0%, rgba(0, 0, 0, 0.4) 26%, #000 58%),
+    linear-gradient(180deg, #000 0%, #000 68%, transparent 100%);
+  -webkit-mask-composite: source-in;
+  mask-image:
+    linear-gradient(90deg, transparent 0%, rgba(0, 0, 0, 0.4) 26%, #000 58%),
+    linear-gradient(180deg, #000 0%, #000 68%, transparent 100%);
+  mask-composite: intersect;
+  animation: fade-in var(--dur-slow) var(--ease-out) both;
+}
+.hero-backdrop img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 36%;
+  filter: saturate(1.08) contrast(1.04);
+}
+.hero-backdrop::after {
+  content: '';
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(circle at 78% 18%, rgba(168, 85, 247, 0.26), transparent 55%),
+    linear-gradient(180deg, rgba(37, 39, 45, 0.18) 0%, rgba(37, 39, 45, 0.42) 100%);
+}
+
+.hero-visual {
+  position: relative;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(24px, 4vw, 56px) 0;
+}
+.hero-visual .hero-mock {
+  width: min(100%, 430px);
+  /* Vidrio oscuro: sobre la foto, el fondo translúcido normal no se lee. */
+  background: var(--surface-glass);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  border-color: var(--surface-border);
+  box-shadow: var(--surface-bevel), 0 24px 60px rgba(0, 0, 0, 0.55), 0 0 70px rgba(168, 85, 247, 0.18);
+}
+
+/* Avisos flotantes de la portada */
+.hero-chip {
+  position: absolute;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px 10px 12px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--surface-border);
+  background: var(--surface-glass);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  box-shadow: var(--surface-bevel), 0 14px 36px rgba(0, 0, 0, 0.5);
+  white-space: nowrap;
+  animation: float 6s ease-in-out infinite;
+}
+.hero-chip .icon { font-size: 22px; }
+.hero-chip__text { display: flex; flex-direction: column; line-height: 1.25; }
+.hero-chip__text strong {
+  font-family: var(--font-body);
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--on-surface);
+}
+.hero-chip__text small {
+  font-family: var(--font-label);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  color: var(--on-surface-variant);
+}
+.hero-chip--ingreso { top: clamp(0px, 2vw, 28px); right: 1%; }
+.hero-chip--ingreso .icon { color: var(--success); }
+.hero-chip--aviso { bottom: clamp(0px, 2vw, 28px); left: 1%; animation-delay: -3s; }
+.hero-chip--aviso .icon { color: var(--primary-accent); }
+
+@media (max-width: 960px) {
+  /* En una columna la foto queda detrás del panel, al final de la portada. */
+  .landing-hero > .hero-backdrop {
+    top: auto;
+    left: 0;
+    width: 100%;
+    height: 560px;
+    -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 34%, #000 72%, transparent 100%);
+    -webkit-mask-composite: source-over;
+    mask-image: linear-gradient(180deg, transparent 0%, #000 34%, #000 72%, transparent 100%);
+    mask-composite: add;
+  }
+  .hero-backdrop img { object-position: 50% 42%; }
+  .hero-visual { padding: 128px 0 84px; }
+  .hero-visual .hero-mock { width: min(90%, 400px); }
+  .hero-chip--ingreso { top: 64px; right: auto; left: 0; }
+  .hero-chip--aviso { bottom: 30px; left: auto; right: 0; }
+}
+
 /* ---------- Section base ---------- */
 .section {
   width: 100%;
@@ -425,6 +536,202 @@
     grid-column: 1;
     grid-row: auto;
   }
+}
+
+/* ---------- Fotos «En tu sala»: collage fundido ----------
+   Las tres fotos forman una sola franja, sin marcos. Cada una se funde con
+   la página por arriba, por abajo y por los lados, con la misma máscara y
+   el mismo tinte de la foto de la portada, y se cruza un poco con la
+   vecina. Encima flota un aviso del producto y, donde la foto se apaga, va
+   la función que le corresponde. En celular las fotos van una debajo de
+   otra, de borde a borde. */
+.sala { position: relative; }
+.sala::before {
+  content: '';
+  position: absolute;
+  top: 56%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(1100px, 96vw);
+  height: min(640px, 90vw);
+  background: radial-gradient(ellipse, rgba(168, 85, 247, 0.18), transparent 68%);
+  pointer-events: none;
+}
+.sala-collage {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: start;
+  list-style: none;
+  margin: -12px 0 0;
+  padding: 0;
+}
+.sala-item { position: relative; min-width: 0; }
+
+.sala-item__photo {
+  position: relative;
+  width: 122%;
+  margin-left: -11%;
+  height: clamp(400px, 43vw, 640px);
+  overflow: hidden;
+  pointer-events: none;
+  -webkit-mask-image:
+    linear-gradient(90deg, transparent 0%, #000 14%, #000 86%, transparent 100%),
+    linear-gradient(180deg, transparent 0%, #000 10%, #000 62%, transparent 96%);
+  -webkit-mask-composite: source-in;
+  mask-image:
+    linear-gradient(90deg, transparent 0%, #000 14%, #000 86%, transparent 100%),
+    linear-gradient(180deg, transparent 0%, #000 10%, #000 62%, transparent 96%);
+  mask-composite: intersect;
+}
+/* Las de los extremos no se salen de la página: solo se cruzan hacia adentro.
+   Cada foto queda a una altura distinta, para que la franja no parezca una
+   fila de tarjetas; los textos de abajo sí quedan en una misma línea. */
+.sala-item--ingreso .sala-item__photo { width: 111%; margin-left: 0; transform: translateY(22px); }
+.sala-item--reto .sala-item__photo    { transform: translateY(-10px); }
+.sala-item--aviso .sala-item__photo   { width: 111%; margin-left: -11%; transform: translateY(8px); }
+.sala-item__photo img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: saturate(1.08) contrast(1.04);
+}
+.sala-item--ingreso .sala-item__photo img { object-position: 50% 42%; }
+.sala-item--reto .sala-item__photo img    { object-position: 50% 26%; }
+.sala-item--aviso .sala-item__photo img   { object-position: 50% 48%; }
+/* El tinte de la portada, un poco más suave. */
+.sala-item__photo::after {
+  content: '';
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(circle at 70% 20%, rgba(168, 85, 247, 0.2), transparent 58%),
+    linear-gradient(180deg, rgba(37, 39, 45, 0.1) 0%, rgba(37, 39, 45, 0.36) 100%);
+}
+
+/* La función de cada foto, sobre la parte donde la foto ya se apagó */
+.sala-item__text {
+  position: relative;
+  z-index: 1;
+  margin-top: clamp(-128px, -8.6vw, -80px);
+  padding: 0 clamp(14px, 2.4vw, 40px);
+}
+.sala-item__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.sala-item__icon {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 38px; height: 38px;
+  border-radius: var(--radius-lg);
+  background: var(--surface-glass);
+  border: 1px solid var(--primary);
+  color: var(--primary-accent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+.sala-item__icon .icon { font-size: 20px; }
+.sala-item__text h3 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(16px, 1.5vw, 19px);
+  letter-spacing: -0.01em;
+  color: var(--on-surface);
+  margin: 0;
+}
+.sala-item__text p {
+  margin: 0;
+  max-width: 34ch;
+  font-size: 14.5px;
+  line-height: 1.5;
+  color: var(--on-surface-variant);
+}
+/* El texto pisa el final de la foto: una sombra suave lo separa del fondo. */
+.sala-item__text h3,
+.sala-item__text p { text-shadow: 0 1px 14px rgba(20, 18, 30, 0.75); }
+
+/* Avisos del producto, flotando sobre las fotos como en la portada */
+.sala-chip {
+  position: absolute;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px 10px 12px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--surface-border);
+  background: var(--surface-glass);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  box-shadow: var(--surface-bevel), 0 14px 36px rgba(0, 0, 0, 0.5);
+  white-space: nowrap;
+  animation: float 6s ease-in-out infinite;
+}
+.sala-chip .icon { font-size: 22px; color: var(--primary-accent); }
+.sala-chip--ingreso .icon { color: var(--success); }
+.sala-chip__text { display: flex; flex-direction: column; line-height: 1.25; }
+.sala-chip__text strong {
+  font-family: var(--font-body);
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--on-surface);
+}
+.sala-chip__text small {
+  font-family: var(--font-label);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  color: var(--on-surface-variant);
+}
+.sala-chip__bar {
+  display: block;
+  width: 132px; height: 5px;
+  margin-top: 7px;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.16);
+  overflow: hidden;
+}
+.sala-chip__bar span {
+  display: block;
+  width: 66%; height: 100%;
+  border-radius: inherit;
+  background: var(--brand-grad);
+}
+.sala-chip--ingreso { top: 19%; right: 20%; }
+.sala-chip--reto    { top: 52%; left: 4%;   animation-delay: -2s; }
+.sala-chip--aviso   { top: 30%; right: 8%;  animation-delay: -4s; }
+
+@media (max-width: 860px) {
+  .sala-collage { grid-template-columns: minmax(0, 1fr); margin-top: -8px; }
+  .sala-item + .sala-item { margin-top: 12px; }
+  /* De borde a borde: solo se funde hacia arriba y hacia abajo. */
+  .sala-collage > .sala-item > .sala-item__photo {
+    width: calc(100% + var(--page-px) * 2);
+    margin-left: calc(var(--page-px) * -1);
+    height: auto;
+    aspect-ratio: 5 / 4;
+    transform: none;
+    -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 13%, #000 64%, transparent 100%);
+    -webkit-mask-composite: source-over;
+    mask-image: linear-gradient(180deg, transparent 0%, #000 13%, #000 64%, transparent 100%);
+    mask-composite: add;
+  }
+  .sala-item--reto .sala-item__photo img { object-position: 50% 20%; }
+  .sala-item__text { margin-top: -60px; padding: 0 4px; }
+  .sala-item__text p { max-width: none; }
+  .sala-chip--ingreso { top: 22%; right: 4px; }
+  .sala-chip--reto    { top: 40%; left: auto; right: 4px; }
+  .sala-chip--aviso   { top: 22%; right: 4px; }
+}
+@media (max-width: 560px) {
+  /* En celular la foto es cuadrada: el aviso cabe sin tapar lo que se ve. */
+  .sala-collage > .sala-item > .sala-item__photo { aspect-ratio: 1 / 1; }
+  .sala-chip--reto { top: 54%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero-chip, .sala-chip, .landing-hero > .hero-backdrop { animation: none; }
 }
 
 /* ---------- Howto ---------- */

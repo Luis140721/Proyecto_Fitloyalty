@@ -252,8 +252,8 @@ describe('MiembrosPage: alta con el asistente de 5 pasos', () => {
     mockPost = vi.fn(async () => { miembros = [...miembros, SOFIA]; return { data: { miembro: SOFIA } }; });
     const { user } = await abrirAlta();
     await llegarATerminos(user);
-    await user.click(screen.getByRole('checkbox', { name: /Acepto los términos/ }));
-    await user.click(screen.getByRole('checkbox', { name: /Autorizo el uso de mis datos/ }));
+    await user.click(screen.getByRole('checkbox', { name: /^Contrato y términos/ }));
+    await user.click(screen.getByRole('checkbox', { name: /^Tratamiento de datos/ }));
 
     // Act
     await user.click(screen.getByRole('button', { name: 'Crear miembro' }));
@@ -294,8 +294,8 @@ describe('MiembrosPage: tiempos (semana 7)', () => {
     await user.type(screen.getByLabelText(/^Número documento/), '1033444555');
     await user.type(screen.getByLabelText(/^Teléfono \/ WhatsApp/), '3201112233');
     for (let paso = 2; paso <= 5; paso += 1) await user.click(botonSiguiente());
-    await user.click(screen.getByRole('checkbox', { name: /Acepto los términos/ }));
-    await user.click(screen.getByRole('checkbox', { name: /Autorizo el uso de mis datos/ }));
+    await user.click(screen.getByRole('checkbox', { name: /^Contrato y términos/ }));
+    await user.click(screen.getByRole('checkbox', { name: /^Tratamiento de datos/ }));
     await user.click(screen.getByRole('button', { name: 'Crear miembro' }));
     await screen.findByRole('row', { name: /Sofía Gómez/ });
 
@@ -316,8 +316,8 @@ describe('MiembrosPage: tiempos (semana 7)', () => {
     await user.type(screen.getByLabelText(/^Número documento/), '1033444555');
     await user.type(screen.getByLabelText(/^Teléfono \/ WhatsApp/), '3201112233');
     for (let paso = 2; paso <= 5; paso += 1) await user.click(botonSiguiente());
-    await user.click(screen.getByRole('checkbox', { name: /Acepto los términos/ }));
-    await user.click(screen.getByRole('checkbox', { name: /Autorizo el uso de mis datos/ }));
+    await user.click(screen.getByRole('checkbox', { name: /^Contrato y términos/ }));
+    await user.click(screen.getByRole('checkbox', { name: /^Tratamiento de datos/ }));
     await user.click(screen.getByRole('button', { name: '← Anterior' }));
 
     // Act: un doble clic en el mismo sitio. El primero (detail 1) en "Siguiente →";

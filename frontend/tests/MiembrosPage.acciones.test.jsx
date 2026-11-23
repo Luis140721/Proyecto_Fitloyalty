@@ -84,8 +84,8 @@ async function crearASofia() {
   await user.type(campo(/^Número documento/), '1033444555');
   await user.type(campo(/^Teléfono \/ WhatsApp/), '3201112233');
   for (let paso = 2; paso <= 5; paso += 1) await user.click(siguiente());
-  await user.click(screen.getByRole('checkbox', { name: /Acepto los términos/ }));
-  await user.click(screen.getByRole('checkbox', { name: /Autorizo el uso de mis datos/ }));
+  await user.click(screen.getByRole('checkbox', { name: /^Contrato y términos/ }));
+  await user.click(screen.getByRole('checkbox', { name: /^Tratamiento de datos/ }));
   await user.click(screen.getByRole('button', { name: 'Crear miembro' }));
   await screen.findByRole('dialog', { name: '¡Miembro creado exitosamente!' });
   return pantalla;
@@ -112,6 +112,8 @@ describe('MiembrosPage: el alta con todos los datos', () => {
     // paso 2, salud y emergencia
     await user.type(campo('Contacto de emergencia'), 'Marta Gómez');
     await user.type(campo('Teléfono emergencia'), '3109998877');
+    // Con el #102, las condiciones medicas y las alergias se escriben despues de autorizar los datos sensibles.
+    await user.click(screen.getByRole('checkbox', { name: /^Datos sensibles \(salud\)/ }));
     await user.type(campo('Condiciones médicas / lesiones'), 'Rodilla derecha');
     await user.type(campo('Alergias'), 'Ninguna');
     await user.click(siguiente());
@@ -131,8 +133,8 @@ describe('MiembrosPage: el alta con todos los datos', () => {
     await user.type(campo('Observaciones / notas del entrenador'), 'Viene en la mañana');
     await user.click(siguiente());
     // paso 5, terminos
-    await user.click(screen.getByRole('checkbox', { name: /Acepto los términos/ }));
-    await user.click(screen.getByRole('checkbox', { name: /Autorizo el uso de mis datos/ }));
+    await user.click(screen.getByRole('checkbox', { name: /^Contrato y términos/ }));
+    await user.click(screen.getByRole('checkbox', { name: /^Tratamiento de datos/ }));
     await user.click(screen.getByRole('button', { name: 'Crear miembro' }));
 
     // Assert
@@ -182,8 +184,8 @@ describe('MiembrosPage: el alta con todos los datos', () => {
     await user.selectOptions(campo('Estado del pago'), 'PARCIAL');
     await user.click(siguiente());
     await user.click(siguiente());
-    await user.click(screen.getByRole('checkbox', { name: /Acepto los términos/ }));
-    await user.click(screen.getByRole('checkbox', { name: /Autorizo el uso de mis datos/ }));
+    await user.click(screen.getByRole('checkbox', { name: /^Contrato y términos/ }));
+    await user.click(screen.getByRole('checkbox', { name: /^Tratamiento de datos/ }));
     await user.click(screen.getByRole('button', { name: 'Crear miembro' }));
 
     // Assert
@@ -213,8 +215,8 @@ describe('MiembrosPage: el alta con todos los datos', () => {
     await user.type(campo(/^Número documento/), '1033444555');
     await user.type(campo(/^Teléfono \/ WhatsApp/), '3201112233');
     for (let paso = 2; paso <= 5; paso += 1) await user.click(siguiente());
-    await user.click(screen.getByRole('checkbox', { name: /Acepto los términos/ }));
-    await user.click(screen.getByRole('checkbox', { name: /Autorizo el uso de mis datos/ }));
+    await user.click(screen.getByRole('checkbox', { name: /^Contrato y términos/ }));
+    await user.click(screen.getByRole('checkbox', { name: /^Tratamiento de datos/ }));
 
     // Act
     await user.click(screen.getByRole('button', { name: 'Crear miembro' }));

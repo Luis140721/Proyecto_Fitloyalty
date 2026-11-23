@@ -10,6 +10,9 @@ export default defineConfig({
     include: ['tests/**/*.test.{js,jsx}'],
     coverage: {
       provider: 'v8',
+      // Los de vitest por defecto mas json-summary: el job frontend del CI lee
+      // coverage/coverage-summary.json para dejar el resumen en la pagina del run.
+      reporter: ['text', 'html', 'clover', 'json', 'json-summary'],
       include: ['src/**/*.{js,jsx}'],
       exclude: [
         // Arranque: solo monta React en el DOM, no tiene logica de negocio.
@@ -24,9 +27,13 @@ export default defineConfig({
         // atras" cae al inicio si no hay historial) ni LandingPage (sus botones
         // llevan al registro del gimnasio).
       ],
-      // Cierre de S2 a S4 (2026-11-19): el mayor entre el piso de la S4 (50%) y la cobertura
-      // real del CI (Linux), redondeada hacia abajo (run 44653040667). No puede bajar.
-      thresholds: { lines: 56, branches: 77, functions: 56, statements: 56 },
+      // Cierre de S5 a S8 (2026-11-21): en cada metrica, el mayor entre el piso de la S8 (80%)
+      // y la cobertura real del CI (Linux, LF, TZ=UTC), redondeada hacia abajo. No puede bajar.
+      //  - #106 (17f3e0f, con develop): lineas 84, sentencias 84, ramas 91 y funciones 93.
+      //  - Tercera sincronizacion con develop (#100 y #104, con los tests de CampanasPage y
+      //    RetosPage) y los #82, #84 y #85: lineas 85,73, sentencias 85,73, ramas 92,59 y
+      //    funciones 93,51.
+      thresholds: { lines: 85, branches: 92, functions: 93, statements: 85 },
     },
   },
 })

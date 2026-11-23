@@ -13,6 +13,8 @@ const { requireActiveTrial } = require('../lib/trial');
 const { ULTIMO_PLAN } = require('../lib/planes');
 const { registrarAccesoBloqueado } = require('../lib/accesos');
 const { calcularGamificacion } = require('../lib/gamificacion');
+const { actualizarRetos, mensajeRetos } = require('../lib/retos');
+const { leerToken, codigoValido } = require('../lib/qr-dinamico');
 const { z } = require('zod');
 const { formatZodError } = require('../lib/validators');
 
@@ -119,14 +121,47 @@ router.post(
     let { codigo, documento, metodo, observacion } = parsed.data;
     const gymId = req.user.gymId;
 
-    if (codigo) {
-      codigo = decryptQrCode(codigo);
-    }
+    // QR dinamico de la app (FLD<id>T<8 digitos>): se reconoce antes de
+    // intentar descifrar, porque no es un QR fijo.
+    const dinamico = codigo ? leerToken(codigo) : null;
+    if (dinamico) metodo = 'QR';
 
     try {
       let miembro;
-      
-      if (codigo) {
+
+      if (dinamico) {
+        const { rows } = await pool.query(
+          `SELECT id_miembro, nombre, documento, codigo_qr, qr_imagen FROM miembro
+            WHERE id_gimnasio = $1 AND activo = TRUE AND id_miembro = $2 LIMIT 1`,
+          [gymId, dinamico.idMiembro]
+        );
+        miembro = rows[0];
+        if (!miembro) throw new AppError(404, 'Miembro no encontrado en este gimnasio.', 'MEMBER_NOT_FOUND');
+        if (!codigoValido({ idMiembro: miembro.id_miembro, codigoQr: miembro.codigo_qr, codigo: dinamico.codigo })) {
+          throw new AppError(400,
+            'Este QR ya venció. Pide al miembro que abra la app y muestre el código que tiene ahora en pantalla.',
+            'QR_DINAMICO_VENCIDO');
+        }
+      } else if (codigo) {
+        // El gimnasio puede exigir el QR dinamico: entonces el fijo (impreso,
+        // en una captura o reenviado) ya no sirve para entrar.
+        let soloDinamico = false;
+        try {
+          const { rows: gym } = await pool.query(
+            'SELECT qr_dinamico_obligatorio FROM gimnasio WHERE id_gimnasio = $1',
+            [gymId]
+          );
+          soloDinamico = !!(gym[0] && gym[0].qr_dinamico_obligatorio === true);
+        } catch (_) {
+          soloDinamico = false;
+        }
+        if (soloDinamico) {
+          throw new AppError(400,
+            'Este gimnasio solo acepta el QR que cambia en la app del miembro. El QR fijo o una captura ya no sirven; también puedes registrar con el documento.',
+            'QR_ESTATICO_NO_PERMITIDO');
+        }
+
+        codigo = decryptQrCode(codigo);
         // CORRECCIÓN: Se quitó "estado" del SELECT porque no existe en la tabla
         const { rows: directMatch } = await pool.query(
           `SELECT id_miembro, nombre, documento, codigo_qr, qr_imagen FROM miembro 
@@ -249,11 +284,18 @@ router.post(
       // Racha y hitos (RQF-11). No frena el ingreso: si falla, devuelve null.
       const gamificacion = await calcularGamificacion(pool, { gymId, idMiembro: miembro.id_miembro });
 
+      // Retos (RQF-12): inscribe en los de segmento TODOS, suma la asistencia y
+      // avisa si se completo alguno. No frena el ingreso: si falla, devuelve [].
+      const retos = await actualizarRetos(pool, { gymId, idMiembro: miembro.id_miembro, nombreMiembro: miembro.nombre });
+
       return res.status(201).json({
         message: 'Ingreso registrado.',
         duplicado: false,
         checkin: nuevo,
         gamificacion,
+        retos,
+        mensaje_retos: mensajeRetos(retos),
+        qr_dinamico: !!dinamico,
         miembro: { 
           id: miembro.id_miembro, 
           nombre: miembro.nombre, 

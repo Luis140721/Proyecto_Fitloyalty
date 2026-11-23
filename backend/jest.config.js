@@ -21,12 +21,19 @@ module.exports = {
     'src/routes/**/*.js',
     'src/jobs/**/*.js',
   ],
-  // Cierre de S2 a S4 (2026-11-19): el mayor entre el piso de la S4 (50%) y la
-  // cobertura real, redondeada hacia abajo. Se toma la menor entre el CI (run
-  // 44653040667) y Windows, que da unas decimas menos, para que nadie vea rojo
-  // en su equipo. Nunca baja (regla de trinquete del bootcamp).
+  // Cierre de S5 a S8 (2026-11-21): en cada metrica, el mayor entre el piso de
+  // la S8 (80%) y la cobertura real, redondeada hacia abajo. Como en el cierre de
+  // S2 a S4 (#77), se toma la menor entre el CI y Windows, para que nadie vea
+  // rojo en su equipo. Nunca baja (regla de trinquete del bootcamp).
+  //  - #106, sobre chore/semana-01-con-develop-2 (17f3e0f): lineas 90,
+  //    sentencias 89, ramas 83 y funciones 89.
+  //  - Tercera sincronizacion con develop (#100 y #104: campanas, retos y QR
+  //    dinamico, con los tests de campanas-rutas y retos-rutas): en Linux con
+  //    Node 24, lineas 91,66, sentencias 90,88, ramas 84,83 y funciones 89,83;
+  //    en Windows, lineas 91,34, sentencias 90,62, ramas 84,68 y funciones
+  //    89,83. Las dos redondean igual.
   coverageThreshold: {
-    global: { statements: 60, branches: 54, functions: 66, lines: 61 },
+    global: { statements: 90, branches: 84, functions: 89, lines: 91 },
   },
   // Evita que Jest intente transformar código nativo (bcrypt, pg) sin
   // necesidad. Cuando agreguemos tests sobre rutas reales, podemos cambiar

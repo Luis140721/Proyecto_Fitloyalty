@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import EmptyState from '../components/EmptyState';
 import PageTransition from '../components/PageTransition';
 import Ripple from '../components/Ripple';
+import { armarPayloadCheckin } from '../lib/checkin';
 
 const COP = (n) => '$' + Number(n || 0).toLocaleString('es-CO');
 
@@ -176,6 +177,8 @@ export default function CheckinPage() {
         miembro: data.miembro,
         advertencia: data.duplicado ? 'ya-registrado' : data.advertencia,
         gamificacion: data.gamificacion,
+        retos: data.retos,
+        mensajeRetos: data.mensaje_retos,
       });
       setFrameFlash({ type: fbType, key: Date.now() });
       if (fbType === 'success') vibrate(80);
@@ -208,15 +211,10 @@ export default function CheckinPage() {
     // se deshabilita, pero el campo del documento sigue aceptando Enter.
     if (enviandoRef.current) return;
     setError(''); setFeedback(null);
-    const payload = { metodo };
-    if (codigo && !porDocumento) {
-      payload.codigo = codigo.trim();
-    } else if (documento) {
-      payload.documento = documento.trim();
-      // Escribir el documento es un ingreso manual: el selector arranca en QR
-      // y sin esto el ingreso quedaba guardado como QR (RQNF-04).
-      if (metodo === 'QR') payload.metodo = 'MANUAL';
-    } else {
+    // Un documento escrito en el campo del QR (donde arranca el cursor) se
+    // registra por documento, como ingreso manual (RQNF-04, lib/checkin.js).
+    const payload = armarPayloadCheckin({ codigo, documento, metodo, porDocumento });
+    if (!payload) {
       setError('Escribe el código QR o el documento.');
       return;
     }
@@ -249,6 +247,8 @@ export default function CheckinPage() {
         miembro: data.miembro,
         advertencia: data.advertencia,
         gamificacion: data.gamificacion,
+        retos: data.retos,
+        mensajeRetos: data.mensaje_retos,
       });
       setFrameFlash({ type: fbType, key: Date.now() });
       if (fbType === 'success') vibrate(80);
@@ -442,6 +442,15 @@ export default function CheckinPage() {
                     <small style={{ display: 'block', marginTop: 2 }}>
                       Racha: {feedback.gamificacion.racha} {feedback.gamificacion.racha === 1 ? 'día' : 'días'} · Asistencias: {feedback.gamificacion.totalAsistencias}
                     </small>
+                  </span>
+                )}
+                {/* Retos de asistencia (RQF-12): avance y aviso al completar. */}
+                {feedback.mensajeRetos && (
+                  <span style={{ display: 'block', marginTop: 8, fontSize: 14 }}>
+                    {feedback.retos?.some((r) => r.completado) && (
+                      <strong style={{ display: 'block' }}>🎯 ¡Reto completado!</strong>
+                    )}
+                    {feedback.mensajeRetos}
                   </span>
                 )}
               </span>
