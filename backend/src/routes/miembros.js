@@ -43,13 +43,10 @@ const router = express.Router();
 // y 004). Sin ellos un dato que no cabe llegaba a PostgreSQL y la ruta respondia
 // 500 o 503 DB_UNREACHABLE (hallazgo de la integracion de la semana 6).
 //   - MAX_VALOR_PLAN: plan_cobro.valor_total y valor_pagado son NUMERIC(10,2).
-//   - cabeEnLaColumna: un VARCHAR(n) se mide en caracteres; .length cuenta
-//     unidades UTF-16 y un emoji vale 2, por eso [...texto] (como en
-//     lib/validators.js).
+//   - Los VARCHAR(n) se miden en caracteres con hasta(), mas abajo.
 //   - valorQueCabe: el alta recibe los valores como texto y los lee con parseFloat.
 const MAX_VALOR_PLAN = 99999999.99;
 const MENSAJE_VALOR_PLAN = 'El valor del plan no puede pasar de 99.999.999,99';
-const cabeEnLaColumna = (n, etiqueta) => [(texto) => [...texto].length <= n, { message: `${etiqueta} admite máximo ${n} caracteres` }];
 const valorQueCabe = () => [(texto) => !(parseFloat(texto) > MAX_VALOR_PLAN), { message: MENSAJE_VALOR_PLAN }];
 
 // El id de un miembro en la URL, en todas las rutas de este archivo: un entero
@@ -142,8 +139,8 @@ const createSchema = z.object({
   email:     hasta(z.string().email(), 150, 'El correo').optional().or(z.literal('').transform(() => undefined)),
   direccion: z.string().optional(),
   // Salud y emergencia
-  contacto_emergencia: z.string().refine(...cabeEnLaColumna(100, 'El contacto de emergencia')).optional(),
-  telefono_emergencia: z.string().refine(...cabeEnLaColumna(20, 'El teléfono de emergencia')).optional(),
+  contacto_emergencia: hasta(z.string(), 100, 'El contacto de emergencia').optional(),
+  telefono_emergencia: hasta(z.string(), 20, 'El teléfono de emergencia').optional(),
   condiciones_medicas: z.string().optional(),
   alergias: z.string().optional(),
   // Plan y cobros
@@ -153,14 +150,14 @@ const createSchema = z.object({
   valor_total: z.string().refine(...valorQueCabe()).optional(),
   valor_pagado: z.string().refine(...valorQueCabe()).default('0'),
   metodo_pago: z.enum(['EFECTIVO', 'TRANSFERENCIA', 'TARJETA', 'PSE', 'NEQUI', 'DAVIPLATA', 'OTRO']).default('EFECTIVO'),
-  referencia_pago: z.string().refine(...cabeEnLaColumna(100, 'La referencia del pago')).optional(),
+  referencia_pago: hasta(z.string(), 100, 'La referencia del pago').optional(),
   estado_pago: z.enum(['PENDIENTE', 'PAGADO', 'PARCIAL']).default('PENDIENTE'),
   proxima_fecha_cobro: z.string().optional(),
   activar_recordatorio: z.boolean().default(false),
   dias_recordatorio: z.number().default(7),
   // Info adicional
-  objetivo: z.string().refine(...cabeEnLaColumna(50, 'El objetivo')).optional(),
-  nivel_experiencia: z.string().refine(...cabeEnLaColumna(30, 'El nivel de experiencia')).optional(),
+  objetivo: hasta(z.string(), 50, 'El objetivo').optional(),
+  nivel_experiencia: hasta(z.string(), 30, 'El nivel de experiencia').optional(),
   observaciones: z.string().optional(),
   // Términos
   acepto_terminos: z.boolean().default(false),
