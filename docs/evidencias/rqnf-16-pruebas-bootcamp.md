@@ -9,6 +9,7 @@ Al fusionar `develop`, 41 pruebas del bootcamp fallaban: estaban escritas contra
 | API | `backend/tests/campanas-rutas.test.js` | 69 | 23 | 123 |
 | API | `backend/tests/miembros-rutas.test.js` | 87 | 1 | 89 |
 | API | `backend/tests/miembros-api-crud.test.js` | 15 | 1 | 15 |
+| BD | `backend/tests/integracion/plan-cobro.test.js` (entró con el #83 después de la fusión) | 7 | 1 | 7 |
 | API | `backend/tests/contrato-front.test.js` | 25 | 0 | 26 |
 | Front | `frontend/tests/CampanasPage.test.jsx` | 42 | 11 | 61 |
 | Front | `frontend/tests/MenuNotificaciones.test.jsx` | 13 | 2 | 17 |
@@ -51,6 +52,7 @@ CR = `campanas-rutas.test.js`, MR = `miembros-rutas.test.js`, MC = `miembros-api
 | 24 | CR | `should answer zeros when no campaign is due` (mismo nombre) | Cinco ceros | Siete ceros (con `reintentadas` y `omitidos`), sin transacciones | Campos nuevos del resumen |
 | 25 | MR | `should return the member of the gym when the id exists` (mismo nombre) | Miembro con los campos de RQNF-17 | Además `acepta_mensajes_comerciales: false, canales_comerciales: []` | La ficha trae la aceptación; sin fila, no acepta |
 | 26 | MC | `should answer 200 in JSON with the member as it is stored, without the password hash nor the gym` (mismo nombre) | Miembro guardado más los campos de RQNF-17 | Además `acepta_mensajes_comerciales: false, canales_comerciales: []` | Ídem |
+| 27 | `integracion/plan-cobro.test.js` (#83, Santiago) | `should accept a plan when its tipo_plan is any value the createSchema of the API allows` (mismo nombre) | Leía el `tipo_plan` con un solo `createSchema.innerType()` | Desenvuelve los `ZodEffects` en bucle hasta el `z.object`: mismo caso y misma aserción, la lista sigue saliendo del zod real | Adaptado a la nueva forma de `createSchema`: el #108 le encadena un segundo `.superRefine` (`validarComerciales`), y un solo `innerType()` ya no llegaba a `.shape` |
 
 ## Backend: pruebas nuevas
 
