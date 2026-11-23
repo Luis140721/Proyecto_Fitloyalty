@@ -58,12 +58,18 @@ function idValido(req, res) {
 
 /**
  * Telefono al que se manda el contrato. Si el miembro es menor de edad, el
- * contrato es con su representante legal (RQNF-17): va a su telefono si lo
- * tiene registrado.
+ * contrato es con su representante legal (RQNF-17): solo va al telefono del
+ * representante. Si no lo tiene registrado, no se manda al telefono del menor
+ * (observacion 4 del #102): la ruta responde 400 y pide registrarlo.
  */
 function telefonoDestino(fila) {
-    if (fila.es_menor && fila.representante_telefono) {
-        return { telefono: telefonoWhatsapp(fila.representante_telefono, fila.codigo_pais_telefono), a: 'representante' };
+    if (fila.es_menor) {
+        return {
+            telefono: fila.representante_telefono
+                ? telefonoWhatsapp(fila.representante_telefono, fila.codigo_pais_telefono)
+                : null,
+            a: 'representante',
+        };
     }
     return { telefono: telefonoWhatsapp(fila.telefono, fila.codigo_pais_telefono), a: 'miembro' };
 }
@@ -95,7 +101,7 @@ router.post(
         const tel = destino.telefono;
         if (!tel) {
             return res.status(400).json({ ok: false, error: destino.a === 'representante'
-                ? 'El representante legal no tiene un telefono valido'
+                ? 'El miembro es menor de edad y su representante legal no tiene un telefono valido: registralo en la ficha del miembro. El contrato no se envia al telefono del menor.'
                 : 'El miembro no tiene un telefono valido' });
         }
 

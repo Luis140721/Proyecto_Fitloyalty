@@ -495,12 +495,40 @@ describe('GET /api/admin/miembros/:id: the member detail', () => {
     // Act
     const r = await pedir('get', '/admin/miembros/88');
 
+    // Assert: el #108 (RQNF-16, Ley 2300) suma la aceptacion de mensajes comerciales;
+    // sin fila de MENSAJES_COMERCIALES el miembro no los acepta por ningun canal
+    expect(r.status).toBe(200);
+    expect(r.body.miembro).toEqual({
+      id_miembro: 88, nombre: 'Ana', autorizo_datos_sensibles: false, menor_de_edad: false, datos_sensibles_sin_autorizacion: false,
+      acepta_mensajes_comerciales: false, canales_comerciales: [],
+    });
+    expect(llamadas(/FROM miembro WHERE id_miembro/)[0].params).toEqual([88, 7]);
+  });
+
+  test.each([
+    ['accepted and the channels in a fixed order when the member accepted them', true, ['EMAIL', 'WHATSAPP'], true, ['WHATSAPP', 'EMAIL']],
+    ['not accepted and no channels when the member cancelled them', false, null, false, []],
+  ])('should answer the commercial messages as %s', async (_caso, otorgada, canales, acepta, canalesComerciales) => {
+    // Arrange: la aceptacion vigente de mensajes comerciales (RQNF-16, Ley 2300 de 2023)
+    const vigente = {
+      id_autorizacion: 5, tipo: 'MENSAJES_COMERCIALES', otorgada, version_texto: 'v2', canal: 'PANEL',
+      fecha: '2026-11-02T15:00:00.000Z', detalle: null, canales_autorizados: canales, registrada_por: 'Luz Recepcion',
+    };
+    responder(
+      [/FROM miembro WHERE id_miembro = \$1 AND id_gimnasio = \$2/, filas([{ id_miembro: 88, nombre: 'Ana' }])],
+      [/FROM autorizacion_miembro/, filas([vigente])],
+    );
+
+    // Act
+    const r = await pedir('get', '/admin/miembros/88');
+
     // Assert
     expect(r.status).toBe(200);
     expect(r.body.miembro).toEqual({
       id_miembro: 88, nombre: 'Ana', autorizo_datos_sensibles: false, menor_de_edad: false, datos_sensibles_sin_autorizacion: false,
+      acepta_mensajes_comerciales: acepta, canales_comerciales: canalesComerciales,
     });
-    expect(llamadas(/FROM miembro WHERE id_miembro/)[0].params).toEqual([88, 7]);
+    expect(llamadas(/FROM autorizacion_miembro/)[0].params).toEqual([88, 7]);
   });
 
   test.each([

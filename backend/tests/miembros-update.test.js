@@ -2,7 +2,12 @@ const express = require('express');
 const jwt = require('jsonwebtoken');
 
 const mockQuery = jest.fn();
-jest.mock('../src/db/db', () => ({ query: (...args) => mockQuery(...args) }));
+// Un cambio de la fecha de nacimiento va por la transaccion de RQNF-17 (ajuste
+// del #102): el cliente de la transaccion usa el mismo mockQuery.
+jest.mock('../src/db/db', () => ({
+  query: (...args) => mockQuery(...args),
+  connect: async () => ({ query: (...args) => mockQuery(...args), release: () => {} }),
+}));
 
 process.env.JWT_SECRET = 'secreto-de-pruebas';
 
@@ -39,6 +44,12 @@ beforeEach(() => {
     if (/SELECT id_gimnasio, activo, trial_ends_at FROM gimnasio/i.test(sql)) {
       return { rows: [{ id_gimnasio: 7, activo: true, trial_ends_at: null }] };
     }
+    if (/^(BEGIN|COMMIT|ROLLBACK)$/.test(sql.trim())) return { rows: [] };
+    // Fila actual (un adulto sin fecha) y sus autorizaciones (ninguna).
+    if (/FROM miembro WHERE id_miembro = \$1 AND id_gimnasio = \$2\s+FOR UPDATE/i.test(sql)) {
+      return { rows: [{ id_miembro: 4, tipo_documento: 'CC', fecha_nacimiento: null, condiciones_medicas: null, alergias: null }] };
+    }
+    if (/FROM autorizacion_miembro/i.test(sql)) return { rows: [] };
     if (/UPDATE miembro SET/i.test(sql)) {
       return {
         rows: [{

@@ -33,6 +33,8 @@ const {
   CAMPOS_REPRESENTANTE, leerVigentes, leerHistorial, otorgada, registrarAutorizacion,
   resumenAutorizaciones, edadEnAnios,
 } = require('../lib/autorizaciones');
+// RQNF-16: aceptacion de mensajes comerciales (autorizacion_miembro, migracion 017).
+const { guardarComerciales, normalizarCanales } = require('../lib/contacto-miembro');
 const { sendMemberQR } = require('../lib/email');
 const { sendWhatsAppQR } = require('../lib/whatsapp'); // <-- NUEVO: Importado el servicio de WhatsApp
 const QRCode = require('qrcode');
@@ -173,6 +175,10 @@ const createSchema = z.object({
   representante_parentesco:     z.string().max(40).nullable().optional(),
   representante_telefono:       z.string().max(20).nullable().optional(),
   autoriza_representante: z.boolean().default(false),
+  // RQNF-16 (Ley 2300 de 2023, arts. 2 y 5): aceptacion explicita y opcional
+  // de mensajes comerciales y los canales. Por defecto no acepta.
+  acepta_mensajes_comerciales: z.boolean().default(false),
+  canales_comerciales: z.array(z.enum(['WHATSAPP', 'EMAIL'])).max(2).optional(),
   activo: z.boolean().default(true),
   qr_imagen: z.string().optional(), // Imagen del QR en base64
   // Contrasena para la app movil del cliente. Si viene vacia/null, no se
@@ -180,7 +186,18 @@ const createSchema = z.object({
   // Se guarda hasheada con bcrypt en password_hash.
   password: z.string().min(6, 'La contrasena debe tener minimo 6 caracteres').optional().or(z.literal('').transform(() => undefined)),
   app_acceso: z.boolean().default(true),
-}).superRefine(validarMenorEnAlta);
+}).superRefine(validarMenorEnAlta).superRefine(validarComerciales);
+
+/** RQNF-16: aceptar mensajes comerciales exige al menos un canal. */
+function validarComerciales(d, ctx) {
+  if (d.acepta_mensajes_comerciales === true && !(d.canales_comerciales || []).length) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['canales_comerciales'],
+      message: 'Para aceptar mensajes comerciales elige al menos un canal (WhatsApp o correo).',
+    });
+  }
+}
 
 /**
  * RQNF-17 (Decreto 1377 de 2013, art. 12): si el miembro es menor de edad,
@@ -283,6 +300,11 @@ const updateSchema = z.object({
   representante_documento:      vacioANull(z.string().max(20)),
   representante_parentesco:     vacioANull(z.string().max(40)),
   representante_telefono:       vacioANull(z.string().max(20)),
+
+  // RQNF-16: el interruptor de mensajes comerciales de la ficha del miembro.
+  // Cada cambio deja una fila de MENSAJES_COMERCIALES (canal PANEL).
+  acepta_mensajes_comerciales:  z.boolean().optional(),
+  canales_comerciales:          z.array(z.enum(['WHATSAPP', 'EMAIL'])).max(2).optional(),
 });
 
 // El mensaje por defecto de zod para el correo es "Invalid email" y el front lo
@@ -298,12 +320,19 @@ function mensajesDeValidacion(issue, ctx) {
 }
 
 /** Claves de updateSchema que no son columnas de miembro. */
-const NO_COLUMNAS = new Set(['autorizo_datos_sensibles', 'autoriza_representante']);
+const NO_COLUMNAS = new Set([
+  'autorizo_datos_sensibles', 'autoriza_representante', 'acepta_mensajes_comerciales', 'canales_comerciales',
+]);
 
 /**
- * ¿La edicion toca algo de RQNF-17? Entonces hay que mirar el estado actual
- * del miembro (edad, representante, autorizaciones) dentro de una
- * transaccion. Si no, la edicion sigue el camino simple de siempre.
+ * ¿La edicion toca algo de RQNF-17 o RQNF-16? Entonces hay que mirar el
+ * estado actual del miembro (edad, representante, autorizaciones) dentro de
+ * una transaccion. Si no, la edicion sigue el camino simple de siempre.
+ *
+ * Cualquier cambio de la fecha de nacimiento o del tipo de documento cuenta,
+ * tambien vaciar la fecha o pasar de TI a otro documento: antes esos dos casos
+ * iban por el camino simple y un menor dejaba de ser tratado como menor sin
+ * ninguna validacion (observacion 2 del #102).
  */
 function tocaAutorizaciones(d) {
   return d.autorizo_datos_sensibles !== undefined
@@ -311,8 +340,10 @@ function tocaAutorizaciones(d) {
     || CAMPOS_REPRESENTANTE.some((k) => d[k] !== undefined)
     || d.condiciones_medicas !== undefined
     || d.alergias !== undefined
-    || (d.fecha_nacimiento !== undefined && d.fecha_nacimiento !== null)
-    || d.tipo_documento === 'TI';
+    || d.fecha_nacimiento !== undefined
+    || d.tipo_documento !== undefined
+    || d.acepta_mensajes_comerciales !== undefined
+    || d.canales_comerciales !== undefined;
 }
 
 function parse(schema, payload) {
@@ -390,6 +421,13 @@ async function registrarAutorizacionesAlta(db, { idMiembro, gymId, usuario, data
   filas.push(await registrarAutorizacion(db, { ...base, tipo: 'TERMINOS', otorgada: data.acepto_terminos, detalle: porRepresentante }));
   filas.push(await registrarAutorizacion(db, { ...base, tipo: 'TRATAMIENTO_DATOS', otorgada: data.autorizo_datos, detalle: porRepresentante }));
   filas.push(await registrarAutorizacion(db, { ...base, tipo: 'DATOS_SENSIBLES', otorgada: data.autorizo_datos_sensibles, detalle: porRepresentante }));
+  // RQNF-16: la decision sobre los mensajes comerciales queda registrada
+  // desde el alta, tambien cuando es "no" (que es lo que queda por defecto).
+  const comerciales = data.acepta_mensajes_comerciales === true;
+  filas.push(await registrarAutorizacion(db, {
+    ...base, tipo: 'MENSAJES_COMERCIALES', otorgada: comerciales, detalle: porRepresentante,
+    canales: comerciales ? normalizarCanales(data.canales_comerciales) : null,
+  }));
   if (menor) {
     filas.push(await registrarAutorizacion(db, {
       ...base,
@@ -441,8 +479,29 @@ async function actualizarConAutorizaciones(client, { id, gymId, usuario, d }) {
   };
   for (const k of CAMPOS_REPRESENTANTE) final[k] = d[k] !== undefined ? d[k] : actual[k];
   const menor = esMenorDeEdad(final);
+  const eraMenor = esMenorDeEdad(actual);
   const base = { idMiembro: id, gymId, canal: 'PANEL', registradaPor: usuario };
   const sets = {};
+
+  // Observacion 2 del #102: un menor solo deja de tratarse como menor con una
+  // fecha de nacimiento valida que muestre que ya cumplio 18 (constancia). Sin
+  // fecha (se vacio, o se cambio la TI por otro documento) no se admite.
+  if (eraMenor && !menor) {
+    if (!final.fecha_nacimiento) {
+      throw new AppError(400, 'El miembro está registrado como menor de edad: para cambiarlo, escribe su fecha de nacimiento (debe tener 18 años o más). No se puede borrar la fecha ni cambiar la tarjeta de identidad sin ella.', 'MENOR_SIN_CONSTANCIA');
+    }
+    await registrarAutorizacion(client, {
+      ...base,
+      tipo: 'REPRESENTANTE_MENOR',
+      otorgada: false,
+      detalle: {
+        motivo: 'MAYOR_DE_EDAD',
+        antes: { tipo_documento: actual.tipo_documento, fecha_nacimiento: actual.fecha_nacimiento },
+        despues: { tipo_documento: final.tipo_documento, fecha_nacimiento: final.fecha_nacimiento },
+        edad_miembro: edadEnAnios(final.fecha_nacimiento),
+      },
+    });
+  }
 
   if (menor) {
     const rep = representanteSchema.safeParse(datosRepresentante(final));
@@ -482,13 +541,28 @@ async function actualizarConAutorizaciones(client, { id, gymId, usuario, d }) {
     });
   }
   let sensiblesBorrados = false;
+  // Solo se tocan los datos de salud si la edicion habla de ellos: cambiar la
+  // fecha, el documento o los mensajes comerciales no los borra de rebote.
+  const tocaSensibles = d.autorizo_datos_sensibles !== undefined
+    || d.condiciones_medicas !== undefined || d.alergias !== undefined;
   if (despues) {
     if (d.condiciones_medicas !== undefined) sets.condiciones_medicas = d.condiciones_medicas;
     if (d.alergias !== undefined) sets.alergias = d.alergias;
-  } else {
+  } else if (tocaSensibles) {
     sensiblesBorrados = Boolean(actual.condiciones_medicas || actual.alergias || d.condiciones_medicas || d.alergias);
     sets.condiciones_medicas = null;
     sets.alergias = null;
+  }
+
+  // RQNF-16: mensajes comerciales. El personal registra lo que el miembro (o
+  // su representante, si es menor) decidio; solo deja fila si algo cambio.
+  let comerciales = null;
+  if (d.acepta_mensajes_comerciales !== undefined || d.canales_comerciales !== undefined) {
+    comerciales = await guardarComerciales(client, {
+      idMiembro: id, gymId, acepta: d.acepta_mensajes_comerciales, canales: d.canales_comerciales,
+      origen: 'PANEL', registradaPor: usuario,
+      detalle: menor ? { otorgada_por: 'REPRESENTANTE_LEGAL' } : null,
+    });
   }
 
   // El resto de campos, igual que el camino simple.
@@ -510,19 +584,28 @@ async function actualizarConAutorizaciones(client, { id, gymId, usuario, d }) {
     campos.push(`${k} = $${params.length}`);
   }
   params.push(id, gymId);
-  const { rows } = await client.query(
-    `UPDATE miembro SET ${campos.join(', ')}
-      WHERE id_miembro = $${params.length - 1} AND id_gimnasio = $${params.length}
-      RETURNING id_miembro, nombre, documento, telefono, email, codigo_qr, qr_imagen,
+  const COLS_RESPUESTA = `id_miembro, nombre, documento, telefono, email, codigo_qr, qr_imagen,
                 activo, fecha_registro, app_acceso,
-                (password_hash IS NOT NULL) AS password_asignada`,
-    params
-  );
+                (password_hash IS NOT NULL) AS password_asignada`;
+  // Observacion 1 del #102: si solo cambian autorizaciones (p. ej.
+  // { autorizo_datos_sensibles: true } sin datos de salud), no hay columnas
+  // que actualizar: se lee la fila en vez de armar un UPDATE vacio.
+  const { rows } = campos.length > 0
+    ? await client.query(
+      `UPDATE miembro SET ${campos.join(', ')}
+        WHERE id_miembro = $${params.length - 1} AND id_gimnasio = $${params.length}
+        RETURNING ${COLS_RESPUESTA}`,
+      params
+    )
+    : await client.query(
+      `SELECT ${COLS_RESPUESTA} FROM miembro WHERE id_miembro = $1 AND id_gimnasio = $2`,
+      [id, gymId]
+    );
   const autorizaciones = resumenAutorizaciones(
     await leerVigentes(client, id, gymId),
     await leerHistorial(client, id, gymId, 20)
   );
-  return { miembro: rows[0], autorizaciones, sensiblesBorrados, revocada: antes && !despues, menor };
+  return { miembro: rows[0], autorizaciones, sensiblesBorrados, revocada: antes && !despues, menor, comerciales };
 }
 
 // ---------------------------------------------------------------------------
@@ -938,9 +1021,14 @@ router.get(
       const historial = await leerHistorial(pool, id, gymId, 20);
       const m = rows[0];
       const sensibles = otorgada(vigentes, 'DATOS_SENSIBLES');
+      // RQNF-16: el interruptor de mensajes comerciales de la ficha.
+      const comerciales = vigentes.MENSAJES_COMERCIALES;
+      const aceptaComerciales = Boolean(comerciales && comerciales.otorgada);
       return res.json({
         miembro: {
           ...m,
+          acepta_mensajes_comerciales: aceptaComerciales,
+          canales_comerciales: aceptaComerciales ? normalizarCanales(comerciales.canales_autorizados) : [],
           autorizo_datos_sensibles: sensibles,
           menor_de_edad: esMenorDeEdad(m),
           // Datos de salud guardados sin autorizacion separada (miembros de
@@ -985,6 +1073,11 @@ router.put(
         let message = 'Miembro actualizado.';
         if (r.revocada) message = 'Miembro actualizado. Se revocó la autorización de datos sensibles y se borraron las condiciones médicas y las alergias.';
         else if (r.sensiblesBorrados) message = 'Miembro actualizado. Sin autorización de datos sensibles no se guardan condiciones médicas ni alergias.';
+        if (r.comerciales && r.comerciales.cambio) {
+          message += r.comerciales.despues.acepta_mensajes_comerciales
+            ? ' Quedó registrada la aceptación de mensajes comerciales.'
+            : ' El miembro ya no recibirá mensajes comerciales.';
+        }
         return res.json({
           message,
           miembro: r.miembro,

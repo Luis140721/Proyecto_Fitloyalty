@@ -144,10 +144,13 @@ describe('GET /api/admin/miembros/:id: one member of the gym', () => {
     // Act
     const r = await pedir('get', '/88');
 
-    // Assert: lo guardado, mas lo que el #102 (RQNF-17) calcula para la ficha
+    // Assert: lo guardado, mas lo que el #102 (RQNF-17) calcula para la ficha y la
+    // aceptacion de mensajes comerciales del #108 (RQNF-16, Ley 2300): sin fila en
+    // autorizacion_miembro, el miembro no los acepta por ningun canal
     esJson(r, 200);
     expect(r.body.miembro).toEqual({
       ...visible, autorizo_datos_sensibles: false, menor_de_edad: false, datos_sensibles_sin_autorizacion: true,
+      acepta_mensajes_comerciales: false, canales_comerciales: [],
     });
   });
 

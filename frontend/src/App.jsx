@@ -24,6 +24,7 @@ import StaffPage from './pages/StaffPage';
 import ConfigPage from './pages/ConfigPage';
 import RetosPage from './pages/RetosPage';
 import CampanasPage from './pages/CampanasPage';
+import BajaMensajesPage from './pages/BajaMensajesPage';
 
 export default function App() {
   return (
@@ -46,6 +47,8 @@ export default function App() {
             <Route path="/legal/privacidad" element={<PrivacidadPage />} />
             <Route path="/legal/datos" element={<PoliticaDatosPage />} />
             <Route path="/legal/eliminar-cuenta" element={<EliminarCuentaPage />} />
+            {/* Enlace publico para dejar los mensajes comerciales (RQNF-16) */}
+            <Route path="/baja/:token" element={<BajaMensajesPage />} />
 
             {/* Admin-protected routes */}
             <Route

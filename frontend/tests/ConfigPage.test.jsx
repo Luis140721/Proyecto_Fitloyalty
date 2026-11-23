@@ -6,9 +6,15 @@
  * El API se simula con vi.mock. Los precios llegan como texto ("90000.00"),
  * como los manda PostgreSQL por las columnas numeric. HitosConfig va dentro de
  * la pagina y aqui no tiene hitos (tiene su propio archivo de tests).
+ *
+ * El aviso de guardado se quita solo a los 3 s, y su timer se cancela al salir
+ * de la pagina: antes corria con la pagina ya desmontada y, si el archivo de
+ * tests habia terminado, Vitest marcaba la corrida con error («window is not
+ * defined»). Esos tests usan timers falsos solo para setTimeout.
  */
-import { describe, expect, test, vi, beforeEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { StrictMode } from 'react';
+import { describe, expect, test, vi, beforeEach, afterEach } from 'vitest';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import ConfigPage from '../src/pages/ConfigPage';
 import { renderWithProviders } from './renderWithProviders';
 
@@ -52,6 +58,7 @@ beforeEach(() => {
   mockGet = apiQueResponde();
   mockPut = vi.fn(async (_url, cuerpo) => ({ data: { config: { ...CONFIG, ...cuerpo } } }));
 });
+afterEach(() => vi.useRealTimers());
 
 describe('ConfigPage: ver la configuracion', () => {
   test('should show the prices, the reminders and the alert thresholds of the gym when the page loads', async () => {
@@ -277,5 +284,130 @@ describe('ConfigPage: guardar', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Los días de recordatorio deben estar entre 1 y 30.');
     expect(campo(/^Plan Mensual/)).toHaveValue(90000);
     expect(guardar()).toBeEnabled();
+  });
+});
+
+describe('ConfigPage: el aviso de guardado', () => {
+  /** Guarda sin cambiar nada. Con timers falsos los clics van con fireEvent, como en CheckinPage.ramas.test.jsx. */
+  const guardarAhora = async () => {
+    fireEvent.click(guardar());
+    await act(async () => {});
+    expect(screen.getByRole('alert')).toHaveTextContent('Configuración guardada exitosamente.');
+  };
+
+  /**
+   * Abre la pagina con timers falsos para setTimeout, guarda y deja pasar 1 s: asi ya corrieron los
+   * timers que no son del aviso (la entrada de la pagina y la onda del boton, de 700 ms) y solo queda
+   * pendiente el que quita el aviso, al que le faltan 2 s.
+   */
+  const guardarYEsperarUnSegundo = async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const pantalla = abrirConfig();
+    await act(async () => {});
+    await guardarAhora();
+    act(() => vi.advanceTimersByTime(1000));
+    expect(vi.getTimerCount()).toBe(1);
+    return pantalla;
+  };
+
+  test('should take the success notice away by itself when 3 seconds pass with the page still open', async () => {
+    // Arrange
+    await guardarYEsperarUnSegundo();
+
+    // Act
+    act(() => vi.advanceTimersByTime(1999));
+    const antes = screen.queryByRole('alert');
+    act(() => vi.advanceTimersByTime(1));
+
+    // Assert
+    expect(antes).toHaveTextContent('Configuración guardada exitosamente.');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  test('should keep the notice 3 seconds from the last save when the admin saves again before it goes away', async () => {
+    // Arrange: ha pasado 1 s desde el primer guardado
+    await guardarYEsperarUnSegundo();
+
+    // Act: guarda otra vez; pasa 1 s (la onda del boton) y luego casi los 3 s del segundo guardado
+    await guardarAhora();
+    act(() => vi.advanceTimersByTime(1000));
+    const timersDelAviso = vi.getTimerCount();
+    act(() => vi.advanceTimersByTime(1999));
+    const antes = screen.queryByRole('alert');
+    act(() => vi.advanceTimersByTime(1));
+
+    // Assert: el timer del primer guardado no quita el aviso del segundo, ni queda suelto
+    expect(timersDelAviso).toBe(1);
+    expect(antes).toHaveTextContent('Configuración guardada exitosamente.');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  test('should leave no timer pending when the admin leaves the page right after saving', async () => {
+    // Arrange
+    const { unmount } = await guardarYEsperarUnSegundo();
+
+    // Act
+    unmount();
+
+    // Assert: antes el timer del aviso seguia vivo 2 s mas, con la pagina ya desmontada
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  test('should create no timer when the answer of the save arrives after the admin left the page', async () => {
+    // Arrange: el servidor tarda en contestar el guardado
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    let responder;
+    mockPut = vi.fn(() => new Promise((resolve) => { responder = resolve; }));
+    const { unmount } = abrirConfig();
+    await act(async () => {});
+    fireEvent.click(guardar());
+    await act(async () => {});
+    act(() => vi.advanceTimersByTime(1000));
+    expect(mockPut).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+
+    // Act: el admin sale de la pagina y despues llega la respuesta
+    unmount();
+    await act(async () => responder({ data: { config: CONFIG } }));
+
+    // Assert: antes se creaba aqui el timer del aviso, con la pagina ya desmontada
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  test('should show the notice and start its 3 seconds when the answer of the save arrives late with the page still open', async () => {
+    // Arrange
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    let responder;
+    mockPut = vi.fn(() => new Promise((resolve) => { responder = resolve; }));
+    abrirConfig();
+    await act(async () => {});
+    fireEvent.click(guardar());
+    await act(async () => {});
+    act(() => vi.advanceTimersByTime(1000));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+
+    // Act
+    await act(async () => responder({ data: { config: CONFIG } }));
+
+    // Assert: la guarda de «ya salio de la pagina» no estorba cuando la pagina sigue abierta
+    expect(screen.getByRole('alert')).toHaveTextContent('Configuración guardada exitosamente.');
+    expect(vi.getTimerCount()).toBe(1);
+    act(() => vi.advanceTimersByTime(3000));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  test('should confirm the save when the page runs inside StrictMode, as the app does', async () => {
+    // Arrange: src/main.jsx monta la app en <StrictMode>, que en desarrollo monta cada pagina, la
+    // desmonta y la vuelve a montar. La pagina no puede quedarse creyendo que ya salieron de ella.
+    const { user } = renderWithProviders(<StrictMode><ConfigPage /></StrictMode>, { route: '/admin/config' });
+    await cargada();
+
+    // Act
+    await user.click(guardar());
+
+    // Assert
+    expect(await screen.findByRole('alert')).toHaveTextContent('Configuración guardada exitosamente.');
+    expect(mockPut).toHaveBeenCalledTimes(1);
   });
 });

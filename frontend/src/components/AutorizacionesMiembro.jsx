@@ -9,12 +9,15 @@
  *     condiciones medicas y alergias, con el texto de que no es obligatoria.
  *   - HistorialAutorizaciones: la prueba de cada autorizacion (fecha,
  *     version del texto, canal y quien la registro).
+ *   - CasillaMensajesComerciales: RQNF-16 (Ley 2300 de 2023), el interruptor
+ *     de mensajes comerciales con sus canales.
  *
  * Las usan el alta y la edicion de MiembrosPage. Los textos vienen de
  * lib/autorizaciones.js, que son los mismos que guarda el backend.
  */
 import {
   TEXTOS_AUTORIZACION, NOMBRES_AUTORIZACION, TIPOS_DOC_REPRESENTANTE, PARENTESCOS,
+  cambiarCanalComercial, puedeAceptarComerciales,
 } from '../lib/autorizaciones';
 
 function ErrorTexto({ msg }) {
@@ -157,7 +160,93 @@ export function CasillaDatosSensibles({ checked, onChange, menor = false, aviso 
   );
 }
 
-const CANALES = { PANEL: 'panel del gimnasio', APP: 'app del miembro' };
+const ETIQUETAS_CANAL = [
+  { valor: 'WHATSAPP', etiqueta: 'WhatsApp' },
+  { valor: 'EMAIL', etiqueta: 'Correo' },
+];
+
+/**
+ * RQNF-16 (Ley 2300 de 2023, arts. 2 y 5): interruptor de mensajes
+ * comerciales y canales. Es opcional y va apagado por defecto: solo se
+ * enciende si el miembro (o su representante, si es menor) lo acepta. Al
+ * apagarlo y guardar, el miembro deja de recibir campañas y mensajes de
+ * retencion; queda constancia en el historial.
+ *
+ *   checked / onChange(bool)         acepta o no
+ *   canales / onCanales(['WHATSAPP'])  por donde
+ */
+export function CasillaMensajesComerciales({ checked, onChange, canales = [], onCanales, menor = false, aviso }) {
+  const marcado = (c) => (canales || []).includes(c);
+  // La regla esta en lib/autorizaciones.js (cambiarCanalComercial), probada en
+  // frontend/tests/formularioMiembro.test.js. Llama a onCanales y, si quito el
+  // ultimo canal, a onChange(false) en el mismo evento: quien la usa tiene que
+  // actualizar su estado con funcion (setForm((prev) => ...)) para que el
+  // segundo cambio no pise el primero.
+  const alternarCanal = (c, valor) => {
+    const r = cambiarCanalComercial({ acepta: checked, canales }, c, valor);
+    onCanales(r.canales);
+    if (r.acepta !== Boolean(checked)) onChange(r.acepta);
+  };
+  // El texto dice «por los canales que marco»: no se marca ninguno solo. Para
+  // aceptar hay que marcar antes al menos un canal.
+  const sinCanal = !puedeAceptarComerciales(canales);
+  const activar = (valor) => {
+    if (valor && sinCanal) return;
+    onChange(valor);
+  };
+  return (
+    <div style={{ background: 'var(--surface-container-low)', borderRadius: 'var(--radius)', padding: 12, marginBottom: 12 }}>
+      <label className="field" style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 8 }}>
+        <input
+          type="checkbox"
+          role="switch"
+          aria-checked={Boolean(checked)}
+          checked={Boolean(checked)}
+          onChange={(e) => activar(e.target.checked)}
+          disabled={!checked && sinCanal}
+          style={{ marginTop: 4 }}
+          aria-describedby="texto-autorizacion-MENSAJES_COMERCIALES"
+        />
+        <span className="field-label" style={{ margin: 0, fontSize: 13, fontWeight: 400, lineHeight: 1.45 }}>
+          <strong>{NOMBRES_AUTORIZACION.MENSAJES_COMERCIALES} (opcional).</strong>{' '}
+          <span id="texto-autorizacion-MENSAJES_COMERCIALES">{TEXTOS_AUTORIZACION.MENSAJES_COMERCIALES}</span>
+          {menor && <span style={{ display: 'block', marginTop: 4, color: 'var(--on-surface-variant)' }}>El miembro es menor de edad: esta decisión la toma su representante legal.</span>}
+        </span>
+      </label>
+      {/* Los canales se ven siempre: primero se marcan, luego se acepta. */}
+      <div style={{ display: 'flex', gap: 16, marginLeft: 26, marginBottom: 6 }} role="group" aria-label="Canales autorizados">
+        {ETIQUETAS_CANAL.map((c) => (
+          <label key={c.valor} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+            <input
+              type="checkbox"
+              checked={marcado(c.valor)}
+              onChange={(e) => alternarCanal(c.valor, e.target.checked)}
+            />
+            {c.etiqueta}
+          </label>
+        ))}
+      </div>
+      <p className="field-hint" style={{ margin: 0 }}>
+        {checked
+          ? (canales && canales.length > 0
+            ? 'Recibirá campañas y mensajes de retención solo por los canales marcados y en el horario de la Ley 2300.'
+            : 'Marca al menos un canal o apaga los mensajes comerciales.')
+          : (sinCanal
+            ? 'Para registrar la aceptación, marca primero los canales que el miembro elige. Sin ella no recibe campañas ni mensajes de retención; los avisos de su plan (vencimiento) sí le llegan.'
+            : 'Sin esta aceptación no recibe campañas ni mensajes de retención. Los avisos de su plan (vencimiento) sí le llegan.')}
+      </p>
+      {aviso && (
+        <div className="alert alert-warning" role="status" style={{ marginTop: 10, marginBottom: 0 }}>
+          <span className="material-symbols-outlined icon">info</span>
+          <span>{aviso}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const CANALES = { PANEL: 'panel del gimnasio', APP: 'app del miembro', ENLACE: 'enlace de baja' };
+const NOMBRE_CANAL_COMERCIAL = { WHATSAPP: 'WhatsApp', EMAIL: 'correo' };
 
 /** Historial de autorizaciones (lo mas reciente primero). */
 export function HistorialAutorizaciones({ historial }) {
@@ -170,8 +259,11 @@ export function HistorialAutorizaciones({ historial }) {
         <li key={`${a.tipo}-${a.fecha}-${i}`}>
           {new Date(a.fecha).toLocaleString('es-CO')}
           {' · '}{NOMBRES_AUTORIZACION[a.tipo] || a.tipo}
-          {': '}<strong>{a.otorgada ? 'otorgada' : (a.tipo === 'DATOS_SENSIBLES' ? 'no otorgada o revocada' : 'no otorgada')}</strong>
+          {': '}<strong>{a.otorgada ? 'otorgada' : (['DATOS_SENSIBLES', 'MENSAJES_COMERCIALES'].includes(a.tipo) ? 'no otorgada o revocada' : 'no otorgada')}</strong>
+          {a.otorgada && Array.isArray(a.canales) && a.canales.length > 0
+            ? ` (${a.canales.map((c) => NOMBRE_CANAL_COMERCIAL[c] || c).join(' y ')})` : ''}
           {` · texto ${a.version} · ${CANALES[a.canal] || a.canal}`}
+          {a.detalle?.motivo === 'MAYOR_DE_EDAD' ? ' · cumplió 18 años' : ''}
           {a.registrada_por ? ` · registró ${a.registrada_por}` : ''}
           {a.detalle?.otorgada_por === 'REPRESENTANTE_LEGAL' ? ' · por el representante legal' : ''}
         </li>
