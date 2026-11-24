@@ -36,7 +36,8 @@ Igual que el `Store_Pro_Ss` de la profe para que el codigo sea consistente:
 
 ```
 FitLoyalty_Cliente/
-├── assets/.env                       # API_URL, APP_NAME
+├── assets/.env.example               # plantilla: copiala como assets/.env (no se sube)
+├── assets/.env                       # API_URL, APP_NAME (lo crea cada uno)
 ├── lib/
 │   ├── main.dart                     # entry + MultiProvider + SplashGate
 │   └── cliente/
@@ -50,6 +51,30 @@ FitLoyalty_Cliente/
 │                                     # plan, more, asistencia, gamificacion, perfil, editar_perfil
 └── tool/migrate_withopacity.py       # util para limpiar deprecations de Flutter
 ```
+
+---
+
+## Construir el instalador (.apk) desde un clon
+
+Necesitas Flutter estable (Dart 3.13.2 o superior) y el SDK de Android. Desde `fitloyalty_cliente/`:
+
+```powershell
+# 1. Configuracion (no se sube al repositorio; la app no compila sin este archivo)
+Copy-Item assets/.env.example assets/.env
+# Para otro servidor, edita API_URL en assets/.env (ver los ejemplos del archivo).
+
+# 2. Dependencias e instalador
+flutter pub get
+flutter build apk --release
+```
+
+El instalador queda en `build/app/outputs/flutter-apk/app-release.apk`. Pasalo al celular (USB o Drive), permite
+«instalar apps de origen desconocido» y ábrelo.
+
+- Si Flutter dice «Your project's Android Gradle Plugin version (9.1.0) is lower than Flutter's minimum supported
+  version», agrega `--android-skip-build-dependency-validation` al `flutter build apk` (pasa con Flutter 3.50 o más).
+- Los íconos (`android/app/src/main/res/mipmap-*/ic_launcher.png`) están en el repositorio y salen del logo de
+  `frontend/src/assets/logo-icon-purple.svg`. El `.gitignore` ignora los demás `.png`.
 
 ---
 
