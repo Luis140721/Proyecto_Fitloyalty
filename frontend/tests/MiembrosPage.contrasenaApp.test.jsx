@@ -6,7 +6,7 @@
  *
  * Se prueba el alta (paso 1 del asistente) y la ficha (editar). El API, useAuth
  * y qrcode se simulan con vi.mock, como en MiembrosPage.test.jsx y
- * MiembrosPage.ficha.test.jsx.
+ * MiembrosPage.ficha.test.jsx. El usuario simulado es un administrador.
  */
 import { describe, expect, test, vi, beforeAll, beforeEach, afterAll } from 'vitest';
 import { screen, within } from '@testing-library/react';
@@ -40,8 +40,9 @@ const PLAN = {
   congelado_desde: null, dias_congelado: 0,
 };
 const SOFIA = { id_miembro: 3, nombre: 'Sofía Gómez', documento: '1033444555', telefono: '3201112233', codigo_qr: 'QR-SOFIA', activo: true };
+const AVISO_TELEFONO = 'Con este teléfono no podrá entrar: la app pide 10 dígitos que empiecen por 3.';
 
-let fichaDeAna, miembros;
+let fichaDeAna, miembros, desplazados;
 
 /** Doble del GET: configuracion, lista, ficha de Ana y su plan. */
 function apiQueResponde() {
@@ -56,24 +57,30 @@ function apiQueResponde() {
 
 const ficha = () => screen.getByRole('dialog', { name: 'Editar Ana Pérez' });
 const campoClaveFicha = () => within(ficha()).getByLabelText('Contraseña de la app');
+const campoClaveAlta = () => screen.getByLabelText('Contraseña de la app');
 const botonSiguiente = () => screen.getByRole('button', { name: 'Siguiente →' });
 
-/** Abre la pagina y la ficha de Ana; espera a que cargue la ficha completa. */
-async function abrirFichaDeAna() {
-  const pantalla = renderWithProviders(<MiembrosPage />, { route: '/admin/miembros' });
-  await pantalla.user.click(await screen.findByRole('row', { name: /Ana Pérez/ }));
+/** Abre la ficha de Ana desde la lista y espera a que cargue completa. */
+async function abrirFichaDeAna(user) {
+  await user.click(await screen.findByRole('row', { name: /Ana Pérez/ }));
   await within(ficha()).findByRole('heading', { name: 'Plan y cobro' });
+}
+
+/** Abre la pagina y la ficha de Ana. */
+async function abrirPaginaYFichaDeAna() {
+  const pantalla = renderWithProviders(<MiembrosPage />, { route: '/admin/miembros' });
+  await abrirFichaDeAna(pantalla.user);
   return pantalla;
 }
 
 /** Abre el alta y llena los campos obligatorios del paso 1. */
-async function abrirAltaConDatos() {
+async function abrirAltaConDatos(telefono = '3201112233') {
   const pantalla = renderWithProviders(<MiembrosPage />, { route: '/admin/miembros' });
   await screen.findByRole('row', { name: /Ana Pérez/ });
   await pantalla.user.click(screen.getByRole('button', { name: 'Nuevo miembro' }));
   await pantalla.user.type(screen.getByLabelText(/^Nombre completo/), 'Sofía Gómez');
   await pantalla.user.type(screen.getByLabelText(/^Número documento/), '1033444555');
-  await pantalla.user.type(screen.getByLabelText(/^Teléfono \/ WhatsApp/), '3201112233');
+  await pantalla.user.type(screen.getByLabelText(/^Teléfono \/ WhatsApp/), telefono);
   return pantalla;
 }
 
@@ -89,12 +96,14 @@ async function terminarAlta(user) {
   expect(await screen.findByRole('status')).toHaveTextContent('Miembro creado exitosamente.');
 }
 
-beforeAll(() => { Element.prototype.scrollIntoView = () => {}; });
+// jsdom no implementa scrollIntoView: se simula y se anota a que elemento se llevo la vista.
+beforeAll(() => { Element.prototype.scrollIntoView = function desplazar() { desplazados.push(this); }; });
 afterAll(() => { delete Element.prototype.scrollIntoView; });
 
 beforeEach(() => {
   fichaDeAna = anaCompleta();
   miembros = [ANA];
+  desplazados = [];
   mockGet = apiQueResponde();
   mockPost = vi.fn(async () => { miembros = [...miembros, SOFIA]; return { data: { miembro: SOFIA } }; });
   mockPut = vi.fn(async () => ({ data: {} }));
@@ -106,7 +115,7 @@ describe('MiembrosPage: la contraseña de la app en la ficha', () => {
     // Arrange: fichaDeAna sin contrasena (beforeEach)
 
     // Act
-    await abrirFichaDeAna();
+    await abrirPaginaYFichaDeAna();
 
     // Assert: el campo no deja ver lo que se escribe y no propone una guardada
     const campo = campoClaveFicha();
@@ -116,9 +125,9 @@ describe('MiembrosPage: la contraseña de la app en la ficha', () => {
     expect(campo).toHaveAccessibleDescription('Aún no tiene contraseña: no puede entrar a la app hasta que le asignes una.');
   });
 
-  test('should send the new password when the receptionist writes one of six characters or more', async () => {
+  test('should send the new password when the admin writes one of six characters or more', async () => {
     // Arrange
-    const { user } = await abrirFichaDeAna();
+    const { user } = await abrirPaginaYFichaDeAna();
 
     // Act
     await user.type(campoClaveFicha(), 'gimnasio2026');
@@ -135,7 +144,7 @@ describe('MiembrosPage: la contraseña de la app en la ficha', () => {
   test('should keep the saved password when the member already has one and the field is left empty', async () => {
     // Arrange
     fichaDeAna = anaCompleta({ password_asignada: true });
-    const { user } = await abrirFichaDeAna();
+    const { user } = await abrirPaginaYFichaDeAna();
     expect(campoClaveFicha()).toHaveAccessibleDescription('Ya tiene contraseña para la app. Escribe una nueva solo si quieres cambiarla.');
 
     // Act: se cambia otro dato y la contrasena se deja vacia
@@ -150,50 +159,69 @@ describe('MiembrosPage: la contraseña de la app en la ficha', () => {
     expect(mockPut.mock.calls[0][1]).not.toHaveProperty('password');
   });
 
-  test('should not save and should mark the field when the password is shorter than six characters', async () => {
+  test('should not save, should mark the field and should take the view to it when the password is shorter than six characters', async () => {
     // Arrange
-    const { user } = await abrirFichaDeAna();
+    const { user } = await abrirPaginaYFichaDeAna();
 
     // Act
     await user.type(campoClaveFicha(), 'abc');
     await user.click(screen.getByRole('button', { name: 'Guardar cambios' }));
 
-    // Assert: el aviso dice que arreglar y la ficha sigue abierta
+    // Assert: «Guardar cambios» esta en el pie del modal; el aviso y el foco van al campo
     expect(within(ficha()).getByRole('alert')).toHaveTextContent('Debe tener al menos 6 caracteres (escribiste 3).');
     expect(campoClaveFicha()).toHaveAttribute('aria-invalid', 'true');
+    expect(campoClaveFicha()).toHaveFocus();
+    expect(desplazados).toContain(campoClaveFicha());
     expect(mockPut).not.toHaveBeenCalled();
     expect(ficha()).toBeInTheDocument();
   });
 
-  test('should clear the error and save when the receptionist completes the password after the warning', async () => {
+  test('should clear the error and save when the admin completes the password after the warning', async () => {
     // Arrange
-    const { user } = await abrirFichaDeAna();
+    const { user } = await abrirPaginaYFichaDeAna();
     await user.type(campoClaveFicha(), 'abc');
     await user.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+    expect(within(ficha()).getByRole('alert')).toHaveTextContent('Debe tener al menos 6 caracteres (escribiste 3).');
 
     // Act
     await user.type(campoClaveFicha(), 'def');
+    const sinAviso = within(ficha()).queryByText(/Debe tener al menos 6 caracteres/);
+    const invalidoAlCorregir = campoClaveFicha().getAttribute('aria-invalid');
+    await user.click(screen.getByRole('button', { name: 'Guardar cambios' }));
 
     // Assert: al escribir se retira el aviso, y ya se puede guardar
-    expect(within(ficha()).queryByText(/Debe tener al menos 6 caracteres/)).not.toBeInTheDocument();
-    expect(campoClaveFicha()).not.toHaveAttribute('aria-invalid');
-    await user.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+    expect(sinAviso).not.toBeInTheDocument();
+    expect(invalidoAlCorregir).toBeNull();
     expect(await screen.findByRole('status')).toHaveTextContent('Miembro actualizado.');
     expect(mockPut.mock.calls[0][1].password).toBe('abcdef');
   });
 
-  test('should warn that the member cannot enter the app when its phone does not start with 3', async () => {
+  test('should open the file with the password field empty when it was written and the file was closed without saving', async () => {
+    // Arrange
+    const { user } = await abrirPaginaYFichaDeAna();
+    await user.type(campoClaveFicha(), 'gimnasio2026');
+    await user.click(within(ficha()).getByRole('button', { name: 'Cerrar' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+    // Act
+    await abrirFichaDeAna(user);
+
+    // Assert: lo escrito no se queda guardado en la pantalla para la siguiente ficha
+    expect(campoClaveFicha()).toHaveValue('');
+    expect(mockPut).not.toHaveBeenCalled();
+  });
+
+  test('should warn that the member cannot enter the app when its phone does not start with 3 and its access is off', async () => {
     // Arrange: la app solo acepta celulares de 10 digitos que empiecen por 3
     fichaDeAna = anaCompleta({ telefono: '6012345678', password_asignada: true, app_acceso: false });
 
     // Act
-    await abrirFichaDeAna();
+    await abrirPaginaYFichaDeAna();
 
     // Assert
     expect(campoClaveFicha()).toHaveAccessibleDescription(
       'Ya tiene contraseña para la app. Escribe una nueva solo si quieres cambiarla. '
-      + 'Su acceso a la app está desactivado. '
-      + 'Con este teléfono no podrá entrar: la app pide 10 dígitos que empiecen por 3.',
+      + `Su acceso a la app está desactivado. ${AVISO_TELEFONO}`,
     );
   });
 });
@@ -202,11 +230,11 @@ describe('MiembrosPage: la contraseña de la app en el alta', () => {
   test('should create the member with the app password when one is written in step 1', async () => {
     // Arrange
     const { user } = await abrirAltaConDatos();
-    const campo = screen.getByLabelText('Contraseña de la app');
-    expect(campo).toHaveAttribute('type', 'password');
+    expect(campoClaveAlta()).toHaveAttribute('type', 'password');
+    expect(campoClaveAlta()).toHaveAttribute('autocomplete', 'new-password');
 
     // Act
-    await user.type(campo, 'clave123');
+    await user.type(campoClaveAlta(), 'clave123');
     await terminarAlta(user);
 
     // Assert
@@ -231,13 +259,41 @@ describe('MiembrosPage: la contraseña de la app en el alta', () => {
     const { user } = await abrirAltaConDatos();
 
     // Act
-    await user.type(screen.getByLabelText('Contraseña de la app'), 'abc');
+    await user.type(campoClaveAlta(), 'abc');
     await user.click(botonSiguiente());
 
     // Assert
     expect(screen.getByText('Debe tener al menos 6 caracteres (escribiste 3).')).toBeInTheDocument();
-    expect(screen.getByLabelText('Contraseña de la app')).toHaveAttribute('aria-invalid', 'true');
+    expect(campoClaveAlta()).toHaveAttribute('aria-invalid', 'true');
     expect(screen.getByText('Paso 1 de 5')).toBeInTheDocument();
     expect(mockPost).not.toHaveBeenCalled();
+  });
+
+  test('should warn that the member cannot enter the app when a password is written and the phone does not start with 3', async () => {
+    // Arrange: un fijo de 10 digitos pasa la validacion del alta, pero no el login de la app
+    const { user } = await abrirAltaConDatos('6012345678');
+    expect(campoClaveAlta()).not.toHaveAccessibleDescription(new RegExp(AVISO_TELEFONO));
+
+    // Act
+    await user.type(campoClaveAlta(), 'clave123');
+
+    // Assert
+    expect(campoClaveAlta()).toHaveAccessibleDescription(new RegExp(AVISO_TELEFONO));
+  });
+
+  test('should open the next sign-up with the app password empty when a member was created with one', async () => {
+    // Arrange
+    const { user } = await abrirAltaConDatos();
+    await user.type(campoClaveAlta(), 'clave123');
+    await terminarAlta(user);
+    const aviso = await screen.findByRole('dialog', { name: '¡Miembro creado exitosamente!' });
+    await user.click(within(aviso).getAllByRole('button', { name: 'Cerrar' }).at(-1));
+
+    // Act
+    await user.click(screen.getByRole('button', { name: 'Nuevo miembro' }));
+
+    // Assert
+    expect(screen.getByText('Paso 1 de 5')).toBeInTheDocument();
+    expect(campoClaveAlta()).toHaveValue('');
   });
 });

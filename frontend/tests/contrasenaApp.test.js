@@ -9,7 +9,7 @@ import {
 } from '../src/lib/contrasenaApp';
 
 describe('errorContrasenaApp: la contrasena que se escribe en el panel', () => {
-  test('should use the same minimum of six characters as the API and the login of the app', () => {
+  test('should ask for six characters when it is compared with the rules of the API and the login of the app', () => {
     // Arrange / Act / Assert: createSchema, updateSchema y loginSchema piden min(6)
     expect(MINIMO_CONTRASENA_APP).toBe(6);
   });
@@ -18,7 +18,7 @@ describe('errorContrasenaApp: la contrasena que se escribe en el panel', () => {
     ['an empty text', ''],
     ['a missing value', undefined],
     ['a null value', null],
-  ])('should accept %s because the field is optional', (_caso, valor) => {
+  ])('should accept the password when it is %s, because the field is optional', (_caso, valor) => {
     // Arrange: vacia, el alta no la asigna y la ficha no cambia la que haya
 
     // Act
@@ -58,7 +58,7 @@ describe('telefonoSirveParaApp: el telefono con el que el miembro entra a la app
     ['ten digits that start with 3', '3001234567'],
     ['spaces between the digits', '300 123 4567'],
     ['dashes between the digits', '300-123-4567'],
-  ])('should accept a phone with %s', (_caso, telefono) => {
+  ])('should accept the phone when it has %s', (_caso, telefono) => {
     // Arrange: el backend le quita espacios y guiones antes de compararlo
 
     // Act
@@ -74,10 +74,12 @@ describe('telefonoSirveParaApp: el telefono con el que el miembro entra a la app
     ['eleven digits', '30012345678'],
     ['the country code', '+573001234567'],
     ['parentheses', '(300)1234567'],
-    ['an empty phone', ''],
-    ['no phone at all', null],
-  ])('should reject a phone with %s', (_caso, telefono) => {
-    // Arrange: la app pide 10 digitos que empiecen por 3 y no limpia nada mas
+    ['a tab between the digits', '300\t1234567'],
+    ['a non-breaking space between the digits', '300 1234567'],
+    ['nothing written', ''],
+    ['no value at all', null],
+  ])('should reject the phone when it has %s', (_caso, telefono) => {
+    // Arrange: la app pide 10 digitos que empiecen por 3, y el backend solo quita espacios ASCII y guiones
 
     // Act
     const sirve = telefonoSirveParaApp(telefono);

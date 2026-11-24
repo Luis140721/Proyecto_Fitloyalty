@@ -7,7 +7,7 @@ No es la app del dueño/recepcionista (eso sigue siendo la web React en `Proyect
 
 ## Que hace
 
-- Login con **teléfono + contraseña** (10 dígitos que empiezan por 3, y la contraseña que el gimnasio le asigna desde el panel)
+- Login con **teléfono + contraseña** (10 dígitos que empiezan por 3, y la contraseña que el gimnasio le asigna desde el panel). La pantalla también pide el código o NIT del gimnasio, que hoy el backend no usa.
 - Pantalla **Inicio**: KPIs rapidos (visitas hoy, este mes, puntos, total)
 - Pantalla **Mi QR**: el codigo QR del miembro para escanear en recepcion (con vista en pantalla completa + zoom)
 - Pantalla **Mi plan**: membresia vigente con fechas, estado de pago, valor, dias restantes
@@ -106,6 +106,7 @@ flutter run
 
 1. La app abre el splash y valida si ya hay sesion guardada
 2. Si no, te manda al login:
+   - **Código o NIT del gimnasio**: la app lo pide (`login_screen.dart`), pero hoy el backend no lo usa: busca al miembro solo por el teléfono. Escribe el NIT o el nombre del gimnasio.
    - **Teléfono**: el celular del miembro, 10 dígitos que empiezan por 3 (sin el +57)
    - **Contraseña**: la que le asignaste en el panel (paso 3)
 3. Si todo esta bien, llegas a la pantalla **Inicio** con tus KPIs

@@ -214,6 +214,7 @@ const CAMPOS_REPRESENTANTE = [
 // cuenta como borrador.
 const CAMPOS_DEL_BORRADOR = [
   'nombre', 'tipo_documento', 'documento', 'fecha_nacimiento', 'genero', 'telefono', 'email', 'direccion',
+  'password',
   'contacto_emergencia', 'telefono_emergencia', 'condiciones_medicas', 'alergias',
   'tipo_plan', 'valor_pagado', 'metodo_pago', 'referencia_pago', 'activar_recordatorio',
   'objetivo', 'nivel_experiencia', 'observaciones',
@@ -323,8 +324,10 @@ export default function MiembrosPage() {
   const [editForm, setEditForm] = useState(empty);
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState('');
-  // RQF-15: error del campo «Contraseña de la app» de la ficha.
+  // RQF-15: error del campo «Contraseña de la app» de la ficha, y el campo,
+  // para llevar ahi a la persona si el error no esta a la vista.
   const [errorClaveEdit, setErrorClaveEdit] = useState('');
+  const campoClaveFicha = useRef(null);
   const [editLoading, setEditLoading] = useState(false);
   // La ficha solo se guarda con el registro completo ya cargado: antes de eso
   // el formulario es la fila de la lista, y guardarla vaciaba campos y
@@ -1100,6 +1103,10 @@ export default function MiembrosPage() {
     const errorClave = errorContrasenaApp(editForm.password);
     if (errorClave) {
       setErrorClaveEdit(errorClave);
+      // «Guardar cambios» esta en el pie del modal: si la persona bajo por la
+      // ficha, el campo y su aviso pueden haber quedado fuera de la vista.
+      campoClaveFicha.current?.focus();
+      campoClaveFicha.current?.scrollIntoView?.({ block: 'center' });
       return;
     }
     setEditSaving(true);
@@ -2391,6 +2398,7 @@ export default function MiembrosPage() {
             <label className="field" style={{ flex: 1 }}>
               <span id="etiqueta-clave-ficha" className="field-label">Contraseña de la app</span>
               <input
+                ref={campoClaveFicha}
                 className={`field-input${errorClaveEdit ? ' field-input--error' : ''}`}
                 aria-labelledby="etiqueta-clave-ficha"
                 type="password"

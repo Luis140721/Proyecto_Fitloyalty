@@ -281,7 +281,8 @@ const updateSchema = z.object({
 
   // App móvil del cliente
   // password: si llega string >=6 chars, se hashea y se guarda en password_hash.
-  //           si llega '', se interpreta como "borrar contrasena" (null en BD).
+  //           si llega '' (o menos de 6), zod la rechaza con 400: no hay forma
+  //           de borrarla desde aqui. El panel solo la manda si se escribio una.
   //           si no viene, NO se toca el password_hash existente.
   // app_acceso: booleano para apagar/encender acceso a la app del miembro.
   password: z.string().min(6, 'La contrasena debe tener minimo 6 caracteres').optional(),

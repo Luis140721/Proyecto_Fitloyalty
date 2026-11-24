@@ -373,6 +373,8 @@ describe('MiembrosPage: el alta que se cierra sin crear', () => {
   test.each([
     ['the email', 0, async (user) => { await user.type(campo('Email'), 'pedro@correo.co'); }],
     ['the address', 0, async (user) => { await user.type(campo('Dirección completa'), 'Carrera 9 # 10-11'); }],
+    // RQF-15 (#122): la contrasena de la app tambien es algo que la persona escribio.
+    ['the app password', 0, async (user) => { await user.type(campo('Contraseña de la app'), 'clave123'); }],
     ['the birth date', 0, async (user) => { await user.type(campo('Fecha nacimiento'), '01011990'); }],
     ['the gender', 0, async (user) => { await user.selectOptions(campo('Género'), 'Masculino'); }],
     ['the emergency contact', 1, async (user) => { await user.type(campo('Contacto de emergencia'), 'Luz Gil'); }],

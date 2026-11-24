@@ -29,10 +29,12 @@ export function errorContrasenaApp(valor) {
 /**
  * ¿Con este telefono puede entrar a la app? El login de la app pide 10 digitos
  * que empiecen por 3 (loginSchema de cliente.js), y el backend busca el
- * telefono guardado quitandole solo espacios y guiones.
+ * telefono guardado quitandole solo los espacios ASCII y los guiones
+ * (REPLACE(..., ' ', '') y REPLACE(..., '-', '')). Un tabulador o un espacio
+ * duro pegado desde otro lado no se quita, asi que aqui tampoco.
  */
 export function telefonoSirveParaApp(telefono) {
-  return /^3\d{9}$/.test(String(telefono ?? '').replace(/[\s-]/g, ''));
+  return /^3\d{9}$/.test(String(telefono ?? '').replace(/[ -]/g, ''));
 }
 
 /**
