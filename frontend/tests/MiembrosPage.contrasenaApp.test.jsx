@@ -40,6 +40,14 @@ const PLAN = {
   congelado_desde: null, dias_congelado: 0,
 };
 const SOFIA = { id_miembro: 3, nombre: 'Sofía Gómez', documento: '1033444555', telefono: '3201112233', codigo_qr: 'QR-SOFIA', activo: true };
+// Otro miembro de la lista, para abrir una ficha distinta despues de la de Ana.
+const CARLOS = { id_miembro: 2, nombre: 'Carlos Ruiz', documento: '79888777', telefono: '3109876543', codigo_qr: 'QR-CARLOS', activo: true };
+const CARLOS_COMPLETO = {
+  ...CARLOS, tipo_documento: 'CC', fecha_nacimiento: '1985-02-03T00:00:00.000Z', genero: 'Masculino', codigo_pais_telefono: '57',
+  ciudad: 'Cali', direccion: 'Carrera 5 # 6-7', contacto_emergencia: 'Rosa Ruiz', telefono_emergencia: '3120000000',
+  condiciones_medicas: '', alergias: '', objetivo: '', nivel_experiencia: '', observaciones: '',
+  app_acceso: true, password_asignada: false,
+};
 const AVISO_TELEFONO = 'Con este teléfono no podrá entrar: la app pide 10 dígitos que empiecen por 3.';
 
 let fichaDeAna, miembros, desplazados;
@@ -51,6 +59,8 @@ function apiQueResponde() {
     if (url === '/admin/miembros') return { data: { miembros } };
     if (url === '/admin/miembros/1') return { data: { miembro: fichaDeAna } };
     if (url === '/admin/miembros/1/plan') return { data: { plan: PLAN, congelaciones: [] } };
+    if (url === '/admin/miembros/2') return { data: { miembro: CARLOS_COMPLETO } };
+    if (url === '/admin/miembros/2/plan') return { data: { plan: PLAN, congelaciones: [] } };
     throw new Error(`GET no simulado en el test: ${url}`);
   });
 }
@@ -102,7 +112,7 @@ afterAll(() => { delete Element.prototype.scrollIntoView; });
 
 beforeEach(() => {
   fichaDeAna = anaCompleta();
-  miembros = [ANA];
+  miembros = [ANA, CARLOS];
   desplazados = [];
   mockGet = apiQueResponde();
   mockPost = vi.fn(async () => { miembros = [...miembros, SOFIA]; return { data: { miembro: SOFIA } }; });
@@ -196,18 +206,20 @@ describe('MiembrosPage: la contraseña de la app en la ficha', () => {
     expect(mockPut.mock.calls[0][1].password).toBe('abcdef');
   });
 
-  test('should open the file with the password field empty when it was written and the file was closed without saving', async () => {
-    // Arrange
+  test('should open the next member file with the password field empty when one was written in a file closed without saving', async () => {
+    // Arrange: se escribe una contrasena en la ficha de Ana y se cierra sin guardar
     const { user } = await abrirPaginaYFichaDeAna();
     await user.type(campoClaveFicha(), 'gimnasio2026');
     await user.click(within(ficha()).getByRole('button', { name: 'Cerrar' }));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 
-    // Act
-    await abrirFichaDeAna(user);
+    // Act: se abre la ficha de otro miembro
+    await user.click(screen.getByRole('row', { name: /Carlos Ruiz/ }));
+    const fichaDeCarlos = screen.getByRole('dialog', { name: 'Editar Carlos Ruiz' });
+    await within(fichaDeCarlos).findByRole('heading', { name: 'Plan y cobro' });
 
-    // Assert: lo escrito no se queda guardado en la pantalla para la siguiente ficha
-    expect(campoClaveFicha()).toHaveValue('');
+    // Assert: lo escrito para Ana no pasa a la ficha de Carlos
+    expect(within(fichaDeCarlos).getByLabelText('Contraseña de la app')).toHaveValue('');
     expect(mockPut).not.toHaveBeenCalled();
   });
 
