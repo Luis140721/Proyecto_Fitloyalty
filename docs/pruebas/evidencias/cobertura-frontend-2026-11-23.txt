@@ -1,0 +1,71 @@
+Cobertura frontend (Vitest) — develop 9fb3f7b fusionado en docs/pruebas-plan-matriz-defectos — 2026-11-23
+
+ Test Files  48 passed (48)
+      Tests  895 passed (895)
+   Start at  23:09:32
+   Duration  85.52s (transform 4.21s, setup 37.11s, collect 31.20s, tests 344.60s, environment 91.76s, prepare 13.11s)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   87.29 |    93.98 |   96.03 |   87.29 |                   
+ src               |     100 |    95.34 |     100 |     100 |                   
+  App.jsx          |     100 |      100 |     100 |     100 |                   
+  api.js           |     100 |    94.93 |     100 |     100 | 51,116-117,124    
+  fechas.js        |     100 |      100 |     100 |     100 |                   
+ src/components    |   99.77 |    95.21 |   97.82 |   99.77 |                   
+  AdminLayout.jsx  |     100 |      100 |     100 |     100 |                   
+  AuthPanel.jsx    |     100 |    66.66 |     100 |     100 | 31                
+  ...esMiembro.jsx |     100 |    98.82 |     100 |     100 | 194               
+  BadgeEstado.jsx  |     100 |      100 |     100 |     100 |                   
+  ...verArriba.jsx |     100 |      100 |     100 |     100 |                   
+  CardGlass.jsx    |     100 |      100 |     100 |     100 |                   
+  EmptyState.jsx   |     100 |      100 |     100 |     100 |                   
+  ErrorBanner.jsx  |     100 |    97.67 |     100 |     100 | 33                
+  ...rBoundary.jsx |   95.55 |      100 |   85.71 |   95.55 | 29-30             
+  HitosConfig.jsx  |     100 |    86.66 |     100 |     100 | 23,25,40,52       
+  ...oWhatsapp.jsx |     100 |      100 |     100 |     100 |                   
+  LegalLayout.jsx  |     100 |      100 |     100 |     100 |                   
+  Logo.jsx         |     100 |    66.66 |     100 |     100 | 56,71             
+  ...icaciones.jsx |     100 |    93.84 |     100 |     100 | 44,90,118,180     
+  MenuPerfil.jsx   |     100 |      100 |     100 |     100 |                   
+  Modal.jsx        |   98.59 |    88.23 |     100 |   98.59 | 73                
+  ...ransition.jsx |     100 |     87.5 |     100 |     100 | 37                
+  ...ctedRoute.jsx |     100 |      100 |     100 |     100 |                   
+  Ripple.jsx       |     100 |       50 |   66.66 |     100 | 38-40,61          
+  Sidebar.jsx      |     100 |       96 |     100 |     100 | 20                
+  UserAvatar.jsx   |     100 |      100 |     100 |     100 |                   
+ src/context       |     100 |    93.75 |     100 |     100 |                   
+  AuthContext.jsx  |     100 |    93.02 |     100 |     100 | ...69,115,174,195 
+  TrialContext.jsx |     100 |      100 |     100 |     100 |                   
+ src/hooks         |     100 |      100 |     100 |     100 |                   
+  ...matedCount.js |     100 |      100 |     100 |     100 |                   
+  useApiErrors.js  |     100 |      100 |     100 |     100 |                   
+ src/lib           |     100 |    97.36 |     100 |     100 |                   
+  ...rizaciones.js |     100 |    97.43 |     100 |     100 | 105               
+  checkin.js       |     100 |    88.23 |     100 |     100 | 35-36             
+  ...cuperacion.js |     100 |      100 |     100 |     100 |                   
+  ...toWhatsapp.js |     100 |      100 |     100 |     100 |                   
+  ...rioMiembro.js |     100 |      100 |     100 |     100 |                   
+  ...rOwnerForm.js |     100 |      100 |     100 |     100 |                   
+ src/pages         |   83.27 |    93.33 |   94.84 |   83.27 |                   
+  ...nvitePage.jsx |     100 |    94.62 |     100 |     100 | 18,52,61,104,167  
+  ...sajesPage.jsx |     100 |      100 |     100 |     100 |                   
+  CampanasPage.jsx |     100 |    96.34 |     100 |     100 | ...28-130,420,518 
+  CheckinPage.jsx  |   97.69 |    88.65 |   94.11 |   97.69 | 374-377,449-454   
+  ConfigPage.jsx   |   99.39 |     90.9 |   94.44 |   99.39 | 260-262           
+  ...boardPage.jsx |   99.81 |     87.6 |     100 |   99.81 | 249               
+  ...rdUsuario.jsx |       0 |        0 |       0 |       0 | 1-172             
+  ...uentaPage.jsx |     100 |     90.9 |     100 |     100 | 19-20             
+  ...swordPage.jsx |     100 |    93.18 |     100 |     100 | ...19,124,144,158 
+  LandingPage.jsx  |     100 |      100 |     100 |     100 |                   
+  LoginPage.jsx    |     100 |      100 |   83.33 |     100 |                   
+  MiembrosPage.jsx |   99.45 |     93.3 |   96.45 |   99.45 | ...,706,1218,2380 
+  NotFoundPage.jsx |     100 |      100 |     100 |     100 |                   
+  ...OwnerPage.jsx |     100 |    97.64 |     100 |     100 | 86,94             
+  RegisterPage.jsx |       0 |        0 |       0 |       0 | 1-161             
+  ...swordPage.jsx |       0 |        0 |       0 |       0 | 1-353             
+  RetosPage.jsx    |     100 |    95.04 |   94.11 |     100 | ...03,132,139,251 
+  StaffPage.jsx    |    1.09 |      100 |       0 |    1.09 | 14-655            
+-------------------|---------|----------|---------|---------|-------------------

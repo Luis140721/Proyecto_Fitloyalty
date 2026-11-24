@@ -49,7 +49,7 @@ function Set-Defecto($numero, $severidad, $estado) {
 Set-Defecto 24  'alta'  'verificado'
 Set-Defecto 80  'alta'  'verificado'
 Set-Defecto 87  'alta'  'abierto'
-Set-Defecto 95  'alta'  'corregido'
+Set-Defecto 95  'alta'  'verificado'
 Set-Defecto 89  'media' 'abierto'
 Set-Defecto 98  'media' 'abierto'
 Set-Defecto 99  'media' 'abierto'
@@ -82,7 +82,8 @@ Detalle del ciclo: `docs/pruebas/defectos.md` (D-10).
   $url = gh issue create --repo $Repo --title $titulo --body $cuerpo --label 'bug,severidad: media,estado: en corrección'
   Write-Host "D-10 creado: $url"
 } else {
-  Set-Defecto $existe 'media' 'en corrección'
+  # Verificado el 2026-11-23: con el #83 en develop, CP-12 responde 400.
+  Set-Defecto $existe 'media' 'verificado'
   Write-Host "D-10 ya existia: #$existe"
 }
 

@@ -348,13 +348,17 @@ En PowerShell, el segundo comando es
 El proceso completo está en [`docs/pruebas/`](docs/pruebas/README.md): plan de pruebas,
 matriz de casos, colección Postman, reporte de ejecución y registro de defectos.
 
-| Nivel | Herramienta | Comando (desde la raíz) | Resultado del 2026-11-22 |
+| Nivel | Herramienta | Comando (desde la raíz) | Resultado del 2026-11-23 |
 |---|---|---|---|
-| Unitarias backend | Jest + Supertest | `pnpm --dir backend test` | 1.093 pasan · cobertura 90,6 % (umbral en `jest.config.js`) |
-| Integración con BD real | Jest + PostgreSQL 16 | ver [Pruebas de integración](#pruebas-de-integración-bd-real) | 236 pasan |
-| Componentes frontend | Vitest + Testing Library + MSW | `pnpm --dir frontend test` | 615 pasan · cobertura 86,0 % |
+| Unitarias backend | Jest + Supertest | `pnpm --dir backend test` | 1.343 pasan · cobertura 92,4 % (umbral en `jest.config.js`) |
+| Integración con BD real | Jest + PostgreSQL 16 | ver [Pruebas de integración](#pruebas-de-integración-bd-real) | 272 pasan (71 de ellas también corren en la fila anterior) |
+| Componentes frontend | Vitest + Testing Library + MSW | `pnpm --dir frontend test` | 895 pasan · cobertura 87,3 % |
 | End-to-end | Playwright (Chromium) | `pnpm --dir e2e run db:up` y `pnpm --dir e2e test` | 44 pasan |
-| API (matriz de casos) | Postman + Newman | ver [docs/pruebas/postman](docs/pruebas/postman/README.md) | 28 de 29 casos; CP-12 → defecto D-10 |
+| API (matriz de casos) | Postman + Newman | ver [docs/pruebas/postman](docs/pruebas/postman/README.md) | 29 de 29 casos (el 2026-11-22 falló CP-12 → defecto D-10, #117, ya corregido) |
+
+En total, 2.512 pruebas distintas, y pasan todas. El conteo está en el
+[reporte](docs/pruebas/reporte-ejecucion-2026-11-22.md#resumen); el bloque para
+repetirlo todo, en el [plan, sección 8](docs/pruebas/plan-de-pruebas.md#8-cómo-repetir-las-pruebas).
 
 - **Módulo crítico:** el check-in. Cobertura de `backend/src/routes/checkin.js` 97,6 % y de
   `frontend/src/pages/CheckinPage.jsx` 97,7 %.

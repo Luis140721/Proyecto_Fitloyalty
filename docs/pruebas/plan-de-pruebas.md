@@ -1,6 +1,11 @@
 # Plan de pruebas — FitLoyalty (T6)
 
-**Responsable:** Daniel · **Versión:** 1.0 · **Fecha:** 2026-11-22 · **Base probada:** `develop` @ `f3a1a71`
+**Responsable:** Daniel · **Versión:** 1.1 · **Fecha:** 2026-11-23 · **Base probada:**
+`develop` @ `f3a1a71` (primera ejecución, 2026-11-22) y `develop` @ `9fb3f7b`
+(re-ejecución, 2026-11-23)
+
+Las fechas de este documento y de los demás de `docs/pruebas/` están en hora de
+Colombia (UTC−5); GitHub muestra algunas en UTC, un día después si son de noche.
 
 Documentos relacionados:
 [matriz de casos](matriz-casos-prueba.md) ·
@@ -49,10 +54,11 @@ decenas de veces al día y decide si una persona entra o no.
 |---|---|---|---|---|
 | Unitarias backend | Jest + Supertest (BD simulada) | `backend/tests/*.test.js` | Rutas, validaciones, reglas de negocio, manejo de errores | Cada push y PR (job `backend`) |
 | Unitarias / componentes frontend | Vitest + Testing Library + MSW | `frontend/tests/` | Pantallas, formularios, hooks, cliente de la API | Cada push y PR (job `frontend`) |
-| Integración con BD real | Jest contra PostgreSQL 16 | `backend/tests/integracion/`, `*-real.test.js` | Esquema, restricciones, transacciones, concurrencia | Cada push y PR (job `integracion`) |
+| Integración con BD real | Jest contra PostgreSQL 16 | `backend/tests/integracion/` y tres `*-real.test.js` (los de `test:integracion`) | Esquema, restricciones, transacciones, concurrencia | Cada push y PR (job `integracion`) |
+| Integración con el esquema de ConsultasDB | Jest con `TEST_DATABASE_URL` | `retos-campanas-real.test.js` y `bandeja-mensajes-real.test.js` (51 pruebas) | Retos, campañas y bandeja contra una copia del esquema real | A mano; ni el CI ni este plan las corren (ver el reporte) |
 | API (sistema) | Postman + Newman | `docs/pruebas/postman/` | 29 casos de la matriz contra la API levantada | Antes de cada entrega y al verificar un defecto |
 | End-to-end | Playwright (Chromium) | `e2e/tests/` | Flujos completos en el navegador: registro, login, alta, check-in | Cada push y PR (job `e2e`) |
-| Usabilidad | Observación con 3 personas | `scripts/rqnf-04-sesiones/` | RQNF-04: check-in manual en ≤ 2 interacciones | Una vez, antes de la sustentación |
+| Usabilidad | Observación con 3 personas | `scripts/rqnf-04-sesiones/` en la rama `chore/rqnf-04-entorno-sesiones` (todavía no está en `develop`) | RQNF-04: check-in manual en ≤ 2 interacciones | Una vez, antes de la sustentación |
 
 Tipos que se aplican en esos niveles: funcional (positivo y negativo), valores
 límite (largos de columnas, metas, fechas), seguridad (JWT, aislamiento,
@@ -66,7 +72,7 @@ errores que no filtran SQL), concurrencia (dos peticiones a la vez) y regresión
 | Base de datos | Postgres de `docker-compose.yml` raíz, puerto **5432**, volumen persistente `pgdata` | Postgres 16.15 de `e2e/docker-compose.yml` (`db-test`), puerto **5433**, solo en `127.0.0.1`, datos en **memoria** (`tmpfs`) |
 | Nombre de la BD | `fitloyalty` | `fitloyalty_test` (la guardia exige el sufijo `_test`) |
 | Credenciales | las del `.env` del desarrollador | solo de prueba (`fitloyalty_test`), no son secretos |
-| Backend | `pnpm run dev`, con el `.env` | `node src/index.js` con variables fijadas por el comando de prueba: `NODE_ENV=test`, `JWT_SECRET` de prueba, `DISABLE_SCHEDULER=true`, `ENABLE_WHATSAPP=false`, sin claves de correo |
+| Backend | `pnpm run dev`, con el `.env` | Variables fijadas antes de cargar el backend, que el `.env` no puede cambiar: `NODE_ENV=test`, `JWT_SECRET` de prueba, `DISABLE_SCHEDULER=true`, `ENABLE_WHATSAPP=false` y claves de correo vacías. Lo hacen el `webServer` de `e2e/playwright.config.js` y `postman/iniciar-api-pruebas.cjs` |
 | Datos | los que el equipo va creando | cada prueba crea los suyos y los borra; `npm run db:down` destruye la BD |
 
 Protecciones para no tocar desarrollo ni producción:
@@ -79,7 +85,7 @@ Protecciones para no tocar desarrollo ni producción:
 - Postman usa datos únicos por corrida (`Date.now()`), así que se puede repetir
   sin limpiar.
 
-Equipo de la ejecución del 2026-11-22: Windows 11, Node.js 24.14.1,
+Equipo de las ejecuciones del 2026-11-22 y 2026-11-23: Windows 11, Node.js 24.14.1,
 pnpm 12.15.0, Docker Desktop, PostgreSQL 16.15-alpine, Chromium de Playwright.
 El CI corre lo mismo en `ubuntu-latest` con Node 24 (`.github/workflows/tests.yml`).
 
@@ -123,40 +129,95 @@ re-ejecuta el caso o la prueba de regresión y pasa; el issue se cierra).
 
 | Fecha | Hito |
 |---|---|
-| 2026-11-22 | Primera ejecución completa (este reporte) |
-| 2026-11-26 | Re-ejecución tras fusionar los PR pendientes (#83 y los de cada uno) |
+| 2026-11-22 | Primera ejecución completa ([reporte](reporte-ejecucion-2026-11-22.md)) |
+| 2026-11-23 | Re-ejecución tras fusionar el #83 en `develop`: Postman 29 de 29 (mismo reporte, sección final) |
+| 2026-11-26 | Último día para los PR hacia `develop`; se vuelve a correr si entra algo después del 23 |
 | 2026-11-27 | Entrega |
 
 ## 8. Cómo repetir las pruebas
 
-Desde la raíz del repo, con Docker Desktop abierto y `pnpm install` hecho en
-`backend/`, `frontend/` y `e2e/`:
+Requisitos:
+
+- Docker Desktop abierto.
+- `pnpm install` hecho en `backend/`, `frontend/` y `e2e/`.
+- Los puertos 3001, 5173 y 5433 libres.
+
+Todos los comandos se escriben desde la **raíz del repo** y ninguno cambia de
+carpeta, así que el bloque se puede copiar entero. Los dos bloques se probaron
+tal cual el 2026-11-23.
+
+**Bash (Git Bash, Linux o macOS):**
 
 ```bash
-# Unitarias con cobertura
+# 1. Unitarias con cobertura (sin BD: las de integración se omiten aquí)
 pnpm --dir backend test
 pnpm --dir frontend test
 
-# BD de pruebas (puerto 5433, en memoria)
+# 2. BD de pruebas (puerto 5433, en memoria)
 pnpm --dir e2e run db:up
 
-# Integración contra PostgreSQL
+# 3. Integración contra PostgreSQL
 DATABASE_URL=postgres://fitloyalty_test:fitloyalty_test@127.0.0.1:5433/fitloyalty_test \
   pnpm --dir backend run test:integracion
 
-# E2E (levanta backend y frontend solos)
+# 4. E2E (levanta su propio backend y frontend en 3001 y 5173, y los apaga)
 pnpm --dir e2e test
 
-# Postman: levantar la API contra la BD de pruebas y correr la colección
-cd backend
-DATABASE_URL=postgres://fitloyalty_test:fitloyalty_test@127.0.0.1:5433/fitloyalty_test DB_SSL=false \
-JWT_SECRET=jwt-solo-para-pruebas NODE_ENV=test DISABLE_SCHEDULER=true ENABLE_WHATSAPP=false \
-  node src/index.js &
-npx newman@6.2.1 run ../docs/pruebas/postman/FitLoyalty.postman_collection.json
+# 5. Postman: la API contra la BD de pruebas, en segundo plano
+node docs/pruebas/postman/iniciar-api-pruebas.cjs > api-pruebas.log 2>&1 &
+API_PID=$!
+#    esperar a que la API conteste (máximo 30 s)
+for i in $(seq 30); do curl -sf http://127.0.0.1:3001/api/healthz > /dev/null && break; sleep 1; done
+npx newman@6.2.1 run docs/pruebas/postman/FitLoyalty.postman_collection.json
+kill $API_PID
 
-# Al terminar: destruir la BD de pruebas
+# 6. Al terminar: destruir la BD de pruebas
 pnpm --dir e2e run db:down
 ```
 
-En PowerShell, las variables se definen antes del comando:
-`$env:DATABASE_URL='postgres://...'; $env:NODE_ENV='test'; ...`.
+**PowerShell (Windows):**
+
+```powershell
+# 1. Unitarias con cobertura
+pnpm --dir backend test
+pnpm --dir frontend test
+
+# 2. BD de pruebas
+pnpm --dir e2e run db:up
+
+# 3. Integración contra PostgreSQL
+$env:DATABASE_URL = 'postgres://fitloyalty_test:fitloyalty_test@127.0.0.1:5433/fitloyalty_test'
+pnpm --dir backend run test:integracion
+
+# 4. E2E
+pnpm --dir e2e test
+
+# 5. Postman: la API contra la BD de pruebas, en segundo plano
+$api = Start-Process node -ArgumentList 'docs/pruebas/postman/iniciar-api-pruebas.cjs' -PassThru -NoNewWindow `
+  -RedirectStandardOutput api-pruebas.log -RedirectStandardError api-pruebas.err.log
+#    esperar a que la API conteste (máximo 30 s)
+$lista = $false
+for ($i = 0; $i -lt 30 -and -not $lista; $i++) {
+  try { $lista = (Invoke-WebRequest http://127.0.0.1:3001/api/healthz -UseBasicParsing).StatusCode -eq 200 }
+  catch { Start-Sleep -Seconds 1 }
+}
+npx newman@6.2.1 run docs/pruebas/postman/FitLoyalty.postman_collection.json
+Stop-Process -Id $api.Id
+
+# 6. Al terminar: destruir la BD de pruebas y quitar la variable del paso 3
+pnpm --dir e2e run db:down
+Remove-Item Env:DATABASE_URL
+```
+
+Notas:
+
+- **Postman, como máximo dos corridas por minuto.** El login del administrador
+  admite 5 intentos por minuto (`loginLimiter` en `backend/src/index.js`) y
+  cada corrida hace 2 (CP-05 y CP-06). Una tercera corrida en el mismo minuto
+  recibe 429 en CP-05 o CP-06; hay que esperar un minuto o reiniciar la API.
+- Si la API no arranca en el paso 5, Newman falla en CP-01; la causa queda en
+  `api-pruebas.log`, que git ignora (`*.log`).
+- El paso 5 usa [`postman/iniciar-api-pruebas.cjs`](postman/iniciar-api-pruebas.cjs),
+  que fija las mismas variables que el `webServer` de los E2E (BD de pruebas,
+  `NODE_ENV=test`, sin correo, WhatsApp ni scheduler) antes de cargar el
+  backend. Así el `.env` de desarrollo no las cambia.
