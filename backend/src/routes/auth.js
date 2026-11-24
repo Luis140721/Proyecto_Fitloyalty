@@ -27,6 +27,7 @@ const pool    = require('../db/db');
 const { authenticate } = require('../middleware/auth');
 const asyncHandler     = require('../lib/asyncHandler');
 const { AppError }     = require('../lib/errors');
+const { esEntornoDeDesarrollo } = require('../lib/entorno');
 const {
   validarEmail, validarContrasena, normEmail,
   usuarioSeguro, generarToken, generarResetToken, random6, sqlIdDueno,
@@ -360,10 +361,15 @@ router.post('/forgot-password', asyncHandler(async (req, res) => {
     });
 
     const payload = { ...generic, resendAfterSeconds: 60 };
-    // Modo demo / fallback: si SHOW_DEV_CODE_IN_UI=true (entorno de sustentacion
-    // sin dominio verificado en Resend) o si Resend no entrego el correo,
-    // exponemos el codigo en la respuesta para que la UI lo muestre al usuario.
-    const showDevInUI = process.env.SHOW_DEV_CODE_IN_UI === 'true' || !result.delivered;
+    // El codigo solo se muestra en pantalla en el modo demo de un equipo local
+    // (SHOW_DEV_CODE_IN_UI=true y NODE_ENV development o test). Antes tambien
+    // se mostraba cuando el correo no salia: asi, quien conociera el correo de
+    // alguien del panel podia cambiarle la contrasena. En produccion, o si
+    // NODE_ENV falta, el codigo llega solo por correo, salga o no.
+    const showDevInUI = process.env.SHOW_DEV_CODE_IN_UI === 'true' && esEntornoDeDesarrollo();
+    if (!result.delivered) {
+      console.warn('[POST /auth/forgot-password] No se pudo enviar el correo de recuperacion:', result.reason || 'sin motivo');
+    }
     if (showDevInUI) {
       payload.devCode = code;
       payload.showCodeInUI = true;

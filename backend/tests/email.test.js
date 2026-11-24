@@ -9,6 +9,7 @@
  *  - Vencimientos por defecto (15 min, 1 h, 7 dias) y valores explicitos.
  *  - Remitente parseado de MAIL_FROM, con y sin "Nombre <correo>".
  *  - Sin BREVO_API_KEY no se llama a Brevo (modo consola).
+ *  - En el modo consola, fuera de desarrollo, el log no muestra el codigo.
  *
  * El SDK se reemplaza con jest.mock y cada test carga el modulo de nuevo con
  * jest.resetModules, porque email.js guarda el cliente y lee el entorno al
@@ -198,6 +199,53 @@ describe('email transport: without key and with errors', () => {
     expect(resultado).toEqual({ delivered: false, reason: 'no-api' });
     expect(BrevoClient).not.toHaveBeenCalled();
     expect(mockSendTransacEmail).not.toHaveBeenCalled();
+  });
+
+  // El asunto del correo de recuperacion lleva el codigo. Si el log lo mostrara
+  // en el servidor, quien vea el log podria cambiar la contrasena de otro.
+  test.each([
+    ['production', 'production'],
+    ['missing', undefined],
+    ['staging', 'staging'],
+  ])('should hide the recovery code in the console log when NODE_ENV is %s', async (_caso, nodeEnv) => {
+    // Arrange: se vigilan todos los niveles del log, no solo console.log
+    const email = cargarEmail({ BREVO_API_KEY: undefined, NODE_ENV: nodeEnv });
+    for (const nivel of ['warn', 'info', 'error']) jest.spyOn(console, nivel).mockImplementation(() => {});
+
+    // Act
+    await email.sendRecoveryCode({ to: 'ana@gym.co', name: 'Ana', code: '482913' });
+
+    // Assert: queda la linea del modo consola, con el asunto pero sin el codigo
+    const lineas = ['log', 'warn', 'info', 'error']
+      .flatMap((nivel) => console[nivel].mock.calls)
+      .map((argumentos) => argumentos.join(' '));
+    expect(lineas.join('\n')).not.toContain('482913');
+    expect(lineas).toContain('[EMAIL] Modo consola - Para: ana@gym.co Asunto: ****** — Tu codigo de recuperacion FitLoyalty');
+  });
+
+  test.each([
+    ['development', 'development'],
+    ['test', 'test'],
+  ])('should keep the full subject in the console log when NODE_ENV is %s', async (_caso, nodeEnv) => {
+    // Arrange
+    const email = cargarEmail({ BREVO_API_KEY: undefined, NODE_ENV: nodeEnv });
+
+    // Act
+    await email.sendRecoveryCode({ to: 'ana@gym.co', name: 'Ana', code: '482913' });
+
+    // Assert: en un equipo local el codigo se ve en el log para poder ensayar
+    expect(console.log).toHaveBeenCalledWith('[EMAIL] Modo consola - Para:', 'ana@gym.co', 'Asunto:', '482913 — Tu codigo de recuperacion FitLoyalty');
+  });
+
+  test('should hide every number of 4 digits or more in the console log subject when NODE_ENV is production', async () => {
+    // Arrange
+    const email = cargarEmail({ BREVO_API_KEY: undefined, NODE_ENV: 'production' });
+
+    // Act
+    await email.sendMail({ to: 'ana@gym.co', subject: 'Plan 123 vence 2026-11-30, codigo 482913', text: 'Hola' });
+
+    // Assert: los numeros de menos de 4 cifras quedan; todos los de 4 o mas se tapan
+    expect(console.log).toHaveBeenCalledWith('[EMAIL] Modo consola - Para:', 'ana@gym.co', 'Asunto:', 'Plan 123 vence ****-11-30, codigo ******');
   });
 
   test('should report api-error and not throw when Brevo rejects the send', async () => {

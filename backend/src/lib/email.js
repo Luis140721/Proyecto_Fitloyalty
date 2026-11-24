@@ -14,6 +14,7 @@
  * TODO: todos los textos usan tuteo obligatorio (tú, tu, tuya). Sin voseo.
  */
 const { BrevoClient, BrevoEnvironment } = require('@getbrevo/brevo');
+const { esEntornoDeDesarrollo } = require('./entorno');
 
 const BRAND = {
   name: 'FitLoyalty',
@@ -252,6 +253,15 @@ function getClient() {
   }
 }
 
+// En el modo consola no se envia nada: solo queda una linea en el log. Fuera
+// de desarrollo los numeros largos del asunto salen tapados, porque el asunto
+// del correo de recuperacion lleva el codigo y el log del servidor lo puede
+// leer cualquiera con acceso al panel del hosting.
+function asuntoParaElLog(subject) {
+  if (esEntornoDeDesarrollo()) return subject;
+  return String(subject).replace(/\d{4,}/g, (numero) => '*'.repeat(numero.length));
+}
+
 function parseFromAddress(from) {
   const match = from.match(/^(.+?)\s*<(.+?)>$/);
   if (match) return { name: match[1].trim(), email: match[2].trim() };
@@ -261,7 +271,7 @@ function parseFromAddress(from) {
 async function sendViaBrevo({ from, to, subject, html, text }) {
   const client = getClient();
   if (!client) {
-    console.log('[EMAIL] Modo consola - Para:', to, 'Asunto:', subject);
+    console.log('[EMAIL] Modo consola - Para:', to, 'Asunto:', asuntoParaElLog(subject));
     return { delivered: false, reason: 'no-api' };
   }
   try {

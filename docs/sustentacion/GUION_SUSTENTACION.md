@@ -6,7 +6,7 @@ Tus criterios son **C1 (compartido), C2, C4, C6 y C9**. Donde hay **[→ SANTIAG
 le pasas la palabra.
 
 > **Antes de empezar:** PostgreSQL prendido · `npm run dev` corriendo · ya probado el login con
-> `laura.rios@fitzone.co` / `Recep2026` · GitHub abierto en la rama con todo · pgAdmin a la mano.
+> `laura.rios@fitzone.co` (contraseña de la cuenta de demo: la tiene Luis) · GitHub abierto en la rama con todo · pgAdmin a la mano.
 
 ---
 

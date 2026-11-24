@@ -70,8 +70,9 @@ Archivos clave:
   - `POST /api/auth/login` → recibe email+contraseña, compara con bcrypt, y si está bien devuelve un **JWT**.
   - `POST /api/auth/register` → crea un usuario (staff) nuevo.
   - `GET /api/auth/me` → devuelve el perfil del usuario logueado (usa el token).
-  - `POST /api/auth/forgot-password` → genera un token de recuperación (JWT con `purpose: 'reset'`, vence en 1h).
-  - `POST /api/auth/reset-password` → valida ese token y guarda la nueva contraseña.
+  - `POST /api/auth/forgot-password` → genera un código de 6 dígitos que vence en 15 minutos y lo envía por correo. Responde lo mismo exista o no el correo, y el código nunca viaja en la respuesta (salvo en el modo demo de un equipo local).
+  - `POST /api/auth/verify-reset-code` → revisa el código y, si es correcto, devuelve un token de recuperación (JWT con `purpose: 'reset'`, vence en 15 minutos por defecto).
+  - `POST /api/auth/reset-password` → valida ese token (o el correo y el código) y guarda la nueva contraseña.
 - `src/routes/asistencia.js` → `GET /api/asistencia`: devuelve el historial de check-ins del gimnasio (para el dashboard de usuario, C4).
 - `src/routes/vista.js` → `GET /api/vista/miembros-activos`: hace `SELECT * FROM vista_miembros_activos` (C6).
 - `src/index.js` → "enchufa" todas las rutas, configura CORS y arranca el servidor verificando primero que PostgreSQL responda.
@@ -130,7 +131,7 @@ Pregúntale el estado de: correo real (C2), dashboard admin (C3 + C5), página d
 Para cada uno, practica decir en voz alta: **qué es, dónde está el código y cómo lo demuestro**. Abre cada pantalla y nárrate a ti mismo el flujo. Repite el recorrido de pruebas (usa la `Guia_Pruebas_E2E.md`).
 
 Datos para la demo (¡no los olvides!):
-- Recepcionista: **laura.rios@fitzone.co** / **Recep2026**
+- Recepcionista: **laura.rios@fitzone.co** (la contraseña de la cuenta de demo no se deja en el repositorio, que es público; la tiene Luis)
 - Para correr todo: `npm run dev` desde la raíz (necesitas PostgreSQL prendido).
 
 ### Bloque 3 — Repasar los conceptos teóricos (1 hora)
@@ -156,7 +157,7 @@ Ten a la mano: el **backlog**, la **matriz de priorización (HU-01 a HU-53)**, l
 ## ✅ Checklist del día de la sustentación
 - [ ] PostgreSQL prendido y BD poblada.
 - [ ] `npm run dev` corriendo (API 🟡 + WEB 🔵).
-- [ ] Probar login con laura.rios@fitzone.co / Recep2026 antes de entrar.
+- [ ] Probar login con laura.rios@fitzone.co (contraseña de la cuenta de demo, la tiene Luis) antes de entrar.
 - [ ] Tener abierto: la app, GitHub (rama con todo), pgAdmin, el backlog/matriz, las evidencias.
 - [ ] Repartido con Santiago quién demuestra cada criterio.
 - [ ] Objetivo: 10/10 → **CUMPLE**.

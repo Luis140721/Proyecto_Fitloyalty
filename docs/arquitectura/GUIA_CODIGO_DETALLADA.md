@@ -230,6 +230,15 @@ router.post('/register', async (req, res) => {
 - Códigos HTTP: **201** (creado), **409** (conflicto: email duplicado).
 
 **POST /forgot-password (C2):**
+
+> **Ojo: esto es la primera versión, ya no es así.** Hoy la recuperación va por
+> un código de 6 dígitos: `POST /forgot-password` lo guarda (vence en 15 minutos)
+> y lo envía por correo; `POST /verify-reset-code` lo revisa y devuelve un token
+> con `purpose: 'reset'` (15 minutos por defecto); `POST /reset-password` cambia la
+> contraseña. Ni el código ni un enlace viajan en la respuesta, salvo en el modo
+> demo de un equipo local (`SHOW_DEV_CODE_IN_UI=true` con `NODE_ENV` development
+> o test). Ver `backend/src/routes/auth.js` y el README, «Correo transaccional (Brevo)».
+
 ```js
 router.post('/forgot-password', async (req, res) => {
   const { email } = req.body;
