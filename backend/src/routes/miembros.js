@@ -1003,6 +1003,9 @@ router.get(
     const id = idDeMiembro(req.params.id);
 
     try {
+      // RQF-15: la ficha dice si el miembro tiene contrasena de la app
+      // (password_asignada) y si tiene el acceso encendido, pero nunca devuelve
+      // el password_hash.
       const { rows } = await pool.query(
         `SELECT id_miembro, nombre, documento, telefono, email, codigo_qr, qr_imagen,
                 activo, fecha_registro, tipo_documento, fecha_nacimiento, genero,
@@ -1011,7 +1014,8 @@ router.get(
                 nivel_experiencia, observaciones,
                 acepto_terminos, autorizo_datos,
                 representante_nombre, representante_tipo_documento, representante_documento,
-                representante_parentesco, representante_telefono
+                representante_parentesco, representante_telefono,
+                app_acceso, (password_hash IS NOT NULL) AS password_asignada
            FROM miembro WHERE id_miembro = $1 AND id_gimnasio = $2`,
         [id, gymId]
       );

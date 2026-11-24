@@ -20,6 +20,7 @@ import {
 import { abrirWhatsappAutorizado } from '../lib/contactoWhatsapp';
 import { aplicarCambio } from '../lib/formularioMiembro';
 import { esMenor, edadEnAnios, isoADate, erroresRepresentante } from '../lib/autorizaciones';
+import { avisoContrasenaFicha, errorContrasenaApp, telefonoSirveParaApp } from '../lib/contrasenaApp';
 import QRCode from 'qrcode';
 
 // CampoFecha usa locale="es": sin registrarlo, el calendario sale en ingles.
@@ -154,6 +155,9 @@ const empty = {
   telefono: '',
   email: '',
   direccion: '',
+  // RQF-15: contrasena de la app del miembro (lib/contrasenaApp.js). Es
+  // opcional: vacia, el alta no la asigna y la ficha no cambia la que haya.
+  password: '',
   // Salud y emergencia
   contacto_emergencia: '',
   telefono_emergencia: '',
@@ -319,6 +323,8 @@ export default function MiembrosPage() {
   const [editForm, setEditForm] = useState(empty);
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState('');
+  // RQF-15: error del campo «Contraseña de la app» de la ficha.
+  const [errorClaveEdit, setErrorClaveEdit] = useState('');
   const [editLoading, setEditLoading] = useState(false);
   // La ficha solo se guarda con el registro completo ya cargado: antes de eso
   // el formulario es la fila de la lista, y guardarla vaciaba campos y
@@ -407,6 +413,8 @@ export default function MiembrosPage() {
       if (!tel) e.telefono = 'Escribe el teléfono.';
       else if (tel.length !== 10) e.telefono = `Debe tener 10 dígitos (escribiste ${tel.length}).`;
       if (f.email?.trim() && !EMAIL_RE.test(f.email.trim())) e.email = 'Este correo no tiene un formato válido.';
+      const errorClave = errorContrasenaApp(f.password);
+      if (errorClave) e.password = errorClave;
       if (!fechaValida(f.fecha_nacimiento)) e.fecha_nacimiento = 'Fecha incompleta o inexistente. Usa DD/MM/AAAA.';
       else if (f.fecha_nacimiento && textoAFecha(f.fecha_nacimiento) > new Date()) {
         e.fecha_nacimiento = 'La fecha de nacimiento no puede ser futura.';
@@ -650,6 +658,9 @@ export default function MiembrosPage() {
     try {
       const payload = { ...form };
       if (!payload.email) delete payload.email;
+      // RQF-15: sin contrasena de la app, el miembro queda sin ella (se la
+      // pueden asignar despues en su ficha).
+      if (!payload.password) delete payload.password;
       // RQNF-17: el representante solo viaja si es menor; sin autorizacion
       // de datos sensibles no viajan condiciones medicas ni alergias.
       for (const k of [...CAMPOS_REPRESENTANTE, 'autoriza_representante']) delete payload[k];
@@ -737,6 +748,7 @@ export default function MiembrosPage() {
     fichaMiembro.current = m.id_miembro;
     setEditing(m);
     setEditError('');
+    setErrorClaveEdit('');
     setEditInfo(''); // el «Contrato enviado al…» era de la ficha anterior
     setEditQr('');
     // Precarga con lo que ya tenemos para que el modal abra sin espera.
@@ -1072,6 +1084,7 @@ export default function MiembrosPage() {
     setMotivoCongelar('');
     setEditForm(empty);
     setEditError('');
+    setErrorClaveEdit('');
     setEditInfo('');
     setEditQr('');
     setQrCopiado(false);
@@ -1082,6 +1095,13 @@ export default function MiembrosPage() {
     e.preventDefault();
     if (!editing || !editCompleto) return;
     setEditError('');
+    // RQF-15: una contrasena de la app muy corta no se envia; el backend la
+    // rechazaria con un 400 y la persona no sabria cual campo arreglar.
+    const errorClave = errorContrasenaApp(editForm.password);
+    if (errorClave) {
+      setErrorClaveEdit(errorClave);
+      return;
+    }
     setEditSaving(true);
     // Si este guardado llevaba la decision comercial y falla en el cliente,
     // el servidor pudo haberla aplicado (un corte por tiempo, por ejemplo).
@@ -1102,6 +1122,9 @@ export default function MiembrosPage() {
       for (const k of EDITABLES) {
         if (editForm[k] !== undefined) payload[k] = editForm[k];
       }
+      // RQF-15: la contrasena de la app solo viaja si se escribio una; vacia,
+      // el backend conserva la que el miembro tenga.
+      if (editForm.password) payload.password = editForm.password;
       // Un correo vacio se envia tal cual: el backend lo guarda como null
       // (updateSchema de routes/miembros.js). Si se quitara del payload, borrar
       // el correo en la ficha no tendria efecto y el viejo seguiria guardado.
@@ -1439,6 +1462,29 @@ export default function MiembrosPage() {
                       aria-invalid={formErrors.email ? 'true' : undefined}
                     />
                     <ErrorCampo msg={formErrors.email} />
+                  </label>
+                </div>
+                {/* RQF-15: el miembro entra a la app con su telefono y esta contrasena. */}
+                <div className="auth-form-row">
+                  <label className="field" style={{ flex: 1 }}>
+                    <span id="etiqueta-clave-alta" className="field-label">Contraseña de la app</span>
+                    <input
+                      className={`field-input${formErrors.password ? ' field-input--error' : ''}`}
+                      type="password"
+                      autoComplete="new-password"
+                      value={form.password}
+                      onChange={(e) => handleFormChange('password', e.target.value)}
+                      placeholder="Opcional, mínimo 6 caracteres"
+                      aria-invalid={formErrors.password ? 'true' : undefined}
+                      aria-labelledby="etiqueta-clave-alta"
+                      aria-describedby="ayuda-clave-alta"
+                    />
+                    <ErrorCampo msg={formErrors.password} />
+                    <span id="ayuda-clave-alta" className="field-hint">
+                      Con su teléfono y esta contraseña el miembro entra a la app FitLoyalty. Si la dejas vacía, se la puedes asignar después en su ficha.
+                      {form.password && !telefonoSirveParaApp(form.telefono)
+                        && ' Con este teléfono no podrá entrar: la app pide 10 dígitos que empiecen por 3.'}
+                    </span>
                   </label>
                 </div>
                 <div className="auth-form-row">
@@ -2338,6 +2384,35 @@ export default function MiembrosPage() {
                 onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
                 placeholder="correo@ejemplo.com"
               />
+            </label>
+          </div>
+          {/* RQF-15: la ficha solo sabe si ya hay contrasena de la app (password_asignada), nunca cual es. */}
+          <div className="auth-form-row">
+            <label className="field" style={{ flex: 1 }}>
+              <span id="etiqueta-clave-ficha" className="field-label">Contraseña de la app</span>
+              <input
+                className={`field-input${errorClaveEdit ? ' field-input--error' : ''}`}
+                aria-labelledby="etiqueta-clave-ficha"
+                type="password"
+                autoComplete="new-password"
+                value={editForm.password || ''}
+                onChange={(e) => {
+                  const valor = e.target.value;
+                  setErrorClaveEdit('');
+                  setEditForm((f) => ({ ...f, password: valor }));
+                }}
+                placeholder={editing?.password_asignada ? 'Escribe una nueva solo si quieres cambiarla' : 'Mínimo 6 caracteres'}
+                aria-invalid={errorClaveEdit ? 'true' : undefined}
+                aria-describedby="ayuda-clave-ficha"
+              />
+              <ErrorCampo msg={errorClaveEdit} />
+              <span id="ayuda-clave-ficha" className="field-hint">
+                {avisoContrasenaFicha({
+                  passwordAsignada: editing?.password_asignada,
+                  appAcceso: editing?.app_acceso,
+                  telefono: editForm.telefono,
+                })}
+              </span>
             </label>
           </div>
           <div className="auth-form-row">
