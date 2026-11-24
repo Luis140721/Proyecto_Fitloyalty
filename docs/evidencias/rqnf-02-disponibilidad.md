@@ -19,7 +19,7 @@ UptimeRobot, cada 5 minutos.** Ver «Monitor externo (UptimeRobot)». La
 evidencia de RQNF-02 sale de ese monitor.
 
 **Estado al 2026-11-23 a las 22:00: Parcial.** El primer día operativo
-completo, el lunes 23, no tuvo caídas de 5:00 a 22:00 (100 %). Ver «Reporte
+completo, el lunes 23, UptimeRobot no registró caídas de 5:00 a 22:00 (100 %). Ver «Reporte
 con UptimeRobot».
 
 ## Requisito
@@ -256,7 +256,7 @@ la muestra no cubre el período. Tampoco mide caídas reales:
   despertar el servicio y la siguiente, 0,8 s.
 
 Por eso el calendario anterior (Parcial el 26 de octubre e Implementado el 1 de
-noviembre) queda sin efecto y RQNF-02 sigue Pendiente.
+noviembre) queda sin efecto y RQNF-02 sigue Pendiente (al 2026-11-06).
 
 ## Monitor externo (UptimeRobot)
 
@@ -314,8 +314,9 @@ pide el horario operativo (5:00 a 22:00 de Colombia). Al cierre del período:
 ## Reporte con UptimeRobot
 
 Datos de la página pública de estado (https://stats.uptimerobot.com/zqKSy3C8RT),
-consultados el 2026-11-24 a las 04:55 de Colombia. Copia de lo que devolvió, sin cambios en las cifras:
-`docs/evidencias/rqnf-02-uptimerobot-2026-11-23.json`.
+consultados el 2026-11-23 a las 23:55 de Colombia (2026-11-24 04:55 UTC).
+Extracto de lo que devolvió, con los campos que usa este reporte y sus cifras
+sin cambios: `docs/evidencias/rqnf-02-uptimerobot-2026-11-23.json`.
 
 **Registro de eventos.** Desde que se activó, el monitor registra una sola
 caída:
@@ -330,26 +331,35 @@ Después no hay ningún otro evento: la API siguió arriba.
 
 | Día (Colombia) | Minutos caídos en el horario | Disponibilidad en el horario | Estado |
 |---|---:|---:|---|
-| Lunes 2026-11-23 | 0 | **100 %** (1.020 de 1.020 minutos) | Medido |
+| Lunes 2026-11-23 | 0 | **100 %** (0 minutos caídos registrados de 1.020) | Medido |
 | Martes 2026-11-24 a domingo 2026-11-29 | — | — | En medición |
 | **Semana** (7.140 minutos) | — | — | Se llena el lunes 2026-11-30 |
 
 Con este día, RQNF-02 pasa a **Parcial** (ver el criterio de abajo).
 
 **Lo que muestra UptimeRobot.** Al consultarla marcaba 100 % en las últimas
-24 horas y 99,654 % en los últimos 7 días. La segunda cifra es más baja porque
-cuenta las 24 horas de cada día e incluye la caída del domingo a las 23:31. El
-requisito solo cuenta el horario operativo; por eso el reporte se arma con el
-registro de eventos, como dice «Cómo se arma el reporte».
+24 horas y 99,654 % en los últimos 7 días. La cifra de 7 días cubre solo el
+tiempo que lleva el monitor (unas 24 horas y 25 minutos al consultarla) e
+incluye la caída del domingo a las 23:31; con 7 días completos, esa misma caída
+daría 99,95 %. La barra del 23 de noviembre en la página pública marca 99,648 %
+porque UptimeRobot arma las barras por días UTC: esa barra va del domingo 22 a
+las 19:00 al lunes 23 a las 19:00 de Colombia, así que también incluye la caída
+del domingo. El requisito solo cuenta el horario operativo; por eso el reporte
+se arma con el registro de eventos, como dice «Cómo se arma el reporte».
 
-**Cada cuánto midió.** El monitor está configurado cada 5 minutos («Checked
-every 5 minutes»). La página pública no muestra cada comprobación: trae una
-muestra de los tiempos de respuesta (150 puntos del lunes; 95 dentro del
-horario, entre 37 y 225 ms, con un promedio de 80 ms), con huecos como el de
-8:25 a 11:10. Esos huecos no son caídas: el registro de eventos no tiene
-ninguna, y después de cada hueco la API respondió en menos de 80 ms, mientras
-que despertar a Render tarda unos 30 segundos. El historial completo de
-comprobaciones está en la cuenta de UptimeRobot de Luis.
+**Cada cuánto midió.** El monitor está configurado para comprobar cada 5
+minutos («Checked every 5 minutes») y el registro no tiene pausas: solo el
+inicio, la caída del domingo y la vuelta. La página pública no muestra cada
+comprobación. De las 204 que tocaban el lunes de 5:00 a 22:00, la muestra trae
+95 (entre 37 y 225 ms, con un promedio de 80 ms). Las otras 109 caen en huecos:
+de 5:00 a 5:25, de 8:30 a 11:05, de 12:30 a 13:50, a las 14:20, de 16:30 a
+18:20 y de 19:30 a 21:55. Con los datos públicos no se puede probar que esas
+109 se hicieron. Hay indicios de que sí: el registro no tiene caídas ni pausas,
+y después de cada hueco del horario la API respondió entre 63 y 78 ms; si nadie
+la hubiera consultado durante el hueco, Render se habría dormido y esa
+respuesta habría tardado unos 30 segundos o habría dado 503. **Pendiente:**
+confirmar con el historial de comprobaciones del lunes en la cuenta de
+UptimeRobot de Luis antes de dar el Parcial por respaldado.
 
 ## Criterio de estado de RQNF-02
 
@@ -371,3 +381,7 @@ comprobaciones está en la cuenta de UptimeRobot de Luis.
    del monitor externo, con una fila por día de Colombia y una fila con la suma
    de la semana, como dice «Cómo se arma el reporte».
 5. Decidir si se apaga `availability-monitor.yml`, que ya no aporta evidencia.
+6. Unificar cómo se mide antes del reporte de la semana: el «Criterio de
+   disponibilidad» y el de Implementado cuentan mediciones exitosas sobre el
+   total, y el reporte de UptimeRobot cuenta minutos caídos según el registro
+   de eventos.

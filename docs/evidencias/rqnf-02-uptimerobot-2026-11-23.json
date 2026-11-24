@@ -1,7 +1,8 @@
 {
   "fuente": "https://stats.uptimerobot.com/api/getMonitor/zqKSy3C8RT?m=804775287 (pagina publica de estado)",
-  "consultado": "2026-11-24 a las 04:55 de Colombia",
-  "zona_horaria_de_las_fechas": "-05:00",
+  "tipo": "Extracto: solo los campos que usa el reporte",
+  "consultado": "2026-11-23 a las 23:55 de Colombia (2026-11-24 04:55 UTC)",
+  "zona_horaria_de_las_fechas": "logs[].date y responseTimes[].datetime vienen en -05:00 (Colombia); createdAt, logs[].dateGMT y logs[].dateGMTISO vienen en UTC; dailyRatios va por dias UTC (en Colombia, de 19:00 a 19:00)",
   "monitor": {
     "name": "FitLoyalty API (Render) - healthz",
     "type": "HTTP(s)",
@@ -678,6 +679,36 @@
         "value": 84,
         "datetime": "November 23, 2026, 23:18"
       }
-    ]
+    ],
+    "dailyRatios_ultimos_3": [
+      {
+        "date": "2026-11-22",
+        "ratio": "0.000",
+        "label": "black",
+        "color": "grey"
+      },
+      {
+        "date": "2026-11-23",
+        "ratio": "99.648",
+        "label": "good",
+        "color": "blue"
+      },
+      {
+        "date": "2026-11-24",
+        "ratio": "100.000",
+        "label": "excellent",
+        "color": "green"
+      }
+    ],
+    "30dRatio": {
+      "ratio": "99.654",
+      "label": "good",
+      "color": "blue"
+    },
+    "90dRatio": {
+      "ratio": "99.654",
+      "label": "good",
+      "color": "blue"
+    }
   }
 }
