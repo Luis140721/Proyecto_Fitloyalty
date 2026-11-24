@@ -96,7 +96,7 @@
 
 ## Datos de prueba generados durante la ejecución
 - **Usuario nuevo creado:** `demo.qa.0615@fitloyalty.com` (nombre "Demo QA Prueba"). Es un registro de prueba; puede eliminarse de la BD si se desea dejarla limpia.
-- **Contraseña de `laura.rios@fitzone.co` actualizada a:** `Recep2026` (por la prueba de recuperación). Tenerlo presente para la demo.
+- **Contraseña de `laura.rios@fitzone.co`:** la prueba de recuperación la cambió. No se deja escrita en el repositorio; si hace falta para la demo, se restablece con el mismo flujo de recuperación.
 
 ## Pendiente (depende de Santiago)
 - **C3** Dashboard Administrador · **C5** Perfil con foto en header · **C7** Página del Procedimiento Almacenado.

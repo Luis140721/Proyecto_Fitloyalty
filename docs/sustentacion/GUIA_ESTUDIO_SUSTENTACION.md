@@ -130,7 +130,7 @@ Pregúntale el estado de: correo real (C2), dashboard admin (C3 + C5), página d
 Para cada uno, practica decir en voz alta: **qué es, dónde está el código y cómo lo demuestro**. Abre cada pantalla y nárrate a ti mismo el flujo. Repite el recorrido de pruebas (usa la `Guia_Pruebas_E2E.md`).
 
 Datos para la demo (¡no los olvides!):
-- Recepcionista: **laura.rios@fitzone.co** / **Recep2026**
+- Recepcionista: **laura.rios@fitzone.co** (la contraseña de la cuenta de demo no se deja en el repositorio, que es público; la tiene Luis)
 - Para correr todo: `npm run dev` desde la raíz (necesitas PostgreSQL prendido).
 
 ### Bloque 3 — Repasar los conceptos teóricos (1 hora)
@@ -156,7 +156,7 @@ Ten a la mano: el **backlog**, la **matriz de priorización (HU-01 a HU-53)**, l
 ## ✅ Checklist del día de la sustentación
 - [ ] PostgreSQL prendido y BD poblada.
 - [ ] `npm run dev` corriendo (API 🟡 + WEB 🔵).
-- [ ] Probar login con laura.rios@fitzone.co / Recep2026 antes de entrar.
+- [ ] Probar login con laura.rios@fitzone.co (contraseña de la cuenta de demo, la tiene Luis) antes de entrar.
 - [ ] Tener abierto: la app, GitHub (rama con todo), pgAdmin, el backlog/matriz, las evidencias.
 - [ ] Repartido con Santiago quién demuestra cada criterio.
 - [ ] Objetivo: 10/10 → **CUMPLE**.
