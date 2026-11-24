@@ -60,8 +60,10 @@ Set-Defecto 88  'baja'  'abierto'
 $titulo = 'El alta de miembro con un nombre de 101 caracteres responde 503 en vez de 400'
 # Se filtra el titulo aqui y no con --search: PowerShell 5.1 parte las comillas
 # internas al pasarlas a gh.
-$existe = gh issue list --repo $Repo --state all --label bug --limit 200 --json number,title |
-  ConvertFrom-Json | Where-Object { $_.title -eq $titulo } | Select-Object -First 1 -ExpandProperty number
+# Los paréntesis hacen que PowerShell 5.1 recorra el arreglo que devuelve
+# ConvertFrom-Json en vez de pasarlo como un solo objeto.
+$issues = (gh issue list --repo $Repo --state all --label bug --limit 200 --json number,title | ConvertFrom-Json)
+$existe = $issues | Where-Object { $_.title -eq $titulo } | Select-Object -First 1 -ExpandProperty number
 if (-not $existe) {
   $cuerpo = @'
 **Detectado por:** caso CP-12 de `docs/pruebas/matriz-casos-prueba.md`, colección Postman ejecutada con Newman el 2026-11-22 sobre `develop` (`f3a1a71`), en el ambiente de pruebas (PostgreSQL 16, `127.0.0.1:5433`).
