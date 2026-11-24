@@ -45,9 +45,12 @@ function start() {
     }
 
     // Avisos de vencimiento: todos los dias a las 9:00 AM y se reintenta a las
-    // 3:00 PM hora Colombia (por si WhatsApp no estaba listo en la primera).
+    // 2:00 PM hora Colombia (por si WhatsApp no estaba listo en la primera).
     // El job es idempotente (yaEnviado), asi que la segunda corrida solo envia
-    // lo que quedo pendiente.
+    // lo que quedo pendiente. RQNF-16: el reintento era a las 3:00 PM, que el
+    // sabado ya esta fuera del horario de la Ley 2300 (8:00 a. m. a 3:00
+    // p. m.); a las 2:00 PM sirve todos los dias habiles. Los domingos y
+    // festivos el job no envia nada (jobs/expiracion.js).
     // La expresion cron es: min hora dia mes diaSemana
     const correrExpiracion = async () => {
         console.log('[scheduler] Disparando job de avisos de vencimiento...');
@@ -63,7 +66,7 @@ function start() {
             console.error('[scheduler] Error en job de vencimiento:', err.message);
         }
     };
-    expiracionTasks = ['0 9 * * *', '0 15 * * *'].map(
+    expiracionTasks = ['0 9 * * *', '0 14 * * *'].map(
         (expr) => cron.schedule(expr, correrExpiracion, { timezone: TZ })
     );
 
@@ -81,12 +84,14 @@ function start() {
     }, { timezone: TZ });
 
     // Campanas programadas (RQF-10): cada 10 minutos ejecuta las que ya
-    // llegaron a su fecha_programada. Tambien corre al arrancar, por si el
-    // servicio estaba dormido a la hora (Render Free duerme sin trafico).
+    // llegaron a su fecha_programada y reintenta los pendientes de un proceso
+    // que se cayo. Tambien corre al arrancar, por si el servicio estaba
+    // dormido a la hora (Render Free duerme sin trafico). Fuera del horario
+    // de la Ley 2300 no envia nada (RQNF-16).
     const correrCampanas = async () => {
         try {
             const resumen = await runCampanasJob();
-            if (resumen.ejecutadas > 0) {
+            if (resumen.ejecutadas > 0 || resumen.reintentadas > 0) {
                 console.log('[scheduler] Campanas programadas ejecutadas:', JSON.stringify(resumen));
             }
         } catch (err) {
@@ -96,7 +101,7 @@ function start() {
     campanasTask = cron.schedule('*/10 * * * *', correrCampanas, { timezone: TZ });
     setTimeout(correrCampanas, 15 * 1000);
 
-    console.log(`[scheduler] Activo. Vencimiento a las 09:00 y 15:00, abandono a las 08:00 y campanas cada 10 min (${TZ}).`);
+    console.log(`[scheduler] Activo. Vencimiento a las 09:00 y 14:00, abandono a las 08:00 y campanas cada 10 min (${TZ}).`);
 }
 
 /**

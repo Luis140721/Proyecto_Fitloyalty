@@ -4,8 +4,8 @@ export default function PrivacidadPage() {
   return (
     <LegalLayout
       title="Política de privacidad"
-      subtitle="Cómo FitLoyalty recopila, usa, almacena y protege los datos personales de los usuarios y miembros, conforme a la Ley 1581 de 2012 y el Decreto 1377 de 2013."
-      updated="17 de noviembre de 2026"
+      subtitle="Cómo FitLoyalty recopila, usa, almacena y protege los datos personales de los usuarios y miembros, conforme a la Ley 1581 de 2012, el Decreto 1377 de 2013 (compilado en el Decreto 1074 de 2015) y la Ley 2300 de 2023."
+      updated="21 de noviembre de 2026"
     >
       <h2>1. Responsable del tratamiento</h2>
       <p>
@@ -63,6 +63,7 @@ export default function PrivacidadPage() {
         <li>Control de ingresos: validación de QR y registro de check-ins.</li>
         <li>Reportes y dashboard: indicadores de asistencia, retención y cobros para el gimnasio.</li>
         <li>Comunicaciones operativas: notificaciones de vencimiento de membresía, entrega del contrato, invitaciones de staff.</li>
+        <li>Mensajes comerciales del gimnasio (campañas y mensajes de retención), solo a los miembros que los aceptaron (sección 12).</li>
         <li>Seguridad del miembro durante el entrenamiento, solo con los datos de salud que haya autorizado.</li>
         <li>Cumplimiento legal: conservación de registros requeridos por autoridades colombianas y de la prueba de las autorizaciones.</li>
       </ol>
@@ -81,7 +82,8 @@ export default function PrivacidadPage() {
         <li>
           <strong>Miembros:</strong> el gimnasio (Responsable) pide la autorización al registrar al
           miembro en el panel. Cada autorización va en una casilla aparte, con su propio texto: el
-          contrato, el tratamiento de datos y, de forma opcional, los datos de salud. FitLoyalty no
+          contrato, el tratamiento de datos y, de forma opcional, los datos de salud y los mensajes
+          comerciales. FitLoyalty no
           tiene contacto directo con los miembros fuera de la app del gimnasio.
         </li>
       </ul>
@@ -95,7 +97,7 @@ export default function PrivacidadPage() {
         <li>
           Su tratamiento necesita una autorización <strong>expresa y separada</strong> de la de
           tratamiento de datos y de la aceptación del contrato (artículo 6 de la Ley 1581 y artículo
-          6 del Decreto 1377 de 2013).
+          6 del Decreto 1377 de 2013, hoy artículo 2.2.2.25.2.3 del Decreto 1074 de 2015).
         </li>
         <li>
           Es <strong>facultativa</strong>: antes de pedirla se le informa al titular que no está
@@ -115,7 +117,7 @@ export default function PrivacidadPage() {
       <p>
         La Plataforma permite registrar miembros menores de 18 años solo con los datos y la
         autorización de su representante legal (artículo 7 de la Ley 1581 de 2012 y artículo 12 del
-        Decreto 1377 de 2013):
+        Decreto 1377 de 2013, hoy artículo 2.2.2.25.2.9 del Decreto 1074 de 2015):
       </p>
       <ul>
         <li>
@@ -125,28 +127,40 @@ export default function PrivacidadPage() {
         </li>
         <li>
           El representante da las autorizaciones en nombre del menor (tratamiento de datos, contrato
-          y, si quiere, datos de salud), respetando su interés superior y sus derechos
-          fundamentales. El gimnasio debe escuchar la opinión del menor según su madurez.
+          y, si quiere, datos de salud y mensajes comerciales), respetando su interés superior y sus
+          derechos fundamentales. El texto que autoriza deja constancia de que escuchó al menor y
+          tuvo en cuenta su opinión según su madurez, autonomía y capacidad para entender el asunto.
         </li>
         <li>
-          Desde la app, un menor puede revocar la autorización de datos de salud, pero no otorgarla:
-          esa la da su representante en el gimnasio.
+          Desde la app, un menor puede revocar la autorización de datos de salud y cancelar los
+          mensajes comerciales, pero no otorgarlas: esas las da su representante en el gimnasio.
         </li>
-        <li>El contrato de un miembro menor de edad se envía al teléfono de su representante legal.</li>
+        <li>
+          El contrato de un miembro menor de edad se envía al teléfono de su representante legal. Si
+          el representante no tiene teléfono registrado, el contrato no se envía (nunca va al teléfono
+          del menor).
+        </li>
+        <li>
+          Un miembro registrado como menor solo deja de tratarse como menor cuando el gimnasio
+          registra una fecha de nacimiento que muestra que ya cumplió 18 años; queda constancia del
+          cambio. No basta con borrar la fecha ni con cambiar la tarjeta de identidad.
+        </li>
       </ul>
 
       <h2>7. Prueba de la autorización</h2>
       <p>
         Cada vez que se otorga o se revoca una autorización, la Plataforma guarda una constancia que
         no se modifica después: el tipo de autorización, si se otorgó o no, la fecha y la hora, la
-        versión del texto que se le mostró al titular, el canal (panel del gimnasio o app del
-        miembro) y el usuario del gimnasio que la registró. La autorización vigente es la más
-        reciente.
+        versión del texto que se le mostró al titular, el canal (panel del gimnasio, app del
+        miembro o enlace de baja de los mensajes comerciales), el usuario del gimnasio que la
+        registró y, en la de mensajes comerciales, los canales que el miembro autorizó. La
+        autorización vigente es la más reciente.
       </p>
       <p>
         La constancia se conserva mientras el miembro esté registrado, para que el gimnasio pueda
         probar la autorización ante el titular o ante la Superintendencia de Industria y Comercio
-        (artículos 7 y 8 del Decreto 1377 de 2013). El miembro consulta las suyas en la app; el gimnasio,
+        (artículos 7 y 8 del Decreto 1377 de 2013, hoy artículos 2.2.2.25.2.4 y 2.2.2.25.2.5 del
+        Decreto 1074 de 2015). El miembro consulta las suyas en la app; el gimnasio,
         en la ficha del miembro. Si el miembro se elimina de forma permanente, sus constancias se
         eliminan con él.
       </p>
@@ -212,17 +226,41 @@ export default function PrivacidadPage() {
 
       <h2>12. Política de contacto con los miembros (Ley 2300 de 2023)</h2>
       <p>
-        Los mensajes que el gimnasio envía a sus miembros desde la Plataforma siguen estas reglas:
+        Los mensajes que el gimnasio envía a sus miembros desde la Plataforma (campañas, mensajes de
+        retención y avisos de vencimiento) siguen estas reglas:
       </p>
       <ul>
         <li>
-          <strong>Horario:</strong> de lunes a viernes de 7:00 a. m. a 7:00 p. m. y los sábados de
-          8:00 a. m. a 3:00 p. m. No se envían mensajes los domingos ni los días festivos.
+          <strong>Horario (artículo 3):</strong> de lunes a viernes de 7:00 a. m. a 7:00 p. m. y los
+          sábados de 8:00 a. m. a 3:00 p. m., hora de Colombia. No se envían mensajes los domingos ni
+          los días festivos de Colombia (incluidos los que se trasladan al lunes). Fuera de ese
+          horario el panel no deja enviar: una campaña queda programada para el siguiente horario
+          permitido y los avisos automáticos esperan a la siguiente corrida en horario.
         </li>
-        <li><strong>Canales:</strong> solo los canales que el miembro autorizó.</li>
         <li>
-          <strong>Mensajes comerciales o publicitarios:</strong> solo si el miembro los autorizó. Puede
-          darse de baja en cualquier momento, y desde entonces no se le vuelven a enviar.
+          <strong>Frecuencia (artículo 3):</strong> al mismo miembro no se le envía más de un mensaje
+          al día, ni por varios canales (WhatsApp y correo) en la misma semana, de lunes a domingo.
+          Cuentan todos los mensajes que salen de la Plataforma, también los avisos de vencimiento.
+        </li>
+        <li>
+          <strong>Canales (artículo 2):</strong> los mensajes comerciales solo van por los canales que
+          el miembro autorizó (WhatsApp, correo o los dos). Los avisos de su plan van por WhatsApp,
+          como lo informa el contrato.
+        </li>
+        <li>
+          <strong>Mensajes comerciales o publicitarios (artículo 5):</strong> las campañas, los
+          mensajes de retención y las felicitaciones de retos solo se envían a quien los aceptó de
+          forma expresa. Aceptarlos es opcional y la membresía no depende de ello. Si el miembro no
+          ha dicho nada, se entiende que no los acepta (también los miembros registrados antes de
+          esta política). Los avisos del plan, como el de vencimiento, no son comerciales y no
+          necesitan esta aceptación, pero sí cumplen el horario y la frecuencia.
+        </li>
+        <li>
+          <strong>Cancelación en cualquier momento:</strong> el miembro deja de recibir mensajes
+          comerciales desde la app FitLoyalty («Más» → «Mensajes del gimnasio»), con el enlace que va
+          al final de cada mensaje comercial o pidiéndolo en recepción. Desde entonces no se le
+          vuelven a enviar. Cada aceptación y cada cancelación quedan registradas con su fecha, la
+          versión del texto y el canal (sección 7).
         </li>
       </ul>
 

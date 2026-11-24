@@ -145,7 +145,14 @@ function avisoVenceHoy({ nombre, gymNombre, tipoPlan, fechaFin }) {
 // Se arma por secciones (la app las muestra una por una) y se une en un solo
 // texto para WhatsApp, con asteriscos para la negrita.
 
-const CONTRATO_VERSION = 'v2';
+// v3 (RQNF-16 y ajustes del #102): la clausula 12 dice si el miembro acepto
+// mensajes comerciales y como cancelarlos; la 10 agrega las demas
+// obligaciones de ley; la 15 dice cuando acepto el representante de un menor;
+// sin plan, la clausula 4 sigue existiendo para que la numeracion (y las
+// referencias a las clausulas 6, 8 y 11) no se corra.
+const CONTRATO_VERSION = 'v3';
+
+const NOMBRES_CANAL = { WHATSAPP: 'WhatsApp', EMAIL: 'correo' };
 
 const PLANES = {
   MENSUAL: 'Mensual',
@@ -269,6 +276,11 @@ function datosContrato(fila, vigentes = {}) {
     autorizaciones: {
       tratamiento_datos: vigentes.TRATAMIENTO_DATOS ? vigentes.TRATAMIENTO_DATOS.otorgada : null,
       datos_sensibles: vigentes.DATOS_SENSIBLES ? vigentes.DATOS_SENSIBLES.otorgada : false,
+      // RQNF-16: sin fila, no acepta (es lo que queda por defecto).
+      mensajes_comerciales: Boolean(vigentes.MENSAJES_COMERCIALES && vigentes.MENSAJES_COMERCIALES.otorgada),
+      canales_comerciales: vigentes.MENSAJES_COMERCIALES && vigentes.MENSAJES_COMERCIALES.otorgada
+        ? ['WHATSAPP', 'EMAIL'].filter((c) => (vigentes.MENSAJES_COMERCIALES.canales_autorizados || []).includes(c))
+        : [],
     },
   };
 }
@@ -350,6 +362,10 @@ function seccionesContrato(d) {
     add('Precio total y forma de pago', precio);
   } else {
     add('Plan y vigencia', 'El miembro todavía no tiene un plan registrado. Este contrato no tiene efecto hasta que el gimnasio le registre uno.');
+    // Observacion 9 del #102: la clausula 4 sigue existiendo, para que las
+    // demas conserven su numero (el texto remite a las clausulas 6, 8 y 11).
+    add('Precio total y forma de pago', 'Sin un plan registrado no hay precio ni forma de pago. El gimnasio te los '
+      + 'informará por escrito antes de cobrarte, y no te cobrará nada que no esté en este contrato.');
   }
 
   // 5. Renovacion
@@ -391,7 +407,8 @@ function seccionesContrato(d) {
 
   // 10. Salud, seguridad y objetos personales
   add('Salud, seguridad y objetos personales', 'El gimnasio responde por mantener sus instalaciones y equipos en '
-    + 'condiciones seguras y por las indicaciones de su personal. Tú te comprometes a seguir esas indicaciones y las '
+    + 'condiciones seguras, por las indicaciones de su personal y por las demás obligaciones que le impone la ley. '
+    + 'Tú te comprometes a seguir esas indicaciones y las '
     + 'reglas de uso, y a avisar al entrenador si tienes una lesión o condición que afecte tu entrenamiento. Te '
     + 'recomendamos no traer objetos de valor; el gimnasio responde, según la ley, por lo que dejes bajo su custodia '
     + '(por ejemplo, en sus casilleros).');
@@ -401,13 +418,21 @@ function seccionesContrato(d) {
     + 'El gimnasio te responde en un máximo de 15 días hábiles. Si no recibes respuesta o no estás de acuerdo con '
     + 'ella, puedes acudir a la Superintendencia de Industria y Comercio (www.sic.gov.co).');
 
-  // 12. Datos personales
-  add('Datos personales', 'Tus datos se tratan según la política de tratamiento de datos del gimnasio (Ley 1581 de '
-    + '2012) y solo con las autorizaciones que diste por separado: tratamiento de datos, '
-    + `${siNo(d.autorizaciones.tratamiento_datos)}; datos de salud (opcional), ${siNo(d.autorizaciones.datos_sensibles)}. `
-    + 'Puedes ver tus autorizaciones y revocar la de datos de salud en la app FitLoyalty. Solo recibirás mensajes '
-    + 'publicitarios si los autorizas, en los horarios permitidos, y puedes pedir que no te escriban más en cualquier '
-    + 'momento (Ley 2300 de 2023).');
+  // 12. Datos personales y mensajes (observacion 8 del #102: con RQNF-16 lo
+  // que dice sobre los mensajes comerciales es lo que hace el sistema).
+  const a = d.autorizaciones;
+  const comerciales = a.mensajes_comerciales
+    ? `sí, por ${a.canales_comerciales.map((c) => NOMBRES_CANAL[c] || c).join(' y ')}`
+    : 'no';
+  add('Datos personales y mensajes', 'Tus datos se tratan según la política de tratamiento de datos del gimnasio (Ley '
+    + '1581 de 2012) y solo con las autorizaciones que diste por separado: tratamiento de datos, '
+    + `${siNo(a.tratamiento_datos)}; datos de salud (opcional), ${siNo(a.datos_sensibles)}; mensajes comerciales `
+    + `(opcional), ${comerciales}. Puedes ver tus autorizaciones y revocar la de datos de salud en la app FitLoyalty. `
+    + 'Solo recibirás mensajes comerciales o publicitarios si los aceptas, por los canales que elijas. Todos los '
+    + 'mensajes del gimnasio, también los avisos de vencimiento, se envían solo de lunes a viernes de 7:00 a. m. a '
+    + '7:00 p. m. y los sábados de 8:00 a. m. a 3:00 p. m., nunca los domingos ni los festivos, y no más de una vez '
+    + 'al día ni por varios canales en la misma semana. Puedes cancelar los mensajes comerciales en cualquier momento '
+    + 'en la app («Mensajes del gimnasio»), con el enlace que va al final de cada uno o en recepción (Ley 2300 de 2023).');
 
   // 13. Uso de imagen
   add('Uso de imagen', 'El gimnasio no usará en su publicidad fotos ni videos en los que aparezcas sin tu '
@@ -419,14 +444,20 @@ function seccionesContrato(d) {
     + 'distinta de la que aceptaste al inscribirte, se aplica la que te sea más favorable.');
 
   // 15. Entrega y aceptacion
+  // Observacion 10 del #102: el contrato de un menor lo acepta su
+  // representante legal (Ley 1581, art. 7; Decreto 1377, art. 12).
+  const quien = d.representante ? `Tu representante legal, ${d.representante.nombre}, aceptó` : 'Aceptaste';
+  const enTuNombre = d.representante ? ' en tu nombre' : '';
   let acepta;
   if (d.aceptacion) {
     const canal = d.aceptacion.canal === 'APP' ? 'la app' : 'el registro del gimnasio';
-    acepta = `Aceptaste las condiciones del gimnasio el ${fmtFechaLarga(d.aceptacion.fecha)} (constancia en ${canal}).`;
+    acepta = `${quien} las condiciones del gimnasio${enTuNombre} el ${fmtFechaLarga(d.aceptacion.fecha)} (constancia en ${canal}).`;
   } else if (m.acepto_terminos) {
-    acepta = `Aceptaste las condiciones del gimnasio al inscribirte${m.fecha_registro ? `, el ${fmtFechaLarga(m.fecha_registro)}` : ''}.`;
+    acepta = `${quien} las condiciones del gimnasio${enTuNombre} al inscribirte${m.fecha_registro ? `, el ${fmtFechaLarga(m.fecha_registro)}` : ''}.`;
   } else {
-    acepta = 'No hay constancia de que hayas aceptado las condiciones del gimnasio: confírmalas en recepción.';
+    acepta = d.representante
+      ? 'No hay constancia de que tu representante legal haya aceptado las condiciones del gimnasio: debe confirmarlas en recepción.'
+      : 'No hay constancia de que hayas aceptado las condiciones del gimnasio: confírmalas en recepción.';
   }
   add('Entrega y aceptación', `${acepta} Esta es tu copia del contrato; también la puedes consultar en la app `
     + 'FitLoyalty, en «Mi contrato». Si no estás de acuerdo con algo, puedes terminarlo en las condiciones de la '

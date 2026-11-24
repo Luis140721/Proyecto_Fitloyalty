@@ -24,12 +24,14 @@
  *   DATABASE_URL=postgres://fitloyalty_test:fitloyalty_test@127.0.0.1:5433/fitloyalty_test \
  *   pnpm --dir backend run test:integracion
  */
+jest.setTimeout(30000); // base real: con la maquina cargada los hooks pasan de 5 s
 const crypto = require('crypto');
 const express = require('express');
 const jwt = require('jsonwebtoken');
 // La guardia de la BD de pruebas y la DATABASE_URL del entorno del proceso:
-// ver tests/integracion/bd-pruebas.js.
+// ver tests/integracion/bd-pruebas.js. Va antes que cualquier modulo de src/.
 const { describeConBd, prepararBdDePruebas } = require('./integracion/bd-pruebas');
+const { CONTRATO_VERSION } = require('../src/lib/mensajes');
 
 jest.mock('../src/lib/whatsapp', () => ({
   sendWhatsAppText: jest.fn(async () => {}),
@@ -191,7 +193,9 @@ describeConBd('RQNF-17 y RQNF-18 contra la base real', () => {
     expect(cks.map((c) => c.conname).sort()).toEqual(['ck_autorizacion_canal', 'ck_autorizacion_tipo', 'ck_contrato_enviado_canal', 'ck_contrato_enviado_telefono']);
   });
 
-  test('alta de un adulto sin datos sensibles: NULL en salud y tres autorizaciones con su prueba', async () => {
+  // RQNF-16: desde el alta tambien queda la de mensajes comerciales (por
+  // defecto "no"), y los textos van en la version v2.
+  test('alta de un adulto sin datos sensibles: NULL en salud y cuatro autorizaciones con su prueba', async () => {
     const r = await pedir('POST', '/api/admin/miembros', tokA, alta());
     expect(r.status).toBe(201);
     const id = r.body.miembro.id_miembro;
@@ -201,9 +205,10 @@ describeConBd('RQNF-17 y RQNF-18 contra la base real', () => {
     );
     expect(m).toEqual({ condiciones_medicas: null, alergias: null, acepto_terminos: true, autorizo_datos: true, representante_nombre: null });
     expect(await autorizaciones(id)).toEqual([
-      { tipo: 'TERMINOS', otorgada: true, version_texto: 'v1', canal: 'PANEL', registrada_por: recepA, detalle: null, fecha_de_ahora: true },
-      { tipo: 'TRATAMIENTO_DATOS', otorgada: true, version_texto: 'v1', canal: 'PANEL', registrada_por: recepA, detalle: null, fecha_de_ahora: true },
-      { tipo: 'DATOS_SENSIBLES', otorgada: false, version_texto: 'v1', canal: 'PANEL', registrada_por: recepA, detalle: null, fecha_de_ahora: true },
+      { tipo: 'TERMINOS', otorgada: true, version_texto: 'v2', canal: 'PANEL', registrada_por: recepA, detalle: null, fecha_de_ahora: true },
+      { tipo: 'TRATAMIENTO_DATOS', otorgada: true, version_texto: 'v2', canal: 'PANEL', registrada_por: recepA, detalle: null, fecha_de_ahora: true },
+      { tipo: 'DATOS_SENSIBLES', otorgada: false, version_texto: 'v2', canal: 'PANEL', registrada_por: recepA, detalle: null, fecha_de_ahora: true },
+      { tipo: 'MENSAJES_COMERCIALES', otorgada: false, version_texto: 'v2', canal: 'PANEL', registrada_por: recepA, detalle: null, fecha_de_ahora: true },
     ]);
   });
 
@@ -227,9 +232,9 @@ describeConBd('RQNF-17 y RQNF-18 contra la base real', () => {
     expect(m).toEqual({ ...REP, condiciones_medicas: 'Asma' });
     const a = await autorizaciones(id);
     expect(a.map((x) => [x.tipo, x.otorgada])).toEqual([
-      ['TERMINOS', true], ['TRATAMIENTO_DATOS', true], ['DATOS_SENSIBLES', true], ['REPRESENTANTE_MENOR', true],
+      ['TERMINOS', true], ['TRATAMIENTO_DATOS', true], ['DATOS_SENSIBLES', true], ['MENSAJES_COMERCIALES', false], ['REPRESENTANTE_MENOR', true],
     ]);
-    expect(a[3].detalle).toMatchObject({ ...REP, edad_miembro: 15 });
+    expect(a[4].detalle).toMatchObject({ ...REP, edad_miembro: 15 });
     expect(a[0].detalle).toEqual({ otorgada_por: 'REPRESENTANTE_LEGAL' });
   });
 
@@ -247,7 +252,7 @@ describeConBd('RQNF-17 y RQNF-18 contra la base real', () => {
     expect(m).toEqual({ condiciones_medicas: null, alergias: null });
     const sens = (await autorizaciones(id)).filter((x) => x.tipo === 'DATOS_SENSIBLES');
     expect(sens.map((x) => x.otorgada)).toEqual([true, false]);
-    expect(sens[1]).toMatchObject({ canal: 'PANEL', registrada_por: recepA, version_texto: 'v1' });
+    expect(sens[1]).toMatchObject({ canal: 'PANEL', registrada_por: recepA, version_texto: 'v2' });
 
     const get = await pedir('GET', `/api/admin/miembros/${id}`, tokA);
     expect(get.body.autorizaciones.vigentes.DATOS_SENSIBLES.otorgada).toBe(false);
@@ -261,7 +266,7 @@ describeConBd('RQNF-17 y RQNF-18 contra la base real', () => {
 
     const lista = await pedir('GET', '/api/cliente/autorizaciones', tokCliente);
     expect(lista.status).toBe(200);
-    expect(lista.body.vigentes.DATOS_SENSIBLES).toMatchObject({ otorgada: true, canal: 'PANEL', version: 'v1' });
+    expect(lista.body.vigentes.DATOS_SENSIBLES).toMatchObject({ otorgada: true, canal: 'PANEL', version: 'v2' });
 
     // El mismo id con el gimnasio B no ve nada.
     const ajeno = await pedir('GET', '/api/cliente/autorizaciones', jwt.sign({ role: 'cliente', idMiembro: id, gymId: gymB }, process.env.JWT_SECRET, { expiresIn: '1h' }));
@@ -285,7 +290,56 @@ describeConBd('RQNF-17 y RQNF-18 contra la base real', () => {
       'SELECT canal, telefono_destino, plantilla_version, exito, contenido FROM contrato_enviado WHERE id_miembro = $1',
       [id]
     );
-    expect(entregas).toEqual([{ canal: 'APP', telefono_destino: null, plantilla_version: 'v2', exito: true, contenido: c1.body.contrato }]);
+    expect(entregas).toEqual([{ canal: 'APP', telefono_destino: null, plantilla_version: CONTRATO_VERSION, exito: true, contenido: c1.body.contrato }]);
+  });
+
+  // El panel ya no manda la autorizacion de datos sensibles ni los datos de
+  // salud si no se tocaron en la ficha. Si el miembro la revoco desde la app
+  // con la ficha abierta, guardar otro campo no la vuelve a registrar ni
+  // devuelve los datos que se borraron.
+  test('revocada en la app, guardar la ficha sin tocar los datos sensibles no la devuelve ni restaura los datos de salud', async () => {
+    const r = await pedir('POST', '/api/admin/miembros', tokA, alta({ autorizo_datos_sensibles: true }));
+    const id = r.body.miembro.id_miembro;
+    const tokCliente = jwt.sign({ role: 'cliente', idMiembro: id, gymId: gymA }, process.env.JWT_SECRET, { expiresIn: '1h' });
+    expect((await pedir('PATCH', '/api/cliente/autorizaciones/datos-sensibles', tokCliente, { otorgada: false })).status).toBe(200);
+    const sensibles = async () => (await autorizaciones(id)).filter((a) => a.tipo === 'DATOS_SENSIBLES');
+    const salud = async () => (await pool.query('SELECT ciudad, condiciones_medicas, alergias FROM miembro WHERE id_miembro = $1', [id])).rows[0];
+    expect((await sensibles()).map((a) => [a.otorgada, a.canal])).toEqual([[true, 'PANEL'], [false, 'APP']]);
+
+    // El cuerpo que arma la ficha: todos los campos editables (con el tipo de
+    // documento y la fecha de nacimiento, que llevan el guardado por el camino
+    // de las autorizaciones), sin las tres claves de los datos sensibles.
+    const { miembro: cargado } = (await pedir('GET', `/api/admin/miembros/${id}`, tokA)).body;
+    const ficha = (cambios) => ({
+      nombre: cargado.nombre, documento: cargado.documento, telefono: cargado.telefono, email: '', activo: true,
+      tipo_documento: cargado.tipo_documento, fecha_nacimiento: String(cargado.fecha_nacimiento).slice(0, 10),
+      genero: '', codigo_pais_telefono: cargado.codigo_pais_telefono, ciudad: '', direccion: '',
+      contacto_emergencia: '', telefono_emergencia: '', objetivo: '', nivel_experiencia: '', observaciones: '',
+      ...cambios,
+    });
+
+    // La ficha de ahora: lo sensible solo viaja si se cambio.
+    const soloCiudad = await pedir('PUT', `/api/admin/miembros/${id}`, tokA, ficha({ ciudad: 'Cali' }));
+    expect(soloCiudad.status).toBe(200);
+    expect(await sensibles()).toHaveLength(2);
+    expect(await salud()).toEqual({ ciudad: 'Cali', condiciones_medicas: null, alergias: null });
+    expect((await pedir('GET', '/api/cliente/autorizaciones', tokCliente)).body.vigentes.DATOS_SENSIBLES).toMatchObject({ otorgada: false, canal: 'APP' });
+
+    // Si alguien edita solo un dato de salud, viaja sin la autorizacion y el
+    // servidor decide con la vigente: revocada, no lo guarda ni registra nada.
+    const soloSalud = await pedir('PUT', `/api/admin/miembros/${id}`, tokA, ficha({ ciudad: 'Cali', condiciones_medicas: 'Asma' }));
+    expect(soloSalud.status).toBe(200);
+    expect(await sensibles()).toHaveLength(2);
+    expect(await salud()).toEqual({ ciudad: 'Cali', condiciones_medicas: null, alergias: null });
+
+    // La ficha de antes mandaba siempre lo que habia cargado: con eso el
+    // servidor la registraba otra vez por el panel y volvia a guardar los datos.
+    const comoAntes = await pedir('PUT', `/api/admin/miembros/${id}`, tokA, ficha({
+      ciudad: 'Cali', autorizo_datos_sensibles: true, condiciones_medicas: 'Asma', alergias: 'Penicilina',
+    }));
+    expect(comoAntes.status).toBe(200);
+    expect((await sensibles()).map((a) => [a.otorgada, a.canal])).toEqual([[true, 'PANEL'], [false, 'APP'], [true, 'PANEL']]);
+    expect(await salud()).toEqual({ ciudad: 'Cali', condiciones_medicas: 'Asma', alergias: 'Penicilina' });
   });
 
   test('envio por WhatsApp: guarda canal y texto; un WHATSAPP sin telefono lo rechaza el CHECK', async () => {
@@ -300,7 +354,7 @@ describeConBd('RQNF-17 y RQNF-18 contra la base real', () => {
       'SELECT canal, telefono_destino, plantilla_version, contenido, enviado_por FROM contrato_enviado WHERE id_miembro = $1',
       [id]
     );
-    expect(fila).toMatchObject({ canal: 'WHATSAPP', telefono_destino: '573001234567', plantilla_version: 'v2', enviado_por: adminA });
+    expect(fila).toMatchObject({ canal: 'WHATSAPP', telefono_destino: '573001234567', plantilla_version: CONTRATO_VERSION, enviado_por: adminA });
     expect(fila.contenido).toBe(whatsapp.sendWhatsAppText.mock.calls[0][1]);
 
     await expect(pool.query(

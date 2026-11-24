@@ -5,6 +5,8 @@
 //   - Mis logros (gamificacion)
 //   - Retos activos
 //   - Mi perfil (con editar)
+//   - Mensajes del gimnasio: el interruptor de mensajes comerciales y sus
+//     canales (RQNF-16, Ley 2300 de 2023)
 //   - Cerrar sesion
 
 import 'package:flutter/material.dart';
@@ -12,6 +14,7 @@ import 'package:provider/provider.dart';
 
 import '../providers/auth_provider.dart';
 import '../theme/app_theme.dart';
+import '../widgets/preferencias_comerciales.dart';
 import 'asistencia_screen.dart';
 import 'gamificacion_screen.dart';
 import 'perfil_screen.dart';
@@ -123,6 +126,12 @@ class MoreTab extends StatelessWidget {
             subtitle: 'Ver y editar tus datos personales',
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PerfilScreen())),
           ),
+
+          const SizedBox(height: 8),
+          _SectionLabel('Mensajes del gimnasio'),
+          const PreferenciasComercialesCard(),
+          const SizedBox(height: 18),
+
           _MenuTile(
             icon: Icons.logout,
             color: AppColors.danger,

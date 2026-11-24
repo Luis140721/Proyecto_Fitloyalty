@@ -34,7 +34,11 @@ class PerfilService {
     return Membresia.fromJson(raw as Map<String, dynamic>);
   }
 
-  Future<Miembro> updatePerfil({
+  /// Devuelve el miembro actualizado, el mensaje del servidor y si descarto
+  /// los datos de salud (sin la autorizacion de datos sensibles, RQNF-17, el
+  /// backend guarda condiciones medicas y alergias en NULL). La pantalla no
+  /// debe decir solo "Perfil actualizado" en ese caso (ajuste 7 del #102).
+  Future<({Miembro miembro, String mensaje, bool sensiblesDescartados})> updatePerfil({
     String? telefono,
     String? email,
     String? direccion,
@@ -57,6 +61,10 @@ class PerfilService {
       'nivel_experiencia':   ?nivelExperiencia,
     };
     final data = await _api.put('/cliente/me', body: body);
-    return Miembro.fromJson(data['miembro'] as Map<String, dynamic>);
+    return (
+      miembro: Miembro.fromJson(data['miembro'] as Map<String, dynamic>),
+      mensaje: data['message']?.toString() ?? 'Perfil actualizado.',
+      sensiblesDescartados: data['datos_sensibles_descartados'] == true,
+    );
   }
 }

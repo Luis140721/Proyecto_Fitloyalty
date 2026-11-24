@@ -151,3 +151,55 @@ En las dos bases, dos corridas cada una: 15 de 15. `registro-envio-real.test.js`
 - Guardar la ficha de un miembro antiguo sin marcar la autorización borra sus datos de salud (el panel lo avisa antes). Es lo que pide la ley, pero cambia lo que el personal estaba acostumbrado a ver.
 - La autorización de mensajes comerciales (`MENSAJES_COMERCIALES`) está prevista en la tabla, pero esta rama no la registra.
 - No se probó en un navegador ni en un teléfono: el panel se comprobó compilando y la app con `flutter analyze`.
+
+## Ajustes del verificador del #102 (rama `feat/rqnf-16-ley2300`, 2026-11-21)
+
+El verificador del #102 dejó observaciones. Estas son las de RQNF-17 que se corrigieron junto con RQNF-16 (ver `docs/evidencias/rqnf-16-ley-2300.md`); las de RQNF-18 están en `rqnf-18-contrato-consumidor.md`.
+
+| Obs. | Qué pasaba | Qué se hizo | Dónde | Prueba |
+|---|---|---|---|---|
+| 1 | `PUT {autorizo_datos_sensibles: true}` sin datos de salud armaba un `UPDATE miembro SET  WHERE` vacío y respondía 503 | Si no hay columnas que actualizar, se lee la fila con un `SELECT` | `backend/src/routes/miembros.js:526-546` | `ley2300-preferencias.test.js` («(1) …»), `ley2300-real.test.js` («(1) …») |
+| 2 | Vaciar la fecha de nacimiento o cambiar la TI por otro documento iba por el camino simple: el menor dejaba de ser menor sin validación ni constancia | Cualquier cambio de fecha o de tipo de documento va por la transacción (`miembros.js:270-288`). Un menor solo deja de serlo con una fecha válida que muestre 18 años o más, y queda una fila `REPRESENTANTE_MENOR` con `otorgada = false` y `detalle.motivo = 'MAYOR_DE_EDAD'` (antes, después, edad y quién lo cambió). Sin fecha: 400 `MENOR_SIN_CONSTANCIA` | `miembros.js:425-446` | tres casos en `ley2300-preferencias.test.js` y uno en `ley2300-real.test.js` |
+| 2 (efecto) | Con el cambio anterior, una edición que solo cambiaba la fecha borraba de rebote los datos de salud viejos sin autorización | Solo se borran si la edición habla de datos de salud (autorización, condiciones o alergias) | `miembros.js:484-497` | `autorizaciones.test.js` («vaciar la fecha de un adulto …») |
+| 5 | El texto del representante no registraba que se escuchó al menor (Decreto 1377, art. 12; Decreto 1074, art. 2.2.2.25.2.9) | Texto nuevo en la versión **v2** de las autorizaciones: «Antes de autorizar escuché al menor y tuve en cuenta su opinión según su madurez, autonomía y capacidad para entender el asunto». Los demás textos de la v1 se copian iguales a la v2; las filas viejas conservan su versión. El panel usa los mismos textos (una prueba compara los dos archivos) | `backend/src/lib/autorizaciones.js:31-82`; `frontend/src/lib/autorizaciones.js` | `ley2300-preferencias.test.js` («(5) …», dos pruebas) |
+| 7 | La app decía «Perfil actualizado» aunque el backend descartara las condiciones médicas y alergias por falta de autorización | `updatePerfil` devuelve también el mensaje del servidor y `datos_sensibles_descartados`; si hubo descarte, la app muestra el aviso del servidor en amarillo | `fitloyalty_cliente/lib/cliente/services/perfil_service.dart:37-69`, `providers/perfil_provider.dart`, `screens/editar_perfil_screen.dart:92-112` | `flutter analyze` sin problemas |
+
+Además, con RQNF-16 el tipo `MENSAJES_COMERCIALES` ya se usa (deja de ser solo una reserva): el alta registra la decisión del miembro (por defecto «no»), la ficha tiene el interruptor, y la de un menor la da su representante (`detalle.otorgada_por`). El historial del panel y de la app muestra el canal `ENLACE` (baja con el enlace de los mensajes). Las páginas legales citan ahora el Decreto 1074 de 2015 junto al 1377 (art. 6 → 2.2.2.25.2.3, art. 7 → 2.2.2.25.2.4, art. 8 → 2.2.2.25.2.5, art. 12 → 2.2.2.25.2.9) y dicen que el texto del representante deja constancia de que escuchó al menor.
+
+Pruebas que cambiaron por estos ajustes: `autorizaciones.test.js` (versión v2, cuatro filas en el alta y la prueba del efecto de la obs. 2), `legal-real.test.js` (v2, la fila de mensajes comerciales del alta y el contrato v3) y `miembros-update.test.js` (la fecha vacía ahora va por la transacción). Todas pasan sin base y contra `fl_consultas` y `fl_migraciones` (683 de 683 después de fusionar develop `ad90d73` y de las tres rondas de ajustes del #108).
+
+Límite que sigue: si un miembro adulto (CC) nunca tuvo fecha y en realidad es menor, el sistema no lo puede saber; el ajuste solo impide que un menor ya registrado como tal deje de serlo sin constancia.
+
+## Las autorizaciones no se arrastran (rama `fix/autorizaciones-sin-arrastre`, 2026-11-22)
+
+Dos caminos del panel registraban una autorización que nadie había dado. Salieron de las pruebas y revisiones del #108 y se corrigen aparte, sobre esa rama (PR #116).
+
+| # | Qué pasaba | Arreglo | Dónde |
+|---|---|---|---|
+| 1 | **El alta que se cerraba sin crear al miembro conservaba el borrador, casillas incluidas.** «Cerrar» solo ocultaba el asistente: «Nuevo miembro» lo reabría en el mismo paso con los datos y las casillas del registro anterior (contrato, tratamiento de datos, datos sensibles con sus datos de salud, la del representante legal y, desde RQNF-16, mensajes comerciales). Si se escribía encima otro miembro y se creaba sin revisar el paso 5, quedaba con autorizaciones que no dio | «Nuevo miembro» abre siempre en blanco y en el paso 1, sin los avisos de error del alta anterior. «Cerrar» descarta lo escrito; si hay algo escrito, elegido o marcado, antes pregunta. Con el miembro creándose, «Cerrar» queda deshabilitado | `frontend/src/pages/MiembrosPage.jsx` (`abrirAlta`, `cerrarAlta`, `reiniciarAlta`, `hayBorrador`) |
+| 2 | **La ficha mandaba la autorización de datos sensibles y los datos de salud en cada guardado**, tal como habían llegado. El miembro puede revocarla desde la app (`PATCH /cliente/autorizaciones/datos-sensibles`), y al revocar se borran sus datos de salud. Si lo hacía con la ficha abierta, guardar cualquier otro campo la volvía a registrar por el panel y devolvía los datos borrados; al revés, una autorización dada en la app se revocaba | La autorización solo viaja si se cambió en esa ficha, y cada dato de salud solo si cambió (también cuando la autorización sí cambia). Si solo cambia un dato de salud, viaja sin la autorización y el servidor decide con la vigente. Tras un guardado que falla sin respuesta del servidor (sin conexión, corte por tiempo) o con un 5xx, el siguiente reenvía lo que aquel llevaba; un rechazo del servidor (400 a 499) no cuenta, porque no aplicó nada | `frontend/src/pages/MiembrosPage.jsx` (`sensiblesCargados`, `mismoTexto`, `NO_SE_SABE`) |
+
+No cambia el backend: `PUT /admin/miembros/:id` ya trataba las tres claves como opcionales y solo registra una autorización cuando llega y es distinta de la vigente (`backend/src/routes/miembros.js`, bloque «Datos sensibles»). Al otorgarla conserva los datos que haya y al revocarla los borra, así que no hace falta mandar los que no cambiaron. Un miembro que llega con datos de salud pero sin autorización (`datos_sensibles_sin_autorizacion`) sigue igual: al guardar viaja vacío el texto que tenía contenido y el servidor borra los dos, como dice el aviso.
+
+La regla del rechazo (400 a 499) vale también para la aceptación de mensajes comerciales del #108 (`comercialesCargados`).
+
+**Cómo se probó** (22 de noviembre; Windows 11, Node 24; integración y E2E en contenedores con PostgreSQL 16.15):
+
+| Prueba | Resultado |
+|---|---|
+| `frontend/tests/MiembrosPage.altaEnBlanco.test.jsx` (46) | El alta siguiente abre en blanco y en el paso 1 tras cerrar o tras crear; el POST del nuevo miembro no lleva nada del descartado (ni el representante legal de un menor, ni el plan, los valores o las demás elecciones); sin marcar contrato y datos no se crea; «Cerrar» pregunta con cualquier campo escrito, elegido o marcado (un caso por campo) y no pregunta con el formulario sin tocar; decir que no deja todo como estaba; los errores por campo y el aviso general no pasan al siguiente; el botón de la lista vacía no reinicia un alta abierta; «Cerrar» deshabilitado con el miembro creándose |
+| `frontend/tests/MiembrosPage.sensibles.test.jsx` (29) | Sin tocar los datos sensibles no viaja ninguna de las tres claves; otorgar manda `true` y solo los textos escritos; revocar manda `false` y vacíos los textos que había; cambiar solo un texto manda ese texto sin la autorización; marcar y desmarcar no viaja; el registro con datos de salud y sin autorización; guardados fallidos (sin conexión, 500 y 503 reenvían; 400 y 409 no); el menor con representante |
+| `frontend/tests/MiembrosPage.comerciales.test.jsx` (+4, 26) | La misma regla del rechazo para la aceptación de mensajes comerciales |
+| `backend/tests/legal-real.test.js`, contra PostgreSQL: «revocada en la app, guardar la ficha sin tocar los datos sensibles no la devuelve ni restaura los datos de salud» | Con el cuerpo que arma la ficha (todos los campos editables, con tipo de documento y fecha de nacimiento) y la autorización revocada desde la app, el PUT no agrega ninguna fila a `autorizacion_miembro` ni restaura los datos; un dato de salud suelto no se guarda; el PUT que armaba antes la registraba otra vez por el panel |
+| Panel completo (`pnpm test`) | 895 de 895, 48 archivos; cobertura 87,37 % líneas, 93,98 % ramas, 96,03 % funciones (umbral 85 / 92 / 93) |
+| Backend sin base (`pnpm test`) | 1329 pasan, 243 se saltan (integración) |
+| Integración (`test:integracion`) | 263 de 263, ninguna saltada (`legal-real` 8) |
+| E2E (Playwright) | 44 de 44 |
+
+Cada prueba nueva del panel se hizo fallar con un cambio temporal en el código (65 cambios, todos revertidos). Cuatro sobreviven porque no cambian nada que se pueda observar: quitar el reinicio de `cerrarAlta` (el alta siempre se reabre por `abrirAlta`, que reinicia; quitar el de `abrirAlta` sí falla), limpiar lo cargado al abrir otra ficha (la carga lo sobrescribe antes de que se pueda guardar), la guarda de la marca «no se sabe» (el texto de pantalla nunca coincide con ella) y la guarda de `cerrarAlta` con el miembro creándose (el botón ya está deshabilitado; sin las dos cosas sí falla).
+
+**Revisión independiente (sobre `1d0efd9`): sin bloqueos.** Reprodujo las cifras, corrió 35 cambios temporales propios y probó contra PostgreSQL siete casos con el cuerpo real de la ficha. De sus observaciones salieron el aviso general que quedaba sobre el alta siguiente, los datos de salud que viajaban sin cambiar al otorgar la autorización (podían borrar un dato que el miembro acabara de escribir en la app), la regla del rechazo, el botón deshabilitado y 32 pruebas más.
+
+**Lo que queda igual a propósito:**
+- «Valor total del plan», «Fecha inicio» y «Estado del pago» no cuentan como borrador aunque se editen a mano, porque son los que el formulario calcula solo; con solo eso cambiado, «Cerrar» no pregunta.
+- Salir a otra página con un alta a medio escribir la descarta sin preguntar, igual que antes.

@@ -14,6 +14,10 @@ hora de Colombia), más una corrida de calentamiento a las 4:50 que no cuenta
 **Estado al 2026-11-06:** este monitor no sirve como evidencia, porque GitHub
 casi no lo corre. Ver «Reporte del período».
 
+**Desde el 2026-11-22 a las 23:30 (Colombia) mide un monitor externo,
+UptimeRobot, cada 5 minutos.** Ver «Monitor externo (UptimeRobot)». La
+evidencia de RQNF-02 sale de ese monitor.
+
 ## Requisito
 
 Texto de RQNF-02 en la matriz y en el documento de requisitos:
@@ -250,6 +254,59 @@ la muestra no cubre el período. Tampoco mide caídas reales:
 Por eso el calendario anterior (Parcial el 26 de octubre e Implementado el 1 de
 noviembre) queda sin efecto y RQNF-02 sigue Pendiente.
 
+## Monitor externo (UptimeRobot)
+
+| Dato | Valor |
+|---|---|
+| Proveedor | UptimeRobot, plan gratuito, en la cuenta de Luis |
+| Monitor | «FitLoyalty API (Render) - healthz», tipo HTTP(S) |
+| URL | https://fitloyalty-api.onrender.com/api/healthz |
+| Intervalo | 5 minutos, las 24 horas |
+| Activo desde | **2026-11-22 a las 23:30 de Colombia** (2026-11-23 04:30 UTC) |
+| Página pública de estado | https://stats.uptimerobot.com/zqKSy3C8RT («FitLoyalty - Estado del servicio») |
+| Alertas | Correo a la cuenta de Luis |
+
+**Qué cuenta como arriba.** UptimeRobot da por arriba una respuesta HTTP 2xx o
+3xx dentro de su tiempo de espera. `/api/healthz` solo responde `200` con
+`{"status":"ok", …}` (`backend/src/index.js`, `app.get('/api/healthz', …)`), así
+que «arriba» coincide con el criterio de esta evidencia: HTTP `200` con
+`"status":"ok"`. UptimeRobot consulta con `HEAD`; Express responde un `HEAD`
+por la misma ruta `GET`, con el mismo código y sin el cuerpo.
+
+**Primera comprobación.** Falló: Render tenía el servicio hibernando y
+respondió `503` con `x-render-routing: hibernate-wake-error` mientras
+despertaba (incidente del 2026-11-22, de 23:31:30 a 23:36:34 de Colombia,
+5 min 4 s). Desde la revisión de las 23:36 responde `200`. Esa caída queda
+fuera del horario operativo (después de las 22:00) y antes de la primera
+semana completa, así que no cuenta en el reporte. Es el mismo arranque en frío
+que hacía fallar a diario al monitor de GitHub.
+
+**También mantiene despierto a Render.** Con una consulta cada 5 minutos el
+servicio gratuito no llega a dormirse (se duerme tras 15 minutos sin tráfico),
+así que deja de pagar el arranque en frío de unos 30 segundos que hacía fallar
+al monitor de GitHub. Un servicio gratuito despierto todo el mes gasta casi las
+750 horas gratuitas del workspace de Render: si el workspace de Santiago tiene
+otro servicio gratuito, entre los dos podrían agotarlas antes de fin de mes.
+
+**Cómo se arma el reporte.** UptimeRobot mide las 24 horas; el requisito solo
+pide el horario operativo (5:00 a 22:00 de Colombia). Al cierre del período:
+
+1. Del registro de eventos del monitor, anotar cada caída con su inicio y su
+   duración, en hora de Colombia.
+2. Por cada día, contar los minutos caídos que quedan dentro de 5:00 a 22:00
+   (1.020 minutos por día) y calcular `(1020 - minutos caídos) / 1020 * 100`.
+3. La semana es la suma de los siete días: `(7140 - minutos caídos) / 7140 * 100`.
+4. Anotar también el porcentaje de 24 horas que muestra UptimeRobot, aparte.
+
+**Calendario.**
+
+| Fecha | Qué se puede decir |
+|---|---|
+| Lunes 2026-11-23 a las 22:00 | Primer día operativo completo medido: RQNF-02 puede pasar a **Parcial** con ese día en el reporte |
+| Viernes 2026-11-27 (entrega) | «En medición desde el 22 de noviembre», con los días completos que lleve (lunes a jueves) |
+| Domingo 2026-11-29 a las 22:00 | Cierra la primera semana completa (lunes 23 a domingo 29). Con 99 % o más, **Implementado** |
+| Lunes 2026-11-30 | Llenar el reporte con los siete días |
+
 ## Criterio de estado de RQNF-02
 
 | Estado | Condición |
@@ -260,11 +317,13 @@ noviembre) queda sin efecto y RQNF-02 sigue Pendiente.
 
 ## Pendiente para completar D3
 
-1. Activar un monitor externo que mida cada 5 minutos, como UptimeRobot, que se
-   recomendó en la primera versión de este informe. También mantiene despierto
-   a Render. Antes hay que confirmar que el workspace no tenga otros servicios
-   gratuitos: un sondeo 24/7 gasta casi todas las horas del mes.
-2. Anotar aquí el proveedor y la fecha y hora en que quedó activo.
-3. Al cierre del período, llenar el reporte con los datos del monitor externo,
-   con una fila por día de Colombia y una fila con la suma de la semana.
-4. Decidir si se apaga `availability-monitor.yml`, que ya no aporta evidencia.
+1. ~~Activar un monitor externo que mida cada 5 minutos.~~ Hecho: UptimeRobot,
+   desde el 2026-11-22 a las 23:30 de Colombia.
+2. ~~Anotar aquí el proveedor y la fecha y hora en que quedó activo.~~ Hecho:
+   ver «Monitor externo (UptimeRobot)».
+3. Confirmar con Santiago que el workspace de Render no tenga otro servicio
+   gratuito que consuma las 750 horas del mes.
+4. Al cierre del período (lunes 2026-11-30), llenar el reporte con los datos
+   del monitor externo, con una fila por día de Colombia y una fila con la suma
+   de la semana, como dice «Cómo se arma el reporte».
+5. Decidir si se apaga `availability-monitor.yml`, que ya no aporta evidencia.

@@ -2,7 +2,7 @@
  * RQF-10 y RQF-12 sin base de datos (corren en el CI). Las pruebas contra la
  * base real estan en retos-campanas-real.test.js.
  */
-const { personalizar, ejecutarCampana } = require('../src/lib/campanas');
+const { personalizar } = require('../src/lib/campanas');
 const { estadoPorFechas, mensajeRetos, porcentaje, actualizarRetos } = require('../src/lib/retos');
 const { consultaSegmento, diasDe } = require('../src/lib/segmentos');
 
@@ -71,60 +71,6 @@ describe('retos: ayudantes', () => {
   });
 });
 
-describe('ejecutarCampana con base falsa', () => {
-  function poolFalso({ estado = 'PROGRAMADA', miembros }) {
-    const consultas = [];
-    const client = {
-      query: jest.fn(async (sql, params) => {
-        consultas.push({ sql, params });
-        if (/FROM campana c/.test(sql)) {
-          return { rows: [{ id_campana: 5, id_gimnasio: 1, nombre: 'C', segmento: 'TODOS', mensaje: 'Hola {primer_nombre}', canal: 'WHATSAPP', estado, activa: true, gimnasio: 'G' }] };
-        }
-        if (/FROM miembro m/.test(sql)) return { rows: miembros };
-        if (/UPDATE campana_destinatario/.test(sql)) return { rows: [{ estado_envio: params[2] }] };
-        return { rows: [] };
-      }),
-      release: jest.fn(),
-    };
-    return { pool: { connect: async () => client }, consultas };
-  }
-  const deps = (extra = {}) => ({
-    canalDelGimnasio: async () => 9,
-    enviarCorreo: async () => ({ delivered: true }),
-    enviarWhatsapp: jest.fn(async () => {}),
-    whatsappActivo: () => true,
-    ...extra,
-  });
-
-  test('una campana ya enviada no se vuelve a ejecutar', async () => {
-    const { pool } = poolFalso({ estado: 'ENVIADA', miembros: [] });
-    expect(await ejecutarCampana(pool, { idCampana: 5, gymId: 1 }, deps())).toBeNull();
-  });
-
-  test('si WhatsApp no esta listo, deja el resto pendiente para enviar a mano', async () => {
-    const miembros = [
-      { id_miembro: 1, nombre: 'Ana', telefono: '3001112233' },
-      { id_miembro: 2, nombre: 'Beto', telefono: '3002223344' },
-      { id_miembro: 3, nombre: 'Sin tel', telefono: null },
-    ];
-    const err = Object.assign(new Error('no listo'), { code: 'WHATSAPP_NO_LISTO' });
-    const enviarWhatsapp = jest.fn().mockRejectedValue(err);
-    const { pool, consultas } = poolFalso({ miembros });
-    const r = await ejecutarCampana(pool, { idCampana: 5, gymId: 1 }, deps({ enviarWhatsapp }));
-    expect(r).toMatchObject({ destinatarios: 3, enviados: 0, pendientes: 2, fallidos: 1 });
-    expect(enviarWhatsapp).toHaveBeenCalledTimes(1); // no insiste despues del primer fallo
-    const envios = consultas.filter((c) => /INSERT INTO envio_mensaje/.test(c.sql));
-    expect(envios).toHaveLength(1); // solo el que no tiene telefono queda FALLIDO
-    expect(envios[0].params[6]).toBe('FALLIDO');
-  });
-
-  test('con WhatsApp listo envia el texto personalizado y deja constancia', async () => {
-    const enviarWhatsapp = jest.fn(async () => {});
-    const { pool, consultas } = poolFalso({ miembros: [{ id_miembro: 1, nombre: 'Ana Gómez', telefono: '3001112233' }] });
-    const r = await ejecutarCampana(pool, { idCampana: 5, gymId: 1, usuarioId: 4 }, deps({ enviarWhatsapp }));
-    expect(r).toMatchObject({ enviados: 1, pendientes: 0 });
-    expect(enviarWhatsapp).toHaveBeenCalledWith('573001112233', 'Hola Ana');
-    const envio = consultas.find((c) => /INSERT INTO envio_mensaje/.test(c.sql));
-    expect(envio.params).toEqual([1, 1, 9, 5, null, 'Hola Ana', 'ENVIADO', 4]);
-  });
-});
+// La ejecucion de campanas (con las reglas de la Ley 2300, RQNF-16) se prueba
+// con una base falsa con estado en campanas-ley2300.test.js, y contra la base
+// real en retos-campanas-real.test.js y ley2300-real.test.js.

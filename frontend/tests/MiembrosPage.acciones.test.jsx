@@ -574,8 +574,11 @@ describe('MiembrosPage: desactivar y eliminar', () => {
 });
 
 describe('MiembrosPage: cancelar el alta', () => {
-  test('should close the wizard and keep the list when the person clicks Cerrar in the header', async () => {
+  // Cerrar el alta descarta lo escrito (el siguiente registro empieza en blanco), asi que antes pregunta.
+  // Lo que pasa con el borrador esta en MiembrosPage.altaEnBlanco.test.jsx.
+  test('should ask before discarding, close the wizard and keep the list when the person clicks Cerrar in the header and confirms', async () => {
     // Arrange
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
     const { user } = await abrirAlta();
     await user.type(campo(/^Nombre completo/), 'Sofía Gómez');
 
@@ -583,6 +586,8 @@ describe('MiembrosPage: cancelar el alta', () => {
     await user.click(screen.getByRole('button', { name: 'Cerrar' }));
 
     // Assert
+    expect(window.confirm).toHaveBeenCalledTimes(1);
+    expect(window.confirm).toHaveBeenCalledWith('¿Cerrar sin crear el miembro? Se descarta lo que escribiste: el siguiente registro empieza en blanco.');
     expect(screen.queryByText('Paso 1 de 5')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Nuevo miembro' })).toBeInTheDocument();
     expect(filaDe('Ana Pérez')).toBeInTheDocument();

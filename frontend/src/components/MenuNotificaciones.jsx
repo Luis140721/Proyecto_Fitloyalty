@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import IconoWhatsapp from './IconoWhatsapp';
+import { abrirWhatsappAutorizado } from '../lib/contactoWhatsapp';
 
 /**
  * components/MenuNotificaciones.jsx
@@ -29,7 +30,7 @@ export default function MenuNotificaciones() {
   const [cargando, setCargando] = useState(false);
   // Avisos a los que ya se les escribio en esta sesion, para marcarlos.
   const [enviados, setEnviados] = useState(() => new Set());
-  // Si el envio se abrio pero no quedo registrado, se dice sin estorbar.
+  // Si no se pudo abrir el envio (Ley 2300 o error al registrarlo), se dice sin estorbar.
   const [avisoRegistro, setAvisoRegistro] = useState('');
   const [error, setError] = useState('');
   const contenedorRef = useRef(null);
@@ -94,28 +95,34 @@ export default function MenuNotificaciones() {
    * para que la persona lo revise y le de enviar, que ademas es lo que exige
    * WhatsApp desde un enlace.
    *
-   * El envio queda registrado en el sistema para poder demostrar que se
-   * contacto al miembro, aunque la entrega la haga el telefono del gimnasio.
+   * RQNF-16 (Ley 2300 de 2023): primero se registra el envio, y el servidor
+   * revisa el horario, la frecuencia y, si es un mensaje comercial (en
+   * riesgo, reto), que el miembro lo haya aceptado. Solo si lo acepta se abre
+   * el chat, con el texto que devuelve (al comercial le agrega el enlace de
+   * baja). Si no, se dice por que y no se abre nada.
    */
   const escribirPorWhatsapp = async (aviso, e) => {
     e.stopPropagation();          // no navegar al miembro al mismo tiempo
-    const url = `https://wa.me/${aviso.telefono}?text=${encodeURIComponent(aviso.mensaje || '')}`;
-    window.open(url, '_blank', 'noopener,noreferrer');
-    setEnviados((prev) => new Set(prev).add(aviso.id));
     setAvisoRegistro('');
-    try {
-      // mensaje: el texto que se abrio en WhatsApp (RQF-09, mensaje_copiado).
+    const r = await abrirWhatsappAutorizado(async () => {
+      // mensaje: el texto que se abre en WhatsApp (RQF-09, mensaje_copiado).
       // idAlerta solo viene en los avisos "en riesgo".
-      await api.post('/admin/notificaciones/enviado', {
+      const { data } = await api.post('/admin/notificaciones/enviado', {
         idMiembro: aviso.idMiembro,
         canal: 'WHATSAPP',
         tipo: aviso.tipo,
         mensaje: aviso.mensaje,
         idAlerta: aviso.idAlerta,
+        antesDeAbrir: true,
       });
-    } catch (_) {
-      // El mensaje igual se abrio: no se interrumpe, solo se deja una nota.
-      setAvisoRegistro(`Se abrió WhatsApp, pero no pudimos registrar el envío a ${aviso.nombreMiembro}.`);
+      return `https://wa.me/${aviso.telefono}?text=${encodeURIComponent(data.mensaje || aviso.mensaje || '')}`;
+    });
+    if (r.ok) {
+      setEnviados((prev) => new Set(prev).add(aviso.id));
+    } else {
+      setAvisoRegistro(r.error?.code === 'CONTACTO_NO_PERMITIDO'
+        ? `No se abrió WhatsApp: ${r.error.message}`
+        : `No se abrió WhatsApp porque no pudimos registrar el envío a ${aviso.nombreMiembro}. Intenta de nuevo.`);
     }
   };
 

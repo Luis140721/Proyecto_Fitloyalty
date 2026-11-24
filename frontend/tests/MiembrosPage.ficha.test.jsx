@@ -11,8 +11,9 @@
  * con la hora de Colombia, como el navegador de recepcion: en UTC, como el CI,
  * el defecto no se veria.
  */
+import { StrictMode } from 'react';
 import { describe, expect, test, vi, beforeAll, beforeEach, afterEach, afterAll } from 'vitest';
-import { screen, within, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, within, waitFor } from '@testing-library/react';
 import MiembrosPage from '../src/pages/MiembrosPage';
 import { renderWithProviders } from './renderWithProviders';
 
@@ -57,6 +58,9 @@ const EDITABLES = [
   // RQNF-17 (#102): la autorizacion de datos sensibles y los datos del representante legal.
   'autorizo_datos_sensibles', 'autoriza_representante', 'representante_nombre', 'representante_tipo_documento',
   'representante_documento', 'representante_parentesco', 'representante_telefono',
+  // RQNF-16 (#108): la aceptacion de mensajes comerciales y sus canales (updateSchema de routes/miembros.js).
+  // La API los acepta, pero la ficha solo los manda si la decision se cambio en ella.
+  'acepta_mensajes_comerciales', 'canales_comerciales',
 ];
 
 let plan, congelaciones;
@@ -134,6 +138,10 @@ describe('MiembrosPage: la ficha del miembro', () => {
     const [url, cuerpo] = mockPut.mock.calls[0];
     expect(url).toBe('/admin/miembros/1');
     expect(cuerpo).toMatchObject({ telefono: '3007654321', ciudad: 'Medellín', fecha_nacimiento: '1990-05-17', activo: true });
+    // RQNF-16: la decision sobre los mensajes comerciales no se toco en esta ficha, asi que no viaja:
+    // guardar otro campo no registra una aceptacion ni una baja que nadie decidio.
+    expect(cuerpo).not.toHaveProperty('acepta_mensajes_comerciales');
+    expect(cuerpo).not.toHaveProperty('canales_comerciales');
     expect(Object.keys(cuerpo).filter((k) => !EDITABLES.includes(k))).toEqual([]);
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
@@ -590,9 +598,31 @@ describe('MiembrosPage: el QR y el contrato', () => {
 });
 
 describe('MiembrosPage: el aviso por WhatsApp de la lista', () => {
-  test('should open the chat with the message of the server and record it without opening the file when WhatsApp is clicked', async () => {
-    // Arrange
-    const abrir = vi.spyOn(window, 'open').mockReturnValue(null);
+  /** La pestaña en blanco que abre el clic, como la usa src/lib/contactoWhatsapp.js. */
+  const pestanaEnBlanco = () => ({ closed: false, opener: window, location: { replace: vi.fn() }, close: vi.fn() });
+  // Un miembro en riesgo: escribirle es un mensaje de retencion, o sea comercial (Ley 2300).
+  const LUISA = {
+    id_miembro: 3, nombre: 'Luisa Gómez', documento: '52999888', telefono: '3001112233', codigo_qr: 'QR-LUISA', activo: true, enRiesgo: true,
+    whatsapp: { motivo: 'riesgo', telefono: '573001112233', mensaje: 'Hola Luisa, en Gimnasio Central te extrañamos.' },
+  };
+  const abrirListaCon = async (...miembros) => {
+    mockGet = vi.fn(async (url) => (url === '/admin/config' ? { data: { config: {} } } : { data: { miembros } }));
+    const pantalla = renderWithProviders(<MiembrosPage />, { route: '/admin/miembros' });
+    await screen.findByRole('row', { name: new RegExp(miembros[0].nombre) });
+    return pantalla;
+  };
+
+  // RQNF-16 (#108): antes el chat se abria con el texto de la lista y despues se registraba. Ahora
+  // el clic abre una pestaña en blanco, se registra (antesDeAbrir) y la pestaña va a wa.me con el
+  // texto que devuelve el servidor: en un aviso del plan, el de su plantilla.
+  test('should record the sending first and open the chat with the message of the server without opening the file when WhatsApp is clicked', async () => {
+    // Arrange: el texto del servidor es distinto del de la lista, para saber cual se abre
+    const DEL_SERVIDOR = 'Hola Carlos, tu plan en Gimnasio Central venció hace 3 días. Renuévalo cuando quieras.';
+    const ventana = pestanaEnBlanco();
+    const abrir = vi.spyOn(window, 'open').mockReturnValue(ventana);
+    mockPost = vi.fn(async () => ({
+      data: { message: 'Envio registrado.', envio: { id_envio: 70, estado: 'ENVIADO' }, mensaje: DEL_SERVIDOR, clase: 'AVISO', texto_del_servidor: true },
+    }));
     const { user } = renderWithProviders(<MiembrosPage />, { route: '/admin/miembros' });
     await screen.findByRole('row', { name: /Carlos Ruiz/ });
 
@@ -600,21 +630,29 @@ describe('MiembrosPage: el aviso por WhatsApp de la lista', () => {
     await user.click(within(filaDe('Carlos Ruiz')).getByRole('button', { name: 'Avisar' }));
 
     // Assert
-    expect(abrir).toHaveBeenCalledWith(
-      `https://wa.me/573109876543?text=${encodeURIComponent(CARLOS.whatsapp.mensaje)}`, '_blank', 'noopener,noreferrer',
-    );
-    // El registro guarda tambien el texto que se abrio en WhatsApp (RQF-09, #73).
-    await waitFor(() => expect(mockPost).toHaveBeenCalledWith('/admin/notificaciones/enviado', {
-      idMiembro: 2, canal: 'WHATSAPP', tipo: 'vencida', mensaje: CARLOS.whatsapp.mensaje,
-    }));
-    expect(within(filaDe('Carlos Ruiz')).getByRole('button', { name: 'Enviado' })).toBeInTheDocument();
+    expect(await within(filaDe('Carlos Ruiz')).findByRole('button', { name: 'Enviado' })).toBeInTheDocument();
+    expect(abrir).toHaveBeenCalledTimes(1);
+    expect(abrir).toHaveBeenCalledWith('about:blank', '_blank');
+    // El registro lleva el texto de la lista (RQF-09, #73) y avisa que el chat todavia no se abrio.
+    expect(mockPost).toHaveBeenCalledTimes(1);
+    expect(mockPost).toHaveBeenCalledWith('/admin/notificaciones/enviado', {
+      idMiembro: 2, canal: 'WHATSAPP', tipo: 'vencida', mensaje: CARLOS.whatsapp.mensaje, antesDeAbrir: true,
+    });
+    expect(ventana.location.replace).toHaveBeenCalledTimes(1);
+    expect(ventana.location.replace).toHaveBeenCalledWith(`https://wa.me/573109876543?text=${encodeURIComponent(DEL_SERVIDOR)}`);
+    expect(mockPost.mock.invocationCallOrder[0]).toBeLessThan(ventana.location.replace.mock.invocationCallOrder[0]);
+    expect(ventana.opener).toBeNull();
+    expect(ventana.close).not.toHaveBeenCalled();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(screen.queryByText(/no pudimos registrar el envío/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/No se abrió WhatsApp/)).not.toBeInTheDocument();
   });
 
-  test('should warn that the sending was not recorded when the chat opens but the record fails', async () => {
+  // RQNF-16: el escenario viejo («se abrio WhatsApp pero no quedo registrado», con el boton en
+  // «Enviado») ya no existe: sin registro no se abre el chat. Este es el equivalente.
+  test('should not open the chat and warn that the sending could not be recorded when the record fails', async () => {
     // Arrange
-    vi.spyOn(window, 'open').mockReturnValue(null);
+    const ventana = pestanaEnBlanco();
+    const abrir = vi.spyOn(window, 'open').mockReturnValue(ventana);
     mockPost = vi.fn(async () => { throw { status: 503, code: 'DB_UNREACHABLE', message: 'Sin conexion.' }; });
     const { user } = renderWithProviders(<MiembrosPage />, { route: '/admin/miembros' });
     await screen.findByRole('row', { name: /Carlos Ruiz/ });
@@ -623,10 +661,60 @@ describe('MiembrosPage: el aviso por WhatsApp de la lista', () => {
     await user.click(within(filaDe('Carlos Ruiz')).getByRole('button', { name: 'Avisar' }));
 
     // Assert
-    expect(await screen.findByRole('status')).toHaveTextContent(
-      'Se abrió WhatsApp, pero no pudimos registrar el envío a Carlos Ruiz.',
+    expect(within(await screen.findByRole('status')).getByText(
+      'No se abrió WhatsApp porque no pudimos registrar el envío a Carlos Ruiz. Intenta de nuevo.',
+    )).toBeInTheDocument();
+    expect(ventana.location.replace).not.toHaveBeenCalled();
+    expect(ventana.close).toHaveBeenCalledTimes(1);
+    expect(abrir).toHaveBeenCalledTimes(1);
+    expect(abrir).toHaveBeenCalledWith('about:blank', '_blank');
+    expect(within(filaDe('Carlos Ruiz')).getByRole('button', { name: 'Avisar' })).toBeInTheDocument();
+    expect(within(filaDe('Carlos Ruiz')).queryByRole('button', { name: 'Enviado' })).not.toBeInTheDocument();
+  });
+
+  test('should not open the chat and say why when the member at risk has not accepted commercial messages', async () => {
+    // Arrange: el 409 de POST /admin/notificaciones/enviado para un mensaje de retencion sin aceptacion
+    const ventana = pestanaEnBlanco();
+    vi.spyOn(window, 'open').mockReturnValue(ventana);
+    mockPost = vi.fn(async () => {
+      throw { status: 409, code: 'CONTACTO_NO_PERMITIDO', message: 'Luisa no ha aceptado recibir mensajes comerciales del gimnasio.' };
+    });
+    const { user } = await abrirListaCon(LUISA);
+
+    // Act
+    await user.click(within(filaDe('Luisa Gómez')).getByRole('button', { name: 'Avisar' }));
+
+    // Assert
+    expect(within(await screen.findByRole('status')).getByText(
+      'No se abrió WhatsApp: Luisa no ha aceptado recibir mensajes comerciales del gimnasio.',
+    )).toBeInTheDocument();
+    expect(mockPost).toHaveBeenCalledWith('/admin/notificaciones/enviado', {
+      idMiembro: 3, canal: 'WHATSAPP', tipo: 'riesgo', mensaje: LUISA.whatsapp.mensaje, antesDeAbrir: true,
+    });
+    expect(ventana.location.replace).not.toHaveBeenCalled();
+    expect(ventana.close).toHaveBeenCalledTimes(1);
+    expect(within(filaDe('Luisa Gómez')).getByRole('button', { name: 'Avisar' })).toBeInTheDocument();
+  });
+
+  test('should open the chat with the unsubscribe link the server adds when the member at risk accepted commercial messages', async () => {
+    // Arrange
+    const PIE_BAJA = '\n\nSi ya no quieres recibir mensajes comerciales del gimnasio, entra aquí: https://panel.fitloyalty.test/baja/3.7.firma';
+    const ventana = pestanaEnBlanco();
+    vi.spyOn(window, 'open').mockReturnValue(ventana);
+    mockPost = vi.fn(async () => ({
+      data: { message: 'Envio registrado.', envio: { id_envio: 71, estado: 'ENVIADO' }, mensaje: `${LUISA.whatsapp.mensaje}${PIE_BAJA}`, clase: 'COMERCIAL', texto_del_servidor: false },
+    }));
+    const { user } = await abrirListaCon(LUISA);
+
+    // Act
+    await user.click(within(filaDe('Luisa Gómez')).getByRole('button', { name: 'Avisar' }));
+
+    // Assert
+    expect(await within(filaDe('Luisa Gómez')).findByRole('button', { name: 'Enviado' })).toBeInTheDocument();
+    expect(ventana.location.replace).toHaveBeenCalledWith(
+      `https://wa.me/573001112233?text=${encodeURIComponent(`${LUISA.whatsapp.mensaje}${PIE_BAJA}`)}`,
     );
-    expect(within(filaDe('Carlos Ruiz')).getByRole('button', { name: 'Enviado' })).toBeInTheDocument();
+    expect(screen.queryByText(/No se abrió WhatsApp/)).not.toBeInTheDocument();
   });
 
   test('should say there is no phone instead of a button when the member has no valid phone', async () => {
@@ -641,5 +729,552 @@ describe('MiembrosPage: el aviso por WhatsApp de la lista', () => {
     const fila = await screen.findByRole('row', { name: /Carlos Ruiz/ });
     expect(within(fila).getByText('Sin teléfono')).toBeInTheDocument();
     expect(within(fila).queryByRole('button', { name: 'Avisar' })).not.toBeInTheDocument();
+  });
+});
+
+/*
+ * Arreglo del #108 (RQNF-16 y RQNF-17). Mientras GET /admin/miembros/:id no responde bien, el
+ * formulario de la ficha es la fila de la lista: sin ciudad, sin autorizaciones y con los mensajes
+ * comerciales apagados. Guardarla asi vaciaba campos y le registraba al miembro una baja de los
+ * mensajes comerciales que nadie decidio. Ahora la ficha solo se guarda con el registro completo, y
+ * la respuesta tardia de una ficha anterior (o ya cerrada) no toca la que esta en pantalla.
+ */
+describe('MiembrosPage: la ficha solo se guarda con el registro completo', () => {
+  // Ana ya habia aceptado mensajes comerciales por WhatsApp: eso solo viene en el registro completo.
+  const ANA_ACEPTO = { ...ANA_COMPLETA, acepta_mensajes_comerciales: true, canales_comerciales: ['WHATSAPP'], autorizo_datos_sensibles: false };
+  const CARLOS_COMPLETO = {
+    ...CARLOS, tipo_documento: 'CC', fecha_nacimiento: '1985-02-03T00:00:00.000Z', genero: 'Masculino', codigo_pais_telefono: '57',
+    ciudad: 'Cali', direccion: 'Carrera 5 # 6-7', contacto_emergencia: 'Rosa Ruiz', telefono_emergencia: '3125556677',
+    condiciones_medicas: '', alergias: '', objetivo: '', nivel_experiencia: '', observaciones: '',
+    acepta_mensajes_comerciales: false, canales_comerciales: [], autorizo_datos_sensibles: false,
+  };
+  const ERROR_503 = { status: 503, code: 'DB_UNREACHABLE', message: 'No pudimos cargar el miembro. Intenta de nuevo.' };
+  const CARGANDO = 'Cargando los datos completos del miembro…';
+  const SIN_REGISTRO = 'No se cargaron los datos completos del miembro, así que no se pueden guardar cambios. Cierra la ficha y vuelve a abrirla.';
+
+  const guardar = () => screen.getByRole('button', { name: 'Guardar cambios' });
+  const fichaDe = (nombre) => screen.getByRole('dialog', { name: `Editar ${nombre}` });
+  /** Lo que hace Enter en un campo: enviar el formulario al que pertenece el boton, sin pasar por el. */
+  const enviarFormulario = async () => {
+    fireEvent.submit(guardar().form);
+    await act(async () => {});
+  };
+
+  /** El registro completo de cada miembro lo responde, o lo hace fallar, el test cuando quiera. */
+  const conRegistrosPendientes = () => {
+    const registros = {};
+    const getNormal = apiQueResponde();
+    mockGet = vi.fn((url) => {
+      const pedido = /^\/admin\/miembros\/(\d+)$/.exec(url);
+      if (pedido) {
+        return new Promise((resolve, reject) => {
+          registros[pedido[1]] = { responder: (miembro) => resolve({ data: { miembro, autorizaciones: null } }), fallar: reject };
+        });
+      }
+      if (url === '/admin/miembros/2/plan') return Promise.resolve({ data: { plan: null, congelaciones: [] } });
+      return getNormal(url);
+    });
+    return registros;
+  };
+  const abrirLista = async () => {
+    const pantalla = renderWithProviders(<MiembrosPage />, { route: '/admin/miembros' });
+    await screen.findByRole('row', { name: /Ana Pérez/ });
+    return pantalla;
+  };
+
+  test('should keep Guardar cambios disabled and send nothing when the form is submitted while the full record is still loading', async () => {
+    // Arrange
+    conRegistrosPendientes();
+    const { user } = await abrirLista();
+    await user.click(filaDe('Ana Pérez'));
+    const ficha_ = within(fichaDe('Ana Pérez'));
+    expect(ficha_.getByText(CARGANDO)).toBeInTheDocument();
+
+    // Act: un clic en el boton y un Enter en el formulario
+    await user.click(guardar());
+    await enviarFormulario();
+
+    // Assert
+    expect(guardar()).toBeDisabled();
+    expect(mockPut).not.toHaveBeenCalled();
+    expect(ficha_.getByText(CARGANDO)).toBeInTheDocument();
+    // Todavia no fallo nada: el aviso de que no se cargo es para cuando la carga falla.
+    expect(ficha_.queryByRole('status')).not.toBeInTheDocument();
+  });
+
+  test('should keep Guardar cambios disabled, say why and send nothing when the full record cannot be loaded', async () => {
+    // Arrange
+    const registros = conRegistrosPendientes();
+    const { user } = await abrirLista();
+    await user.click(filaDe('Ana Pérez'));
+    const ficha_ = within(fichaDe('Ana Pérez'));
+
+    // Act: la carga falla; despues, un clic en el boton y un Enter en el formulario
+    await act(async () => registros[1].fallar(ERROR_503));
+    await user.click(guardar());
+    await enviarFormulario();
+
+    // Assert
+    expect(ficha_.getByRole('alert')).toHaveTextContent('No pudimos cargar el miembro. Intenta de nuevo.');
+    expect(within(ficha_.getByRole('status')).getByText(SIN_REGISTRO)).toBeInTheDocument();
+    expect(ficha_.queryByText(CARGANDO)).not.toBeInTheDocument();
+    expect(guardar()).toBeDisabled();
+    // Ningun PUT: en especial, ninguno que le apague los mensajes comerciales a quien los habia aceptado.
+    expect(mockPut).not.toHaveBeenCalled();
+  });
+
+  test('should enable Guardar cambios and save the data of the full record when it arrives', async () => {
+    // Arrange
+    const registros = conRegistrosPendientes();
+    const { user } = await abrirLista();
+    await user.click(filaDe('Ana Pérez'));
+    const ficha_ = within(fichaDe('Ana Pérez'));
+    expect(guardar()).toBeDisabled();
+
+    // Act: llega el registro completo
+    await act(async () => registros[1].responder(ANA_ACEPTO));
+    await ficha_.findByRole('heading', { name: 'Plan y cobro' });
+
+    // Assert
+    expect(guardar()).toBeEnabled();
+    expect(ficha_.queryByText(CARGANDO)).not.toBeInTheDocument();
+    expect(ficha_.queryByRole('status')).not.toBeInTheDocument();
+
+    // Act
+    await user.click(guardar());
+
+    // Assert: viaja lo del registro completo (la ciudad, la direccion y la fecha no vienen en la lista)
+    expect(await screen.findByText('Miembro actualizado.')).toBeInTheDocument();
+    expect(mockPut).toHaveBeenCalledTimes(1);
+    const [url, cuerpo] = mockPut.mock.calls[0];
+    expect(url).toBe('/admin/miembros/1');
+    expect(cuerpo).toMatchObject({
+      nombre: 'Ana Pérez', ciudad: 'Medellín', direccion: 'Calle 10 # 20-30', fecha_nacimiento: '1990-05-17', contacto_emergencia: 'Luz Pérez',
+    });
+    // La aceptacion comercial de Ana no se toco en esta ficha: no viaja.
+    expect(cuerpo).not.toHaveProperty('acepta_mensajes_comerciales');
+    expect(cuerpo).not.toHaveProperty('canales_comerciales');
+  });
+
+  test('should save when Enter submits the form and the full record is loaded', async () => {
+    // Arrange
+    const registros = conRegistrosPendientes();
+    const { user } = await abrirLista();
+    await user.click(filaDe('Ana Pérez'));
+    await act(async () => registros[1].responder(ANA_ACEPTO));
+    await within(fichaDe('Ana Pérez')).findByRole('heading', { name: 'Plan y cobro' });
+
+    // Act
+    await enviarFormulario();
+
+    // Assert
+    expect(await screen.findByText('Miembro actualizado.')).toBeInTheDocument();
+    expect(mockPut).toHaveBeenCalledTimes(1);
+    const [url, cuerpo] = mockPut.mock.calls[0];
+    expect(url).toBe('/admin/miembros/1');
+    expect(cuerpo).toMatchObject({ nombre: 'Ana Pérez', ciudad: 'Medellín', fecha_nacimiento: '1990-05-17' });
+    expect(cuerpo).not.toHaveProperty('acepta_mensajes_comerciales');
+    expect(cuerpo).not.toHaveProperty('canales_comerciales');
+  });
+
+  test('should treat it as a failed load and not let the file be saved when the server answers without the member', async () => {
+    // Arrange: un 200 sin `miembro`. Antes la ficha quedaba «completa» con la fila de la lista.
+    const getNormal = apiQueResponde();
+    mockGet = vi.fn(async (url) => (url === '/admin/miembros/1' ? { data: { autorizaciones: null } } : getNormal(url)));
+    const { user } = await abrirLista();
+
+    // Act
+    await user.click(filaDe('Ana Pérez'));
+    const ficha_ = within(fichaDe('Ana Pérez'));
+    const error = await ficha_.findByRole('alert');
+    await user.click(guardar());
+    await enviarFormulario();
+
+    // Assert
+    expect(error).toHaveTextContent('No pudimos cargar los datos completos del miembro.');
+    expect(within(ficha_.getByRole('status')).getByText(SIN_REGISTRO)).toBeInTheDocument();
+    expect(ficha_.queryByText(CARGANDO)).not.toBeInTheDocument();
+    expect(guardar()).toBeDisabled();
+    expect(mockPut).not.toHaveBeenCalled();
+    expect(mockGet.mock.calls.map(([url]) => url)).not.toContain('/admin/miembros/1/plan');
+  });
+
+  // Hueco que encontro la revision: en los tests de este bloque la primera ficha nunca llegaba a cargar.
+  // Aqui la de Ana carga completa (queda lista para guardar) y despues se abre la de Carlos: lo que
+  // habilito la ficha de Ana no puede habilitar la de Carlos.
+  test.each([
+    ['cancelled', async (user) => { await user.click(screen.getByRole('button', { name: 'Cancelar' })); }, []],
+    ['saved', async (user) => { await user.click(guardar()); await screen.findByText('Miembro actualizado.'); }, ['/admin/miembros/1']],
+  ])('should keep Guardar cambios disabled while the next file loads and after its load fails when the previous file was fully loaded and then %s', async (_caso, cerrarLaDeAna, guardados) => {
+    // Arrange: la ficha de Ana carga completa y se cierra
+    const registros = conRegistrosPendientes();
+    const { user } = await abrirLista();
+    await user.click(filaDe('Ana Pérez'));
+    await act(async () => registros[1].responder(ANA_ACEPTO));
+    await within(fichaDe('Ana Pérez')).findByRole('heading', { name: 'Plan y cobro' });
+    expect(guardar()).toBeEnabled();
+    await cerrarLaDeAna(user);
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+
+    // Act: se abre la de Carlos, que todavia no carga; un clic en el boton y un Enter en el formulario
+    await user.click(filaDe('Carlos Ruiz'));
+    const ficha_ = within(fichaDe('Carlos Ruiz'));
+    await user.click(guardar());
+    await enviarFormulario();
+
+    // Assert
+    expect(ficha_.getByText(CARGANDO)).toBeInTheDocument();
+    expect(guardar()).toBeDisabled();
+    expect(mockPut.mock.calls.map(([url]) => url)).toEqual(guardados);
+
+    // Act: la carga de Carlos falla; otro clic y otro Enter
+    await act(async () => registros[2].fallar(ERROR_503));
+    await user.click(guardar());
+    await enviarFormulario();
+
+    // Assert: sigue sin poder guardarse, y a Carlos no le llego ningun PUT
+    expect(within(ficha_.getByRole('status')).getByText(SIN_REGISTRO)).toBeInTheDocument();
+    expect(guardar()).toBeDisabled();
+    expect(mockPut.mock.calls.map(([url]) => url)).toEqual(guardados);
+  });
+
+  test('should leave the second file untouched when the answer of the first one arrives after another file was opened', async () => {
+    // Arrange: se abre la ficha de Ana, se cierra sin esperar y se abre la de Carlos
+    const registros = conRegistrosPendientes();
+    const { user } = await abrirLista();
+    await user.click(filaDe('Ana Pérez'));
+    await user.click(screen.getByRole('button', { name: 'Cancelar' }));
+    await user.click(filaDe('Carlos Ruiz'));
+    await act(async () => registros[2].responder(CARLOS_COMPLETO));
+    const ficha_ = within(fichaDe('Carlos Ruiz'));
+    await ficha_.findByRole('heading', { name: 'Plan y cobro' });
+
+    // Act: llega tarde el registro de Ana
+    await act(async () => registros[1].responder(ANA_ACEPTO));
+
+    // Assert: sigue siendo la ficha de Carlos, con sus datos
+    expect(screen.queryByRole('dialog', { name: 'Editar Ana Pérez' })).not.toBeInTheDocument();
+    expect(ficha_.getByLabelText('Nombre completo')).toHaveValue('Carlos Ruiz');
+    expect(ficha_.getByRole('textbox', { name: 'Ciudad' })).toHaveValue('Cali');
+    expect(mockGet.mock.calls.map(([url]) => url)).not.toContain('/admin/miembros/1/plan');
+
+    // Act
+    await user.click(guardar());
+
+    // Assert: se guarda a Carlos con lo de Carlos, y sin la aceptacion comercial de Ana (ni la suya, que no se toco)
+    expect(await screen.findByText('Miembro actualizado.')).toBeInTheDocument();
+    expect(mockPut).toHaveBeenCalledTimes(1);
+    const [url, cuerpo] = mockPut.mock.calls[0];
+    expect(url).toBe('/admin/miembros/2');
+    expect(cuerpo).toMatchObject({
+      nombre: 'Carlos Ruiz', documento: '79888777', ciudad: 'Cali', direccion: 'Carrera 5 # 6-7', fecha_nacimiento: '1985-02-03',
+    });
+    expect(cuerpo).not.toHaveProperty('acepta_mensajes_comerciales');
+    expect(cuerpo).not.toHaveProperty('canales_comerciales');
+  });
+
+  test('should keep loading the second file when the answer of the first one arrives before its own', async () => {
+    // Arrange
+    const registros = conRegistrosPendientes();
+    const { user } = await abrirLista();
+    await user.click(filaDe('Ana Pérez'));
+    await user.click(screen.getByRole('button', { name: 'Cancelar' }));
+    await user.click(filaDe('Carlos Ruiz'));
+    const ficha_ = within(fichaDe('Carlos Ruiz'));
+
+    // Act: llega el registro de Ana; el de Carlos sigue en camino
+    await act(async () => registros[1].responder(ANA_ACEPTO));
+
+    // Assert: la ficha de Carlos sigue cargando, sin datos de Ana y sin poder guardarse
+    expect(ficha_.getByText(CARGANDO)).toBeInTheDocument();
+    expect(ficha_.queryByRole('status')).not.toBeInTheDocument();
+    expect(ficha_.getByLabelText('Nombre completo')).toHaveValue('Carlos Ruiz');
+    expect(ficha_.getByRole('textbox', { name: 'Ciudad' })).toHaveValue('');
+    expect(guardar()).toBeDisabled();
+
+    // Act: llega el de Carlos
+    await act(async () => registros[2].responder(CARLOS_COMPLETO));
+
+    // Assert
+    expect(await ficha_.findByRole('heading', { name: 'Plan y cobro' })).toBeInTheDocument();
+    expect(ficha_.getByRole('textbox', { name: 'Ciudad' })).toHaveValue('Cali');
+    expect(guardar()).toBeEnabled();
+  });
+
+  test('should not show the error of the first file in the second one when the first one fails after another file was opened', async () => {
+    // Arrange
+    const registros = conRegistrosPendientes();
+    const { user } = await abrirLista();
+    await user.click(filaDe('Ana Pérez'));
+    await user.click(screen.getByRole('button', { name: 'Cancelar' }));
+    await user.click(filaDe('Carlos Ruiz'));
+    await act(async () => registros[2].responder(CARLOS_COMPLETO));
+    const ficha_ = within(fichaDe('Carlos Ruiz'));
+    await ficha_.findByRole('heading', { name: 'Plan y cobro' });
+
+    // Act: falla tarde el registro de Ana
+    await act(async () => registros[1].fallar(ERROR_503));
+
+    // Assert
+    expect(ficha_.queryByRole('alert')).not.toBeInTheDocument();
+    expect(ficha_.queryByRole('status')).not.toBeInTheDocument();
+    expect(ficha_.getByRole('textbox', { name: 'Ciudad' })).toHaveValue('Cali');
+    expect(guardar()).toBeEnabled();
+  });
+
+  test('should stay closed and ask for nothing else when the answer of a file arrives after the file was closed', async () => {
+    // Arrange: se abre la ficha de Ana y se cierra con la X antes de que cargue
+    const registros = conRegistrosPendientes();
+    const { user } = await abrirLista();
+    await user.click(filaDe('Ana Pérez'));
+    await user.click(within(fichaDe('Ana Pérez')).getByRole('button', { name: 'Cerrar' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+    // Act
+    await act(async () => registros[1].responder(ANA_ACEPTO));
+
+    // Assert: no se reabre ni sigue con el plan de esa ficha
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(mockGet.mock.calls.map(([url]) => url)).not.toContain('/admin/miembros/1/plan');
+  });
+
+  test('should load the file again from scratch when it is reopened after a late answer was thrown away', async () => {
+    // Arrange: la primera respuesta de Ana llega con la ficha ya cerrada
+    const registros = conRegistrosPendientes();
+    const { user } = await abrirLista();
+    await user.click(filaDe('Ana Pérez'));
+    await user.click(screen.getByRole('button', { name: 'Cancelar' }));
+    const primera = registros[1];
+    await act(async () => primera.responder({ ...ANA_ACEPTO, ciudad: 'Bogotá' }));
+
+    // Act: se vuelve a abrir y esta vez si se espera
+    await user.click(filaDe('Ana Pérez'));
+    const ficha_ = within(fichaDe('Ana Pérez'));
+    expect(ficha_.getByText(CARGANDO)).toBeInTheDocument();
+    expect(guardar()).toBeDisabled();
+    expect(registros[1]).not.toBe(primera);
+    await act(async () => registros[1].responder(ANA_ACEPTO));
+
+    // Assert: manda la respuesta de esta apertura, no la que se descarto
+    expect(await ficha_.findByRole('heading', { name: 'Plan y cobro' })).toBeInTheDocument();
+    expect(ficha_.getByRole('textbox', { name: 'Ciudad' })).toHaveValue('Medellín');
+    expect(guardar()).toBeEnabled();
+    expect(mockGet.mock.calls.filter(([url]) => url === '/admin/miembros/1')).toHaveLength(2);
+  });
+});
+
+/*
+ * Arreglo del #108: «Copiado» vuelve a «Copiar código» a los 2 s, y ese timer se cancela al cerrar la
+ * ficha o salir de la pagina. Antes seguia vivo con la pagina ya desmontada y, si el archivo de tests
+ * habia terminado, Vitest marcaba la corrida con error («window is not defined»).
+ */
+describe('MiembrosPage: el aviso «Copiado» del QR', () => {
+  afterEach(() => vi.useRealTimers());
+
+  const copiar = async () => {
+    fireEvent.click(within(ficha()).getByRole('button', { name: /^(Copiar código|Copiado)$/ }));
+    await act(async () => {});
+    expect(within(ficha()).getByRole('button', { name: 'Copiado' })).toBeInTheDocument();
+  };
+
+  /**
+   * Abre la ficha de Ana y copia el codigo, con timers falsos para setTimeout (los clics van con
+   * fireEvent, como en CheckinPage.ramas.test.jsx). Antes de copiar deja pasar 100 ms para que corran
+   * los timers de entrada (la pagina y el foco del dialogo): asi el unico pendiente es el de «Copiado».
+   */
+  const abrirFichaYCopiar = async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const pantalla = renderWithProviders(<MiembrosPage />, { route: '/admin/miembros' });
+    await act(async () => {});
+    fireEvent.click(screen.getByRole('row', { name: /Ana Pérez/ }));
+    await act(async () => {});
+    act(() => vi.advanceTimersByTime(100));
+    expect(vi.getTimerCount()).toBe(0);
+    vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue();
+    await copiar();
+    expect(vi.getTimerCount()).toBe(1);
+    return pantalla;
+  };
+
+  test('should turn the button back to Copiar código by itself when 2 seconds pass with the file still open', async () => {
+    // Arrange
+    await abrirFichaYCopiar();
+
+    // Act
+    act(() => vi.advanceTimersByTime(1999));
+    const antes = within(ficha()).queryByRole('button', { name: 'Copiado' });
+    act(() => vi.advanceTimersByTime(1));
+
+    // Assert
+    expect(antes).not.toBeNull();
+    expect(within(ficha()).getByRole('button', { name: 'Copiar código' })).toBeInTheDocument();
+    expect(within(ficha()).queryByRole('button', { name: 'Copiado' })).not.toBeInTheDocument();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  test('should keep Copiado 2 seconds from the last copy when the code is copied again before it goes away', async () => {
+    // Arrange: ha pasado 1 s desde la primera copia
+    await abrirFichaYCopiar();
+    act(() => vi.advanceTimersByTime(1000));
+
+    // Act: se copia otra vez y pasan casi 2 s
+    await copiar();
+    const timersDelAviso = vi.getTimerCount();
+    act(() => vi.advanceTimersByTime(1999));
+    const antes = within(ficha()).queryByRole('button', { name: 'Copiado' });
+    act(() => vi.advanceTimersByTime(1));
+
+    // Assert: el timer de la primera copia no devuelve el boton antes de tiempo, ni queda suelto
+    expect(timersDelAviso).toBe(1);
+    expect(antes).not.toBeNull();
+    expect(within(ficha()).getByRole('button', { name: 'Copiar código' })).toBeInTheDocument();
+  });
+
+  test.each([
+    ['Cancelar', () => screen.getByRole('button', { name: 'Cancelar' })],
+    ['the X of the dialog', () => within(ficha()).getByRole('button', { name: 'Cerrar' })],
+  ])('should leave no timer pending when the file is closed with %s right after copying', async (_caso, botonDeCerrar) => {
+    // Arrange
+    await abrirFichaYCopiar();
+
+    // Act
+    fireEvent.click(botonDeCerrar());
+
+    // Assert
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  test('should leave no Copiado timer pending when the file is saved right after copying', async () => {
+    // Arrange
+    await abrirFichaYCopiar();
+
+    // Act: se guarda la ficha y pasa 1 s, lo que tarda en irse la onda del boton (700 ms)
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+    await act(async () => {});
+    act(() => vi.advanceTimersByTime(1000));
+
+    // Assert: a «Copiado» le quedaba 1 s, pero su timer se cancelo al guardar
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(mockPut).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  test('should leave no timer pending when the person leaves the page right after copying', async () => {
+    // Arrange
+    const { unmount } = await abrirFichaYCopiar();
+
+    // Act
+    unmount();
+
+    // Assert: antes el timer seguia vivo 2 s mas, con la pagina ya desmontada
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  /** Abre la ficha de Ana con timers falsos y pulsa «Copiar código», pero el portapapeles no contesta hasta que el test lo diga. */
+  const abrirFichaYEmpezarACopiar = async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const pantalla = renderWithProviders(<MiembrosPage />, { route: '/admin/miembros' });
+    await act(async () => {});
+    fireEvent.click(screen.getByRole('row', { name: /Ana Pérez/ }));
+    await act(async () => {});
+    act(() => vi.advanceTimersByTime(100));
+    let terminarCopia;
+    vi.spyOn(navigator.clipboard, 'writeText').mockImplementation(() => new Promise((resolve) => { terminarCopia = resolve; }));
+    fireEvent.click(within(ficha()).getByRole('button', { name: 'Copiar código' }));
+    await act(async () => {});
+    expect(vi.getTimerCount()).toBe(0);
+    return { ...pantalla, terminarCopia: () => act(async () => terminarCopia()) };
+  };
+
+  test('should create no timer when the copy finishes after the person left the page', async () => {
+    // Arrange: el portapapeles todavia no contesto
+    const { unmount, terminarCopia } = await abrirFichaYEmpezarACopiar();
+
+    // Act: la persona sale de la pagina y despues termina la copia
+    unmount();
+    await terminarCopia();
+
+    // Assert: antes se creaba aqui el timer de «Copiado», con la pagina ya desmontada
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  test('should show Copiado and start its 2 seconds when the copy finishes with the file still open', async () => {
+    // Arrange
+    const { terminarCopia } = await abrirFichaYEmpezarACopiar();
+    expect(within(ficha()).getByRole('button', { name: 'Copiar código' })).toBeInTheDocument();
+
+    // Act
+    await terminarCopia();
+
+    // Assert: la guarda de «ya salio de la pagina» no estorba cuando la pagina sigue abierta
+    expect(within(ficha()).getByRole('button', { name: 'Copiado' })).toBeInTheDocument();
+    expect(vi.getTimerCount()).toBe(1);
+  });
+
+  test('should show Copiado when the page runs inside StrictMode, as the app does', async () => {
+    // Arrange: src/main.jsx monta la app en <StrictMode>, que en desarrollo monta cada pagina, la
+    // desmonta y la vuelve a montar. La pagina no puede quedarse creyendo que ya salieron de ella.
+    const { user } = renderWithProviders(<StrictMode><MiembrosPage /></StrictMode>, { route: '/admin/miembros' });
+    await user.click(await screen.findByRole('row', { name: /Ana Pérez/ }));
+    await within(ficha()).findByRole('heading', { name: 'Plan y cobro' });
+    const escribir = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue();
+
+    // Act
+    await user.click(within(ficha()).getByRole('button', { name: 'Copiar código' }));
+
+    // Assert
+    expect(await within(ficha()).findByRole('button', { name: 'Copiado' })).toBeInTheDocument();
+    expect(escribir).toHaveBeenCalledWith('QR-ANA');
+  });
+
+  /** Para abrir despues la ficha de Carlos: su registro completo y sin plan. */
+  const conLaFichaDeCarlos = () => {
+    const getNormal = apiQueResponde();
+    mockGet = vi.fn(async (url) => {
+      if (url === '/admin/miembros/2') return { data: { miembro: { ...CARLOS, tipo_documento: 'CC', ciudad: 'Cali' }, autorizaciones: null } };
+      if (url === '/admin/miembros/2/plan') return { data: { plan: null, congelaciones: [] } };
+      return getNormal(url);
+    });
+  };
+  const abrirFichaDeCarlos = async () => {
+    fireEvent.click(screen.getByRole('row', { name: /Carlos Ruiz/ }));
+    await act(async () => {});
+    return within(screen.getByRole('dialog', { name: 'Editar Carlos Ruiz' }));
+  };
+
+  // Los timers falsos no avanzan solos: si «Copiado» no se limpia al cambiar de ficha, sigue ahi.
+  test.each([
+    ['cancelled', () => screen.getByRole('button', { name: 'Cancelar' })],
+    ['saved', () => screen.getByRole('button', { name: 'Guardar cambios' })],
+  ])('should offer Copiar código in the next file when the previous one was %s right after copying', async (_caso, botonQueCierra) => {
+    // Arrange: «Copiado» en la ficha de Ana, con sus 2 s en marcha
+    conLaFichaDeCarlos();
+    await abrirFichaYCopiar();
+    fireEvent.click(botonQueCierra());
+    await act(async () => {});
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+    // Act: se abre la de Carlos antes de que pasen los 2 s
+    const fichaDeCarlos = await abrirFichaDeCarlos();
+
+    // Assert
+    expect(fichaDeCarlos.getByRole('button', { name: 'Copiar código' })).toBeInTheDocument();
+    expect(fichaDeCarlos.queryByRole('button', { name: 'Copiado' })).not.toBeInTheDocument();
+  });
+
+  test('should offer Copiar código in the next file when the copy of the previous one finished after it was closed', async () => {
+    // Arrange: se pulsa copiar en la ficha de Ana y se cierra antes de que el portapapeles conteste
+    conLaFichaDeCarlos();
+    const { terminarCopia } = await abrirFichaYEmpezarACopiar();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+    await terminarCopia();
+
+    // Act
+    const fichaDeCarlos = await abrirFichaDeCarlos();
+
+    // Assert: el «Copiado» que llego tarde era de la ficha de Ana
+    expect(fichaDeCarlos.getByRole('button', { name: 'Copiar código' })).toBeInTheDocument();
+    expect(fichaDeCarlos.queryByRole('button', { name: 'Copiado' })).not.toBeInTheDocument();
   });
 });

@@ -18,10 +18,25 @@
  *   registra en una tabla `alerta_vencimiento_enviada` que vas a encontrar
  *   en la migracion 007. Asi, si el cron corre dos veces (Render reinicia
  *   el web service, etc.) o si el admin corre manualmente, no se duplican.
+ *
+ * Ley 2300 de 2023 (RQNF-16): el aviso de vencimiento es un aviso del
+ * contrato (clausula 5: "te avisaremos por WhatsApp"), no un mensaje
+ * comercial, asi que no pide la aceptacion de mensajes comerciales. Si cumple:
+ *   - el horario: fuera de lunes a viernes de 7:00 a. m. a 7:00 p. m. y de
+ *     los sabados de 8:00 a. m. a 3:00 p. m., o en domingo o festivo, el job
+ *     no envia nada (la siguiente corrida en horario lo hace);
+ *   - la frecuencia: si al miembro ya se le escribio hoy, o por otro canal
+ *     esta semana (envio_mensaje y los avisos anteriores), no se le envia y
+ *     queda para la siguiente corrida.
+ * La revision y el envio de cada miembro van en una transaccion con el
+ * bloqueo de contacto (lib/contacto-miembro.js), para no cruzarse con un
+ * envio a mano del panel al mismo tiempo.
  */
 
 const pool = require('../db/db');
 const { avisoVencimiento, avisoVenceHoy } = require('../lib/mensajes');
+const { puedeContactar, ahora: relojLey2300, evaluarHorario, siguienteHorarioPermitido } = require('../lib/contacto-legal');
+const { historialDeLaSemana, bloquearContacto } = require('../lib/contacto-miembro');
 
 /**
  * Normaliza un telefono colombiano al formato que whatsapp-web.js espera:
@@ -72,13 +87,15 @@ async function miembrosPorVencer(dias) {
  * vencimiento. Si la fila ya existe, NO la sobreescribe (asi protegemos
  * contra duplicados si el cron se dispara dos veces el mismo dia).
  */
-async function marcarEnviado({ idMiembro, idPlanCobro, diasRestantes }) {
+async function marcarEnviado({ idMiembro, idPlanCobro, diasRestantes, fecha = relojLey2300(), db = pool }) {
   try {
-    await pool.query(
+    // enviado_at con el reloj de la Ley 2300, para que el historial de
+    // frecuencia compare con la misma hora con que se decidio.
+    await db.query(
       `INSERT INTO alerta_vencimiento_enviada (id_miembro, id_plan_cobro, dias_restantes, enviado_at)
-       VALUES ($1, $2, $3, NOW())
+       VALUES ($1, $2, $3, ($4::timestamptz AT TIME ZONE current_setting('TimeZone')))
        ON CONFLICT (id_plan_cobro, dias_restantes) DO NOTHING`,
-      [idMiembro, idPlanCobro, diasRestantes]
+      [idMiembro, idPlanCobro, diasRestantes, fecha]
     );
     return true;
   } catch (e) {
@@ -120,7 +137,8 @@ async function yaEnviado({ idPlanCobro, diasRestantes }) {
  *   { whatsappClient } -> inyeccion para tests (si no, usa el modulo).
  *
  * Devuelve un resumen con cuantos candidatos encontro, cuantos mando,
- * cuantos bloqueo el gym (dias_aviso=0) y cuantos omitio por duplicado.
+ * cuantos bloqueo el gym (dias_aviso=0), cuantos omitio por duplicado y
+ * cuantos dejo para despues por la frecuencia de la Ley 2300.
  */
 async function runJob({ dryRun = false, whatsappClient = null } = {}) {
   const summary = {
@@ -130,10 +148,21 @@ async function runJob({ dryRun = false, whatsappClient = null } = {}) {
     omitidosDuplicado: 0,
     omitidosGymDesactivado: 0,
     omitidosSinTelefono: 0,
+    omitidosLey2300: 0,
     errores: 0,
     dryRun,
     detalle: [],
   };
+
+  // RQNF-16: fuera del horario de la Ley 2300 no se envia ningun aviso.
+  const instante = relojLey2300();
+  const horario = evaluarHorario(instante);
+  if (!horario.permitido) {
+    summary.fueraDeHorario = true;
+    summary.motivo = `Fuera del horario de la Ley 2300 (${horario.razon}${horario.festivo ? `: ${horario.festivo}` : ''}).`;
+    summary.siguiente = siguienteHorarioPermitido(instante).toISOString();
+    return summary;
+  }
 
   // Necesitamos un maximo razonable de dias_aviso para no traer todo el año.
   // Tomamos el maximo entre todos los gyms (cap a 30 dias por seguridad).
@@ -201,26 +230,55 @@ async function runJob({ dryRun = false, whatsappClient = null } = {}) {
       ? avisoVenceHoy({ nombre: m.nombre, gymNombre: m.gym_nombre, tipoPlan: m.tipo_plan, fechaFin: m.fecha_fin })
       : avisoVencimiento({ nombre: m.nombre, gymNombre: m.gym_nombre, tipoPlan: m.tipo_plan, fechaFin: m.fecha_fin, diasRestantes });
 
-    if (dryRun) {
-      summary.detalle.push({ id: m.id_miembro, nombre: m.nombre, tel, diasRestantes, texto });
-      summary.enviados += 1; // lo contamos como enviado hipotetico
-      continue;
-    }
-
+    // RQNF-16: en una transaccion con el bloqueo de contacto del miembro, se
+    // revisa la frecuencia (hoy, y otro canal esta semana) y, si se puede, se
+    // envia y se marca. Si no, queda para la siguiente corrida.
+    let client;
     try {
-      // NO se comprueba isWhatsAppReady() antes: el cliente es perezoso y solo se
-      // inicializa dentro de sendWhatsAppText, asi que tras un reinicio esa
-      // comprobacion seria siempre falsa y los avisos no saldrian nunca.
-      // sendWhatsAppText lanza si no esta listo o si el envio falla; solo se marca
-      // como enviado cuando el mensaje realmente salio, y lo demas se reintenta
-      // en la siguiente corrida del scheduler.
-      await wa.sendWhatsAppText(tel, texto);
-      await marcarEnviado({ idMiembro: m.id_miembro, idPlanCobro, diasRestantes });
+      client = await pool.connect();
+      await client.query('BEGIN');
+      await bloquearContacto(client, m.id_miembro);
+      const historial = await historialDeLaSemana(client, m.id_miembro, instante);
+      const decision = puedeContactar(m, 'WHATSAPP', instante, historial, { clase: 'AVISO' });
+      if (!decision.puede) {
+        await client.query('ROLLBACK');
+        summary.omitidosLey2300 += 1;
+        summary.detalle.push({ id: m.id_miembro, motivo: decision.motivo, mensaje: decision.mensaje, diasRestantes });
+        continue;
+      }
+
+      if (dryRun) {
+        await client.query('ROLLBACK');
+        summary.detalle.push({ id: m.id_miembro, nombre: m.nombre, tel, diasRestantes, texto });
+        summary.enviados += 1; // lo contamos como enviado hipotetico
+        continue;
+      }
+
+      try {
+        // NO se comprueba isWhatsAppReady() antes: el cliente es perezoso y solo se
+        // inicializa dentro de sendWhatsAppText, asi que tras un reinicio esa
+        // comprobacion seria siempre falsa y los avisos no saldrian nunca.
+        // sendWhatsAppText lanza si no esta listo o si el envio falla; solo se marca
+        // como enviado cuando el mensaje realmente salio, y lo demas se reintenta
+        // en la siguiente corrida del scheduler.
+        await wa.sendWhatsAppText(tel, texto);
+      } catch (err) {
+        await client.query('ROLLBACK');
+        summary.errores += 1;
+        summary.detalle.push({ id: m.id_miembro, nombre: m.nombre, tel, diasRestantes, status: 'error', error: err.message });
+        continue;
+      }
+      await marcarEnviado({ idMiembro: m.id_miembro, idPlanCobro, diasRestantes, fecha: instante, db: client });
+      await client.query('COMMIT');
       summary.enviados += 1;
       summary.detalle.push({ id: m.id_miembro, nombre: m.nombre, tel, diasRestantes, status: 'enviado' });
     } catch (err) {
+      if (client) await client.query('ROLLBACK').catch(() => {});
       summary.errores += 1;
       summary.detalle.push({ id: m.id_miembro, nombre: m.nombre, tel, diasRestantes, status: 'error', error: err.message });
+    } finally {
+      if (client) client.release();
+      client = null;
     }
   }
 

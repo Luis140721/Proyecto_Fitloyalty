@@ -31,7 +31,8 @@ class _AutorizacionesScreenState extends State<AutorizacionesScreen> {
   bool _cargando = true;
   bool _guardando = false;
 
-  static const _tipos = ['TERMINOS', 'TRATAMIENTO_DATOS', 'DATOS_SENSIBLES', 'REPRESENTANTE_MENOR'];
+  // RQNF-16: tambien la de mensajes comerciales (se cambia en Mas -> Mensajes del gimnasio).
+  static const _tipos = ['TERMINOS', 'TRATAMIENTO_DATOS', 'DATOS_SENSIBLES', 'MENSAJES_COMERCIALES', 'REPRESENTANTE_MENOR'];
 
   @override
   void initState() {

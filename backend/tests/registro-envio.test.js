@@ -24,6 +24,13 @@ jest.mock('../src/db/db', () => ({
 
 process.env.JWT_SECRET = 'secreto-de-pruebas';
 
+// RQNF-16: el envio solo se registra dentro del horario de la Ley 2300; el
+// reloj se fija a un martes a las 10:00 a. m. de Colombia. Las reglas de la
+// ley en este endpoint se prueban en ley2300-envios.test.js.
+const legal = require('../src/lib/contacto-legal');
+const MARTES = new Date('2026-11-17T10:00:00-05:00');
+legal.establecerReloj(() => MARTES);
+
 const notifRouter = require('../src/routes/notificaciones');
 const miembrosRouter = require('../src/routes/miembros');
 const { errorHandler } = require('../src/middleware/errorHandler');
@@ -46,6 +53,7 @@ beforeAll((done) => {
   server = app.listen(0, () => { base = `http://127.0.0.1:${server.address().port}`; done(); });
 });
 afterAll(() => new Promise((resolve) => {
+  legal.establecerReloj(null);
   establecerBusquedaPersonal(null);
   if (server.closeAllConnections) server.closeAllConnections();
   server.close(() => resolve());
@@ -77,11 +85,24 @@ const TEXTO = 'Hola Ana, te saludamos de Gym Demo. Tu plan vencio hace 2 dias.';
  * que otra peticion creo el canal mientras esta esperaba el bloqueo: la
  * busqueda de despues del bloqueo ya lo encuentra.
  */
-function prepararBD({ miembro = { nombre: 'Ana' }, canales = [], alerta = null, canalTrasBloqueo = null, fallaEnvio = false, fallaMiembro = false } = {}) {
+function prepararBD({ miembro = { id_miembro: 12, nombre: 'Ana' }, canales = [], alerta = null, canalTrasBloqueo = null, fallaEnvio = false, fallaMiembro = false } = {}) {
   const estado = { canales: canales.map((c) => ({ activo: true, ...c })), siguiente: 50, bloqueado: false };
   mockQuery.mockImplementation(async (sql, params = []) => {
     const s = sql.trim();
     if (/^(BEGIN|COMMIT|ROLLBACK)$/.test(s)) return {};
+    // RQNF-16: bloqueo de contacto, historial vacio y un miembro que acepto
+    // mensajes comerciales por WhatsApp y correo.
+    if (/hashtext\('contacto_miembro'\)/.test(s)) return { rows: [{}] };
+    if (/FROM envio_mensaje e/.test(s)) return { rows: [] };
+    if (/to_regclass/.test(s)) return { rows: [{ existe: false }] };
+    if (/FROM autorizacion_miembro a/.test(s)) {
+      return { rows: [{ id_miembro: params[0][0], otorgada: true, canales_autorizados: ['WHATSAPP', 'EMAIL'], canal: 'PANEL', version_texto: 'v2', fecha: new Date('2026-11-01T15:00:00Z') }] };
+    }
+    // RQNF-16: el servidor confirma el aviso con el plan (aqui, vencido hace 2 dias).
+    if (/LEFT JOIN[\s\S]* pc ON pc\.id_miembro = m\.id_miembro/.test(s)) {
+      return { rows: [{ sin_plan: false, congelada: false, vencida: true, dias_para_vencer: -2 }] };
+    }
+    if (/^SELECT nombre FROM gimnasio WHERE id_gimnasio = \$1$/.test(s)) return { rows: [{ nombre: 'Gym Demo' }] };
     if (/FROM miembro/.test(s)) {
       if (fallaMiembro) throw new Error('caida');
       return { rows: miembro ? [miembro] : [] };
@@ -119,6 +140,9 @@ function prepararBD({ miembro = { nombre: 'Ana' }, canales = [], alerta = null, 
 const llamadas = (re) => mockQuery.mock.calls.filter(([s]) => re.test(s));
 const indice = (re) => mockQuery.mock.calls.findIndex(([s]) => re.test(s));
 const insertEnvio = () => llamadas(/INSERT INTO envio_mensaje/)[0];
+// El bloqueo del catalogo de canales (por gimnasio); el de contacto de la
+// Ley 2300 es otro (hashtext('contacto_miembro')).
+const LOCK_CANAL = /hashtext\('canal_comunicacion'\)/;
 
 /** Columnas de una tabla segun un CREATE TABLE: nombre y si es obligatoria (NOT NULL sin DEFAULT). */
 function columnasDe(archivo, tabla) {
@@ -138,9 +162,14 @@ describe('POST /api/admin/notificaciones/enviado: canal del gimnasio', () => {
     expect(r.status).toBe(201);
     expect(r.body.envio).toMatchObject({ id_envio: 900, estado: 'ENVIADO' });
     expect(llamadas(/INSERT INTO canal_comunicacion/)).toHaveLength(0);
-    expect(llamadas(/pg_advisory_xact_lock/)).toHaveLength(0);
-    // [id_gimnasio, id_miembro, id_canal, id_alerta, mensaje_copiado, enviado_por]
-    expect(insertEnvio()[1]).toEqual([7, 12, 4, null, TEXTO, 2]);
+    expect(llamadas(LOCK_CANAL)).toHaveLength(0);
+    // [id_gimnasio, id_miembro, id_canal, id_alerta, id_campana, id_plantilla,
+    //  mensaje_copiado, estado, fecha_envio (reloj de la Ley 2300), enviado_por]
+    // RQNF-16: un aviso confirmado guarda el texto que arma el servidor (el
+    // mismo de la campana), no el que manda el panel.
+    const AVISO = 'Hola Ana, te saludamos de Gym Demo. Tu plan vencio hace 2 dias. Pasa cuando quieras y lo renovamos para que no pierdas el ritmo.';
+    expect(r.body).toMatchObject({ clase: 'AVISO', mensaje: AVISO, texto_del_servidor: true });
+    expect(insertEnvio()[1]).toEqual([7, 12, 4, null, null, null, AVISO, 'ENVIADO', MARTES, 2]);
     expect(llamadas(/^COMMIT$/)).toHaveLength(1);
     expect(mockRelease).toHaveBeenCalledTimes(1);
   });
@@ -153,14 +182,17 @@ describe('POST /api/admin/notificaciones/enviado: canal del gimnasio', () => {
     expect(params).toEqual([7, 'WHATSAPP']);
     expect(estado.canales).toEqual([{ id_canal: 50, id_gimnasio: 7, tipo: 'WHATSAPP', activo: true }]);
     expect(insertEnvio()[1][2]).toBe(50);
-    // Orden: miembro, BEGIN, buscar, bloquear, buscar otra vez, crear, envio, aviso, COMMIT.
+    // Orden: miembro, BEGIN, Ley 2300 (bloqueo de contacto, autorizacion
+    // comercial e historial), buscar canal, bloquear, buscar otra vez, crear,
+    // envio, aviso, COMMIT.
     const orden = mockQuery.mock.calls.map(([s]) => s.trim().match(/^(BEGIN|COMMIT|SELECT \w+|INSERT INTO \w+)/)[1]);
     expect(orden).toEqual([
-      'SELECT nombre', 'BEGIN', 'SELECT id_canal', 'SELECT pg_advisory_xact_lock', 'SELECT id_canal',
+      'SELECT id_miembro', 'BEGIN', 'SELECT pg_advisory_xact_lock', 'SELECT DISTINCT', 'SELECT e',
+      'SELECT to_regclass', 'SELECT id_canal', 'SELECT pg_advisory_xact_lock', 'SELECT id_canal',
       'INSERT INTO canal_comunicacion', 'INSERT INTO envio_mensaje', 'INSERT INTO notificacion', 'COMMIT',
     ]);
     // El bloqueo es por gimnasio.
-    expect(llamadas(/pg_advisory_xact_lock/)[0][1]).toEqual([7]);
+    expect(llamadas(LOCK_CANAL)[0][1]).toEqual([7]);
   });
 
   test('el segundo envio reutiliza el canal creado en el primero', async () => {
@@ -176,7 +208,7 @@ describe('POST /api/admin/notificaciones/enviado: canal del gimnasio', () => {
     prepararBD({ canalTrasBloqueo: { id_canal: 61, id_gimnasio: 7, tipo: 'WHATSAPP' } });
     const r = await enviar({ idMiembro: 12, mensaje: TEXTO });
     expect(r.status).toBe(201);
-    expect(llamadas(/pg_advisory_xact_lock/)).toHaveLength(1);
+    expect(llamadas(LOCK_CANAL)).toHaveLength(1);
     expect(llamadas(/INSERT INTO canal_comunicacion/)).toHaveLength(0);
     expect(insertEnvio()[1][2]).toBe(61);
   });
@@ -207,7 +239,7 @@ describe('POST /api/admin/notificaciones/enviado: canal del gimnasio', () => {
     const estado = prepararBD({ canales: [{ id_canal: 4, id_gimnasio: 7, tipo: 'WHATSAPP', activo: false }] });
     const r = await enviar({ idMiembro: 12, mensaje: TEXTO });
     expect(r.status).toBe(201);
-    expect(llamadas(/pg_advisory_xact_lock/)).toHaveLength(1);
+    expect(llamadas(LOCK_CANAL)).toHaveLength(1);
     expect(llamadas(/INSERT INTO canal_comunicacion/)[0][1]).toEqual([7, 'WHATSAPP']);
     expect(estado.canales.find((c) => c.id_canal === 50)).toMatchObject({ activo: true });
     expect(insertEnvio()[1][2]).toBe(50);
@@ -259,7 +291,7 @@ describe('POST /api/admin/notificaciones/enviado: validaciones', () => {
   test('guarda el mensaje sin los espacios de los extremos', async () => {
     prepararBD({ canales: [{ id_canal: 4, id_gimnasio: 7, tipo: 'WHATSAPP' }] });
     await enviar({ idMiembro: 12, mensaje: `  ${TEXTO}\n` });
-    expect(insertEnvio()[1][4]).toBe(TEXTO);
+    expect(insertEnvio()[1][6]).toBe(TEXTO);
   });
 
   test.each(['PALOMA', 'SMS'])('canal %s: 400 (canal_comunicacion solo admite EMAIL y WHATSAPP)', async (canal) => {
@@ -295,7 +327,7 @@ describe('POST /api/admin/notificaciones/enviado: lo que se guarda', () => {
     await enviar({ idMiembro: 12, mensaje: TEXTO });
     const [sql] = insertEnvio();
     const usadas = columnasDelInsert(sql, 'envio_mensaje');
-    expect(usadas).toEqual(['id_gimnasio', 'id_miembro', 'id_canal', 'id_alerta',
+    expect(usadas).toEqual(['id_gimnasio', 'id_miembro', 'id_canal', 'id_alerta', 'id_campana', 'id_plantilla',
       'mensaje_copiado', 'estado', 'fecha_envio', 'enviado_por']);
     expect(usadas).not.toContain('canal'); // la columna de Docker que no existe en produccion (issue #24)
 
@@ -303,8 +335,12 @@ describe('POST /api/admin/notificaciones/enviado: lo que se guarda', () => {
     const nombres = reales.map((c) => c.nombre);
     usadas.forEach((c) => expect(nombres).toContain(c));
     reales.filter((c) => c.obligatoria).forEach((c) => expect(usadas).toContain(c.nombre));
-    // Estado ENVIADO (lo admite el CHECK) y la fecha del momento.
-    expect(sql).toMatch(/'ENVIADO', NOW\(\)/);
+    // Estado ENVIADO (lo admite el CHECK) y la fecha del momento, con el reloj
+    // de la Ley 2300 en la zona de la sesion (RQNF-16).
+    const [, params] = insertEnvio();
+    expect(params[7]).toBe('ENVIADO');
+    expect(params[8]).toEqual(MARTES);
+    expect(sql).toMatch(/\$9::timestamptz AT TIME ZONE current_setting\('TimeZone'\)/);
   });
 
   test('el INSERT en canal_comunicacion usa columnas que existen en produccion y en Docker', async () => {

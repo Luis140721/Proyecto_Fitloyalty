@@ -12,17 +12,27 @@
  *   GET    /api/admin/campanas/segmento          -> vista previa: cuantos miembros caen en un segmento
  *   POST   /api/admin/campanas                   -> crea una campana (MANUAL o PROGRAMADO)
  *   PUT    /api/admin/campanas/:id               -> la edita mientras siga PROGRAMADA
- *   POST   /api/admin/campanas/:id/ejecutar      -> la ejecuta ya
+ *   POST   /api/admin/campanas/:id/ejecutar      -> la ejecuta ya; fuera del horario de la
+ *                                                   Ley 2300 la deja programada (202)
+ *   POST   /api/admin/campanas/:id/reintentar    -> vuelve a procesar los destinatarios PENDIENTE
  *   POST   /api/admin/campanas/:id/cancelar      -> la cancela si no se ha enviado
- *   GET    /api/admin/campanas/:id/destinatarios -> destinatarios con su estado y su mensaje
+ *   GET    /api/admin/campanas/:id/destinatarios -> destinatarios con su estado, motivo y mensaje
  *   POST   /api/admin/campanas/:id/destinatarios/:idMiembro/enviado
- *                                                -> constancia de un envio hecho a mano por WhatsApp
+ *                                                -> constancia de un envio a mano por WhatsApp,
+ *                                                   ANTES de abrir el chat (devuelve el texto)
  *
- * Las programadas las ejecuta el scheduler (jobs/campanas.js) cada 10 minutos,
- * y tambien al consultar la lista, por si el servidor estuvo dormido a la hora.
+ * Las programadas las ejecuta solo el scheduler (jobs/campanas.js) cada 10
+ * minutos; el mismo job reintenta los PENDIENTE que quedaron de un proceso que
+ * se cayo. Consultar la lista no ejecuta nada.
+ *
+ * RQNF-16 (Ley 2300 de 2023, lib/campanas.js y lib/contacto-legal.js): solo
+ * reciben la campana los miembros que aceptaron mensajes comerciales por ese
+ * canal, dentro del horario y sin pasar la frecuencia; los demas quedan
+ * OMITIDO con su motivo. Una campana programada solo se puede poner dentro
+ * del horario permitido.
  *
  * Columnas de produccion (ConsultasDB); en Docker las crea la migracion 015,
- * que tambien agrega campana.canal en las dos.
+ * que tambien agrega campana.canal en las dos. motivo y OMITIDO son de la 018.
  */
 const express = require('express');
 const { z } = require('zod');
@@ -32,8 +42,15 @@ const asyncHandler = require('../lib/asyncHandler');
 const { AppError } = require('../lib/errors');
 const { requireActiveTrial } = require('../lib/trial');
 const { formatZodError } = require('../lib/validators');
-const { SEGMENTOS, ETIQUETAS, ZONA, HOY, fechaLocal, miembrosDelSegmento, diasDe } = require('../lib/segmentos');
-const { personalizar, ejecutarCampana, registrarEntrega, campanasVencidas, VARIABLES } = require('../lib/campanas');
+const { SEGMENTOS, ETIQUETAS, ZONA, miembrosDelSegmento, diasDe } = require('../lib/segmentos');
+const {
+  textoParaMiembro, fueraDeHorario, ejecutarCampana, reanudarCampana, registrarEnvioManual,
+  destinatariosDeCampana, campanasVencidas, campanasConPendientes, VARIABLES,
+} = require('../lib/campanas');
+const {
+  ahora, evaluarHorario, siguienteHorarioPermitido, describirInstante, TEXTO_HORARIO,
+} = require('../lib/contacto-legal');
+const { comercialesDeVarios } = require('../lib/contacto-miembro');
 const { telefonoWhatsapp } = require('../lib/mensajes');
 const { canalDelGimnasio } = require('./notificaciones');
 const { sendMail } = require('../lib/email');
@@ -170,7 +187,8 @@ async function campanaDelGimnasio(db, id, gymId) {
             COUNT(d.id_campana_destinatario)::int AS destinatarios,
             COUNT(d.id_campana_destinatario) FILTER (WHERE d.estado_envio = 'ENVIADO')::int AS enviados,
             COUNT(d.id_campana_destinatario) FILTER (WHERE d.estado_envio = 'FALLIDO')::int AS fallidos,
-            COUNT(d.id_campana_destinatario) FILTER (WHERE d.estado_envio = 'PENDIENTE')::int AS pendientes
+            COUNT(d.id_campana_destinatario) FILTER (WHERE d.estado_envio = 'PENDIENTE')::int AS pendientes,
+            COUNT(d.id_campana_destinatario) FILTER (WHERE d.estado_envio = 'OMITIDO')::int AS omitidos
        FROM campana c
        LEFT JOIN campana_destinatario d ON d.id_campana = c.id_campana
       WHERE c.id_campana = $1 AND c.id_gimnasio = $2
@@ -181,20 +199,60 @@ async function campanaDelGimnasio(db, id, gymId) {
   return rows[0];
 }
 
-/** Ejecuta las programadas vencidas de un gimnasio (o de todos con gymId null). */
+/**
+ * Ejecuta las programadas vencidas de un gimnasio (o de todos con gymId
+ * null; la consulta ya filtra por gimnasio). Fuera del horario de la Ley 2300
+ * no ejecuta ninguna: esperan a la siguiente franja.
+ */
 async function ejecutarVencidas(gymId = null) {
-  const vencidas = await campanasVencidas(pool);
+  if (fueraDeHorario(ahora())) return [];
+  const vencidas = await campanasVencidas(pool, gymId);
   const resultados = [];
   for (const c of vencidas) {
-    if (gymId !== null && c.id_gimnasio !== gymId) continue;
     try {
       const r = await ejecutarCampana(pool, { idCampana: c.id_campana, gymId: c.id_gimnasio, usuarioId: c.creada_por }, deps);
-      if (r) resultados.push({ id_campana: c.id_campana, ...r });
+      if (r && !r.fueraDeHorario) resultados.push({ id_campana: c.id_campana, ...r });
     } catch (err) {
       console.error(`[campanas] No se pudo ejecutar la campana ${c.id_campana}:`, err.message);
     }
   }
   return resultados;
+}
+
+/**
+ * Reintenta los destinatarios PENDIENTE que el servidor puede enviar solo y
+ * que quedaron asi porque el proceso se cayo o se cerro la franja. Lo llama
+ * el scheduler.
+ */
+async function reanudarPendientes(gymId = null) {
+  if (fueraDeHorario(ahora())) return [];
+  const lista = await campanasConPendientes(pool, { gymId, conWhatsapp: deps.whatsappActivo() });
+  const resultados = [];
+  for (const c of lista) {
+    try {
+      const r = await reanudarCampana(pool, { idCampana: c.id_campana, gymId: c.id_gimnasio, usuarioId: c.creada_por }, deps);
+      if (r && !r.fueraDeHorario) resultados.push({ id_campana: c.id_campana, ...r });
+    } catch (err) {
+      console.error(`[campanas] No se pudo reintentar la campana ${c.id_campana}:`, err.message);
+    }
+  }
+  return resultados;
+}
+
+/** 'AAAA-MM-DDTHH:MM' en hora de Colombia -> Date (Colombia es UTC-5 todo el año). */
+const instanteDeTexto = (texto) => new Date(`${String(texto).slice(0, 16)}:00-05:00`);
+
+/** El estado del horario ahora, para que el panel avise antes de enviar. */
+function horarioAhora() {
+  const instante = ahora();
+  const permitido = evaluarHorario(instante).permitido;
+  const siguiente = permitido ? null : siguienteHorarioPermitido(instante);
+  return {
+    permitido,
+    texto: TEXTO_HORARIO,
+    siguiente: siguiente ? siguiente.toISOString() : null,
+    siguiente_texto: siguiente ? describirInstante(siguiente) : null,
+  };
 }
 
 /** Arma el mensaje desde la plantilla si no viene escrito, y valida la programacion. */
@@ -221,19 +279,28 @@ async function normalizar(d, gymId, { parcial = false } = {}) {
     if (!d.fecha_programada) throw new AppError(400, 'Elige la fecha y la hora de envío.', 'VALIDATION_ERROR');
     const { rows } = await pool.query(`SELECT ${A_SERVIDOR('$1')} > NOW() AS futura`, [d.fecha_programada]);
     if (!rows[0].futura) throw new AppError(400, 'La fecha de envío debe ser futura.', 'VALIDATION_ERROR');
+    // RQNF-16: solo se programa dentro del horario de la Ley 2300.
+    const fuera = fueraDeHorario(instanteDeTexto(d.fecha_programada));
+    if (fuera) {
+      throw new AppError(400, `Esa hora está fuera del horario permitido. ${fuera.mensaje}`, 'FUERA_DE_HORARIO', {
+        siguiente: fuera.siguiente.toISOString(),
+      });
+    }
   }
   return { ...d, mensaje };
 }
 
+// La lista solo lee: las programadas vencidas las ejecuta el scheduler
+// (jobs/campanas.js), no la pantalla (antes las ejecutaba al abrirla).
 router.get('/admin/campanas', ...soloAdmin, enBase('GET /admin/campanas', 'No pudimos cargar las campañas.', async (req, res) => {
   const gymId = req.user.gymId;
-  await ejecutarVencidas(gymId);
   const { rows } = await pool.query(
     `SELECT ${CAMPANA_COLS},
             COUNT(d.id_campana_destinatario)::int AS destinatarios,
             COUNT(d.id_campana_destinatario) FILTER (WHERE d.estado_envio = 'ENVIADO')::int AS enviados,
             COUNT(d.id_campana_destinatario) FILTER (WHERE d.estado_envio = 'FALLIDO')::int AS fallidos,
-            COUNT(d.id_campana_destinatario) FILTER (WHERE d.estado_envio = 'PENDIENTE')::int AS pendientes
+            COUNT(d.id_campana_destinatario) FILTER (WHERE d.estado_envio = 'PENDIENTE')::int AS pendientes,
+            COUNT(d.id_campana_destinatario) FILTER (WHERE d.estado_envio = 'OMITIDO')::int AS omitidos
        FROM campana c
        LEFT JOIN campana_destinatario d ON d.id_campana = c.id_campana
       WHERE c.id_gimnasio = $1
@@ -246,6 +313,7 @@ router.get('/admin/campanas', ...soloAdmin, enBase('GET /admin/campanas', 'No pu
     campanas: rows,
     segmentos: SEGMENTOS.map((s) => ({ valor: s, etiqueta: ETIQUETAS[s], dias: diasDe(s) })),
     variables: VARIABLES,
+    horario: horarioAhora(),
   });
 }));
 
@@ -254,12 +322,20 @@ router.get('/admin/campanas/segmento', ...soloAdmin, enBase('GET /admin/campanas
   if (!SEGMENTOS.includes(segmento)) throw new AppError(400, 'Segmento invalido.', 'VALIDATION_ERROR');
   const dias = req.query.dias === undefined || req.query.dias === '' ? undefined : req.query.dias;
   const miembros = await miembrosDelSegmento(pool, req.user.gymId, segmento, { dias });
+  // RQNF-16: cuantos aceptaron mensajes comerciales por cada canal.
+  const comerciales = await comercialesDeVarios(pool, miembros.map((m) => m.id_miembro), req.user.gymId);
+  const aceptan = (canal) => miembros.filter((m) => {
+    const c = comerciales.get(Number(m.id_miembro));
+    return c && c.acepta_mensajes_comerciales && c.canales_autorizados.includes(canal);
+  }).length;
   return res.json({
     segmento,
     dias: diasDe(segmento, dias),
     total: miembros.length,
     con_telefono: miembros.filter((m) => telefonoWhatsapp(m.telefono, m.codigo_pais_telefono)).length,
     con_correo: miembros.filter((m) => m.email).length,
+    aceptan_whatsapp: aceptan('WHATSAPP'),
+    aceptan_correo: aceptan('EMAIL'),
     muestra: miembros.slice(0, 10).map((m) => ({ id_miembro: m.id_miembro, nombre: m.nombre })),
   });
 }));
@@ -315,7 +391,52 @@ router.post('/admin/campanas/:id/ejecutar', ...soloAdmin, enBase('POST /admin/ca
   }
   const resumen = await ejecutarCampana(pool, { idCampana: id, gymId, usuarioId: req.user.id }, deps);
   if (!resumen) throw new AppError(409, 'La campaña ya se está enviando.', 'CAMPANA_NO_EJECUTABLE');
+
+  // RQNF-16: fuera del horario de la Ley 2300 no se envia. Queda programada
+  // para el primer momento permitido, y el administrador la puede editar o
+  // cancelar mientras tanto.
+  if (resumen.fueraDeHorario) {
+    await pool.query(
+      `UPDATE campana SET tipo_disparo = 'PROGRAMADO',
+                          fecha_programada = ($3::timestamptz AT TIME ZONE current_setting('TimeZone'))
+        WHERE id_campana = $1 AND id_gimnasio = $2 AND estado = 'PROGRAMADA'`,
+      [id, gymId, resumen.siguiente]
+    );
+    return res.status(202).json({
+      programada: true,
+      message: `Ahora no se puede enviar. ${resumen.mensaje} La campaña quedó programada para el ${describirInstante(resumen.siguiente)}`,
+      siguiente: resumen.siguiente.toISOString(),
+      campana: await campanaDelGimnasio(pool, id, gymId),
+    });
+  }
   return res.json({ resumen, campana: await campanaDelGimnasio(pool, id, gymId) });
+}));
+
+// Reintento de los destinatarios PENDIENTE (el proceso se cayo o se cerro la
+// franja). Los de WhatsApp sin el modulo del servidor siguen siendo a mano.
+router.post('/admin/campanas/:id/reintentar', ...soloAdmin, enBase('POST /admin/campanas/reintentar', 'No pudimos reintentar la campaña.', async (req, res) => {
+  const gymId = req.user.gymId;
+  const id = idDe(req.params.id);
+  const actual = await campanaDelGimnasio(pool, id, gymId);
+  if (actual.estado !== 'ENVIADA') throw new AppError(409, 'Solo se reintenta una campaña que ya se envió.', 'CAMPANA_NO_EJECUTABLE');
+  if (actual.pendientes === 0) {
+    return res.json({ message: 'No hay destinatarios pendientes.', campana: actual });
+  }
+  const resumen = await reanudarCampana(pool, { idCampana: id, gymId, usuarioId: req.user.id }, deps);
+  if (!resumen) throw new AppError(409, 'Solo se reintenta una campaña que ya se envió.', 'CAMPANA_NO_EJECUTABLE');
+  if (resumen.fueraDeHorario) {
+    throw new AppError(409, `Ahora no se puede enviar. ${resumen.mensaje}`, 'FUERA_DE_HORARIO', {
+      siguiente: resumen.siguiente.toISOString(),
+    });
+  }
+  const aMano = actual.canal === 'WHATSAPP' && !deps.whatsappActivo();
+  return res.json({
+    resumen,
+    message: aMano
+      ? 'El servidor no tiene WhatsApp conectado: envía los pendientes uno a uno con el botón de WhatsApp.'
+      : `Reintento hecho: ${resumen.enviados} enviados, ${resumen.pendientes} pendientes, ${resumen.fallidos} fallidos y ${resumen.omitidos} omitidos.`,
+    campana: await campanaDelGimnasio(pool, id, gymId),
+  });
 }));
 
 router.post('/admin/campanas/:id/cancelar', ...soloAdmin, enBase('POST /admin/campanas/cancelar', 'No pudimos cancelar la campaña.', async (req, res) => {
@@ -338,65 +459,67 @@ router.get('/admin/campanas/:id/destinatarios', ...soloAdmin, enBase('GET /admin
   const id = idDe(req.params.id);
   const campana = await campanaDelGimnasio(pool, id, gymId);
   const { rows: gym } = await pool.query('SELECT nombre FROM gimnasio WHERE id_gimnasio = $1', [gymId]);
-  const { rows } = await pool.query(
-    `SELECT d.id_campana_destinatario, d.estado_envio, d.fecha_envio,
-            m.id_miembro, m.nombre, m.telefono, m.codigo_pais_telefono, m.email,
-            pc.fecha_fin,
-            (SELECT (${HOY} - ${fechaLocal('MAX(c.fecha_hora)')})::int
-               FROM checkin c WHERE c.id_miembro = m.id_miembro AND c.valido = TRUE) AS dias_sin_venir
-       FROM campana_destinatario d
-       JOIN miembro m ON m.id_miembro = d.id_miembro AND m.id_gimnasio = $2
-       LEFT JOIN (
-         SELECT DISTINCT ON (id_miembro) id_miembro, fecha_fin FROM plan_cobro
-          WHERE activo = TRUE ORDER BY id_miembro, fecha_fin DESC NULLS LAST, id_plan_cobro DESC
-       ) pc ON pc.id_miembro = m.id_miembro
-      WHERE d.id_campana = $1
-      ORDER BY (d.estado_envio = 'PENDIENTE') DESC, m.nombre`,
-    [id, gymId]
-  );
-  const gimnasio = gym[0] ? gym[0].nombre : null;
+  const rows = await destinatariosDeCampana(pool, id, gymId);
+  const conGimnasio = { ...campana, gimnasio: gym[0] ? gym[0].nombre : null };
   return res.json({
     campana,
+    horario: horarioAhora(),
     destinatarios: rows.map((r) => ({
       id_campana_destinatario: r.id_campana_destinatario,
       id_miembro: r.id_miembro,
       nombre: r.nombre,
       estado_envio: r.estado_envio,
+      // RQNF-16: por que no se le envio (OMITIDO) o por que sigue esperando.
+      motivo: r.motivo || null,
       fecha_envio: r.fecha_envio,
       telefono: telefonoWhatsapp(r.telefono, r.codigo_pais_telefono),
       email: r.email,
-      // El texto para enviar a mano, con los datos de hoy.
-      mensaje: personalizar(campana.mensaje, {
-        nombre: r.nombre, gimnasio, fecha_fin: r.fecha_fin, dias_sin_venir: r.dias_sin_venir,
-      }),
+      // El texto para enviar a mano, con los datos de hoy y el enlace de baja.
+      mensaje: textoParaMiembro(conGimnasio, r, gymId),
     })),
   });
 }));
 
+// El mensaje lo arma el servidor (con el enlace de baja); si el panel manda
+// uno, se ignora: queda registrado lo que de verdad se abre en WhatsApp.
 const envioManualSchema = z.object({
-  mensaje: z.string().trim().min(1, 'Falta el mensaje que se envio.').max(2000),
+  mensaje: z.string().trim().max(2000).optional(),
 });
 
+/**
+ * Constancia de un envio a mano por WhatsApp. El panel la pide ANTES de
+ * abrir el chat (RQNF-16): el servidor revisa la ley con la fila del
+ * destinatario bloqueada y, si se puede, deja la constancia y devuelve el
+ * texto y el telefono para wa.me. Un doble clic no duplica la constancia
+ * (200 con duplicado: true).
+ */
 router.post('/admin/campanas/:id/destinatarios/:idMiembro/enviado', ...soloAdmin, enBase('POST /admin/campanas/enviado', 'No pudimos dejar constancia del envío.', async (req, res) => {
   const gymId = req.user.gymId;
   const id = idDe(req.params.id);
   const idMiembro = idDe(req.params.idMiembro, 'miembro');
-  const { mensaje } = validar(envioManualSchema, req.body);
+  validar(envioManualSchema, req.body);
   const campana = await campanaDelGimnasio(pool, id, gymId);
-  const { rows } = await pool.query(
-    `SELECT d.estado_envio FROM campana_destinatario d
-       JOIN miembro m ON m.id_miembro = d.id_miembro AND m.id_gimnasio = $3
-      WHERE d.id_campana = $1 AND d.id_miembro = $2`,
-    [id, idMiembro, gymId]
-  );
-  if (rows.length === 0) throw new AppError(404, 'Ese miembro no es destinatario de la campaña.', 'NOT_FOUND');
-  const destinatario = await registrarEntrega(pool, {
-    gymId, idCampana: id, idPlantilla: campana.id_plantilla, idMiembro, canal: campana.canal,
-    mensaje, estado: 'ENVIADO', usuarioId: req.user.id, canalDelGimnasio: deps.canalDelGimnasio,
-  });
-  return res.status(201).json({ destinatario });
+  if (campana.canal !== 'WHATSAPP') {
+    throw new AppError(409, 'Solo las campañas por WhatsApp se envían a mano.', 'CAMPANA_NO_EJECUTABLE');
+  }
+  if (campana.estado !== 'ENVIADA') {
+    throw new AppError(409, 'La campaña todavía no se ha ejecutado.', 'CAMPANA_NO_EJECUTABLE');
+  }
+  const { rows: gym } = await pool.query('SELECT nombre FROM gimnasio WHERE id_gimnasio = $1', [gymId]);
+  const r = await registrarEnvioManual(pool, {
+    campana: { ...campana, gimnasio: gym[0] ? gym[0].nombre : null }, gymId, idMiembro, usuarioId: req.user.id,
+  }, deps);
+  if (!r) throw new AppError(404, 'Ese miembro no es destinatario de la campaña.', 'NOT_FOUND');
+  if (r.error) {
+    throw new AppError(409, r.error.mensaje, 'CONTACTO_NO_PERMITIDO', {
+      motivo: r.error.motivo,
+      siguiente: r.error.siguiente ? r.error.siguiente.toISOString() : null,
+    });
+  }
+  return res.status(r.duplicado ? 200 : 201).json(r);
 }));
 
 module.exports = router;
 module.exports.ejecutarVencidas = ejecutarVencidas;
+module.exports.reanudarPendientes = reanudarPendientes;
 module.exports.setDeps = (nuevas) => { deps = { ...deps, ...nuevas }; };
