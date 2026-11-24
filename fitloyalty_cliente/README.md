@@ -56,12 +56,13 @@ FitLoyalty_Cliente/
 
 ## Construir el instalador (.apk) desde un clon
 
-Necesitas Flutter estable (Dart 3.13.2 o superior) y el SDK de Android. Desde `fitloyalty_cliente/`:
+Necesitas Flutter estable (Dart 3.13.2 o superior), JDK 17 o superior (viene con Android Studio) y el SDK de
+Android con sus licencias aceptadas (`flutter doctor --android-licenses`). Desde `fitloyalty_cliente/`:
 
 ```powershell
 # 1. Configuracion (no se sube al repositorio; la app no compila sin este archivo)
-Copy-Item assets/.env.example assets/.env
-# Para otro servidor, edita API_URL en assets/.env (ver los ejemplos del archivo).
+cp assets/.env.example assets/.env      # PowerShell, Linux y Mac
+# La plantilla apunta a PRODUCCION. Para otro servidor, edita API_URL en assets/.env (ver los ejemplos del archivo).
 
 # 2. Dependencias e instalador
 flutter pub get
@@ -69,12 +70,14 @@ flutter build apk --release
 ```
 
 El instalador queda en `build/app/outputs/flutter-apk/app-release.apk`. Pasalo al celular (USB o Drive), permite
-«instalar apps de origen desconocido» y ábrelo.
+«instalar apps de origen desconocido» y ábrelo. El `.apk` de release va firmado con la clave de depuración de cada
+PC: si ya tenías instalada la app construida en otro PC, desinstálala primero.
 
 - Si Flutter dice «Your project's Android Gradle Plugin version (9.1.0) is lower than Flutter's minimum supported
   version», agrega `--android-skip-build-dependency-validation` al `flutter build apk` (pasa con Flutter 3.50 o más).
 - Los íconos (`android/app/src/main/res/mipmap-*/ic_launcher.png`) están en el repositorio y salen del logo de
-  `frontend/src/assets/logo-icon-purple.svg`. El `.gitignore` ignora los demás `.png`.
+  `frontend/src/assets/logo-icon-purple.svg`. El `.gitignore` ignora los demás `.png` (menos los de
+  `docs/evidencias/capturas/rqnf-06/`).
 
 ---
 
@@ -107,7 +110,9 @@ adb devices
 adb reverse tcp:3001 tcp:3001
 ```
 
-Esto hace que cuando la app en el celular pida `http://localhost:3001`, llegue a tu PC.
+Esto hace que cuando la app en el celular pida `http://localhost:3001`, llegue a tu PC. Para que la app use ese
+servidor local y **no producción**, crea `assets/.env` con `API_URL=http://localhost:3001/api` (copia
+`assets/.env.example` y cambia esa línea: la plantilla apunta a producción).
 
 ### 3. Asignar la contraseña de la app desde el panel web
 
@@ -126,6 +131,9 @@ cd "C:\Users\Santiago\Documents\Estudios\Sena\FitLoyalty\FitLoyalty_\FitLoyalty_
 flutter pub get
 flutter run
 ```
+
+Si Flutter 3.50 o más se queja de la versión del Android Gradle Plugin, usa
+`flutter run --android-skip-build-dependency-validation`.
 
 ### 5. Probar el flujo
 
