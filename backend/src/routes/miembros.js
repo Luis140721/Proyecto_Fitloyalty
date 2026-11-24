@@ -281,7 +281,8 @@ const updateSchema = z.object({
 
   // App móvil del cliente
   // password: si llega string >=6 chars, se hashea y se guarda en password_hash.
-  //           si llega '', se interpreta como "borrar contrasena" (null en BD).
+  //           si llega '' (o menos de 6), zod la rechaza con 400: no hay forma
+  //           de borrarla desde aqui. El panel solo la manda si se escribio una.
   //           si no viene, NO se toca el password_hash existente.
   // app_acceso: booleano para apagar/encender acceso a la app del miembro.
   password: z.string().min(6, 'La contrasena debe tener minimo 6 caracteres').optional(),
@@ -1003,6 +1004,9 @@ router.get(
     const id = idDeMiembro(req.params.id);
 
     try {
+      // RQF-15: la ficha dice si el miembro tiene contrasena de la app
+      // (password_asignada) y si tiene el acceso encendido, pero nunca devuelve
+      // el password_hash.
       const { rows } = await pool.query(
         `SELECT id_miembro, nombre, documento, telefono, email, codigo_qr, qr_imagen,
                 activo, fecha_registro, tipo_documento, fecha_nacimiento, genero,
@@ -1011,7 +1015,8 @@ router.get(
                 nivel_experiencia, observaciones,
                 acepto_terminos, autorizo_datos,
                 representante_nombre, representante_tipo_documento, representante_documento,
-                representante_parentesco, representante_telefono
+                representante_parentesco, representante_telefono,
+                app_acceso, (password_hash IS NOT NULL) AS password_asignada
            FROM miembro WHERE id_miembro = $1 AND id_gimnasio = $2`,
         [id, gymId]
       );

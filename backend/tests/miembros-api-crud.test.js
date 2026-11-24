@@ -137,21 +137,38 @@ beforeEach(() => {
 afterEach(() => jest.restoreAllMocks());
 
 describe('GET /api/admin/miembros/:id: one member of the gym', () => {
-  test('should answer 200 in JSON with the member as it is stored, without the password hash nor the gym', async () => {
-    // Arrange: la fila 88 del gimnasio 7 (beforeEach)
-    const { id_gimnasio, password_hash, password_set_at, app_acceso, ...visible } = ANA();
+  test('should answer 200 in JSON with the member as it is stored and whether it has an app password, without the password hash nor the gym', async () => {
+    // Arrange: la fila 88 del gimnasio 7 (beforeEach), sin contrasena de la app y con el acceso apagado
+    const { id_gimnasio, password_hash, password_set_at, ...visible } = ANA();
 
     // Act
     const r = await pedir('get', '/88');
 
     // Assert: lo guardado, mas lo que el #102 (RQNF-17) calcula para la ficha y la
     // aceptacion de mensajes comerciales del #108 (RQNF-16, Ley 2300): sin fila en
-    // autorizacion_miembro, el miembro no los acepta por ningun canal
+    // autorizacion_miembro, el miembro no los acepta por ningun canal. RQF-15: la
+    // ficha dice si hay contrasena de la app y si el acceso esta encendido
     esJson(r, 200);
     expect(r.body.miembro).toEqual({
-      ...visible, autorizo_datos_sensibles: false, menor_de_edad: false, datos_sensibles_sin_autorizacion: true,
-      acepta_mensajes_comerciales: false, canales_comerciales: [],
+      ...visible, password_asignada: false, autorizo_datos_sensibles: false, menor_de_edad: false,
+      datos_sensibles_sin_autorizacion: true, acepta_mensajes_comerciales: false, canales_comerciales: [],
     });
+  });
+
+  test('should say the member has an app password without sending the hash when one is saved', async () => {
+    // Arrange: RQF-15, el gimnasio ya le asigno una contrasena de la app
+    ANA().password_hash = '$2b$10$hashDePruebaQueNoDebeSalir';
+    ANA().password_set_at = '2026-11-20T15:00:00.000Z';
+
+    // Act
+    const r = await pedir('get', '/88');
+
+    // Assert
+    esJson(r, 200);
+    expect(r.body.miembro.password_asignada).toBe(true);
+    expect(r.body.miembro).not.toHaveProperty('password_hash');
+    expect(r.body.miembro).not.toHaveProperty('password_set_at');
+    expect(r.text).not.toContain('hashDePruebaQueNoDebeSalir');
   });
 
   test('should answer 404 MEMBER_NOT_FOUND without its data when the member belongs to another gym', async () => {
