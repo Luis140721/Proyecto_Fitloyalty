@@ -20,7 +20,10 @@ evidencia de RQNF-02 sale de ese monitor.
 
 **Estado al 2026-11-23 a las 22:00: Parcial.** El primer día operativo
 completo, el lunes 23, UptimeRobot no registró caídas de 5:00 a 22:00 (100 %). Ver «Reporte
-con UptimeRobot».
+con UptimeRobot». El 2026-11-24 se revisó en la cuenta de UptimeRobot: confirma
+el registro sin caídas ni pausas, pero UptimeRobot no muestra cada
+comprobación, ni en la página pública ni en la cuenta (ver «Revisión en la
+cuenta de UptimeRobot»).
 
 ## Requisito
 
@@ -287,7 +290,7 @@ que hacía fallar a diario al monitor de GitHub.
 
 **También mantiene despierto a Render.** Con una consulta cada 5 minutos el
 servicio gratuito no llega a dormirse (se duerme tras 15 minutos sin tráfico),
-así que deja de pagar el arranque en frío de unos 30 segundos que hacía fallar
+así que deja de pagar el arranque en frío (de 30 segundos a un minuto) que hacía fallar
 al monitor de GitHub. Un servicio gratuito despierto todo el mes gasta casi las
 750 horas gratuitas del workspace de Render: si el workspace de Santiago tiene
 otro servicio gratuito, entre los dos podrían agotarlas antes de fin de mes.
@@ -354,12 +357,67 @@ comprobación. De las 204 que tocaban el lunes de 5:00 a 22:00, la muestra trae
 95 (entre 37 y 225 ms, con un promedio de 80 ms). Las otras 109 caen en huecos:
 de 5:00 a 5:25, de 8:30 a 11:05, de 12:30 a 13:50, a las 14:20, de 16:30 a
 18:20 y de 19:30 a 21:55. Con los datos públicos no se puede probar que esas
-109 se hicieron. Hay indicios de que sí: el registro no tiene caídas ni pausas,
-y después de cada hueco del horario la API respondió entre 63 y 78 ms; si nadie
-la hubiera consultado durante el hueco, Render se habría dormido y esa
-respuesta habría tardado unos 30 segundos o habría dado 503. **Pendiente:**
-confirmar con el historial de comprobaciones del lunes en la cuenta de
-UptimeRobot de Luis antes de dar el Parcial por respaldado.
+109 se hicieron.
+
+**Revisión en la cuenta de UptimeRobot (2026-11-24, hacia las 8:25 de
+Colombia).** Con la sesión de Luis abierta, se revisó el detalle del monitor en
+su cuenta sin cambiar nada. La página se vio con la traducción automática del
+navegador: por eso mezcla inglés y español, el nombre del monitor sale como
+«API FitLoyalty (Render) - healthz» y las frases citadas abajo son la
+traducción.
+
+- «Se revisa cada 5 m.» y «Actualmente activo desde hace 1 día, 8 horas y 49
+  minutos»: sigue arriba, sin pausas, desde la vuelta del domingo a las 23:36.
+- Últimas 24 horas (del lunes 23 a las 8:25 al martes 24 a las 8:25): 100 %,
+  0 incidentes, 0 minutos caídos.
+- Últimos 7 días: 99,744 %, 1 incidente, 5 min 4 s de caída. Esta cifra cubre
+  también el lunes de 5:00 a 8:25, que queda fuera de la ventana de 24 horas,
+  y su único incidente es la caída del domingo.
+- Últimos incidentes: solo el 503 del domingo 22 a las 23:31:30, de 5 min 4 s.
+  La lista termina ahí («¡Eso es todo, amigos!»).
+- Capturas, recortadas sin los datos de la cuenta:
+  `docs/evidencias/capturas/rqnf-02/uptimerobot-cuenta-resumen-2026-11-24.jpg`
+  y `docs/evidencias/capturas/rqnf-02/uptimerobot-cuenta-incidentes-2026-11-24.jpg`.
+  Lo que se leyó, con los bloques del gráfico:
+  `docs/evidencias/rqnf-02-uptimerobot-cuenta-2026-11-24.txt`.
+
+**UptimeRobot no muestra cada comprobación, ni en la página pública ni en la
+cuenta.** El gráfico de la cuenta (últimas 24 horas) trae un promedio por
+bloque de 30 minutos y, a las 8:25, tenía los mismos huecos que la página
+pública: el lunes no había bloques entre las 8:25 y las 11:10, entre las 12:10
+y las 13:55, entre las 16:25 y las 18:25 ni entre las 19:25 y las 22:40. Lo que
+muestra cambia de una consulta a otra: a las 8:25 el gráfico no tenía bloques
+entre las 4:00 y las 7:25 del martes, y a las 8:44 la página pública ya traía
+comprobaciones de 5:55 a 7:25 (18 puntos; falta el de las 6:50). Cada consulta a la página
+pública trae unos 150 puntos (150 el 23 y 154 el 24), lo que parece un límite
+de lo que muestra. Por eso, **con lo que muestra UptimeRobot no se puede contar
+ni probar que se hicieron las 204 comprobaciones del lunes**. Lo que respalda
+el 100 % es el registro de eventos: el monitor estuvo activo, sin pausas y sin
+caídas.
+
+Hay indicios de que las comprobaciones de los huecos sí se hicieron:
+
+- Comprobaciones que no se veían a las 8:25 aparecieron en la consulta de las
+  8:44: las del martes de 5:55 a 7:25.
+- Render, en el plan gratis, suspende el servicio después de 15 minutos sin
+  tráfico y tarda alrededor de un minuto en volver (ver «Causa probable del
+  `503`»). Después de cada hueco del lunes, el primer bloque promedió entre 61
+  y 85 ms. Si la API se hubiera dormido durante un hueco, la primera
+  comprobación después de él habría tardado cerca de un minuto o habría
+  fallado: el promedio de ese bloque habría subido a varios segundos o el
+  registro tendría una caída.
+- El workflow de GitHub corrió el lunes dos veces dentro del hueco de la tarde
+  de la página pública (16:30 a 18:20). A las 16:43 corrió el calentamiento,
+  que no cuenta como medición; según su log, recibió HTTP 200 en el primer
+  intento. A las 16:59 corrió una medición, que salió bien (HTTP 200 y
+  `status=ok`).
+
+Con esto, RQNF-02 sigue en **Parcial**. La condición de Parcial pide un día
+operativo completo «de mediciones cada 5 minutos». Aquí se da por cumplida con
+la configuración del monitor (cada 5 minutos) y con el registro de eventos sin
+pausas ni caídas, no con un conteo de comprobaciones, porque UptimeRobot no las
+muestra todas. El mismo límite aplica a la semana (ver el punto 6 de
+«Pendiente para completar D3»).
 
 ## Criterio de estado de RQNF-02
 
@@ -384,4 +442,6 @@ UptimeRobot de Luis antes de dar el Parcial por respaldado.
 6. Unificar cómo se mide antes del reporte de la semana: el «Criterio de
    disponibilidad» y el de Implementado cuentan mediciones exitosas sobre el
    total, y el reporte de UptimeRobot cuenta minutos caídos según el registro
-   de eventos.
+   de eventos. Como UptimeRobot no muestra cada comprobación (ver «Revisión
+   en la cuenta de UptimeRobot»), la semana no se puede medir contando
+   comprobaciones. Lo decide Luis antes del cierre del domingo 29.
