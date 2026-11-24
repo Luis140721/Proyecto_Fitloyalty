@@ -37,6 +37,12 @@ La meta es, por tanto, **99 % o más** y solo se mide **de lunes a domingo, de
 
 ## Criterio de disponibilidad
 
+**Desde el 2026-11-24, la semana se mide por minutos caídos** según el registro
+de eventos de UptimeRobot (decisión de Luis; ver «Criterio para la semana con
+UptimeRobot»). La fórmula de mediciones de esta sección era la del workflow de
+GitHub y se conserva como historia; la definición de comprobación exitosa
+sigue valiendo.
+
 Una comprobación cuenta como exitosa si el monitor recibe HTTP `200` y
 el cuerpo contiene `"status":"ok"`. Los errores HTTP, tiempos de espera y
 respuestas sin ese estado cuentan como fallos.
@@ -305,13 +311,32 @@ pide el horario operativo (5:00 a 22:00 de Colombia). Al cierre del período:
 3. La semana es la suma de los siete días: `(7140 - minutos caídos) / 7140 * 100`.
 4. Anotar también el porcentaje de 24 horas que muestra UptimeRobot, aparte.
 
+**Criterio para la semana con UptimeRobot (lo decidió Luis el 2026-11-24, antes
+del cierre de la semana).** UptimeRobot no muestra cada comprobación (ver
+«Revisión en la cuenta de UptimeRobot»), así que la semana no se mide contando
+comprobaciones sino por **minutos caídos** según el registro de eventos, con la
+receta de arriba:
+
+- **Período:** del lunes 2026-11-23 al domingo 2026-11-29, solo de 5:00 a
+  22:00 de Colombia: 7 días × 1.020 minutos = **7.140 minutos**.
+- **Minutos caídos:** la duración de cada caída del registro, desde que el
+  monitor la marca hasta que vuelve a estar arriba, contando solo la parte que
+  cae dentro de 5:00 a 22:00.
+- **Pausas:** si el monitor se pausa dentro del horario, ese tiempo cuenta como
+  caído, porque no hay medición que lo respalde.
+- **Disponibilidad de la semana:** `(7140 - minutos caídos) / 7140 * 100`.
+- **Implementado** con 99 % o más: como máximo **71 minutos y 24 segundos**
+  caídos en el horario de la semana. Con más, RQNF-02 queda en Parcial.
+- La regla se fijó el martes 24, con el lunes ya medido y antes del cierre de
+  la semana, y no se cambia después.
+
 **Calendario.**
 
 | Fecha | Qué se puede decir |
 |---|---|
 | Lunes 2026-11-23 a las 22:00 | **Hecho.** El primer día operativo completo dio 100 % y RQNF-02 pasa a **Parcial** (ver «Reporte con UptimeRobot») |
 | Viernes 2026-11-27 (entrega) | «En medición desde el 22 de noviembre», con los días completos que lleve (lunes a jueves) |
-| Domingo 2026-11-29 a las 22:00 | Cierra la primera semana completa (lunes 23 a domingo 29). Con 99 % o más, **Implementado** |
+| Domingo 2026-11-29 a las 22:00 | Cierra la primera semana completa (lunes 23 a domingo 29). Con 99 % o más (como máximo 71 minutos y 24 segundos caídos en el horario), **Implementado** |
 | Lunes 2026-11-30 | Llenar el reporte con los siete días |
 
 ## Reporte con UptimeRobot
@@ -416,8 +441,8 @@ Con esto, RQNF-02 sigue en **Parcial**. La condición de Parcial pide un día
 operativo completo «de mediciones cada 5 minutos». Aquí se da por cumplida con
 la configuración del monitor (cada 5 minutos) y con el registro de eventos sin
 pausas ni caídas, no con un conteo de comprobaciones, porque UptimeRobot no las
-muestra todas. El mismo límite aplica a la semana (ver el punto 6 de
-«Pendiente para completar D3»).
+muestra todas. Por el mismo motivo, la semana se mide por minutos caídos (ver
+«Criterio para la semana con UptimeRobot»).
 
 ## Criterio de estado de RQNF-02
 
@@ -425,7 +450,7 @@ muestra todas. El mismo límite aplica a la semana (ver el punto 6 de
 |---|---|
 | Pendiente | Mientras no haya un día operativo completo medido. Un monitor sin datos no demuestra disponibilidad |
 | Parcial | Al menos un día operativo completo (5:00 a 22:00) de mediciones cada 5 minutos, con el reporte lleno. También si la medición de 7 días da menos de 99 %. **Estado actual, desde el 2026-11-23** |
-| Implementado | 7 días seguidos (una semana completa de lunes a domingo, unas 1.428 mediciones nominales) con 99 % o más de mediciones exitosas. Lo ideal son 30 días |
+| Implementado | 7 días seguidos (una semana completa de lunes a domingo) con 99 % o más del horario operativo sin caídas, según el registro de eventos de UptimeRobot: como máximo 71 minutos y 24 segundos caídos de los 7.140 de la semana (ver «Criterio para la semana con UptimeRobot»; antes del 2026-11-24 decía «unas 1.428 mediciones nominales con 99 % o más de mediciones exitosas»). Lo ideal son 30 días |
 
 ## Pendiente para completar D3
 
@@ -439,9 +464,7 @@ muestra todas. El mismo límite aplica a la semana (ver el punto 6 de
    del monitor externo, con una fila por día de Colombia y una fila con la suma
    de la semana, como dice «Cómo se arma el reporte».
 5. Decidir si se apaga `availability-monitor.yml`, que ya no aporta evidencia.
-6. Unificar cómo se mide antes del reporte de la semana: el «Criterio de
-   disponibilidad» y el de Implementado cuentan mediciones exitosas sobre el
-   total, y el reporte de UptimeRobot cuenta minutos caídos según el registro
-   de eventos. Como UptimeRobot no muestra cada comprobación (ver «Revisión
-   en la cuenta de UptimeRobot»), la semana no se puede medir contando
-   comprobaciones. Lo decide Luis antes del cierre del domingo 29.
+6. ~~Unificar cómo se mide antes del reporte de la semana.~~ Hecho el
+   2026-11-24: Luis decidió medir la semana por minutos caídos según el
+   registro de eventos de UptimeRobot, porque UptimeRobot no muestra cada
+   comprobación. Ver «Criterio para la semana con UptimeRobot».
