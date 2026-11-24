@@ -255,7 +255,8 @@ describe('POST /api/auth/forgot-password', () => {
   describe('el codigo no viaja en la respuesta salvo en el modo demo local', () => {
     const entorno = { NODE_ENV: process.env.NODE_ENV, SHOW_DEV_CODE_IN_UI: process.env.SHOW_DEV_CODE_IN_UI };
     const fijarEntorno = ({ nodeEnv, mostrar }) => {
-      process.env.NODE_ENV = nodeEnv;
+      if (nodeEnv === undefined) delete process.env.NODE_ENV;
+      else process.env.NODE_ENV = nodeEnv;
       if (mostrar === undefined) delete process.env.SHOW_DEV_CODE_IN_UI;
       else process.env.SHOW_DEV_CODE_IN_UI = mostrar;
     };
@@ -276,6 +277,9 @@ describe('POST /api/auth/forgot-password', () => {
       ['production con SHOW_DEV_CODE_IN_UI=true', { nodeEnv: 'production', mostrar: 'true' }],
       ['development sin la variable', { nodeEnv: 'development', mostrar: undefined }],
       ['development con SHOW_DEV_CODE_IN_UI=false', { nodeEnv: 'development', mostrar: 'false' }],
+      // NODE_ENV es una lista blanca: si falta o trae otro valor, cuenta como produccion
+      ['sin NODE_ENV y con SHOW_DEV_CODE_IN_UI=true', { nodeEnv: undefined, mostrar: 'true' }],
+      ['staging con SHOW_DEV_CODE_IN_UI=true', { nodeEnv: 'staging', mostrar: 'true' }],
     ])('si el correo no sale, la respuesta es la generica y no trae el codigo (%s)', async (_caso, config) => {
       // Arrange
       fijarEntorno(config);
@@ -307,11 +311,12 @@ describe('POST /api/auth/forgot-password', () => {
     });
 
     test.each([
-      ['el correo no salio', { delivered: false, reason: 'no-api' }, 'no-api'],
-      ['el correo salio', { delivered: true }, 'demo-mode'],
-    ])('en el modo demo local muestra el codigo guardado (%s)', async (_caso, envio, motivo) => {
+      ['development, el correo no salio', 'development', { delivered: false, reason: 'no-api' }, 'no-api'],
+      ['development, el correo salio', 'development', { delivered: true }, 'demo-mode'],
+      ['test, el correo no salio', 'test', { delivered: false, reason: 'no-api' }, 'no-api'],
+    ])('en el modo demo local muestra el codigo guardado (%s)', async (_caso, nodeEnv, envio, motivo) => {
       // Arrange
-      fijarEntorno({ nodeEnv: 'development', mostrar: 'true' });
+      fijarEntorno({ nodeEnv, mostrar: 'true' });
       simularBd();
       mockSendRecoveryCode.mockResolvedValue(envio);
       jest.spyOn(console, 'warn').mockImplementation(() => {});

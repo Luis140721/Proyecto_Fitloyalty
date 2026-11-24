@@ -137,7 +137,7 @@ Ninguno de los dos archivos `.env` se versiona — están cubiertos por `.gitign
 |-----------------------|:-----------:|-------------|-------------|
 | `BREVO_API_KEY`       | no          | —           | API key v3 de Brevo (`xkeysib-…`). **Sin ella no se envía ningún correo** |
 | `MAIL_FROM`           | no          | `FitLoyalty <fitloyaltysaas@gmail.com>` | Remitente, formato `Nombre <correo>` |
-| `SHOW_DEV_CODE_IN_UI` | no          | `false`     | Muestra el código de recuperación en pantalla. Solo para demos en un equipo local: con `NODE_ENV=production` no tiene efecto |
+| `SHOW_DEV_CODE_IN_UI` | no          | `false`     | Muestra el código de recuperación en pantalla. Solo para demos en un equipo local: tiene efecto únicamente con `NODE_ENV=development` o `test` |
 
 ### Frontend
 
@@ -357,8 +357,11 @@ MAIL_FROM=FitLoyalty <tucorreo@tudominio.com>
 y reinicia el backend: `docker compose up -d backend`.
 
 **Sin `BREVO_API_KEY` los correos no se envían.** El sistema cae a "modo consola":
-registra el mensaje en el log y devuelve el código de recuperación dentro de la
-respuesta HTTP para que la interfaz pueda mostrarlo.
+deja en el log a quién iba el correo y su asunto, sin enviarlo. El código de
+recuperación **no** viaja en la respuesta HTTP. Fuera de desarrollo (`NODE_ENV`
+distinto de `development` o `test`) los números del asunto salen tapados, porque el
+asunto del correo de recuperación lleva el código. Para ensayar la recuperación sin
+correo, usa el modo demo de `SHOW_DEV_CODE_IN_UI` (ver la nota de abajo).
 
 Verifica que funciona pidiendo un restablecimiento y mirando el log:
 
@@ -375,9 +378,11 @@ docker compose logs backend | grep EMAIL
 
 > ⚠️ **`SHOW_DEV_CODE_IN_UI`**: muestra el código de recuperación en pantalla
 > para ensayar el flujo sin correo. Solo funciona con `SHOW_DEV_CODE_IN_UI=true` y
-> `NODE_ENV` distinto de `production`. En producción el código llega únicamente por
-> correo: si el envío falla, la persona ve el mensaje de siempre y el servidor deja
-> el motivo en el log. (Antes, si el correo fallaba, el código salía en la respuesta
+> `NODE_ENV=development` (o `test`); si `NODE_ENV` falta o trae otro valor, cuenta como
+> producción. Con `docker compose`, `NODE_ENV` vale `production` por defecto: para el
+> modo demo pon `NODE_ENV=development` y `SHOW_DEV_CODE_IN_UI=true` en tu `.env`. En
+> producción el código llega únicamente por correo: si el envío falla, la persona ve
+> el mensaje de siempre y el servidor deja el motivo en el log. (Antes, si el correo fallaba, el código salía en la respuesta
 > aunque la variable estuviera en `false`, y cualquiera que conociera un correo del
 > panel podía cambiarle la contraseña).
 
