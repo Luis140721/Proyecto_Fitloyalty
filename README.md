@@ -137,7 +137,7 @@ Ninguno de los dos archivos `.env` se versiona — están cubiertos por `.gitign
 |-----------------------|:-----------:|-------------|-------------|
 | `BREVO_API_KEY`       | no          | —           | API key v3 de Brevo (`xkeysib-…`). **Sin ella no se envía ningún correo** |
 | `MAIL_FROM`           | no          | `FitLoyalty <fitloyaltysaas@gmail.com>` | Remitente, formato `Nombre <correo>` |
-| `SHOW_DEV_CODE_IN_UI` | no          | `false`     | Expone el código de recuperación en la respuesta HTTP. Solo para demos |
+| `SHOW_DEV_CODE_IN_UI` | no          | `false`     | Muestra el código de recuperación en pantalla. Solo para demos en un equipo local: con `NODE_ENV=production` no tiene efecto |
 
 ### Frontend
 
@@ -373,12 +373,13 @@ docker compose logs backend | grep EMAIL
 | `Enviado OK: <id>`               | Correo entregado |
 | `Error Brevo: Status code: 401`  | La clave es inválida o expiró |
 
-> ⚠️ **`SHOW_DEV_CODE_IN_UI`**: cuando el envío falla, la API incluye el código de
-> recuperación en la respuesta HTTP aunque esta variable esté en `false`. Es útil
-> para demostrar el flujo sin dominio verificado, pero significa que **cualquiera
-> podría restablecer una contraseña ajena si el correo deja de funcionar**. Antes de
-> exponer el servicio a usuarios reales, configura `BREVO_API_KEY` y elimina ese
-> fallback en `backend/src/routes/auth.js`.
+> ⚠️ **`SHOW_DEV_CODE_IN_UI`**: muestra el código de recuperación en pantalla
+> para ensayar el flujo sin correo. Solo funciona con `SHOW_DEV_CODE_IN_UI=true` y
+> `NODE_ENV` distinto de `production`. En producción el código llega únicamente por
+> correo: si el envío falla, la persona ve el mensaje de siempre y el servidor deja
+> el motivo en el log. (Antes, si el correo fallaba, el código salía en la respuesta
+> aunque la variable estuviera en `false`, y cualquiera que conociera un correo del
+> panel podía cambiarle la contraseña).
 
 ---
 

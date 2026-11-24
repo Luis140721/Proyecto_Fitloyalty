@@ -248,4 +248,79 @@ describe('POST /api/auth/forgot-password', () => {
     expect(vence.getTime() - AHORA.getTime()).toBe(15 * 60_000);
     expect(mockSendRecoveryCode).toHaveBeenCalledWith(expect.objectContaining({ to: 'ana@gym.co', code, expiresMinutes: 15 }));
   });
+
+  // Antes, si el correo no salia, el codigo viajaba en la respuesta y la pagina
+  // lo mostraba: quien conociera el correo de alguien del panel podia cambiarle
+  // la contrasena. Ahora solo se muestra en el modo demo de un equipo local.
+  describe('el codigo no viaja en la respuesta salvo en el modo demo local', () => {
+    const entorno = { NODE_ENV: process.env.NODE_ENV, SHOW_DEV_CODE_IN_UI: process.env.SHOW_DEV_CODE_IN_UI };
+    const fijarEntorno = ({ nodeEnv, mostrar }) => {
+      process.env.NODE_ENV = nodeEnv;
+      if (mostrar === undefined) delete process.env.SHOW_DEV_CODE_IN_UI;
+      else process.env.SHOW_DEV_CODE_IN_UI = mostrar;
+    };
+    const codigoGuardado = () => llamadas(/INSERT INTO password_reset/)[0][1][1];
+    const GENERICA = {
+      message: 'Si el correo esta registrado, te enviamos un codigo para recuperar tu contrasena.',
+      resendAfterSeconds: 60,
+    };
+
+    afterEach(() => {
+      process.env.NODE_ENV = entorno.NODE_ENV;
+      if (entorno.SHOW_DEV_CODE_IN_UI === undefined) delete process.env.SHOW_DEV_CODE_IN_UI;
+      else process.env.SHOW_DEV_CODE_IN_UI = entorno.SHOW_DEV_CODE_IN_UI;
+    });
+
+    test.each([
+      ['production sin la variable', { nodeEnv: 'production', mostrar: undefined }],
+      ['production con SHOW_DEV_CODE_IN_UI=true', { nodeEnv: 'production', mostrar: 'true' }],
+      ['development sin la variable', { nodeEnv: 'development', mostrar: undefined }],
+      ['development con SHOW_DEV_CODE_IN_UI=false', { nodeEnv: 'development', mostrar: 'false' }],
+    ])('si el correo no sale, la respuesta es la generica y no trae el codigo (%s)', async (_caso, config) => {
+      // Arrange
+      fijarEntorno(config);
+      simularBd();
+      mockSendRecoveryCode.mockResolvedValue({ delivered: false, reason: 'no-api' });
+      const aviso = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+      // Act
+      const r = await pedir('ana@gym.co');
+
+      // Assert: lo mismo que ve quien pide con un correo que no existe
+      expect(r.status).toBe(200);
+      expect(r.body).toEqual(GENERICA);
+      expect(JSON.stringify(r.body)).not.toContain(codigoGuardado());
+      expect(aviso).toHaveBeenCalledWith(expect.stringContaining('No se pudo enviar el correo de recuperacion'), 'no-api');
+    });
+
+    test('con el correo entregado en produccion y SHOW_DEV_CODE_IN_UI=true tampoco trae el codigo', async () => {
+      // Arrange
+      fijarEntorno({ nodeEnv: 'production', mostrar: 'true' });
+      simularBd();
+      mockSendRecoveryCode.mockResolvedValue({ delivered: true });
+
+      // Act
+      const r = await pedir('ana@gym.co');
+
+      // Assert
+      expect(r.body).toEqual(GENERICA);
+    });
+
+    test.each([
+      ['el correo no salio', { delivered: false, reason: 'no-api' }, 'no-api'],
+      ['el correo salio', { delivered: true }, 'demo-mode'],
+    ])('en el modo demo local muestra el codigo guardado (%s)', async (_caso, envio, motivo) => {
+      // Arrange
+      fijarEntorno({ nodeEnv: 'development', mostrar: 'true' });
+      simularBd();
+      mockSendRecoveryCode.mockResolvedValue(envio);
+      jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+      // Act
+      const r = await pedir('ana@gym.co');
+
+      // Assert: es el mismo codigo que quedo guardado, para poder ensayar el flujo
+      expect(r.body).toEqual({ ...GENERICA, devCode: codigoGuardado(), showCodeInUI: true, devCodeReason: motivo });
+    });
+  });
 });
