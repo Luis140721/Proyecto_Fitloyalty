@@ -60,6 +60,8 @@ frontend/.vite.err.log
 *.png
 **/*.png
 !docs/evidencias/capturas/rqnf-06/*.png
+# Iconos de la app Android: sin ellos la app no se puede construir desde un clon.
+!fitloyalty_cliente/android/app/src/main/res/mipmap-*/*.png
 .fitloyalty-*.png
 .fitloyalty-*.jpg
 kinetic-*.png
