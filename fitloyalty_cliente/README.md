@@ -61,7 +61,8 @@ Android con sus licencias aceptadas (`flutter doctor --android-licenses`). Desde
 
 ```powershell
 # 1. Configuracion (no se sube al repositorio; la app no compila sin este archivo)
-cp assets/.env.example assets/.env      # PowerShell, Linux y Mac
+# (el mismo comando sirve en PowerShell, Linux y Mac)
+cp assets/.env.example assets/.env
 # La plantilla apunta a PRODUCCION. Para otro servidor, edita API_URL en assets/.env (ver los ejemplos del archivo).
 
 # 2. Dependencias e instalador
@@ -75,6 +76,9 @@ PC: si ya tenías instalada la app construida en otro PC, desinstálala primero.
 
 - Si Flutter dice «Your project's Android Gradle Plugin version (9.1.0) is lower than Flutter's minimum supported
   version», agrega `--android-skip-build-dependency-validation` al `flutter build apk` (pasa con Flutter 3.50 o más).
+- **Ojo con la versión del servidor:** la app de `develop` trae funciones que producción (la rama `main`) todavía no tiene,
+  como las preferencias de mensajes comerciales («Más»), y producción tampoco tiene todavía el campo «Contraseña de la
+  app» del panel (#122). Hasta la próxima versión, para probarlas usa un backend local.
 - Los íconos (`android/app/src/main/res/mipmap-*/ic_launcher.png`) están en el repositorio y salen del logo de
   `frontend/src/assets/logo-icon-purple.svg`. El `.gitignore` ignora los demás `.png` (menos los de
   `docs/evidencias/capturas/rqnf-06/`).
