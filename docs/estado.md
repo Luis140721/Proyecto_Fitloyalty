@@ -1,11 +1,31 @@
 # Estado: avance real de requisitos
 
-- **Fecha:** 2026-11-21 (actualizaciones tras las fusiones en `develop` del 18, el 19, el 20, el 25 y el 27 de octubre y el 13, el 14, el 20 y el 21 de noviembre; la medición inicial fue el 2026-10-16)
-- **Rama:** `docs/avance-2026-11-21` (PR hacia `develop`). Las anteriores fueron `docs/avance-2026-11-20-legal` (PR #103), `docs/avance-2026-11-14` (PR #74), `docs/avance-2026-11-06` (PR #70), `docs/avance-2026-10-18` (PR #20), `docs/avance-2026-10-19` (PR #25), `docs/avance-2026-10-19-b` (PR #29), `docs/avance-2026-10-20` (PR #35) y `docs/avance-2026-10-25` (PR #44); la medición inicial se hizo en `docs/avance-requisitos` (PR #6, ya en `main`).
-- **Código verificado:** `develop` @ `f41fa7e` para los requisitos de las actualizaciones (secciones siguientes); el resto, `main` @ `54b19fa`. El PR #5 (`8acab31`) solo agregó `CONTRIBUTING.md` y el check de nombre de rama al CI (sin cambios en el código de la app); se fusionó en esta rama y es la base de la evidencia del CI.
+- **Fecha:** 2026-11-23 (actualizaciones tras las fusiones en `develop` del 18, el 19, el 20, el 25 y el 27 de octubre y el 13, el 14, el 20, el 21, el 22 y el 23 de noviembre; la medición inicial fue el 2026-10-16)
+- **Rama:** `docs/avance-2026-11-23` (PR hacia `develop`). Las anteriores fueron `docs/avance-2026-11-21` (PR #107), `docs/avance-2026-11-20-legal` (PR #103), `docs/avance-2026-11-14` (PR #74), `docs/avance-2026-11-06` (PR #70), `docs/avance-2026-10-18` (PR #20), `docs/avance-2026-10-19` (PR #25), `docs/avance-2026-10-19-b` (PR #29), `docs/avance-2026-10-20` (PR #35) y `docs/avance-2026-10-25` (PR #44); la medición inicial se hizo en `docs/avance-requisitos` (PR #6, ya en `main`).
+- **Código verificado:** `develop` @ `9fb3f7b` para la actualización del 2026-11-23 y para todas las citas archivo:línea de `docs/matriz-requisitos.md`, que se auditaron otra vez ese día; las secciones anteriores citan el commit de su fecha. El resto, `main` @ `54b19fa`. El PR #5 (`8acab31`) solo agregó `CONTRIBUTING.md` y el check de nombre de rama al CI (sin cambios en el código de la app); se fusionó en esta rama y es la base de la evidencia del CI.
 - **Base de la documentación:** por decisión de Luis, los archivos de Santiago del PR #4 (`docs/borrador-matriz-requisitos` @ `00cdcdb`), verificados y corregidos aquí.
 - **Copias de seguridad:** los originales de `Documentación/` están en `54b19fa` y los archivos de Santiago sin corregir en el commit `5db4e2a` de esta rama (o en `00cdcdb`). Ejemplo: `git show 00cdcdb:docs/avance-requisitos.xlsx > copia.xlsx`.
 - **Responsable de esta tarea:** agente ejecutor (Claude de Luis). Solo documentación y Excel; el reparto de las implementaciones está en `docs/plan-trabajo.md`.
+
+## Actualización del 2026-11-23
+
+**El avance sube a 96,3 % (38,5/40): RF 100,0 % y RNF 91,7 %. Se mantiene por encima de la meta del 90 %.** Solo se marcó lo fusionado en `develop` (`9fb3f7b`) y revisado.
+
+| Req. | Antes | Ahora | PR | Evidencia y motivo |
+|---|---|---|---|---|
+| RQNF-16 | Pendiente | **Implementado** | #108, #116 | Ley 2300 de 2023, arts. 2, 3 y 5. Horario de lunes a viernes de 7:00 a 19:00 y sábados de 8:00 a 15:00 (`lib/contacto-legal.js:72-79`), sin domingos ni festivos de Colombia, que se calculan cada año, con la Virgen de Chiquinquirá desde 2026 (`:202`, `:228`); un contacto al día y un solo canal por semana (`:305-321`); los mensajes comerciales solo con aceptación y por el canal autorizado (`puedeContactar`, `:370-411`). Se aplica a las campañas (`lib/campanas.js:142-152`, `:358-361`), al registro de envíos de RQF-09 (`routes/notificaciones.js:515`, `:531-544`) y a los avisos de vencimiento (`jobs/expiracion.js:157-165`, `:233-248`). Baja de los mensajes comerciales en la app (`routes/preferencias.js:119`), con el enlace firmado del final de cada mensaje (`:177-183`, `lib/baja-mensajes.js:29`) y en el panel (`AutorizacionesMiembro.jsx:178`). Migraciones 017 y 018. Seis revisiones independientes; la quinta y la sexta, sin bloqueos. Los checks del PR en verde: `backend`, `frontend`, `integracion`, `e2e`, `evidencia-individual` y `rama`. El #116 cierra lo que encontraron esas revisiones: el alta de un miembro abre siempre en blanco y la ficha solo manda una autorización si se cambió. Evidencia: `docs/evidencias/rqnf-16-ley-2300.md`, `docs/evidencias/rqnf-16-pruebas-bootcamp.md` y la última sección de `docs/evidencias/rqnf-17-datos-sensibles-menores.md`. |
+
+CI de `develop` @ `9fb3f7b` (workflow `tests`, run 45297554190): `backend` 1343 pasan y 250 se saltan (las de integración), `integracion` 270 de 270, `frontend` 895 de 895 y `e2e` 44 de 44, sin saltadas ni inestables. Es el mismo resultado del run sobre `27cd28a` (45161180416): el #119 solo trae documentación.
+
+**También:**
+- **Producción.** La release 2 (#112, `main` @ `41d0d8b`) llevó a `main` el bootcamp de pruebas y el #109; Render no recibe el aviso de GitHub, así que Santiago la desplegó a mano el 2026-11-23 y, según él, quedaron aplicadas las migraciones 015, 016, 019 y 020. La release 3 (#115, `main` @ `7e1e4d0`) trajo las fotos de la landing (#114) y ya está en producción. **El #108, el #116 y el #83 están en `develop` pero no en `main`**: la release 3 es anterior al #108, así que producción todavía no aplica la Ley 2300 ni tiene las migraciones 017 y 018. `QR_DINAMICO_SECRET` sigue sin definirse en Render.
+- **RQNF-02 sigue Pendiente.** Desde el 2026-11-22 a las 23:30 de Colombia mide un monitor externo, UptimeRobot, cada 5 minutos (página pública https://stats.uptimerobot.com/zqKSy3C8RT; `docs/evidencias/rqnf-02-disponibilidad.md`, sección «Monitor externo (UptimeRobot)», PR #119). El primer día operativo completo medido termina hoy, lunes 2026-11-23, a las 22:00; con ese día en el reporte puede pasar a Parcial (98,8 %). La primera semana completa cierra el domingo 2026-11-29 a las 22:00.
+- **RQNF-04 sigue Parcial: faltan las 3 sesiones con participantes.** Desde el #109, un documento escrito en el campo del QR se registra como ingreso MANUAL (`frontend/src/lib/checkin.js:19`, `:39-41`, `:47-49`). Producción ya tiene el #109 y el backend de la release 2, así que las sesiones se pueden hacer con el enlace de producción (https://fitloyalty-zeta.vercel.app). Observación de Daniel: el campo «O por documento» muestra como ejemplo `79123456` (`CheckinPage.jsx:404`), el mismo documento de la tarea del protocolo; conviene que la tarea use otro documento.
+- **Bootcamp de pruebas (#48, que trae el #110):** pnpm, las pruebas pasan de `ci.yml` a `.github/workflows/tests.yml` con los jobs `integracion` (PostgreSQL 16) y `e2e` (Playwright), y umbrales de cobertura (`backend/jest.config.js:35-37`, `frontend/vite.config.js:36`). Se actualizan las filas de RQNF-07 y RQNF-11, sin cambio de estado.
+- **#83 (Santiago):** los largos de los VARCHAR de miembro se validan con `hasta()` (`routes/miembros.js:126`) y hay pruebas de `plan_cobro` contra la BD real (`backend/tests/integracion/plan-cobro.test.js`). No cambia ningún estado.
+- **RQF-14:** con el #108 el reintento de los avisos de vencimiento pasa de las 15:00 a las 14:00 (`jobs/scheduler.js:69`), porque a las 15:00 del sábado ya está fuera del horario de la ley. Se corrige su fila.
+- **Decisión del QR (Luis, 2026-11-21):** se queda el QR dinámico del miembro. Queda escrita en `docs/decisiones/0001-qr-dinamico-del-miembro.md`.
+- **Observaciones del verificador del #107:** se corrigió el texto vencido de RQF-15 (la app ya tiene «Unirme», la bandeja de mensajes y pruebas Flutter), el tipo y las citas de EV-16 y EV-18 en el Excel, y se auditaron todas las citas archivo:línea de la matriz contra `9fb3f7b`.
 
 ## Actualización del 2026-11-21
 
@@ -160,17 +180,17 @@ Solo se marcó lo que está fusionado en `develop` y revisado por el verificador
 
 | Alcance | RF | RNF | Global |
 |---|---:|---:|---:|
-| **Final (RQF-01..22, RQNF-01..18)** | 100,0 % (22 puntos de 22) | 86,1 % (15,5 puntos de 18) | **93,8 % (37,5 puntos de 40)** |
+| **Final (RQF-01..22, RQNF-01..18)** | 100,0 % (22 puntos de 22) | 91,7 % (16,5 puntos de 18) | **96,3 % (38,5 puntos de 40)** |
 | Solo original del docx (RQF-01..12, RQNF-01..08) | 100,0 % (12 puntos de 12) | 81,3 % (6,5 puntos de 8) | 92,5 % (18,5 puntos de 20) |
 
-Fórmula: (implementados + 0,5 × parciales) / total; los puntos son esa suma. El 2026-10-16 el avance era 62,2 % (23/37, la cifra conciliada con el verificador); RQF-22 suma 1 punto, y RQNF-05, RQF-07, RQF-02 y RQF-01 medio cada uno; el 2026-10-19 RQF-09 resta medio (issue #24) y RQNF-10 y RQF-06 suman medio cada uno; el 2026-10-20 RQF-11 suma 1 punto y RQF-14, RQF-13, RQF-04 y RQNF-07 medio cada uno; el 2026-10-25 RQNF-01 y RQNF-15 suman 1 punto cada uno y RQF-08 y RQNF-09 medio cada uno. El 2026-11-14, RQF-09 y RQNF-06 suman medio punto cada uno. El 2026-11-20 entran RQNF-16, RQNF-17 y RQNF-18 (el total pasa a 40) y RQNF-17 y RQNF-18 suman un punto cada uno. El 2026-11-21, RQF-10 y RQF-12 suman un punto cada uno. **La meta del Excel es el 90 % (decisión de Luis del 2026-10-25): con 40 requisitos son 36 puntos y ya se supera, con 37,5.** La del 80 % pedida para la entrega (32 puntos con 40 requisitos) ya está superada; ver la hoja «Trabajo pendiente». El PR #4 decía 80,5 % porque daba por implementados requisitos que el código no respalda y contaba aparte funciones que repetían otras (ver «Correcciones»).
+Fórmula: (implementados + 0,5 × parciales) / total; los puntos son esa suma. El 2026-10-16 el avance era 62,2 % (23/37, la cifra conciliada con el verificador); RQF-22 suma 1 punto, y RQNF-05, RQF-07, RQF-02 y RQF-01 medio cada uno; el 2026-10-19 RQF-09 resta medio (issue #24) y RQNF-10 y RQF-06 suman medio cada uno; el 2026-10-20 RQF-11 suma 1 punto y RQF-14, RQF-13, RQF-04 y RQNF-07 medio cada uno; el 2026-10-25 RQNF-01 y RQNF-15 suman 1 punto cada uno y RQF-08 y RQNF-09 medio cada uno. El 2026-11-14, RQF-09 y RQNF-06 suman medio punto cada uno. El 2026-11-20 entran RQNF-16, RQNF-17 y RQNF-18 (el total pasa a 40) y RQNF-17 y RQNF-18 suman un punto cada uno. El 2026-11-21, RQF-10 y RQF-12 suman un punto cada uno. El 2026-11-23, RQNF-16 suma un punto; como es un requisito nuevo, el alcance original no cambia. **La meta del Excel es el 90 % (decisión de Luis del 2026-10-25): con 40 requisitos son 36 puntos y ya se supera, con 38,5.** La del 80 % pedida para la entrega (32 puntos con 40 requisitos) ya está superada; ver la hoja «Trabajo pendiente». El PR #4 decía 80,5 % porque daba por implementados requisitos que el código no respalda y contaba aparte funciones que repetían otras (ver «Correcciones»).
 
 **Decisión de Luis aplicada (2026-10-16):** se retiraron RQF-23 (repetía RQF-08), RQF-24 (repetía RQF-05) y RQF-25 (repetía RQF-03 y es un defecto de seguridad), y RQF-26 (editar el perfil) se fusionó en RQF-15. La numeración queda consecutiva, sin renumerar. Con los cuatro, el avance habría sido 63,4 % (26 puntos de 41).
 
 **Ruta al 100 %** (hoja «Trabajo pendiente», en el mismo orden):
-- RQNF-04: las 3 sesiones de Luis → 95,0 %.
-- RQNF-02: monitor externo, 7 días seguidos al 99 % o más → 97,5 %.
-- RQNF-16 (Ley 2300): rama `feat/rqnf-16-ley2300` → 100 %.
+- RQNF-04: las 3 sesiones con participantes → 97,5 %.
+- RQNF-02: un día operativo completo medido por UptimeRobot, con el reporte lleno, pasa a Parcial → 98,8 %.
+- RQNF-02: 7 días seguidos (de lunes a domingo) al 99 % o más pasa a Implementado → 100 %.
 
 ## Qué se hizo
 
@@ -306,7 +326,7 @@ Ajustes de redacción:
 ## Cómo verificar
 
 - **Porcentajes:** `docs/avance-requisitos.xlsx` → Resumen. Todo son fórmulas sobre las hojas RF y RNF.
-- **Evidencias:** hoja Evidencias, con la ruta del archivo y la línea en el commit `54b19fa`; las filas fechadas el 2026-10-18 citan `develop` @ `1ddcb24` o, las de RQF-01, RQF-02, RQF-04, RQF-07 y RQF-22, `develop` @ `f3d323c` o `bdf987b`; las del 2026-10-19, `develop` @ `dcda269` (RQF-09, con el issue #24) o `66186d7` (RQNF-10 y RQF-06). Las filas fechadas el 2026-11-06 citan `develop` @ `a9f7ce1`; las del 2026-11-14, `develop` @ `b780cc9`, las del 2026-11-20, `develop` @ `907af1a`, y las del 2026-11-21, `develop` @ `f41fa7e`.
+- **Evidencias:** hoja Evidencias, con la ruta del archivo y la línea en el commit `54b19fa`; las filas fechadas el 2026-10-18 citan `develop` @ `1ddcb24` o, las de RQF-01, RQF-02, RQF-04, RQF-07 y RQF-22, `develop` @ `f3d323c` o `bdf987b`; las del 2026-10-19, `develop` @ `dcda269` (RQF-09, con el issue #24) o `66186d7` (RQNF-10 y RQF-06). Las filas fechadas el 2026-11-06 citan `develop` @ `a9f7ce1`; las del 2026-11-14, `develop` @ `b780cc9`, las del 2026-11-20, `develop` @ `907af1a`, las del 2026-11-21, `develop` @ `f41fa7e`, y las del 2026-11-23, `develop` @ `9fb3f7b`.
 - **Documento:** `docs/Proyecto FitLoyalty - requisitos actualizados.docx`, tablas 5 y 6.
 - **Cobertura:** `docs/evidencias/cobertura-backend-2026-10-16.txt`.
-- **CI:** pestaña Actions del repositorio (ejecución exitosa en `main` 8acab31).
+- **CI:** pestaña Actions del repositorio (ejecución exitosa en `main` 8acab31). Desde el bootcamp, las pruebas corren en el workflow `tests` (`.github/workflows/tests.yml`); la corrida sobre `develop` @ `9fb3f7b` es la 45297554190.

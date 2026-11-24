@@ -9,6 +9,7 @@
 | [`sustentacion/`](sustentacion/) | Guion y guía de estudio de la sustentación, y las [`evidencias/`](sustentacion/evidencias/) de pruebas E2E, QA responsive y capturas |
 | [`historias-de-usuario/`](historias-de-usuario/) | Historias de usuario, estimaciones y capturas del tablero de Azure DevOps |
 | [`evidencias/`](evidencias/) | Evidencias de los requisitos no funcionales (cobertura, disponibilidad, navegadores, usabilidad) |
+| [`decisiones/`](decisiones/) | Decisiones de arquitectura (ADR): [`0001-qr-dinamico-del-miembro.md`](decisiones/0001-qr-dinamico-del-miembro.md) |
 | [`archivo/`](archivo/) | Versiones anteriores que se conservan por historia |
 
 ## Seguimiento de la semana de entrega
