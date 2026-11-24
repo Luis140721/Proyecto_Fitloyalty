@@ -1,0 +1,199 @@
+(node:23692) [DEP0176] DeprecationWarning: fs.F_OK is deprecated, use fs.constants.F_OK instead
+(Use `node --trace-deprecation ...` to show where the warning was created)
+newman
+
+FitLoyalty API · Casos de prueba T6
+
+□ 0 · Salud
+└ CP-01 · La API responde en /healthz
+  GET http://127.0.0.1:3001/api/healthz [200 OK, 324B, 67ms]
+  √  responde 200
+  √  status ok
+
+□ 1 · Registro y sesión (RQF-19, RQF-02, RQNF-03)
+└ CP-02 · Registrar un gimnasio con datos válidos
+  POST http://127.0.0.1:3001/api/auth/signup [201 Created, 962B, 312ms]
+  √  responde 201
+  √  entrega un token JWT
+
+└ CP-03 · Rechazar el registro con un correo ya usado
+  POST http://127.0.0.1:3001/api/auth/signup [409 Conflict, 369B, 19ms]
+  √  responde 409
+  √  código de correo ocupado
+
+└ CP-04 · Rechazar una contraseña sin números
+  POST http://127.0.0.1:3001/api/auth/signup [400 Bad Request, 610B, 10ms]
+  √  responde 400
+  √  código VALIDATION_ERROR
+
+└ CP-05 · Iniciar sesión con credenciales válidas
+  POST http://127.0.0.1:3001/api/auth/login [200 OK, 1kB, 253ms]
+  √  responde 200
+  √  entrega token
+
+└ CP-06 · Rechazar el login con contraseña incorrecta
+  POST http://127.0.0.1:3001/api/auth/login [401 Unauthorized, 451B, 218ms]
+  √  responde 401
+  √  no entrega token
+
+└ CP-07 · Negar una ruta protegida sin token
+  GET http://127.0.0.1:3001/api/auth/me [401 Unauthorized, 349B, 6ms]
+  √  responde 401
+  √  código AUTH_REQUIRED
+
+└ CP-08 · Negar una ruta protegida con un token alterado
+  GET http://127.0.0.1:3001/api/auth/me [401 Unauthorized, 360B, 11ms]
+  √  responde 401
+  √  código TOKEN_INVALID
+
+□ 2 · Miembros (RQF-03, RQF-04)
+└ CP-09 · Registrar un miembro con plan vigente
+  POST http://127.0.0.1:3001/api/admin/miembros [201 Created, 1.39kB, 383ms]
+  √  responde 201
+  √  devuelve el miembro con su id
+  √  guarda el plan pagado
+
+└ CP-10 · Rechazar un miembro sin teléfono
+  POST http://127.0.0.1:3001/api/admin/miembros [400 Bad Request, 476B, 18ms]
+  √  responde 400
+  √  código VALIDATION_ERROR
+
+└ CP-11 · Rechazar un documento repetido en el mismo gimnasio
+  POST http://127.0.0.1:3001/api/admin/miembros [409 Conflict, 379B, 22ms]
+  √  responde 409
+  √  código MEMBER_DOC_TAKEN
+
+└ CP-12 · Rechazar un nombre de 101 caracteres con un 400
+  POST http://127.0.0.1:3001/api/admin/miembros [503 Service Unavailable, 388B, 38ms]
+  1. responde 400
+  2. código VALIDATION_ERROR
+
+└ CP-13 · Buscar un miembro por documento
+  GET http://127.0.0.1:3001/api/admin/miembros/lookup?documento=QA1795387052847 [200 OK, 621B, 25ms]
+  √  responde 200
+  √  es el miembro registrado
+
+└ CP-14 · Responder 404 al buscar un documento que no existe
+  GET http://127.0.0.1:3001/api/admin/miembros/lookup?documento=NOEXISTE1795387052847 [404 Not Found, 356B, 16ms]
+  √  responde 404
+
+□ 3 · Check-in (RQF-05, RQF-06, RQNF-01)
+└ CP-15 · Registrar el ingreso por documento como MANUAL
+  POST http://127.0.0.1:3001/api/admin/checkin [201 Created, 896B, 76ms]
+  √  responde 201
+  √  mensaje de ingreso
+  √  método MANUAL
+  √  no es duplicado
+  √  responde en menos de 2 s (RQNF-01)
+
+└ CP-16 · No duplicar un ingreso repetido al instante
+  POST http://127.0.0.1:3001/api/admin/checkin [200 OK, 719B, 30ms]
+  √  responde 200
+  √  marca duplicado
+
+└ CP-17 · Responder 404 al registrar un documento inexistente
+  POST http://127.0.0.1:3001/api/admin/checkin [404 Not Found, 373B, 16ms]
+  √  responde 404
+  √  código MEMBER_NOT_FOUND
+
+└ CP-18 · Rechazar un check-in sin código ni documento
+  POST http://127.0.0.1:3001/api/admin/checkin [400 Bad Request, 465B, 19ms]
+  √  responde 400
+  √  código VALIDATION_ERROR
+
+└ Preparación · Miembro con el plan vencido hace 30 días
+  POST http://127.0.0.1:3001/api/admin/miembros [201 Created, 1.4kB, 77ms]
+  √  responde 201
+
+└ CP-19 · Bloquear el ingreso de una membresía vencida
+  POST http://127.0.0.1:3001/api/admin/checkin [200 OK, 387B, 26ms]
+  √  responde 200
+  √  estado VENCIDO
+  √  no registra ingreso
+
+└ CP-20 · Congelar la membresía de un miembro
+  POST http://127.0.0.1:3001/api/admin/miembros/1/congelar [200 OK, 432B, 35ms]
+  √  responde 200
+  √  mensaje de congelada
+
+└ CP-21 · Bloquear el ingreso de una membresía congelada
+  POST http://127.0.0.1:3001/api/admin/checkin [200 OK, 486B, 27ms]
+  √  responde 200
+  √  estado CONGELADO
+  √  no registra ingreso
+
+□ 4 · Aislamiento entre gimnasios (RQNF-05)
+└ Preparación · Registrar un segundo gimnasio
+  POST http://127.0.0.1:3001/api/auth/signup [201 Created, 973B, 261ms]
+  √  responde 201
+
+└ CP-22 · Otro gimnasio no puede ver el miembro
+  GET http://127.0.0.1:3001/api/admin/miembros/1 [404 Not Found, 355B, 16ms]
+  √  responde 404
+  √  código MEMBER_NOT_FOUND
+
+└ CP-23 · Otro gimnasio no puede registrar su ingreso
+  POST http://127.0.0.1:3001/api/admin/checkin [404 Not Found, 373B, 20ms]
+  √  responde 404
+  √  código MEMBER_NOT_FOUND
+
+□ 5 · Configuración, retos y dashboard (RQF-08, RQF-12, RQF-07)
+└ CP-24 · Rechazar una alerta roja menor que la amarilla
+  PUT http://127.0.0.1:3001/api/admin/config [400 Bad Request, 382B, 17ms]
+  √  responde 400
+
+└ CP-25 · Crear un reto de asistencia válido
+  POST http://127.0.0.1:3001/api/admin/retos [201 Created, 575B, 22ms]
+  √  responde 201
+
+└ CP-26 · Rechazar un reto que termina antes de empezar
+  POST http://127.0.0.1:3001/api/admin/retos [400 Bad Request, 518B, 10ms]
+  √  responde 400
+  √  código VALIDATION_ERROR
+
+└ CP-27 · Consultar las métricas del dashboard
+  GET http://127.0.0.1:3001/api/admin/dashboard [200 OK, 926B, 51ms]
+  √  responde 200
+  √  devuelve un objeto con datos
+
+□ 6 · App del miembro (RQF-15)
+└ CP-28 · El miembro entra a la app con teléfono y contraseña
+  POST http://127.0.0.1:3001/api/cliente/login [200 OK, 1.04kB, 213ms]
+  √  responde 200
+  √  entrega token
+
+└ CP-29 · Rechazar la app con contraseña incorrecta
+  POST http://127.0.0.1:3001/api/cliente/login [401 Unauthorized, 448B, 220ms]
+  √  responde 401
+
+┌─────────────────────────┬───────────────────┬───────────────────┐
+│                         │          executed │            failed │
+├─────────────────────────┼───────────────────┼───────────────────┤
+│              iterations │                 1 │                 0 │
+├─────────────────────────┼───────────────────┼───────────────────┤
+│                requests │                31 │                 0 │
+├─────────────────────────┼───────────────────┼───────────────────┤
+│            test-scripts │                31 │                 0 │
+├─────────────────────────┼───────────────────┼───────────────────┤
+│      prerequest-scripts │                 1 │                 0 │
+├─────────────────────────┼───────────────────┼───────────────────┤
+│              assertions │                62 │                 2 │
+├─────────────────────────┴───────────────────┴───────────────────┤
+│ total run duration: 5.3s                                        │
+├─────────────────────────────────────────────────────────────────┤
+│ total data received: 9.25kB (approx)                            │
+├─────────────────────────────────────────────────────────────────┤
+│ average response time: 81ms [min: 6ms, max: 383ms, s.d.: 104ms] │
+└─────────────────────────────────────────────────────────────────┘
+
+[31m  # [39m[31m failure        [39m[31m detail                                                                                           [39m
+[90m    [39m[90m                [39m[90m                                                                                                  [39m
+ 1.  AssertionError  responde 400                                                                                     
+                     expected response to have status code 400 but got 503                                            
+                     at assertion:0 in test-script                                                                    
+                     inside "2 · Miembros (RQF-03, RQF-04) / CP-12 · Rechazar un nombre de 101 caracteres con un 400" 
+[90m    [39m[90m                [39m[90m                                                                                                  [39m
+ 2.  AssertionError  código VALIDATION_ERROR                                                                          
+                     expected 'DB_UNREACHABLE' to deeply equal 'VALIDATION_ERROR'                                     
+                     at assertion:1 in test-script                                                                    
+                     inside "2 · Miembros (RQF-03, RQF-04) / CP-12 · Rechazar un nombre de 101 caracteres con un 400" 
