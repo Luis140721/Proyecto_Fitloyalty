@@ -32,7 +32,7 @@ responda antes de correr la colección.
 En otra terminal, desde la raíz del repo:
 
 ```bash
-npx newman@6.2.1 run docs/pruebas/postman/FitLoyalty.postman_collection.json
+npx --yes newman@6.2.1 run docs/pruebas/postman/FitLoyalty.postman_collection.json
 ```
 
 El bloque completo, que arranca la API en segundo plano, espera a que conteste y

@@ -168,7 +168,7 @@ node docs/pruebas/postman/iniciar-api-pruebas.cjs > api-pruebas.log 2>&1 &
 API_PID=$!
 #    esperar a que la API conteste (máximo 30 s)
 for i in $(seq 30); do curl -sf http://127.0.0.1:3001/api/healthz > /dev/null && break; sleep 1; done
-npx newman@6.2.1 run docs/pruebas/postman/FitLoyalty.postman_collection.json
+npx --yes newman@6.2.1 run docs/pruebas/postman/FitLoyalty.postman_collection.json
 kill $API_PID
 
 # 6. Al terminar: destruir la BD de pruebas
@@ -201,7 +201,7 @@ for ($i = 0; $i -lt 30 -and -not $lista; $i++) {
   try { $lista = (Invoke-WebRequest http://127.0.0.1:3001/api/healthz -UseBasicParsing).StatusCode -eq 200 }
   catch { Start-Sleep -Seconds 1 }
 }
-npx newman@6.2.1 run docs/pruebas/postman/FitLoyalty.postman_collection.json
+npx --yes newman@6.2.1 run docs/pruebas/postman/FitLoyalty.postman_collection.json
 Stop-Process -Id $api.Id
 
 # 6. Al terminar: destruir la BD de pruebas y quitar la variable del paso 3
