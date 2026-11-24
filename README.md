@@ -17,6 +17,7 @@ Proyecto formativo — **SENA, TG. Análisis y Desarrollo de Software, Ficha 322
 - [Estructura del proyecto](#estructura-del-proyecto)
 - [API](#api)
 - [Base de datos](#base-de-datos)
+- [Pruebas](#pruebas)
 - [Correo transaccional (Brevo)](#correo-transaccional-brevo)
 - [Ramas](#ramas)
 - [Documentación](docs/README.md)
@@ -339,6 +340,35 @@ En PowerShell, el segundo comando es
 - La guardia confía en lo que escuche en `127.0.0.1:5433`. En Windows, si ese puerto ya lo ocupa
   otro Postgres (de otro proyecto), los tests se conectan a ese: antes de correrlos, comprueba que
   `docker ps --filter publish=5433` muestre solo el contenedor de `db-test`.
+
+---
+
+## Pruebas
+
+El proceso completo está en [`docs/pruebas/`](docs/pruebas/README.md): plan de pruebas,
+matriz de casos, colección Postman, reporte de ejecución y registro de defectos.
+
+| Nivel | Herramienta | Comando (desde la raíz) | Resultado del 2026-11-23 |
+|---|---|---|---|
+| Unitarias backend | Jest + Supertest | `pnpm --dir backend test` | 1.343 pasan · cobertura 92,4 % (umbral en `jest.config.js`) |
+| Integración con BD real | Jest + PostgreSQL 16 | ver [Pruebas de integración](#pruebas-de-integración-bd-real) | 272 pasan (71 de ellas también corren en la fila anterior) |
+| Componentes frontend | Vitest + Testing Library + MSW | `pnpm --dir frontend test` | 895 pasan · cobertura 87,3 % |
+| End-to-end | Playwright (Chromium) | `pnpm --dir e2e run db:up` y `pnpm --dir e2e test` | 44 pasan |
+| API (matriz de casos) | Postman + Newman | ver [docs/pruebas/postman](docs/pruebas/postman/README.md) | 29 de 29 casos (el 2026-11-22 falló CP-12 → defecto D-10, #117, ya corregido) |
+
+En total, 2.512 pruebas distintas, y pasan todas. El conteo está en el
+[reporte](docs/pruebas/reporte-ejecucion-2026-11-22.md#resumen); el bloque para
+repetirlo todo, en el [plan, sección 8](docs/pruebas/plan-de-pruebas.md#8-cómo-repetir-las-pruebas).
+
+- **Módulo crítico:** el check-in. Cobertura de `backend/src/routes/checkin.js` 97,6 % y de
+  `frontend/src/pages/CheckinPage.jsx` 97,7 %.
+- **Ambiente de pruebas separado:** todo lo que usa base de datos corre contra `db-test`
+  (`127.0.0.1:5433`, datos en memoria), nunca contra la base de desarrollo (5432) ni producción.
+- **En el CI** (`.github/workflows/tests.yml`) corren los jobs `backend`, `frontend`,
+  `integracion` y `e2e` en cada push y PR; la cobertura no puede bajar del umbral.
+- **Defectos:** se registran como issues con la etiqueta `bug`, una de severidad y una de estado
+  ([criterios y registro](docs/pruebas/defectos.md)). El commit que corrige un defecto lo
+  referencia: `fix(modulo): ... (cierra #N)`.
 
 ---
 
