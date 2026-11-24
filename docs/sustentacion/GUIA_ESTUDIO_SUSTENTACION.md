@@ -70,8 +70,9 @@ Archivos clave:
   - `POST /api/auth/login` → recibe email+contraseña, compara con bcrypt, y si está bien devuelve un **JWT**.
   - `POST /api/auth/register` → crea un usuario (staff) nuevo.
   - `GET /api/auth/me` → devuelve el perfil del usuario logueado (usa el token).
-  - `POST /api/auth/forgot-password` → genera un token de recuperación (JWT con `purpose: 'reset'`, vence en 1h).
-  - `POST /api/auth/reset-password` → valida ese token y guarda la nueva contraseña.
+  - `POST /api/auth/forgot-password` → genera un código de 6 dígitos que vence en 15 minutos y lo envía por correo. Responde lo mismo exista o no el correo, y el código nunca viaja en la respuesta (salvo en el modo demo de un equipo local).
+  - `POST /api/auth/verify-reset-code` → revisa el código y, si es correcto, devuelve un token de recuperación (JWT con `purpose: 'reset'`, vence en 15 minutos por defecto).
+  - `POST /api/auth/reset-password` → valida ese token (o el correo y el código) y guarda la nueva contraseña.
 - `src/routes/asistencia.js` → `GET /api/asistencia`: devuelve el historial de check-ins del gimnasio (para el dashboard de usuario, C4).
 - `src/routes/vista.js` → `GET /api/vista/miembros-activos`: hace `SELECT * FROM vista_miembros_activos` (C6).
 - `src/index.js` → "enchufa" todas las rutas, configura CORS y arranca el servidor verificando primero que PostgreSQL responda.

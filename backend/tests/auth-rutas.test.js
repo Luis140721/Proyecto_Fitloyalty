@@ -267,7 +267,8 @@ describe('POST /api/auth/forgot-password', () => {
     };
 
     afterEach(() => {
-      process.env.NODE_ENV = entorno.NODE_ENV;
+      if (entorno.NODE_ENV === undefined) delete process.env.NODE_ENV;
+      else process.env.NODE_ENV = entorno.NODE_ENV;
       if (entorno.SHOW_DEV_CODE_IN_UI === undefined) delete process.env.SHOW_DEV_CODE_IN_UI;
       else process.env.SHOW_DEV_CODE_IN_UI = entorno.SHOW_DEV_CODE_IN_UI;
     });

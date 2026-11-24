@@ -359,7 +359,7 @@ y reinicia el backend: `docker compose up -d backend`.
 **Sin `BREVO_API_KEY` los correos no se envían.** El sistema cae a "modo consola":
 deja en el log a quién iba el correo y su asunto, sin enviarlo. El código de
 recuperación **no** viaja en la respuesta HTTP. Fuera de desarrollo (`NODE_ENV`
-distinto de `development` o `test`) los números del asunto salen tapados, porque el
+distinto de `development` o `test`) los números de 4 cifras o más del asunto salen tapados, porque el
 asunto del correo de recuperación lleva el código. Para ensayar la recuperación sin
 correo, usa el modo demo de `SHOW_DEV_CODE_IN_UI` (ver la nota de abajo).
 

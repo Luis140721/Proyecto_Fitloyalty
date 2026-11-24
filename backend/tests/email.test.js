@@ -208,14 +208,17 @@ describe('email transport: without key and with errors', () => {
     ['missing', undefined],
     ['staging', 'staging'],
   ])('should hide the recovery code in the console log when NODE_ENV is %s', async (_caso, nodeEnv) => {
-    // Arrange
+    // Arrange: se vigilan todos los niveles del log, no solo console.log
     const email = cargarEmail({ BREVO_API_KEY: undefined, NODE_ENV: nodeEnv });
+    for (const nivel of ['warn', 'info', 'error']) jest.spyOn(console, nivel).mockImplementation(() => {});
 
     // Act
     await email.sendRecoveryCode({ to: 'ana@gym.co', name: 'Ana', code: '482913' });
 
     // Assert: queda la linea del modo consola, con el asunto pero sin el codigo
-    const lineas = console.log.mock.calls.map((argumentos) => argumentos.join(' '));
+    const lineas = ['log', 'warn', 'info', 'error']
+      .flatMap((nivel) => console[nivel].mock.calls)
+      .map((argumentos) => argumentos.join(' '));
     expect(lineas.join('\n')).not.toContain('482913');
     expect(lineas).toContain('[EMAIL] Modo consola - Para: ana@gym.co Asunto: ****** — Tu codigo de recuperacion FitLoyalty');
   });
@@ -234,15 +237,15 @@ describe('email transport: without key and with errors', () => {
     expect(console.log).toHaveBeenCalledWith('[EMAIL] Modo consola - Para:', 'ana@gym.co', 'Asunto:', '482913 — Tu codigo de recuperacion FitLoyalty');
   });
 
-  test('should hide only the long numbers of the subject in the console log outside development', async () => {
+  test('should hide every number of 4 digits or more in the console log subject when NODE_ENV is production', async () => {
     // Arrange
     const email = cargarEmail({ BREVO_API_KEY: undefined, NODE_ENV: 'production' });
 
     // Act
-    await email.sendMail({ to: 'ana@gym.co', subject: 'Plan 123 vence 2026-11-30', text: 'Hola' });
+    await email.sendMail({ to: 'ana@gym.co', subject: 'Plan 123 vence 2026-11-30, codigo 482913', text: 'Hola' });
 
-    // Assert: los numeros de menos de 4 cifras quedan; los de 4 o mas se tapan
-    expect(console.log).toHaveBeenCalledWith('[EMAIL] Modo consola - Para:', 'ana@gym.co', 'Asunto:', 'Plan 123 vence ****-11-30');
+    // Assert: los numeros de menos de 4 cifras quedan; todos los de 4 o mas se tapan
+    expect(console.log).toHaveBeenCalledWith('[EMAIL] Modo consola - Para:', 'ana@gym.co', 'Asunto:', 'Plan 123 vence ****-11-30, codigo ******');
   });
 
   test('should report api-error and not throw when Brevo rejects the send', async () => {
