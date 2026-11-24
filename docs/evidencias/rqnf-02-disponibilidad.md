@@ -18,6 +18,10 @@ casi no lo corre. Ver «Reporte del período».
 UptimeRobot, cada 5 minutos.** Ver «Monitor externo (UptimeRobot)». La
 evidencia de RQNF-02 sale de ese monitor.
 
+**Estado al 2026-11-23 a las 22:00: Parcial.** El primer día operativo
+completo, el lunes 23, no tuvo caídas de 5:00 a 22:00 (100 %). Ver «Reporte
+con UptimeRobot».
+
 ## Requisito
 
 Texto de RQNF-02 en la matriz y en el documento de requisitos:
@@ -302,17 +306,57 @@ pide el horario operativo (5:00 a 22:00 de Colombia). Al cierre del período:
 
 | Fecha | Qué se puede decir |
 |---|---|
-| Lunes 2026-11-23 a las 22:00 | Primer día operativo completo medido: RQNF-02 puede pasar a **Parcial** con ese día en el reporte |
+| Lunes 2026-11-23 a las 22:00 | **Hecho.** El primer día operativo completo dio 100 % y RQNF-02 pasa a **Parcial** (ver «Reporte con UptimeRobot») |
 | Viernes 2026-11-27 (entrega) | «En medición desde el 22 de noviembre», con los días completos que lleve (lunes a jueves) |
 | Domingo 2026-11-29 a las 22:00 | Cierra la primera semana completa (lunes 23 a domingo 29). Con 99 % o más, **Implementado** |
 | Lunes 2026-11-30 | Llenar el reporte con los siete días |
+
+## Reporte con UptimeRobot
+
+Datos de la página pública de estado (https://stats.uptimerobot.com/zqKSy3C8RT),
+consultados el 2026-11-24 a las 04:55 de Colombia. Copia de lo que devolvió, sin cambios en las cifras:
+`docs/evidencias/rqnf-02-uptimerobot-2026-11-23.json`.
+
+**Registro de eventos.** Desde que se activó, el monitor registra una sola
+caída:
+
+| Inicio (Colombia) | Fin (Colombia) | Duración | Motivo | ¿En el horario operativo? |
+|---|---|---|---|---|
+| 2026-11-22 23:31:30 | 2026-11-22 23:36:34 | 5 min 4 s | HTTP 503 en la primera comprobación, mientras Render despertaba | No: domingo, después de las 22:00 |
+
+Después no hay ningún otro evento: la API siguió arriba.
+
+**Reporte por día** (horario operativo de 5:00 a 22:00 = 1.020 minutos por día):
+
+| Día (Colombia) | Minutos caídos en el horario | Disponibilidad en el horario | Estado |
+|---|---:|---:|---|
+| Lunes 2026-11-23 | 0 | **100 %** (1.020 de 1.020 minutos) | Medido |
+| Martes 2026-11-24 a domingo 2026-11-29 | — | — | En medición |
+| **Semana** (7.140 minutos) | — | — | Se llena el lunes 2026-11-30 |
+
+Con este día, RQNF-02 pasa a **Parcial** (ver el criterio de abajo).
+
+**Lo que muestra UptimeRobot.** Al consultarla marcaba 100 % en las últimas
+24 horas y 99,654 % en los últimos 7 días. La segunda cifra es más baja porque
+cuenta las 24 horas de cada día e incluye la caída del domingo a las 23:31. El
+requisito solo cuenta el horario operativo; por eso el reporte se arma con el
+registro de eventos, como dice «Cómo se arma el reporte».
+
+**Cada cuánto midió.** El monitor está configurado cada 5 minutos («Checked
+every 5 minutes»). La página pública no muestra cada comprobación: trae una
+muestra de los tiempos de respuesta (150 puntos del lunes; 95 dentro del
+horario, entre 37 y 225 ms, con un promedio de 80 ms), con huecos como el de
+8:25 a 11:10. Esos huecos no son caídas: el registro de eventos no tiene
+ninguna, y después de cada hueco la API respondió en menos de 80 ms, mientras
+que despertar a Render tarda unos 30 segundos. El historial completo de
+comprobaciones está en la cuenta de UptimeRobot de Luis.
 
 ## Criterio de estado de RQNF-02
 
 | Estado | Condición |
 |---|---|
-| Pendiente | Mientras no haya un día operativo completo medido (hoy). Un monitor sin datos no demuestra disponibilidad |
-| Parcial | Al menos un día operativo completo (5:00 a 22:00) de mediciones cada 5 minutos, con el reporte lleno. También si la medición de 7 días da menos de 99 % |
+| Pendiente | Mientras no haya un día operativo completo medido. Un monitor sin datos no demuestra disponibilidad |
+| Parcial | Al menos un día operativo completo (5:00 a 22:00) de mediciones cada 5 minutos, con el reporte lleno. También si la medición de 7 días da menos de 99 %. **Estado actual, desde el 2026-11-23** |
 | Implementado | 7 días seguidos (una semana completa de lunes a domingo, unas 1.428 mediciones nominales) con 99 % o más de mediciones exitosas. Lo ideal son 30 días |
 
 ## Pendiente para completar D3

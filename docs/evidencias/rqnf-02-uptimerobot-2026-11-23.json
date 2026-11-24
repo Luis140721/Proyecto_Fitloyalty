@@ -1,0 +1,683 @@
+{
+  "fuente": "https://stats.uptimerobot.com/api/getMonitor/zqKSy3C8RT?m=804775287 (pagina publica de estado)",
+  "consultado": "2026-11-24 a las 04:55 de Colombia",
+  "zona_horaria_de_las_fechas": "-05:00",
+  "monitor": {
+    "name": "FitLoyalty API (Render) - healthz",
+    "type": "HTTP(s)",
+    "checkInterval": "Checked every 5 minutes",
+    "createdAt": "2026-11-23 04:30:18",
+    "statusClass": "success",
+    "logs": [
+      {
+        "class": "success",
+        "label": "up",
+        "date": "November 22, 2026, 23:36",
+        "dateGMT": "November 23, 2026, 04:36",
+        "dateGMTISO": "2026-11-23T04:36:34+00:00",
+        "time": 1795408594,
+        "timezone": "-05:00",
+        "duration": "0 seconds",
+        "reason": {
+          "code": "200",
+          "detail": {
+            "short": "OK",
+            "full": "Standard response for successful HTTP requests."
+          }
+        }
+      },
+      {
+        "class": "danger",
+        "label": "down",
+        "date": "November 22, 2026, 23:31",
+        "dateGMT": "November 23, 2026, 04:31",
+        "dateGMTISO": "2026-11-23T04:31:30+00:00",
+        "time": 1795408290,
+        "timezone": "-05:00",
+        "duration": "5 minutes",
+        "reason": {
+          "code": "503",
+          "detail": {
+            "short": "Service Unavailable",
+            "full": "The service is temporarily overloaded."
+          }
+        }
+      },
+      {
+        "class": "success",
+        "label": "started",
+        "date": "November 22, 2026, 23:30",
+        "dateGMT": "November 23, 2026, 04:30",
+        "dateGMTISO": "2026-11-23T04:30:17+00:00",
+        "time": 1795408217,
+        "timezone": "-05:00",
+        "duration": "0 seconds",
+        "reason": {
+          "code": "Start by user",
+          "detail": {
+            "short": "Unknown error",
+            "full": "There was some other error."
+          }
+        }
+      }
+    ],
+    "1dRatio": {
+      "ratio": "100.000",
+      "label": "excellent",
+      "color": "green"
+    },
+    "7dRatio": {
+      "ratio": "99.654",
+      "label": "good",
+      "color": "blue"
+    },
+    "responseTimeStats": {
+      "avg_response_time": 75,
+      "min_response_time": 32,
+      "max_response_time": 225,
+      "total_requests": 173
+    },
+    "responseTimes": [
+      {
+        "value": 108,
+        "datetime": "November 23, 2026, 00:45"
+      },
+      {
+        "value": 65,
+        "datetime": "November 23, 2026, 00:50"
+      },
+      {
+        "value": 71,
+        "datetime": "November 23, 2026, 00:55"
+      },
+      {
+        "value": 42,
+        "datetime": "November 23, 2026, 01:00"
+      },
+      {
+        "value": 88,
+        "datetime": "November 23, 2026, 01:05"
+      },
+      {
+        "value": 143,
+        "datetime": "November 23, 2026, 01:10"
+      },
+      {
+        "value": 75,
+        "datetime": "November 23, 2026, 01:15"
+      },
+      {
+        "value": 77,
+        "datetime": "November 23, 2026, 01:20"
+      },
+      {
+        "value": 70,
+        "datetime": "November 23, 2026, 01:25"
+      },
+      {
+        "value": 132,
+        "datetime": "November 23, 2026, 01:30"
+      },
+      {
+        "value": 69,
+        "datetime": "November 23, 2026, 01:35"
+      },
+      {
+        "value": 48,
+        "datetime": "November 23, 2026, 01:40"
+      },
+      {
+        "value": 92,
+        "datetime": "November 23, 2026, 01:45"
+      },
+      {
+        "value": 75,
+        "datetime": "November 23, 2026, 01:50"
+      },
+      {
+        "value": 65,
+        "datetime": "November 23, 2026, 01:55"
+      },
+      {
+        "value": 48,
+        "datetime": "November 23, 2026, 02:00"
+      },
+      {
+        "value": 37,
+        "datetime": "November 23, 2026, 02:05"
+      },
+      {
+        "value": 57,
+        "datetime": "November 23, 2026, 02:10"
+      },
+      {
+        "value": 47,
+        "datetime": "November 23, 2026, 02:15"
+      },
+      {
+        "value": 70,
+        "datetime": "November 23, 2026, 02:20"
+      },
+      {
+        "value": 85,
+        "datetime": "November 23, 2026, 02:25"
+      },
+      {
+        "value": 65,
+        "datetime": "November 23, 2026, 02:30"
+      },
+      {
+        "value": 67,
+        "datetime": "November 23, 2026, 02:35"
+      },
+      {
+        "value": 52,
+        "datetime": "November 23, 2026, 02:40"
+      },
+      {
+        "value": 134,
+        "datetime": "November 23, 2026, 02:45"
+      },
+      {
+        "value": 72,
+        "datetime": "November 23, 2026, 02:50"
+      },
+      {
+        "value": 36,
+        "datetime": "November 23, 2026, 02:55"
+      },
+      {
+        "value": 72,
+        "datetime": "November 23, 2026, 03:00"
+      },
+      {
+        "value": 32,
+        "datetime": "November 23, 2026, 03:05"
+      },
+      {
+        "value": 68,
+        "datetime": "November 23, 2026, 03:10"
+      },
+      {
+        "value": 57,
+        "datetime": "November 23, 2026, 03:15"
+      },
+      {
+        "value": 66,
+        "datetime": "November 23, 2026, 03:25"
+      },
+      {
+        "value": 40,
+        "datetime": "November 23, 2026, 03:30"
+      },
+      {
+        "value": 69,
+        "datetime": "November 23, 2026, 03:35"
+      },
+      {
+        "value": 62,
+        "datetime": "November 23, 2026, 03:40"
+      },
+      {
+        "value": 67,
+        "datetime": "November 23, 2026, 03:45"
+      },
+      {
+        "value": 76,
+        "datetime": "November 23, 2026, 03:50"
+      },
+      {
+        "value": 38,
+        "datetime": "November 23, 2026, 03:55"
+      },
+      {
+        "value": 38,
+        "datetime": "November 23, 2026, 04:00"
+      },
+      {
+        "value": 81,
+        "datetime": "November 23, 2026, 04:05"
+      },
+      {
+        "value": 72,
+        "datetime": "November 23, 2026, 04:10"
+      },
+      {
+        "value": 64,
+        "datetime": "November 23, 2026, 04:15"
+      },
+      {
+        "value": 48,
+        "datetime": "November 23, 2026, 04:20"
+      },
+      {
+        "value": 63,
+        "datetime": "November 23, 2026, 04:25"
+      },
+      {
+        "value": 65,
+        "datetime": "November 23, 2026, 05:30"
+      },
+      {
+        "value": 98,
+        "datetime": "November 23, 2026, 05:35"
+      },
+      {
+        "value": 81,
+        "datetime": "November 23, 2026, 05:40"
+      },
+      {
+        "value": 37,
+        "datetime": "November 23, 2026, 05:45"
+      },
+      {
+        "value": 79,
+        "datetime": "November 23, 2026, 05:50"
+      },
+      {
+        "value": 80,
+        "datetime": "November 23, 2026, 05:55"
+      },
+      {
+        "value": 44,
+        "datetime": "November 23, 2026, 06:00"
+      },
+      {
+        "value": 71,
+        "datetime": "November 23, 2026, 06:05"
+      },
+      {
+        "value": 68,
+        "datetime": "November 23, 2026, 06:10"
+      },
+      {
+        "value": 73,
+        "datetime": "November 23, 2026, 06:15"
+      },
+      {
+        "value": 38,
+        "datetime": "November 23, 2026, 06:20"
+      },
+      {
+        "value": 67,
+        "datetime": "November 23, 2026, 06:25"
+      },
+      {
+        "value": 82,
+        "datetime": "November 23, 2026, 06:30"
+      },
+      {
+        "value": 50,
+        "datetime": "November 23, 2026, 06:35"
+      },
+      {
+        "value": 59,
+        "datetime": "November 23, 2026, 06:40"
+      },
+      {
+        "value": 84,
+        "datetime": "November 23, 2026, 06:45"
+      },
+      {
+        "value": 50,
+        "datetime": "November 23, 2026, 06:50"
+      },
+      {
+        "value": 81,
+        "datetime": "November 23, 2026, 06:55"
+      },
+      {
+        "value": 101,
+        "datetime": "November 23, 2026, 07:00"
+      },
+      {
+        "value": 77,
+        "datetime": "November 23, 2026, 07:05"
+      },
+      {
+        "value": 56,
+        "datetime": "November 23, 2026, 07:10"
+      },
+      {
+        "value": 103,
+        "datetime": "November 23, 2026, 07:15"
+      },
+      {
+        "value": 74,
+        "datetime": "November 23, 2026, 07:20"
+      },
+      {
+        "value": 54,
+        "datetime": "November 23, 2026, 07:25"
+      },
+      {
+        "value": 83,
+        "datetime": "November 23, 2026, 07:30"
+      },
+      {
+        "value": 84,
+        "datetime": "November 23, 2026, 07:35"
+      },
+      {
+        "value": 48,
+        "datetime": "November 23, 2026, 07:40"
+      },
+      {
+        "value": 89,
+        "datetime": "November 23, 2026, 07:45"
+      },
+      {
+        "value": 81,
+        "datetime": "November 23, 2026, 07:50"
+      },
+      {
+        "value": 55,
+        "datetime": "November 23, 2026, 07:55"
+      },
+      {
+        "value": 85,
+        "datetime": "November 23, 2026, 08:00"
+      },
+      {
+        "value": 61,
+        "datetime": "November 23, 2026, 08:05"
+      },
+      {
+        "value": 48,
+        "datetime": "November 23, 2026, 08:10"
+      },
+      {
+        "value": 66,
+        "datetime": "November 23, 2026, 08:15"
+      },
+      {
+        "value": 87,
+        "datetime": "November 23, 2026, 08:20"
+      },
+      {
+        "value": 77,
+        "datetime": "November 23, 2026, 08:25"
+      },
+      {
+        "value": 73,
+        "datetime": "November 23, 2026, 11:10"
+      },
+      {
+        "value": 58,
+        "datetime": "November 23, 2026, 11:15"
+      },
+      {
+        "value": 69,
+        "datetime": "November 23, 2026, 11:20"
+      },
+      {
+        "value": 56,
+        "datetime": "November 23, 2026, 11:25"
+      },
+      {
+        "value": 58,
+        "datetime": "November 23, 2026, 11:30"
+      },
+      {
+        "value": 57,
+        "datetime": "November 23, 2026, 11:35"
+      },
+      {
+        "value": 104,
+        "datetime": "November 23, 2026, 11:40"
+      },
+      {
+        "value": 104,
+        "datetime": "November 23, 2026, 11:45"
+      },
+      {
+        "value": 120,
+        "datetime": "November 23, 2026, 11:50"
+      },
+      {
+        "value": 140,
+        "datetime": "November 23, 2026, 11:55"
+      },
+      {
+        "value": 98,
+        "datetime": "November 23, 2026, 12:00"
+      },
+      {
+        "value": 57,
+        "datetime": "November 23, 2026, 12:05"
+      },
+      {
+        "value": 87,
+        "datetime": "November 23, 2026, 12:10"
+      },
+      {
+        "value": 92,
+        "datetime": "November 23, 2026, 12:15"
+      },
+      {
+        "value": 42,
+        "datetime": "November 23, 2026, 12:20"
+      },
+      {
+        "value": 75,
+        "datetime": "November 23, 2026, 12:25"
+      },
+      {
+        "value": 63,
+        "datetime": "November 23, 2026, 13:55"
+      },
+      {
+        "value": 134,
+        "datetime": "November 23, 2026, 14:00"
+      },
+      {
+        "value": 80,
+        "datetime": "November 23, 2026, 14:05"
+      },
+      {
+        "value": 67,
+        "datetime": "November 23, 2026, 14:10"
+      },
+      {
+        "value": 85,
+        "datetime": "November 23, 2026, 14:15"
+      },
+      {
+        "value": 76,
+        "datetime": "November 23, 2026, 14:25"
+      },
+      {
+        "value": 100,
+        "datetime": "November 23, 2026, 14:30"
+      },
+      {
+        "value": 91,
+        "datetime": "November 23, 2026, 14:35"
+      },
+      {
+        "value": 89,
+        "datetime": "November 23, 2026, 14:40"
+      },
+      {
+        "value": 49,
+        "datetime": "November 23, 2026, 14:45"
+      },
+      {
+        "value": 69,
+        "datetime": "November 23, 2026, 14:50"
+      },
+      {
+        "value": 70,
+        "datetime": "November 23, 2026, 14:55"
+      },
+      {
+        "value": 50,
+        "datetime": "November 23, 2026, 15:00"
+      },
+      {
+        "value": 73,
+        "datetime": "November 23, 2026, 15:05"
+      },
+      {
+        "value": 55,
+        "datetime": "November 23, 2026, 15:10"
+      },
+      {
+        "value": 147,
+        "datetime": "November 23, 2026, 15:15"
+      },
+      {
+        "value": 88,
+        "datetime": "November 23, 2026, 15:20"
+      },
+      {
+        "value": 131,
+        "datetime": "November 23, 2026, 15:25"
+      },
+      {
+        "value": 85,
+        "datetime": "November 23, 2026, 15:30"
+      },
+      {
+        "value": 85,
+        "datetime": "November 23, 2026, 15:35"
+      },
+      {
+        "value": 95,
+        "datetime": "November 23, 2026, 15:40"
+      },
+      {
+        "value": 71,
+        "datetime": "November 23, 2026, 15:45"
+      },
+      {
+        "value": 58,
+        "datetime": "November 23, 2026, 15:50"
+      },
+      {
+        "value": 225,
+        "datetime": "November 23, 2026, 15:55"
+      },
+      {
+        "value": 75,
+        "datetime": "November 23, 2026, 16:00"
+      },
+      {
+        "value": 81,
+        "datetime": "November 23, 2026, 16:05"
+      },
+      {
+        "value": 68,
+        "datetime": "November 23, 2026, 16:10"
+      },
+      {
+        "value": 136,
+        "datetime": "November 23, 2026, 16:15"
+      },
+      {
+        "value": 81,
+        "datetime": "November 23, 2026, 16:20"
+      },
+      {
+        "value": 71,
+        "datetime": "November 23, 2026, 16:25"
+      },
+      {
+        "value": 78,
+        "datetime": "November 23, 2026, 18:25"
+      },
+      {
+        "value": 66,
+        "datetime": "November 23, 2026, 18:30"
+      },
+      {
+        "value": 63,
+        "datetime": "November 23, 2026, 18:35"
+      },
+      {
+        "value": 79,
+        "datetime": "November 23, 2026, 18:40"
+      },
+      {
+        "value": 44,
+        "datetime": "November 23, 2026, 18:45"
+      },
+      {
+        "value": 55,
+        "datetime": "November 23, 2026, 18:50"
+      },
+      {
+        "value": 140,
+        "datetime": "November 23, 2026, 18:55"
+      },
+      {
+        "value": 87,
+        "datetime": "November 23, 2026, 19:00"
+      },
+      {
+        "value": 53,
+        "datetime": "November 23, 2026, 19:05"
+      },
+      {
+        "value": 89,
+        "datetime": "November 23, 2026, 19:10"
+      },
+      {
+        "value": 196,
+        "datetime": "November 23, 2026, 19:15"
+      },
+      {
+        "value": 76,
+        "datetime": "November 23, 2026, 19:20"
+      },
+      {
+        "value": 111,
+        "datetime": "November 23, 2026, 19:25"
+      },
+      {
+        "value": 66,
+        "datetime": "November 23, 2026, 22:27"
+      },
+      {
+        "value": 58,
+        "datetime": "November 23, 2026, 22:32"
+      },
+      {
+        "value": 47,
+        "datetime": "November 23, 2026, 22:37"
+      },
+      {
+        "value": 46,
+        "datetime": "November 23, 2026, 22:42"
+      },
+      {
+        "value": 70,
+        "datetime": "November 23, 2026, 22:47"
+      },
+      {
+        "value": 63,
+        "datetime": "November 23, 2026, 22:52"
+      },
+      {
+        "value": 79,
+        "datetime": "November 23, 2026, 22:57"
+      },
+      {
+        "value": 77,
+        "datetime": "November 23, 2026, 23:02"
+      },
+      {
+        "value": 80,
+        "datetime": "November 23, 2026, 23:08"
+      },
+      {
+        "value": 75,
+        "datetime": "November 23, 2026, 23:13"
+      },
+      {
+        "value": 84,
+        "datetime": "November 23, 2026, 23:18"
+      }
+    ]
+  }
+}
