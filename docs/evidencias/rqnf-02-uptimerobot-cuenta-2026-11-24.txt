@@ -1,0 +1,38 @@
+Grafico «Tiempo de respuesta» del monitor 804775287 en la cuenta de UptimeRobot,
+rango «Last 24 hours», leido el 2026-11-24 hacia las 8:25 de Colombia.
+Cada punto es un bloque de 30 minutos (hora de Colombia, UTC-5) con su
+promedio en milisegundos, tal como lo trae el grafico.
+
+2026-11-23  08:25 77 | 11:10 61 | 11:40 103 | 12:10 74 | 13:55 85 | 14:25 79
+            14:55 80 | 15:25 87 | 15:55 111 | 16:25 71 | 18:25 64 | 18:55 106
+            19:25 111 | 22:40 69 | 23:10 75 | 23:40 79
+2026-11-24  00:10 52 | 00:40 71 | 01:10 59 | 03:00 87 | 03:30 73 | 04:00 68
+            07:25 62 | 07:55 91
+
+Sin bloques: el lunes entre 08:25 y 11:10, entre 12:10 y 13:55, entre 16:25 y
+18:25 y entre 19:25 y 22:40; el martes entre 01:10 y 03:00 y entre 04:00 y 07:25.
+
+Resumen del monitor en la misma consulta: «Se revisa cada 5 m.»; activo desde
+hace 1 dia, 8 horas y 49 minutos; ultimas 24 horas 100 %, 0 incidentes, 0 m
+abajo; ultimos 7 y 30 dias 99,744 %, 1 incidente, 5 m 4 s abajo; ultimos
+incidentes: 503 Service Unavailable, 22 de noviembre de 2026, 23:31:30 GMT-5,
+0 h 5 min 4 s, resuelto (unico de la lista).
+
+Corridas del workflow availability-monitor.yml el lunes 23 dentro del horario
+(gh run list): a las 16:43 de Colombia (21:43 UTC) el calentamiento, que no
+cuenta como medicion; su log dice «la API respondio HTTP 200 en el intento 1»
+(run 45272557982). A las 16:59 (21:59 UTC) una medicion, con «HTTP 200 y
+status=ok» (run 45275182354).
+
+Notas:
+- La pagina de la cuenta se vio con la traduccion automatica del navegador:
+  mezcla ingles y espanol, el nombre del monitor sale como «API FitLoyalty
+  (Render) - healthz» y las frases citadas son la traduccion (por ejemplo,
+  «¡Eso es todo, amigos!»).
+- Debajo del grafico, la cuenta mostraba «Promedio 77 ms / Minimo 62 ms /
+  Maximo 91 ms». No coincide con los bloques de arriba (van de 52 a 111 ms), asi
+  que no se usa.
+- Consulta a la pagina publica (getMonitor) el 2026-11-24 a las 8:44 de
+  Colombia (13:44 UTC): 154 puntos, del 23 a las 00:30 al 24 a las 08:41. Trae
+  comprobaciones del martes de 05:55 a 07:25 (18 puntos; falta el de las 06:50), que el grafico de
+  la cuenta no mostraba a las 8:25 (ahi no habia bloques entre 04:00 y 07:25).

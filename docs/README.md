@@ -10,6 +10,7 @@
 | [`historias-de-usuario/`](historias-de-usuario/) | Historias de usuario, estimaciones y capturas del tablero de Azure DevOps |
 | [`evidencias/`](evidencias/) | Evidencias de los requisitos no funcionales (cobertura, disponibilidad, navegadores, usabilidad) |
 | [`pruebas/`](pruebas/README.md) | Proceso de pruebas de T6: plan, matriz de casos, colección Postman, reporte de ejecución y defectos |
+| [`decisiones/`](decisiones/) | Decisiones de arquitectura (ADR): [`0001-qr-dinamico-del-miembro.md`](decisiones/0001-qr-dinamico-del-miembro.md) |
 | [`archivo/`](archivo/) | Versiones anteriores que se conservan por historia |
 
 ## Seguimiento de la semana de entrega
