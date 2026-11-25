@@ -54,8 +54,17 @@ function telParaWhatsapp(telefono) {
  * proximos `dias` dias (incluyendo hoy). La query toma el ultimo plan
  * activo de cada miembro, igual que `ULTIMO_PLAN` en lib/planes.js,
  * pero ademas excluye gyms desactivados.
+ *
+ * Con `gymId` solo los de ese gimnasio (los endpoints); sin el, los de todos
+ * (el cron).
  */
-async function miembrosPorVencer(dias) {
+async function miembrosPorVencer(dias, gymId = null) {
+  const params = [dias];
+  let filtroGym = '';
+  if (gymId !== null) {
+    params.push(gymId);
+    filtroGym = 'AND m.id_gimnasio = $2';
+  }
   const { rows } = await pool.query(
     `SELECT
         m.id_miembro, m.nombre, m.telefono, m.id_gimnasio,
@@ -76,10 +85,24 @@ async function miembrosPorVencer(dias) {
        AND pc.fecha_fin IS NOT NULL
        AND pc.congelado_desde IS NULL   -- congelada: su vencimiento se corre al descongelar (RQF-04)
        AND pc.fecha_fin::date BETWEEN CURRENT_DATE AND (CURRENT_DATE + $1::int)
+       ${filtroGym}
      ORDER BY pc.fecha_fin ASC, m.id_miembro`,
-    [dias]
+    params
   );
   return rows;
+}
+
+/**
+ * Dias de la ventana a revisar: el maximo entre los gimnasios activos (o el de
+ * uno solo, con `gymId`), con tope de 30 para no traer todo el ano.
+ */
+async function diasDeVentana(gymId = null) {
+  const { rows } = await pool.query(
+    `SELECT COALESCE(MAX(dias_aviso_vencimiento), 3) AS max_dias
+       FROM gimnasio WHERE activo = TRUE ${gymId !== null ? 'AND id_gimnasio = $1' : ''}`,
+    gymId !== null ? [gymId] : []
+  );
+  return Math.min(parseInt(rows[0].max_dias || 3, 10) || 3, 30);
 }
 
 /**
@@ -133,6 +156,7 @@ async function yaEnviado({ idPlanCobro, diasRestantes }) {
 /**
  * Logica principal. Llamable desde el cron o desde el endpoint admin.
  *
+ *   { gymId }         -> solo ese gimnasio (el endpoint manual); sin el, todos (el cron).
  *   { dryRun: true }  -> NO manda WhatsApp, solo cuenta candidatos.
  *   { whatsappClient } -> inyeccion para tests (si no, usa el modulo).
  *
@@ -140,7 +164,7 @@ async function yaEnviado({ idPlanCobro, diasRestantes }) {
  * cuantos bloqueo el gym (dias_aviso=0), cuantos omitio por duplicado y
  * cuantos dejo para despues por la frecuencia de la Ley 2300.
  */
-async function runJob({ dryRun = false, whatsappClient = null } = {}) {
+async function runJob({ gymId = null, dryRun = false, whatsappClient = null } = {}) {
   const summary = {
     encontrados: 0,
     enVentana:   0,
@@ -164,19 +188,13 @@ async function runJob({ dryRun = false, whatsappClient = null } = {}) {
     return summary;
   }
 
-  // Necesitamos un maximo razonable de dias_aviso para no traer todo el año.
-  // Tomamos el maximo entre todos los gyms (cap a 30 dias por seguridad).
-  const cfgRows = await pool.query(
-    `SELECT COALESCE(MAX(dias_aviso_vencimiento), 3) AS max_dias
-       FROM gimnasio WHERE activo = TRUE`
-  );
-  const maxDias = Math.min(parseInt(cfgRows.rows[0].max_dias || 3, 10) || 3, 30);
+  const maxDias = await diasDeVentana(gymId);
   if (maxDias <= 0) {
     summary.motivo = 'Todos los gimnasios tienen dias_aviso_vencimiento = 0 (desactivado)';
     return summary;
   }
 
-  const candidatos = await miembrosPorVencer(maxDias);
+  const candidatos = await miembrosPorVencer(maxDias, gymId);
   summary.encontrados = candidatos.length;
 
   const wa = whatsappClient || require('../lib/whatsapp');
@@ -285,4 +303,4 @@ async function runJob({ dryRun = false, whatsappClient = null } = {}) {
   return summary;
 }
 
-module.exports = { runJob, miembrosPorVencer, telParaWhatsapp };
+module.exports = { runJob, miembrosPorVencer, diasDeVentana, telParaWhatsapp };
