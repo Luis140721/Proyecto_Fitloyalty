@@ -28,8 +28,17 @@ const configSchema = z.object({
   plan_clases_suelta_valor: z.coerce.number().min(0).optional(),
   plan_ilimitado_valor: z.coerce.number().min(0).optional(),
   recordatorio_cobro_activo: z.boolean().optional(),
-  dias_recordatorio_default: z.number().min(1).max(30).optional(),
-  dias_prueba: z.number().min(1).max(90).optional(),
+  // Las dos columnas son INTEGER: un decimal llegaba a la BD y respondia 503 (#88).
+  dias_recordatorio_default: z.number({ invalid_type_error: 'Los días de recordatorio deben ser un número.' })
+    .int('Los días de recordatorio deben ser un número entero.')
+    .min(1, 'Los días de recordatorio deben ser al menos 1.')
+    .max(30, 'Los días de recordatorio no pueden ser más de 30.')
+    .optional(),
+  dias_prueba: z.number({ invalid_type_error: 'Los días de prueba deben ser un número.' })
+    .int('Los días de prueba deben ser un número entero.')
+    .min(1, 'Los días de prueba deben ser al menos 1.')
+    .max(90, 'Los días de prueba no pueden ser más de 90.')
+    .optional(),
   // Vive en la tabla gimnasio (migracion 006). 0 desactiva el aviso por WhatsApp.
   dias_aviso_vencimiento: z.number().int().min(0).max(30).optional(),
   // Dias sin venir para la alerta amarilla y la roja (RQF-08). Viven en
@@ -264,13 +273,36 @@ router.put(
 //   DELETE /api/admin/hitos/:id   (se desactiva; los ya otorgados se conservan)
 // Viven aqui y no en un archivo nuevo para no tocar el montaje de index.js.
 // ---------------------------------------------------------------------------
+// Mensajes en espanol: el formulario de hitos muestra el error tal cual, y sin
+// ellos el admin veia el texto de zod en ingles (#88).
 const hitoSchema = z.object({
-  nombre: z.string().trim().min(1).max(100),
-  tipo_hito: z.enum(['RACHA', 'TOTAL_ASISTENCIAS']),
-  valor_objetivo: z.number().int().min(1).max(10000),
-  mensaje: z.string().trim().min(1).max(300),
-  activo: z.boolean().optional(),
+  nombre: z.string({ required_error: 'Escribe el nombre del hito.', invalid_type_error: 'El nombre debe ser texto.' })
+    .trim()
+    .min(1, 'Escribe el nombre del hito.')
+    .max(100, 'El nombre no puede tener más de 100 caracteres.'),
+  tipo_hito: z.enum(['RACHA', 'TOTAL_ASISTENCIAS'], {
+    errorMap: () => ({ message: 'El tipo de hito debe ser RACHA o TOTAL_ASISTENCIAS.' }),
+  }),
+  valor_objetivo: z.number({ required_error: 'Escribe la meta del hito.', invalid_type_error: 'La meta debe ser un número.' })
+    .int('La meta debe ser un número entero.')
+    .min(1, 'La meta debe ser de al menos 1.')
+    .max(10000, 'La meta no puede ser mayor que 10000.'),
+  mensaje: z.string({ required_error: 'Escribe el mensaje del hito.', invalid_type_error: 'El mensaje debe ser texto.' })
+    .trim()
+    .min(1, 'Escribe el mensaje del hito.')
+    .max(300, 'El mensaje no puede tener más de 300 caracteres.'),
+  activo: z.boolean({ invalid_type_error: 'Activo debe ser verdadero o falso.' }).optional(),
 });
+
+// Un id que no es un entero positivo llegaba a PostgreSQL como NaN y respondia
+// 503 DB_UNREACHABLE (#88). Ahora es 400 antes de tocar la base.
+function idHito(valor) {
+  const id = Number(valor);
+  if (!/^\d+$/.test(String(valor)) || !Number.isSafeInteger(id) || id <= 0) {
+    throw new AppError(400, 'El id del hito no es válido.', 'VALIDATION_ERROR');
+  }
+  return id;
+}
 
 const HITO_COLS = 'id_hito, nombre, tipo_hito, valor_objetivo, mensaje, activo';
 
@@ -326,6 +358,7 @@ router.put(
   authorize('admin'),
   requireActiveTrial(pool),
   asyncHandler(async (req, res) => {
+    const idHitoPedido = idHito(req.params.id);
     const parsed = parse(hitoSchema.partial(), req.body);
     if (!parsed.ok) throw new AppError(parsed.status, parsed.error, 'VALIDATION_ERROR', { issues: parsed.issues });
     const campos = [];
@@ -336,7 +369,7 @@ router.put(
       campos.push(`${k} = $${params.length}`);
     }
     if (campos.length === 0) throw new AppError(400, 'Nada que actualizar', 'VALIDATION_ERROR');
-    params.push(Number(req.params.id), req.user.gymId);
+    params.push(idHitoPedido, req.user.gymId);
     try {
       const { rows } = await pool.query(
         `UPDATE hito_gamificacion SET ${campos.join(', ')}
@@ -363,11 +396,12 @@ router.delete(
   authorize('admin'),
   requireActiveTrial(pool),
   asyncHandler(async (req, res) => {
+    const idHitoPedido = idHito(req.params.id);
     try {
       const { rows } = await pool.query(
         `UPDATE hito_gamificacion SET activo = FALSE
           WHERE id_hito = $1 AND id_gimnasio = $2 RETURNING ${HITO_COLS}`,
-        [Number(req.params.id), req.user.gymId]
+        [idHitoPedido, req.user.gymId]
       );
       if (rows.length === 0) throw new AppError(404, 'Hito no encontrado.', 'NOT_FOUND');
       return res.json({ hito: rows[0] });
