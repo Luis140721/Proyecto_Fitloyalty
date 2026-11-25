@@ -161,7 +161,9 @@
 
 .miembro-card__actions {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
+  gap: 8px;
 }
 
 .miembros-cards__empty {

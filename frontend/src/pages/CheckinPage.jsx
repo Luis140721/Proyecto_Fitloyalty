@@ -62,17 +62,20 @@ export default function CheckinPage() {
   // que la que ya esta en pantalla.
   const ultimaCargaPedidaRef = useRef(0);
   const cargaEnPantallaRef = useRef(0);
+  // Para decir "Aún no hay ingresos hoy" solo despues de la primera carga buena.
+  const [historialCargado, setHistorialCargado] = useState(false);
 
   const loadRecent = async () => {
     const carga = ++ultimaCargaPedidaRef.current;
     try {
-      const { data } = await api.get('/admin/checkin', { params: { limit: 20 } });
+      const { data } = await api.get('/admin/checkin', { params: { dia: 'hoy', limit: 200 } });
       if (carga < cargaEnPantallaRef.current) return false;
       cargaEnPantallaRef.current = carga;
       const next = data.checkins || [];
       const previousIds = knownIdsRef.current;
       const newOnTop = next.length > 0 && previousIds.size > 0 && !previousIds.has(next[0].id_checkin);
       setRecent(next);
+      setHistorialCargado(true);
       if (previousIds.size === 0) {
         next.forEach((c) => previousIds.add(c.id_checkin));
       }
@@ -465,11 +468,17 @@ export default function CheckinPage() {
               <span className="checkin-feed__live anim-pulse">EN VIVO</span>
             </div>
           </div>
-          {/* Lista con nombre: el lector de pantalla la anuncia como "Ingresos de hoy" y cuenta las filas. */}
+          {historialCargado && recent.length === 0 && (
+            <p style={{ padding: '0 24px 12px', color: 'var(--on-surface-variant)' }}>Aún no hay ingresos hoy.</p>
+          )}
+          {/* Lista con nombre: el lector de pantalla la anuncia como "Ingresos de hoy" y cuenta las filas.
+              Con muchos ingresos se desplaza por dentro (tabIndex para hacerlo con el teclado; el aro
+              de foco va hacia adentro porque la tarjeta recorta lo que se sale). */}
           <div
             role="list"
             aria-labelledby="checkin-ingresos-titulo"
-            style={{ padding: '8px 24px 24px', display: 'flex', flexDirection: 'column', gap: 12 }}
+            tabIndex={recent.length > 0 ? 0 : undefined}
+            style={{ padding: '8px 24px 24px', display: 'flex', flexDirection: 'column', gap: 12, maxHeight: '70vh', overflowY: 'auto', outlineOffset: -2 }}
           >
             {recent.map((c, idx) => {
               const denied = c.advertencia || c.denegado;

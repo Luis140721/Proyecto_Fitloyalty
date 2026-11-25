@@ -272,11 +272,16 @@ const FILTROS = [
   { id: 'todos',  label: 'Todos' },
   { id: 'al-dia', label: 'Al día' },
   { id: 'vence',  label: 'Vence pronto' },
+  { id: 'vence30', label: 'Vence en 30 días' },
   { id: 'vencido',label: 'Vencido' },
   { id: 'riesgo', label: 'En riesgo' },
   { id: 'congelado', label: 'Congelado' },
   { id: 'desactivados', label: 'Desactivados' },
 ];
+
+/** La ventana de «Próximos vencimientos» del Dashboard: de hoy a 30 dias, sin congeladas. */
+const venceEn30 = (m) => !m.congelada && m.dias_para_vencer != null
+  && m.dias_para_vencer >= 0 && m.dias_para_vencer <= 30;
 
 // Nota: el antiguo statusChip() se reemplazo por el componente <BadgeEstado />.
 
@@ -310,7 +315,7 @@ function formularioVacio() {
 }
 
 export default function MiembrosPage() {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   // Miembros a los que ya se les escribio en esta sesion, para marcar el boton.
   const [contactados, setContactados] = useState(() => new Set());
   // Si el chat se abrio pero el envio no quedo registrado (RQF-09).
@@ -349,6 +354,11 @@ export default function MiembrosPage() {
   const fichaPedida = useRef(0);
   // De que miembro es la ficha en pantalla (null si no hay ninguna abierta).
   const fichaMiembro = useRef(null);
+  // Para no abrir la ficha de la URL encima del alta a medio llenar.
+  const altaAbierta = useRef(false);
+  useEffect(() => { altaAbierta.current = open; }, [open]);
+  // La URL sin ?ficha que esta pagina acaba de poner: no es una busqueda nueva.
+  const urlSinFicha = useRef(null);
   const [editQr, setEditQr] = useState('');      // imagen del QR en el detalle
   // RQNF-17: autorizaciones del miembro que se edita (vigentes e historial).
   const [autorizacionesEdit, setAutorizacionesEdit] = useState(null);
@@ -508,6 +518,7 @@ export default function MiembrosPage() {
       if (carga !== ultimaCargaRef.current) return;
       setItems(data.miembros);
       setErrorCarga('');
+      return data.miembros;
     } catch (err) {
       if (carga !== ultimaCargaRef.current) return;
       setErrorCarga(err.message || 'Error al cargar miembros.');
@@ -519,12 +530,34 @@ export default function MiembrosPage() {
   /*
    * Los avisos de la campana llevan a esta pantalla con ?q=<nombre>. Se
    * respeta esa busqueda en la carga inicial para caer directo en el miembro
-   * del aviso en vez de en la lista completa.
+   * del aviso en vez de en la lista completa. El Dashboard llega ademas con
+   * ?filtro=<id de FILTROS> («Ver todos») o ?ficha=<id del miembro> (la fila).
    */
   useEffect(() => {
+    const esSoloSinFicha = urlSinFicha.current === searchParams.toString();
+    urlSinFicha.current = null;
+    if (esSoloSinFicha) return;
     const inicial = searchParams.get('q') || '';
-    if (inicial) setQ(inicial);
-    load(inicial);
+    setQ(inicial); // la caja dice lo mismo que se busco: si no, un filtro repetia la busqueda vieja
+    const pedido = searchParams.get('filtro');
+    const filtroInicial = FILTROS.some((f) => f.id === pedido) ? pedido : 'todos';
+    setFiltro(filtroInicial); // tambien al llegar desde la campana: otro filtro podria esconder al miembro del aviso
+    const idFicha = Number(searchParams.get('ficha')) || null;
+    const fichaAntes = fichaPedida.current;
+    load(inicial, filtroInicial === 'desactivados').then((miembros) => {
+      // Sin lista (fallo, la reemplazo otra o la persona salio) no se toca nada.
+      if (!idFicha || !miembros || !montada.current) return;
+      const m = miembros.find((x) => x.id_miembro === idFicha);
+      // Se respeta lo que la persona tenga abierto: otra ficha (o que abrio y
+      // cerro mientras cargaba la lista) o un alta a medio llenar.
+      const libre = fichaMiembro.current === null && fichaPedida.current === fichaAntes && !altaAbierta.current;
+      if (m && libre) openEdit(m);
+      // La ficha se abre una vez: al volver atras o recargar no se abre sola.
+      const sinFicha = new URLSearchParams(searchParams);
+      sinFicha.delete('ficha');
+      urlSinFicha.current = sinFicha.toString();
+      setSearchParams(sinFicha, { replace: true });
+    });
   }, [searchParams]);
 
   // Cargar configuración del gimnasio
@@ -1242,6 +1275,7 @@ export default function MiembrosPage() {
     return items.filter((m) => {
       if (filtro === 'al-dia')    return !m.vencido && !m.vencePronto && !m.enRiesgo && !m.congelada;
       if (filtro === 'vence')     return !!m.vencePronto;
+      if (filtro === 'vence30')   return venceEn30(m);
       if (filtro === 'vencido')   return !!m.vencido;
       if (filtro === 'riesgo')    return !!m.enRiesgo;
       if (filtro === 'congelado') return !!m.congelada;
@@ -1253,6 +1287,7 @@ export default function MiembrosPage() {
     todos: items.filter(m => m.activo).length,
     'al-dia': items.filter((m) => m.activo && !m.vencido && !m.vencePronto && !m.enRiesgo && !m.congelada).length,
     vence: items.filter((m) => m.activo && m.vencePronto).length,
+    vence30: items.filter((m) => m.activo && venceEn30(m)).length,
     vencido: items.filter((m) => m.activo && m.vencido).length,
     riesgo: items.filter((m) => m.activo && m.enRiesgo).length,
     congelado: items.filter((m) => m.activo && m.congelada).length,
@@ -2049,15 +2084,36 @@ export default function MiembrosPage() {
                     <dd><code>{m.codigo_qr}</code></dd>
                   </div>
                 </dl>
+                {/* Las acciones de la tabla: aqui no hay fila que tocar, asi que la ficha lleva boton
+                    (un miembro desactivado se reactiva en ella, con «Miembro activo»). */}
                 <footer className="miembro-card__actions">
                   <button
-                    className="btn btn-ghost btn-sm"
-                    onClick={() => askDeactivate(m)}
-                    aria-label={`Desactivar a ${m.nombre}`}
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => openEdit(m)}
+                    aria-label={`Ver ficha de ${m.nombre}`}
                   >
-                    <span className="material-symbols-outlined icon" aria-hidden="true">person_remove</span>
-                    Desactivar
+                    <span className="material-symbols-outlined icon" aria-hidden="true">badge</span>
+                    Ver ficha
                   </button>
+                  {m.activo ? (
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => askDeactivate(m)}
+                      aria-label={`Desactivar a ${m.nombre}`}
+                    >
+                      <span className="material-symbols-outlined icon" aria-hidden="true">person_remove</span>
+                      Desactivar
+                    </button>
+                  ) : (
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => askDelete(m)}
+                      aria-label={`Eliminar permanentemente a ${m.nombre}`}
+                    >
+                      <span className="material-symbols-outlined icon" aria-hidden="true">delete_forever</span>
+                      Eliminar
+                    </button>
+                  )}
                 </footer>
               </CardGlass>
             );
