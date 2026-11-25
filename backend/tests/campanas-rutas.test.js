@@ -185,7 +185,8 @@ function destinatariosEnMemoria(miembros, iniciales = []) {
       return { rows: [] };
     }],
     [PENDIENTES, ([idCampana]) => ({ rows: tabla.filter((d) => d.id_campana === idCampana && d.estado_envio === 'PENDIENTE').map(conMiembro) })],
-    [/FOR UPDATE SKIP LOCKED/, ([id]) => ({ rows: tabla.filter((d) => d.id_campana_destinatario === id).map((d) => ({ estado_envio: d.estado_envio })) })],
+    // Con SKIP LOCKED la toma el envio; sin el, el reintento de la constancia (#111).
+    [/SELECT estado_envio FROM campana_destinatario[\s\S]*FOR UPDATE/, ([id]) => ({ rows: tabla.filter((d) => d.id_campana_destinatario === id).map((d) => ({ estado_envio: d.estado_envio })) })],
     [MARCAR, ([id, estado, motivo, fecha]) => {
       const d = tabla.find((x) => x.id_campana_destinatario === id);
       Object.assign(d, { estado_envio: estado, motivo, fecha_envio: fecha || d.fecha_envio });
@@ -1032,7 +1033,16 @@ describe('POST /api/admin/campanas/:id/ejecutar: send a campaign now', () => {
     expect(r.status).toBe(503);
     expect(r.body).toEqual({ error: 'No pudimos ejecutar la campaña.', code: 'DB_UNREACHABLE' });
     expect(deps.enviarCorreo).toHaveBeenCalledTimes(1);
-    expect(transacciones()).toEqual(['BEGIN', 'COMMIT', 'release', 'BEGIN', 'ROLLBACK', 'release']);
+    // El correo salio: la constancia se intenta en su transaccion y, por el
+    // #111, otras dos veces aparte antes de rendirse. Nunca se marca FALLIDO.
+    expect(transacciones()).toEqual([
+      'BEGIN', 'COMMIT', 'release',
+      'BEGIN', 'ROLLBACK',
+      'BEGIN', 'ROLLBACK', 'release',
+      'BEGIN', 'ROLLBACK', 'release',
+      'ROLLBACK', 'release',
+    ]);
+    expect(llamadas(/INSERT INTO envio_mensaje/)).toHaveLength(3);
     expect(llamadas(/UPDATE campana_destinatario/)).toHaveLength(0);
   });
 });
