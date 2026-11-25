@@ -32,6 +32,9 @@ const ETIQUETAS = {
 // Fecha de hoy en Colombia y fecha local de una columna TIMESTAMP.
 const HOY = `(NOW() AT TIME ZONE '${ZONA}')::date`;
 const fechaLocal = (col) => `((${col} AT TIME ZONE current_setting('TimeZone')) AT TIME ZONE '${ZONA}')::date`;
+// Inicio de hoy en Colombia, en la zona de la sesion: se compara directo con una
+// columna TIMESTAMP sin zona (p. ej. checkin.fecha_hora).
+const INICIO_HOY = `(((${HOY})::timestamp AT TIME ZONE '${ZONA}') AT TIME ZONE current_setting('TimeZone'))`;
 
 function diasDe(segmento, dias) {
   const n = Number.parseInt(dias, 10);
@@ -106,6 +109,7 @@ async function esElegible(db, gymId, idMiembro, segmento, opciones = {}) {
 module.exports = {
   ZONA,
   HOY,
+  INICIO_HOY,
   fechaLocal,
   SEGMENTOS,
   DIAS_POR_DEFECTO,

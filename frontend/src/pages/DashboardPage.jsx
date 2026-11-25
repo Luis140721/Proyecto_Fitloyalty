@@ -8,8 +8,8 @@
  *       1. Exportar        -> descarga CSV (fetch blob -> Blob URL -> anchor click)
  *       2. Registrar entrada -> navigate('/admin/checkin')
  *       3. Activar plan    -> toast "Pago en construccion" (5s). No existe /billing.
- *       4. Ver todos       -> navigate('/admin/miembros?vencio=1')
- *       5. Fila chevron    -> navigate('/admin/miembros?doc=<documento>')
+ *       4. Ver todos       -> navigate('/admin/miembros?filtro=vence30')
+ *       5. Fila chevron    -> navigate('/admin/miembros?q=<documento>&ficha=<id>')
  *   - Animaciones (motion.css + hooks/useAnimatedCount.js):
  *       * <PageTransition> envuelve toda la pagina.
  *       * 8 KPIs usan useAnimatedCount (incluye retention + '%' y COP '$').
@@ -24,9 +24,9 @@
  *     7 o 30 dias) y refresco automatico cada minuto con la pestana visible.
  *
  * Notas de scope:
- *   - NO se modifica Miembros/Checkin/Staff (PROHIBIDO en esta tarea).
- *     Por eso las navegaciones a /admin/miembros?vencio=1 o ?doc=... se hacen
- *     pero el filtro lo aplicara una mejora futura en MiembrosPage.
+ *   - MiembrosPage lee ?q, ?filtro y ?ficha al entrar.
+ *   - Los textos bajo cada cifra salen de los datos o explican la cifra: no
+ *     llevan numeros ni comparaciones fijas.
  *   - /billing no existe como ruta; por eso el boton "Activar plan" cae al toast.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -57,6 +57,12 @@ const PERIODOS_HORAS = [
 ];
 
 const horaTexto = (h) => `${String(h).padStart(2, '0')}:00`;
+
+// Sin el dato (un backend anterior no lo manda) no se afirma nada.
+const textoNuevos = (n) => {
+  if (n == null) return 'Con perfil activo';
+  return n > 0 ? `+${n} este mes` : 'Ninguno nuevo este mes';
+};
 
 /**
  * BarsWeekly: barras verticales por dia de la semana.
@@ -302,11 +308,12 @@ export default function DashboardPage() {
     });
   };
 
-  const handleVerTodos = () => navigate('/admin/miembros?vencio=1');
+  // La misma ventana de la tarjeta: los que vencen en los proximos 30 dias.
+  const handleVerTodos = () => navigate('/admin/miembros?filtro=vence30');
 
+  // La lista queda en ese miembro y se abre su ficha.
   const handleFila = (r) => {
-    const doc = (r && r.documento) ? encodeURIComponent(r.documento) : '';
-    navigate(`/admin/miembros?doc=${doc}`);
+    navigate(`/admin/miembros?${new URLSearchParams({ q: r.documento ?? '', ficha: r.id_miembro ?? '' })}`);
   };
 
   // Refs para useAnimatedCount (los 8 KPIs).
@@ -403,7 +410,9 @@ export default function DashboardPage() {
               <span className="kpi-value">
                 <span ref={miembrosRef}>0</span>
               </span>
-              <span className="kpi-meta">+12 este mes</span>
+              <span className="kpi-meta">
+                {textoNuevos(data.nuevosMes)}
+              </span>
             </article>
             <article className="kpi anim-fade-up anim-delay-2">
               <div className="kpi-head">
@@ -423,7 +432,9 @@ export default function DashboardPage() {
               <span className="kpi-value">
                 <span ref={vencen7Ref}>0</span>
               </span>
-              <span className="kpi-meta">Acción recomendada hoy</span>
+              <span className="kpi-meta">
+                {data.vencen7 > 0 ? 'Acción recomendada hoy' : 'Nadie vence en 7 días'}
+              </span>
             </article>
             <article className="kpi kpi-risk anim-fade-up anim-delay-4">
               <div className="kpi-head">
@@ -449,7 +460,7 @@ export default function DashboardPage() {
                 <span ref={retentionRef}>0</span>
                 <small style={{ fontSize: 18, color: 'var(--on-surface-variant)', marginLeft: 4 }}>%</small>
               </span>
-              <span className="kpi-meta">Por encima del promedio</span>
+              <span className="kpi-meta">Activos que vinieron en 90 días</span>
             </article>
             <article className="kpi anim-fade-up anim-delay-6">
               <div className="kpi-head">
@@ -467,7 +478,7 @@ export default function DashboardPage() {
                 <span className="kpi-icon"><span className="material-symbols-outlined icon" aria-hidden="true">workspace_premium</span></span>
               </div>
               <span className="kpi-value" style={{ fontSize: 20 }}>
-                {data.planTop || 'Mensual'}
+                {data.planTopCount > 0 ? data.planTop : 'Sin planes'}
               </span>
               <span className="kpi-meta">{data.planTopCount ?? 0} miembros</span>
             </article>
@@ -479,7 +490,7 @@ export default function DashboardPage() {
               <span className="kpi-value">
                 <span ref={qrsRef}>0</span>
               </span>
-              <span className="kpi-meta">100% operativos</span>
+              <span className="kpi-meta">Uno por miembro activo</span>
             </article>
           </section>
 
@@ -555,7 +566,7 @@ export default function DashboardPage() {
                       </span>
                     </div>
                     <span className="risk-row__amount risk-row__amount--error">
-                      {COP(r.monto)}
+                      {r.monto == null ? 'Sin plan' : COP(r.monto)}
                     </span>
                   </div>
                 ))}
@@ -666,7 +677,7 @@ export default function DashboardPage() {
                         </div>
                         <div className="activity-row__meta">
                           <strong>{r.nombre}</strong>
-                          <span>{r.metodo} · hace {new Date(r.fecha_hora).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}</span>
+                          <span>{r.metodo} · a las {new Date(r.fecha_hora).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}</span>
                         </div>
                       </div>
                     ))}

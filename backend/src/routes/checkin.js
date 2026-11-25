@@ -15,6 +15,7 @@ const { registrarAccesoBloqueado } = require('../lib/accesos');
 const { calcularGamificacion } = require('../lib/gamificacion');
 const { actualizarRetos, mensajeRetos } = require('../lib/retos');
 const { leerToken, codigoValido } = require('../lib/qr-dinamico');
+const { INICIO_HOY } = require('../lib/segmentos');
 const { z } = require('zod');
 const { formatZodError } = require('../lib/validators');
 
@@ -316,6 +317,7 @@ router.post(
 
 // ---------------------------------------------------------------------------
 // GET /api/admin/checkin  (historial reciente)
+//   ?dia=hoy -> solo los ingresos de hoy (dia de Colombia): "Ingresos de hoy"
 // ---------------------------------------------------------------------------
 router.get(
   '/admin/checkin',
@@ -325,6 +327,7 @@ router.get(
   asyncHandler(async (req, res) => {
     const gymId = req.user.gymId;
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
+    const soloHoy = req.query.dia === 'hoy' ? `AND c.fecha_hora >= ${INICIO_HOY}` : '';
 
     try {
       const { rows } = await pool.query(
@@ -332,7 +335,7 @@ router.get(
                 m.id_miembro, m.nombre, m.documento, m.codigo_qr
          FROM checkin c
          INNER JOIN miembro m ON m.id_miembro = c.id_miembro
-         WHERE c.id_gimnasio = $1
+         WHERE c.id_gimnasio = $1 ${soloHoy}
          ORDER BY c.fecha_hora DESC
          LIMIT ${limit}`,
         [gymId]
