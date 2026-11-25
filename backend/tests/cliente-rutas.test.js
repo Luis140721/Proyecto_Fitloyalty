@@ -254,9 +254,9 @@ describe('PUT /api/cliente/me: what the member can edit', () => {
     expect(update.params).toEqual(['3109876543', 'ana.ruiz@example.com', 'AVANZADO', 41, 7]);
   });
 
-  test('should save the empty email without looking for duplicates when the member clears it', async () => {
+  test('should save no email (NULL) without looking for duplicates when the member clears it', async () => {
     // Arrange
-    responder(actualizado({ email: '' }));
+    responder(actualizado({ email: null }));
 
     // Act
     const r = await pedir('put', '/me').send({ email: '' });
@@ -264,7 +264,7 @@ describe('PUT /api/cliente/me: what the member can edit', () => {
     // Assert
     expect(r.status).toBe(200);
     expect(llamadas(/SELECT 1 FROM miembro/)).toHaveLength(0);
-    expect(llamadas(/UPDATE miembro SET/)[0].params).toEqual(['', 41, 7]);
+    expect(llamadas(/UPDATE miembro SET/)[0].params).toEqual([null, 41, 7]);
   });
 
   test('should answer 409 EMAIL_TAKEN without updating when another active member of the gym has that email', async () => {
