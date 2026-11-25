@@ -278,7 +278,7 @@ async function constanciaDeEnvioRealizado(pool, client, base) {
   }
   const error = new Error(
     `El mensaje a ${base.destinatario.nombre || `el miembro ${base.destinatario.id_miembro}`} salió, `
-    + 'pero no se pudo guardar la constancia: sigue PENDIENTE y un reintento puede repetirlo. Revisa la base de datos antes de reintentar la campaña.'
+    + 'pero no se pudo guardar la constancia: sigue PENDIENTE y un reintento puede repetirlo. Espera unos minutos antes de reintentar la campaña.'
   );
   error.code = 'CONSTANCIA_NO_GUARDADA';
   error.cause = ultimo;

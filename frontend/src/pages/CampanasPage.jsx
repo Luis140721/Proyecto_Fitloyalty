@@ -188,6 +188,16 @@ export default function CampanasPage() {
     }
   };
 
+  // #111: el envío se detuvo a mitad. El aviso va primero, porque recargar puede
+  // tardar; se repite porque cargar() lo pisa si también falla.
+  const mostrarFalloDeEnvio = async (err, porDefecto) => {
+    const texto = err.message || porDefecto;
+    setError(texto);
+    if (err.code !== 'CONSTANCIA_NO_GUARDADA') return;
+    await cargar();
+    setError(texto);
+  };
+
   const ejecutar = async (c) => {
     if (!window.confirm(`¿Enviar ahora «${c.nombre}»? Se calcula el segmento en este momento.`)) return;
     setError(''); setInfo('');
@@ -205,9 +215,7 @@ export default function CampanasPage() {
       await cargar();
       if (r.pendientes > 0 || r.omitidos > 0) await verDestinatarios(c);
     } catch (err) {
-      // El envío se detuvo a mitad: la lista tiene que mostrar lo que alcanzó a salir.
-      if (err.code === 'CONSTANCIA_NO_GUARDADA') await cargar();
-      setError(err.message || 'No se pudo enviar la campaña.');
+      await mostrarFalloDeEnvio(err, 'No se pudo enviar la campaña.');
     }
   };
 
@@ -219,7 +227,7 @@ export default function CampanasPage() {
       setInfo(`«${c.nombre}»: ${data.message}`);
       await cargar();
     } catch (err) {
-      setError(err.message || 'No se pudo reintentar la campaña.');
+      await mostrarFalloDeEnvio(err, 'No se pudo reintentar la campaña.');
     }
   };
 
