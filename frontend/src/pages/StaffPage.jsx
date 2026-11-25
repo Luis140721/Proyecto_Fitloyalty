@@ -138,6 +138,9 @@ export default function StaffPage() {
     const { data } = await api.patch(`/admin/staff/${u.id_usuario}`, cambios);
     setStaff((lista) => lista.map((x) => (x.id_usuario === u.id_usuario ? { ...x, ...data.staff } : x)));
     setInfo(okMsg || data.message);
+    // Al desactivar o bajar de rol a un administrador, el servidor revoca sus
+    // invitaciones pendientes: la lista tiene que mostrarlo.
+    load();
   };
 
   const guardarEdicion = async (e) => {
@@ -648,6 +651,7 @@ export default function StaffPage() {
         </p>
         <p style={{ marginTop: 10, color: 'var(--on-surface-variant)', fontSize: 13 }}>
           No podrá iniciar sesión hasta que reactives la cuenta. Sus registros se conservan.
+          {confirmEstado?.rol === 'ADMINISTRADOR' && ' Las invitaciones pendientes que creó quedan revocadas.'}
         </p>
       </Modal>
     </PageTransition>
