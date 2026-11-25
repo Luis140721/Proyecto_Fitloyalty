@@ -107,8 +107,8 @@ async function diasDeVentana(gymId = null) {
 
 /**
  * Registra que ya le mandamos el aviso a este miembro por este ciclo de
- * vencimiento. Si la fila ya existe, NO la sobreescribe (asi protegemos
- * contra duplicados si el cron se dispara dos veces el mismo dia).
+ * vencimiento. Renovar o descongelar cambia las fechas del mismo plan, asi que
+ * puede haber una fila de un ciclo anterior con los mismos dias: se actualiza.
  */
 async function marcarEnviado({ idMiembro, idPlanCobro, diasRestantes, fecha = relojLey2300(), db = pool }) {
   try {
@@ -117,7 +117,7 @@ async function marcarEnviado({ idMiembro, idPlanCobro, diasRestantes, fecha = re
     await db.query(
       `INSERT INTO alerta_vencimiento_enviada (id_miembro, id_plan_cobro, dias_restantes, enviado_at)
        VALUES ($1, $2, $3, ($4::timestamptz AT TIME ZONE current_setting('TimeZone')))
-       ON CONFLICT (id_plan_cobro, dias_restantes) DO NOTHING`,
+       ON CONFLICT (id_plan_cobro, dias_restantes) DO UPDATE SET enviado_at = EXCLUDED.enviado_at`,
       [idMiembro, idPlanCobro, diasRestantes, fecha]
     );
     return true;
@@ -129,13 +129,15 @@ async function marcarEnviado({ idMiembro, idPlanCobro, diasRestantes, fecha = re
 }
 
 /**
- * Devuelve true si ya le mandamos el aviso de esta ETAPA a este plan_cobro.
- * Cada plan recibe como maximo dos avisos:
+ * Devuelve true si ya le mandamos el aviso de esta ETAPA a este plan_cobro por
+ * su vencimiento actual. Cada vencimiento recibe como maximo dos avisos:
  *   - 'aviso': la primera vez que entra en la ventana de dias del gimnasio
  *     (queda guardado con los dias que faltaban ese dia, > 0);
  *   - 'hoy':   el dia del vencimiento (dias_restantes = 0).
  * Asi con N dias de aviso no salen N+1 mensajes, y si el servidor estuvo
  * dormido el dia exacto el aviso sale al dia siguiente en vez de perderse.
+ * El vencimiento de un aviso es el dia en que salio mas los dias que faltaban:
+ * si no es el actual, el plan se renovo o se descongelo y el aviso es de antes.
  * Si la tabla no existe, devuelve false (no filtra).
  */
 async function yaEnviado({ idPlanCobro, diasRestantes }) {
@@ -143,8 +145,10 @@ async function yaEnviado({ idPlanCobro, diasRestantes }) {
     const condicion = diasRestantes === 0 ? 'dias_restantes = 0' : 'dias_restantes > 0';
     const { rows } = await pool.query(
       `SELECT 1 FROM alerta_vencimiento_enviada
-        WHERE id_plan_cobro = $1 AND ${condicion} LIMIT 1`,
-      [idPlanCobro]
+        WHERE id_plan_cobro = $1 AND ${condicion}
+          AND enviado_at::date + dias_restantes = CURRENT_DATE + $2::int
+        LIMIT 1`,
+      [idPlanCobro, diasRestantes]
     );
     return rows.length > 0;
   } catch (e) {

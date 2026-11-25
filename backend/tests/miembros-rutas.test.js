@@ -28,16 +28,17 @@ let mockLlamadas = [];
 let mockLiberadas = 0;
 const mockGimnasio = { id_gimnasio: 7, activo: true, trial_ends_at: null };
 
-async function mockEjecutar(sql, params = []) {
-  mockLlamadas.push({ sql, params });
+async function mockEjecutar(sql, params = [], enTransaccion = false) {
+  mockLlamadas.push({ sql, params, enTransaccion });
   if (/SELECT id_gimnasio, activo, trial_ends_at FROM gimnasio/.test(sql)) return { rows: [mockGimnasio] };
   if (/^\s*(BEGIN|COMMIT|ROLLBACK)\s*$/.test(sql)) return { rows: [] };
+  if (/pg_advisory_xact_lock/.test(sql)) return { rows: [] };
   for (const [patron, respuesta] of mockReglas) if (patron.test(sql)) return respuesta(params, sql);
   throw new Error('Consulta inesperada: ' + sql.trim().slice(0, 80));
 }
 jest.mock('../src/db/db', () => ({
   query: (...a) => mockEjecutar(...a),
-  connect: async () => ({ query: (...a) => mockEjecutar(...a), release: () => { mockLiberadas += 1; } }),
+  connect: async () => ({ query: (sql, params) => mockEjecutar(sql, params, true), release: () => { mockLiberadas += 1; } }),
 }));
 let mockSendMemberQR;
 let mockSendWhatsAppQR;
@@ -222,7 +223,11 @@ describe('POST /api/admin/miembros: creating a member', () => {
     ['the email belongs to an active member', /LOWER\(email\) = \$2/, { email: 'ANA@Gym.co' }, 'MEMBER_EMAIL_TAKEN'],
   ])('should answer 409 and save nothing when %s', async (_caso, patron, extra, code) => {
     // Arrange
-    responder([patron, filas([{ id_miembro: 90 }])], [/SELECT id_miembro FROM miembro/, filas([])]);
+    responder(
+      [patron, filas([{ id_miembro: 90 }])],
+      [/SELECT id_miembro FROM miembro/, filas([])],
+      [/SELECT 1 FROM miembro WHERE codigo_qr/, filas([])],
+    );
 
     // Act
     const r = await pedir('post', '/admin/miembros').send({ ...ANA, ...extra });
@@ -231,6 +236,38 @@ describe('POST /api/admin/miembros: creating a member', () => {
     expect(r.status).toBe(409);
     expect(r.body.code).toBe(code);
     expect(insertMiembro()).toBeUndefined();
+    expect(mockLlamadas[mockLlamadas.length - 1].sql).toBe('ROLLBACK');
+    expect(mockLiberadas).toBe(1);
+  });
+
+  // #87: la busqueda y el INSERT en una transaccion, con un candado por documento y otro por correo.
+  test('should lock and look for the document and then the email, inside the transaction, before saving the member', async () => {
+    // Arrange
+    altaSinDuplicados();
+
+    // Act
+    await pedir('post', '/admin/miembros').send({ ...ANA, email: 'ANA@Gym.co' });
+
+    // Assert
+    const pasos = mockLlamadas.map(({ sql }) => sql).filter((sql) => /^BEGIN$|advisory|SELECT id_miembro FROM miembro|INSERT INTO miembro /.test(sql))
+      .map((sql) => (/miembro_documento/.test(sql) && 'candado documento') || (/miembro_correo/.test(sql) && 'candado correo')
+        || (/documento = \$2/.test(sql) && 'buscar documento') || (/LOWER\(email\)/.test(sql) && 'buscar correo')
+        || (/INSERT/.test(sql) ? 'guardar' : sql));
+    expect(pasos).toEqual(['BEGIN', 'candado documento', 'buscar documento', 'candado correo', 'buscar correo', 'guardar']);
+    expect(llamadas(/miembro_documento/)[0].params).toEqual([`7:${ANA.documento}`]);
+    expect(llamadas(/miembro_correo/)[0].params).toEqual(['7:ana@gym.co']);
+  });
+
+  test('should not lock nor look for an email when the member has none', async () => {
+    // Arrange
+    altaSinDuplicados();
+
+    // Act
+    await pedir('post', '/admin/miembros').send(ANA);
+
+    // Assert
+    expect(llamadas(/miembro_documento/)).toHaveLength(1);
+    expect(llamadas(/miembro_correo|LOWER\(email\)/)).toHaveLength(0);
   });
 
   test('should look for the duplicated email in lower case when the email has capitals', async () => {
@@ -550,7 +587,14 @@ describe('GET /api/admin/miembros/:id: the member detail', () => {
 
 // ---------------------------------------------------------------------------
 describe('PUT /api/admin/miembros/:id: editing a member', () => {
-  const actualizar = (respuesta = (p) => ({ rows: [{ id_miembro: p[p.length - 2] }] })) => responder([/UPDATE miembro SET/, respuesta]);
+  // La fila que ya esta guardada: la lee el control de duplicados (RQF-03).
+  const GUARDADO = { documento: '1020304050', email: 'ana@vieja.co', activo: true };
+  const FILA_GUARDADA = /SELECT documento, email, activo FROM miembro WHERE id_miembro = \$1 AND id_gimnasio = \$2 FOR UPDATE/;
+  const actualizar = (respuesta = (p) => ({ rows: [{ id_miembro: p[p.length - 2] }] })) => responder(
+    [FILA_GUARDADA, filas([GUARDADO])],
+    [/SELECT id_miembro FROM miembro/, filas([])],
+    [/UPDATE miembro SET/, respuesta],
+  );
   const update = () => llamadas(/UPDATE miembro SET/)[0];
 
   test('should save the email in lower case and the new password hashed when both are sent', async () => {
@@ -570,6 +614,164 @@ describe('PUT /api/admin/miembros/:id: editing a member', () => {
     expect(params.slice(-2)).toEqual([88, 7]);
   });
 
+  // ------------------------------------------------ RQF-03: duplicados al editar
+  const conGuardado = (fila, repetidos = []) => responder(
+    [FILA_GUARDADA, filas(fila ? [fila] : [])],
+    ...repetidos.map((patron) => [patron, filas([{ id_miembro: 90 }])]),
+    [/SELECT id_miembro FROM miembro/, filas([])],
+    [/UPDATE miembro SET/, (p) => ({ rows: [{ id_miembro: p[p.length - 2] }] })],
+  );
+  const DOC = /documento = \$2/;
+  const CORREO = /LOWER\(email\) = \$2/;
+
+  test.each([
+    ['the new document belongs to another active member', { documento: '999888' }, DOC, 'MEMBER_DOC_TAKEN', [7, '999888', 88]],
+    ['the new email belongs to another active member', { email: 'Otra@Gym.co' }, CORREO, 'MEMBER_EMAIL_TAKEN', [7, 'otra@gym.co', 88]],
+  ])('should answer 409 and update nothing when %s', async (_caso, cuerpo, patron, code, params) => {
+    // Arrange
+    conGuardado(GUARDADO, [patron]);
+
+    // Act
+    const r = await pedir('put', '/admin/miembros/88').send(cuerpo);
+
+    // Assert
+    expect(r.status).toBe(409);
+    expect(r.body.code).toBe(code);
+    const [busqueda] = llamadas(patron);
+    expect(busqueda.sql).toMatch(/activo = TRUE AND id_miembro <> \$3$/);
+    expect(busqueda.params).toEqual(params);
+    expect(update()).toBeUndefined();
+    expect(mockLlamadas[mockLlamadas.length - 1].sql).toBe('ROLLBACK');
+    expect(mockLiberadas).toBe(1);
+  });
+
+  test('should look for duplicates before the update, in one transaction, when the document and the email change', async () => {
+    // Arrange
+    conGuardado(GUARDADO);
+
+    // Act
+    const r = await pedir('put', '/admin/miembros/88').send({ documento: '999888', email: 'otra@gym.co' });
+
+    // Assert
+    expect(r.status).toBe(200);
+    const orden = mockLlamadas.map(({ sql }) => sql).filter((sql) => /^(BEGIN|COMMIT)$|advisory|FOR UPDATE|SELECT id_miembro FROM miembro|UPDATE miembro/.test(sql));
+    expect(orden).toHaveLength(8);
+    expect(orden[0]).toBe('BEGIN');
+    expect(orden[1]).toMatch(FILA_GUARDADA);
+    expect(orden[2]).toMatch(/miembro_documento/);
+    expect(orden[3]).toMatch(DOC);
+    expect(orden[4]).toMatch(/miembro_correo/);
+    expect(orden[5]).toMatch(CORREO);
+    expect(orden[6]).toMatch(/UPDATE miembro SET/);
+    expect(orden[7]).toBe('COMMIT');
+    expect(update().enTransaccion).toBe(true);
+    expect(mockLiberadas).toBe(1);
+  });
+
+  // La ficha manda siempre el documento y el correo.
+  test('should not look for duplicates when the document and the email are the saved ones', async () => {
+    // Arrange
+    conGuardado(GUARDADO, [DOC, CORREO]);
+
+    // Act
+    const r = await pedir('put', '/admin/miembros/88').send({ nombre: 'Ana Maria', documento: '1020304050', email: 'ANA@vieja.co', activo: true });
+
+    // Assert
+    expect(r.status).toBe(200);
+    expect(llamadas(/SELECT id_miembro FROM miembro|advisory/)).toHaveLength(0);
+  });
+
+  test('should look for the saved document and email when the member is activated again', async () => {
+    // Arrange
+    conGuardado({ ...GUARDADO, activo: false }, [CORREO]);
+
+    // Act
+    const r = await pedir('put', '/admin/miembros/88').send({ activo: true });
+
+    // Assert
+    expect(r.status).toBe(409);
+    expect(r.body.code).toBe('MEMBER_EMAIL_TAKEN');
+    expect(llamadas(DOC)[0].params).toEqual([7, '1020304050', 88]);
+    expect(llamadas(CORREO)[0].params).toEqual([7, 'ana@vieja.co', 88]);
+    expect(update()).toBeUndefined();
+  });
+
+  test('should activate again a member without email when nobody has the document', async () => {
+    // Arrange
+    conGuardado({ ...GUARDADO, email: null, activo: false });
+
+    // Act
+    const r = await pedir('put', '/admin/miembros/88').send({ activo: true });
+
+    // Assert
+    expect(r.status).toBe(200);
+    expect(llamadas(CORREO)).toHaveLength(0);
+  });
+
+  test.each([
+    ['stays inactive', { ...GUARDADO, activo: false }, { documento: '999888' }],
+    ['is deactivated with the change', GUARDADO, { documento: '999888', activo: false }],
+  ])('should not look for duplicates when the member %s', async (_caso, fila, cuerpo) => {
+    // Arrange
+    conGuardado(fila, [DOC, CORREO]);
+
+    // Act
+    const r = await pedir('put', '/admin/miembros/88').send(cuerpo);
+
+    // Assert
+    expect(r.status).toBe(200);
+    expect(llamadas(/SELECT id_miembro FROM miembro/)).toHaveLength(0);
+  });
+
+  test('should answer 404 and update nothing when the document changes and the member is not in the gym', async () => {
+    // Arrange
+    conGuardado(null);
+
+    // Act
+    const r = await pedir('put', '/admin/miembros/88').send({ documento: '999888' });
+
+    // Assert
+    expect(r.status).toBe(404);
+    expect(r.body.code).toBe('MEMBER_NOT_FOUND');
+    expect(update()).toBeUndefined();
+  });
+
+  test('should look for duplicates too when the edit also changes the birth date', async () => {
+    // Arrange: ese cambio va por la transaccion de RQNF-17
+    conGuardado(GUARDADO, [DOC]);
+
+    // Act
+    const r = await pedir('put', '/admin/miembros/88').send({ documento: '999888', fecha_nacimiento: '1990-05-20' });
+
+    // Assert
+    expect(r.status).toBe(409);
+    expect(r.body.code).toBe('MEMBER_DOC_TAKEN');
+    expect(update()).toBeUndefined();
+    expect(mockLlamadas[mockLlamadas.length - 1].sql).toBe('ROLLBACK');
+  });
+
+  // La restriccion unica de la base cuenta tambien a los desactivados.
+  test.each([
+    ['the simple edit', { documento: '999888' }],
+    ['the edit with authorizations', { documento: '999888', fecha_nacimiento: '1990-05-20' }],
+  ])('should answer 409 MEMBER_DUPLICATED when the database refuses the duplicate in %s', async (_caso, cuerpo) => {
+    // Arrange
+    responder(
+      [FILA_GUARDADA, filas([GUARDADO])],
+      [/SELECT id_miembro FROM miembro/, filas([])],
+      [/FROM miembro WHERE id_miembro = \$1 AND id_gimnasio = \$2\s+FOR UPDATE/, filas([{ id_miembro: 88, tipo_documento: 'CC', fecha_nacimiento: null }])],
+      [/FROM autorizacion_miembro/, filas([])],
+      [/UPDATE miembro SET/, () => { throw Object.assign(new Error('duplicate key'), { code: '23505' }); }],
+    );
+
+    // Act
+    const r = await pedir('put', '/admin/miembros/88').send(cuerpo);
+
+    // Assert
+    expect(r.status).toBe(409);
+    expect(r.body.code).toBe('MEMBER_DUPLICATED');
+  });
+
   test('should clear the email when it is sent empty', async () => {
     // Arrange
     actualizar();
@@ -579,6 +781,8 @@ describe('PUT /api/admin/miembros/:id: editing a member', () => {
 
     // Assert
     expect(update().params).toEqual([null, 88, 7]);
+    expect(llamadas(/BEGIN|advisory|FOR UPDATE/)).toHaveLength(0);
+    expect(update().enTransaccion).toBe(false);
   });
 
   test('should turn the app access off without touching the password when only app_acceso is sent', async () => {

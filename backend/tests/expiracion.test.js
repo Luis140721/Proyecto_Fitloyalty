@@ -32,11 +32,13 @@ afterAll(() => legal.establecerReloj(null));
 
 /**
  * Simula la base con estado: `enviados` guarda los avisos ya marcados
- * ({ plan, dias, fecha }), `contactos` otros envios de la semana ({ canal,
- * fecha }) y `diasRestantes` es cuantos dias faltan para el vencimiento.
+ * ({ plan, dias, fecha, vence }), `contactos` otros envios de la semana ({ canal,
+ * fecha }) y `diasRestantes` es cuantos dias faltan para el vencimiento (`vence`).
+ * La cuenta que en SQL une el aviso con su vencimiento la prueba, contra
+ * PostgreSQL, tests/integracion/aviso-vencimiento-renovacion.test.js.
  */
-function prepararBD({ diasAviso = 3, diasRestantes = 2, enviados = [], contactos = [] } = {}) {
-  const estado = { enviados: [...enviados], contactos: [...contactos], diasRestantes };
+function prepararBD({ diasAviso = 3, diasRestantes = 2, enviados = [], contactos = [], vence = 'ciclo 1' } = {}) {
+  const estado = { enviados: enviados.map((e) => ({ vence, ...e })), contactos: [...contactos], diasRestantes, vence };
   mockQuery.mockImplementation(async (sql, params) => {
     if (/^(BEGIN|COMMIT|ROLLBACK)$/.test(sql)) return { rows: [] };
     if (sql.includes('pg_advisory_xact_lock')) return { rows: [] };
@@ -60,11 +62,20 @@ function prepararBD({ diasAviso = 3, diasRestantes = 2, enviados = [], contactos
     if (sql.includes('SELECT id_plan_cobro FROM plan_cobro')) return { rows: [{ id_plan_cobro: 99 }] };
     if (sql.includes('SELECT 1 FROM alerta_vencimiento_enviada')) {
       const hoy = sql.includes('dias_restantes = 0');
-      const hay = estado.enviados.some((e) => e.plan === params[0] && (hoy ? e.dias === 0 : e.dias > 0));
+      // Sin esta condicion el aviso de antes de renovar contaria como enviado.
+      if (!/enviado_at::date \+ dias_restantes = CURRENT_DATE \+ \$2::int/.test(sql) || params[1] !== estado.diasRestantes) {
+        throw new Error('La busqueda no mira el vencimiento actual');
+      }
+      const hay = estado.enviados.some((e) => e.plan === params[0] && e.vence === estado.vence && (hoy ? e.dias === 0 : e.dias > 0));
       return { rows: hay ? [{}] : [] };
     }
     if (sql.includes('INSERT INTO alerta_vencimiento_enviada')) {
-      estado.enviados.push({ plan: params[1], dias: params[2], fecha: params[3] });
+      // UNIQUE (id_plan_cobro, dias_restantes), con DO UPDATE.
+      if (!/ON CONFLICT \(id_plan_cobro, dias_restantes\) DO UPDATE SET enviado_at = EXCLUDED\.enviado_at/.test(sql)) {
+        throw new Error('El aviso del ciclo nuevo no quedaria marcado');
+      }
+      estado.enviados = estado.enviados.filter((e) => !(e.plan === params[1] && e.dias === params[2]));
+      estado.enviados.push({ plan: params[1], dias: params[2], fecha: params[3], vence: estado.vence });
       return { rows: [] };
     }
     throw new Error('Consulta inesperada: ' + sql.slice(0, 60));
@@ -130,6 +141,27 @@ describe('runJob: envio y marcado', () => {
     const r = await runJob({ whatsappClient: wa });
     expect(wa.sendWhatsAppText).not.toHaveBeenCalled();
     expect(r.enVentana).toBe(0);
+  });
+});
+
+// Renovar (PUT /plan) y descongelar cambian las fechas del mismo plan_cobro.
+describe('runJob: el plan renovado vuelve a recibir sus avisos', () => {
+  test('despues de renovar salen otra vez los dos avisos, y ninguno se repite', async () => {
+    const estado = prepararBD({ diasAviso: 3, diasRestantes: 3 });
+    const wa = waOk();
+    let semana = 0;
+    const correr = async (dias) => {
+      estado.diasRestantes = dias;
+      semana += 1;
+      fijarReloj(otraSemana(semana));
+      return (await runJob({ whatsappClient: wa })).enviados;
+    };
+
+    expect([await correr(3), await correr(2), await correr(0), await correr(0)]).toEqual([1, 0, 1, 0]);
+    estado.vence = 'ciclo 2';
+    expect([await correr(3), await correr(2), await correr(0), await correr(0)]).toEqual([1, 0, 1, 0]);
+
+    expect(sinFecha(estado.enviados)).toEqual([{ plan: 99, dias: 3 }, { plan: 99, dias: 0 }]);
   });
 });
 
