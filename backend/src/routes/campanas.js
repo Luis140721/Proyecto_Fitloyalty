@@ -113,6 +113,8 @@ function enBase(etiqueta, mensaje, fn) {
       if (err.code === '23505') throw new AppError(409, 'Ya existe una plantilla con ese nombre.', 'PLANTILLA_DUPLICADA');
       if (err.code === '23514') throw new AppError(400, 'Los datos no son validos.', 'VALIDATION_ERROR');
       console.error(`[${etiqueta}] Error:`, err.message);
+      // El mensaje salio y no quedo su constancia (#111): el admin tiene que saberlo antes de reintentar.
+      if (err.code === 'CONSTANCIA_NO_GUARDADA') throw new AppError(503, err.message, err.code);
       throw new AppError(503, mensaje, 'DB_UNREACHABLE');
     }
   });

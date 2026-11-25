@@ -58,7 +58,8 @@ async function applyMigrations() {
       console.log(`[migrate] ${file} — aplicada.`);
       ran += 1;
     } catch (err) {
-      await client.query('ROLLBACK');
+      // El ROLLBACK solo falla con la conexion rota: se marca y sigue el primer error.
+      await client.query('ROLLBACK').catch(() => { err.conexionPerdida = true; });
       console.error(`[migrate] ${file} — FALLO: ${err.message}`);
       throw err;
     } finally {

@@ -20,7 +20,7 @@
  * findBy la esperan. Nada depende del reloj: el horario lo dice el servidor.
  */
 import { describe, expect, test, vi, beforeEach, afterEach } from 'vitest';
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import CampanasPage from '../src/pages/CampanasPage';
 import { renderWithProviders } from './renderWithProviders';
 
@@ -552,6 +552,51 @@ describe('CampanasPage: enviar y cancelar una campaña', () => {
 
     // Assert
     expect(await screen.findByRole('alert')).toHaveTextContent(texto);
+  });
+
+  // #111: el envio se detuvo a mitad. La lista tiene que mostrar lo que alcanzo a salir.
+  const SIN_CONSTANCIA = 'El mensaje a Ana salió, pero no se pudo guardar la constancia: sigue PENDIENTE y un reintento puede repetirlo.';
+
+  test.each([
+    ['reload', 'Enviar ahora', 'CONSTANCIA_NO_GUARDADA', 2],
+    ['not reload', 'Enviar ahora', 'DB_UNREACHABLE', 1],
+    ['reload', 'Reintentar', 'CONSTANCIA_NO_GUARDADA', 2],
+    ['not reload', 'Reintentar', 'DB_UNREACHABLE', 1],
+  ])('should %s the list when "%s" fails with %s', async (_accion, nombreBoton, code, veces) => {
+    // Arrange
+    campanas = [CAMPANA, ENVIADA];
+    mockPost = vi.fn(async () => { throw { message: SIN_CONSTANCIA, code }; });
+    const { user } = abrirCampanas();
+
+    // Act
+    await user.click(boton(nombreBoton, await tarjeta(nombreBoton === 'Reintentar' ? ENVIADA.nombre : 'Te extrañamos')));
+
+    // Assert
+    expect(await screen.findByRole('alert')).toHaveTextContent(SIN_CONSTANCIA);
+    await waitFor(() => expect(mockGet.mock.calls.filter(([url]) => url === '/admin/campanas')).toHaveLength(veces));
+  });
+
+  test('should show the warning before the list is reloaded and keep it when the reload fails', async () => {
+    // Arrange: la recarga queda en espera y despues falla
+    let fallar;
+    const responder = mockGet;
+    let cargas = 0;
+    mockGet = vi.fn((url) => {
+      if (url === '/admin/campanas') cargas += 1;
+      if (cargas < 2) return responder(url);
+      return new Promise((_ok, no) => { fallar = () => no({ message: 'No se pudieron cargar las campañas.' }); });
+    });
+    mockPost = vi.fn(async () => { throw { message: SIN_CONSTANCIA, code: 'CONSTANCIA_NO_GUARDADA' }; });
+    const { user } = abrirCampanas();
+
+    // Act
+    await user.click(boton('Enviar ahora', await tarjeta('Te extrañamos')));
+
+    // Assert
+    expect(await screen.findByRole('alert')).toHaveTextContent(SIN_CONSTANCIA);
+    expect(cargas).toBe(2);
+    await act(async () => { fallar(); });
+    expect(screen.getByRole('alert')).toHaveTextContent(SIN_CONSTANCIA);
   });
 
   test('should cancel the campaign and reload the list when the admin confirms', async () => {

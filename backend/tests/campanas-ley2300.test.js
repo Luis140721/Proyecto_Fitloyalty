@@ -31,7 +31,7 @@ afterAll(() => legal.establecerReloj(null));
  * Base falsa con estado. `miembros` son los del segmento; `comerciales` es
  * id -> { otorgada, canales }; `contactos` son envios previos { id, canal, fecha }.
  */
-function crearBase({ canal = 'WHATSAPP', estado = 'PROGRAMADA', miembros, comerciales = {}, contactos = [] }) {
+function crearBase({ canal = 'WHATSAPP', estado = 'PROGRAMADA', miembros, comerciales = {}, contactos = [], fallasConstancia = 0 }) {
   const bd = {
     campana: { id_campana: 5, id_gimnasio: 1, nombre: 'Te extrañamos', segmento: 'TODOS', mensaje: 'Hola {primer_nombre}', canal, estado, activa: true, id_plantilla: null, gimnasio: 'Gym Demo' },
     destinatarios: [],
@@ -75,8 +75,8 @@ function crearBase({ canal = 'WHATSAPP', estado = 'PROGRAMADA', miembros, comerc
       const solo = /estado_envio = 'PENDIENTE'/.test(s);
       return { rows: bd.destinatarios.filter((d) => !solo || d.estado_envio === 'PENDIENTE').map((d) => ({ ...d, ...miembro(d.id_miembro) })) };
     }
-    if (/^SELECT estado_envio FROM campana_destinatario .* SKIP LOCKED/.test(s)) {
-      if (bd.bloqueadas.has(params[0])) return { rows: [] };
+    if (/^SELECT estado_envio FROM campana_destinatario .* FOR UPDATE/.test(s)) {
+      if (/SKIP LOCKED/.test(s) && bd.bloqueadas.has(params[0])) return { rows: [] };
       const d = bd.destinatarios.find((x) => x.id_campana_destinatario === params[0]);
       return { rows: d ? [{ estado_envio: d.estado_envio }] : [] };
     }
@@ -103,7 +103,53 @@ function crearBase({ canal = 'WHATSAPP', estado = 'PROGRAMADA', miembros, comerc
     }
     throw new Error(`Consulta inesperada: ${s.slice(0, 120)}`);
   }
-  bd.pool = { query, connect: async () => ({ query, release: () => {} }) };
+  // Cada conexion se porta como en PostgreSQL: despues de un error, la
+  // transaccion queda abortada y todo falla con 25P02 hasta el ROLLBACK.
+  // `fallasConstancia`: cuantas veces falla guardar la constancia de un
+  // ENVIADO (un corte breve de la BD), para el defecto #111.
+  // Lo que no se confirma con COMMIT se pierde (ROLLBACK, o soltar la conexion).
+  // `otroProceso` corre una vez despues de un ROLLBACK: otro proceso que escribe
+  // y confirma entre la falla y el reintento.
+  bd.fallasConstancia = fallasConstancia;
+  const foto = () => ({ destinatarios: bd.destinatarios.map((d) => ({ ...d })), envios: bd.envios.map((e) => ({ ...e })), estado: bd.campana.estado });
+  const deshacer = (f) => { bd.destinatarios = f.destinatarios; bd.envios = f.envios; bd.campana.estado = f.estado; };
+  bd.pool = {
+    query,
+    connect: async () => {
+      let abortada = false;
+      let antes = null;
+      const terminar = () => {
+        if (antes) deshacer(antes);
+        antes = null;
+        abortada = false;
+        const otro = bd.otroProceso;
+        bd.otroProceso = null;
+        if (otro) otro();
+      };
+      return {
+        release: () => { if (antes) terminar(); },
+        query: async (sql, params = []) => {
+          const s = sql.replace(/\s+/g, ' ').trim();
+          if (s === 'ROLLBACK') { bd.log.push(s); terminar(); return { rows: [] }; }
+          if (abortada) {
+            throw Object.assign(new Error('current transaction is aborted'), { code: '25P02' });
+          }
+          if (s === 'BEGIN') antes = foto();
+          if (s === 'COMMIT') antes = null;
+          try {
+            if (/^INSERT INTO envio_mensaje/.test(s) && params[7] === 'ENVIADO' && bd.fallasConstancia > 0) {
+              bd.fallasConstancia -= 1;
+              throw Object.assign(new Error('se perdio la conexion'), { code: '08006' });
+            }
+            return await query(sql, params);
+          } catch (err) {
+            if (s !== 'BEGIN' && s !== 'COMMIT' && s !== 'ROLLBACK') abortada = true;
+            throw err;
+          }
+        },
+      };
+    },
+  };
   return bd;
 }
 
@@ -112,6 +158,7 @@ const deps = (extra = {}) => ({
   enviarCorreo: jest.fn(async () => ({ delivered: true })),
   enviarWhatsapp: jest.fn(async () => {}),
   whatsappActivo: () => true,
+  esperar: jest.fn(async () => {}), // sin esperar de verdad entre reintentos de la constancia
   ...extra,
 });
 
@@ -354,5 +401,151 @@ describe('campanasVencidas: filtra por gimnasio', () => {
     expect(query.mock.calls[0][0]).toMatch(/\$1::int IS NULL OR id_gimnasio = \$1::int/);
     expect(query.mock.calls[0][1]).toEqual([7]);
     expect(query.mock.calls[1][1]).toEqual([null]);
+  });
+});
+
+// Defecto #111: el envio y su constancia iban en el mismo try. Si el mensaje
+// salia y fallaba guardar la constancia, el catch lo marcaba FALLIDO (el admin
+// lo reenviaria a mano); con PostgreSQL la transaccion quedaba abortada, el
+// destinatario seguia PENDIENTE y el reintento lo volvia a mandar.
+// https://github.com/Luis140721/Proyecto_Fitloyalty/issues/111
+describe('constancia de un mensaje que ya salio (#111)', () => {
+  test('un WhatsApp que salio queda ENVIADO aunque falle la primera constancia', async () => {
+    // Arrange
+    const bd = crearBase({ miembros: [ANA], comerciales: { 1: SOLO_WA }, fallasConstancia: 1 });
+    const d = deps();
+
+    // Act
+    const r = await ejecutarCampana(bd.pool, { idCampana: 5, gymId: 1, usuarioId: 8 }, d);
+
+    // Assert
+    expect(r).toMatchObject({ enviados: 1, fallidos: 0, pendientes: 0 });
+    expect(bd.destinatarios[0]).toMatchObject({ estado_envio: 'ENVIADO', motivo: null });
+    expect(bd.envios.filter((e) => e.estado === 'ENVIADO')).toHaveLength(1);
+    expect(bd.envios.filter((e) => e.estado === 'FALLIDO')).toHaveLength(0);
+    expect(d.enviarWhatsapp).toHaveBeenCalledTimes(1);
+  });
+
+  test('reintentar la campana despues no vuelve a mandar el WhatsApp que ya salio', async () => {
+    // Arrange
+    const bd = crearBase({ miembros: [ANA], comerciales: { 1: SOLO_WA }, fallasConstancia: 1 });
+    const d = deps();
+    await ejecutarCampana(bd.pool, { idCampana: 5, gymId: 1, usuarioId: 8 }, d);
+
+    // Act
+    await reanudarCampana(bd.pool, { idCampana: 5, gymId: 1, usuarioId: 8 }, d);
+
+    // Assert
+    expect(d.enviarWhatsapp).toHaveBeenCalledTimes(1);
+  });
+
+  test('un correo que salio queda ENVIADO aunque falle la primera constancia', async () => {
+    // Arrange
+    const bd = crearBase({ canal: 'EMAIL', miembros: [ANA], comerciales: { 1: LOS_DOS }, fallasConstancia: 1 });
+    const d = deps();
+
+    // Act
+    const r = await ejecutarCampana(bd.pool, { idCampana: 5, gymId: 1, usuarioId: 8 }, d);
+
+    // Assert
+    expect(r).toMatchObject({ enviados: 1, fallidos: 0 });
+    expect(bd.destinatarios[0].estado_envio).toBe('ENVIADO');
+    expect(d.enviarCorreo).toHaveBeenCalledTimes(1);
+  });
+
+  test('la constancia que se guarda en el reintento queda confirmada, sin repetirla', async () => {
+    const bd = crearBase({ miembros: [ANA, BETO], comerciales: { 1: SOLO_WA, 2: SOLO_WA }, fallasConstancia: 1 });
+    const d = deps();
+
+    const r = await ejecutarCampana(bd.pool, { idCampana: 5, gymId: 1, usuarioId: 8 }, d);
+
+    expect(r).toMatchObject({ enviados: 2, pendientes: 0 });
+    expect(bd.envios.map((e) => [e.id_miembro, e.estado])).toEqual([[1, 'ENVIADO'], [2, 'ENVIADO']]);
+    expect(bd.destinatarios.map((x) => x.estado_envio)).toEqual(['ENVIADO', 'ENVIADO']);
+  });
+
+  test('si otro proceso ya dejo la constancia, el reintento no la escribe otra vez', async () => {
+    const bd = crearBase({ miembros: [ANA], comerciales: { 1: SOLO_WA }, fallasConstancia: 1 });
+    bd.otroProceso = () => {
+      bd.destinatarios[0].estado_envio = 'ENVIADO';
+      bd.envios.push({ id_miembro: 1, id_campana: 5, estado: 'ENVIADO', fecha: MARTES });
+    };
+
+    await ejecutarCampana(bd.pool, { idCampana: 5, gymId: 1, usuarioId: 8 }, deps());
+
+    expect(bd.envios).toHaveLength(1);
+  });
+
+  test.each([
+    [1, []],
+    [2, [500]],
+    [3, [500, 3000]],
+  ])('reintenta enseguida y solo espera si la base sigue fallando (%i fallas)', async (fallasConstancia, esperas) => {
+    const bd = crearBase({ miembros: [ANA], comerciales: { 1: SOLO_WA }, fallasConstancia });
+    const d = deps();
+
+    const r = await ejecutarCampana(bd.pool, { idCampana: 5, gymId: 1, usuarioId: 8 }, d);
+
+    expect(r).toMatchObject({ enviados: 1, pendientes: 0 });
+    expect(d.esperar.mock.calls.map(([ms]) => ms)).toEqual(esperas);
+    expect(d.enviarWhatsapp).toHaveBeenCalledTimes(1);
+  });
+
+  // La fecha de la constancia es la que usa la frecuencia de la Ley 2300.
+  test('la constancia del reintento lleva la fecha del envio', async () => {
+    const bd = crearBase({ miembros: [ANA], comerciales: { 1: SOLO_WA }, fallasConstancia: 2 });
+    const d = deps({ esperar: jest.fn(async () => { legal.establecerReloj(() => co('2026-11-17 11:30')); }) });
+
+    await ejecutarCampana(bd.pool, { idCampana: 5, gymId: 1, usuarioId: 8 }, d);
+
+    expect(bd.envios.map((e) => e.fecha)).toEqual([MARTES]);
+  });
+
+  test('sin `esperar` en las dependencias, espera de verdad medio segundo antes del segundo reintento', async () => {
+    const bd = crearBase({ miembros: [ANA], comerciales: { 1: SOLO_WA }, fallasConstancia: 2 });
+    const inicio = Date.now();
+
+    const r = await ejecutarCampana(bd.pool, { idCampana: 5, gymId: 1, usuarioId: 8 }, deps({ esperar: undefined }));
+
+    expect(r).toMatchObject({ enviados: 1 });
+    expect(Date.now() - inicio).toBeGreaterThanOrEqual(450);
+  });
+
+  test('si no se logra guardar, el destinatario queda PENDIENTE y el error dice que un reintento puede repetirlo', async () => {
+    const bd = crearBase({ miembros: [ANA], comerciales: { 1: SOLO_WA }, fallasConstancia: 4 });
+
+    await expect(ejecutarCampana(bd.pool, { idCampana: 5, gymId: 1, usuarioId: 8 }, deps()))
+      .rejects.toThrow(/Ana.*sigue PENDIENTE y un reintento puede repetirlo/);
+
+    expect(bd.destinatarios[0].estado_envio).toBe('PENDIENTE');
+    expect(bd.envios).toEqual([]);
+  });
+
+  test('si la constancia no se puede guardar, la campana se detiene y no le escribe a nadie mas', async () => {
+    // Arrange
+    const bd = crearBase({ miembros: [ANA, BETO], comerciales: { 1: SOLO_WA, 2: SOLO_WA }, fallasConstancia: 99 });
+    const d = deps();
+
+    // Act
+    const promesa = ejecutarCampana(bd.pool, { idCampana: 5, gymId: 1, usuarioId: 8 }, d);
+
+    // Assert
+    await expect(promesa).rejects.toMatchObject({ code: 'CONSTANCIA_NO_GUARDADA' });
+    await expect(promesa).rejects.toThrow(/salió, pero no se pudo guardar la constancia/);
+    expect(d.enviarWhatsapp).toHaveBeenCalledTimes(1);
+    expect(bd.envios.filter((e) => e.estado === 'FALLIDO')).toHaveLength(0);
+  });
+
+  test('un WhatsApp que de verdad fallo sigue quedando FALLIDO con ERROR_ENVIO', async () => {
+    // Arrange
+    const bd = crearBase({ miembros: [ANA], comerciales: { 1: SOLO_WA } });
+    const d = deps({ enviarWhatsapp: jest.fn(async () => { throw new Error('numero invalido'); }) });
+
+    // Act
+    const r = await ejecutarCampana(bd.pool, { idCampana: 5, gymId: 1, usuarioId: 8 }, d);
+
+    // Assert
+    expect(r).toMatchObject({ enviados: 0, fallidos: 1 });
+    expect(bd.destinatarios[0]).toMatchObject({ estado_envio: 'FALLIDO', motivo: 'ERROR_ENVIO' });
   });
 });

@@ -185,7 +185,8 @@ function destinatariosEnMemoria(miembros, iniciales = []) {
       return { rows: [] };
     }],
     [PENDIENTES, ([idCampana]) => ({ rows: tabla.filter((d) => d.id_campana === idCampana && d.estado_envio === 'PENDIENTE').map(conMiembro) })],
-    [/FOR UPDATE SKIP LOCKED/, ([id]) => ({ rows: tabla.filter((d) => d.id_campana_destinatario === id).map((d) => ({ estado_envio: d.estado_envio })) })],
+    // Con SKIP LOCKED la toma el envio; sin el, el reintento de la constancia (#111).
+    [/SELECT estado_envio FROM campana_destinatario[\s\S]*FOR UPDATE/, ([id]) => ({ rows: tabla.filter((d) => d.id_campana_destinatario === id).map((d) => ({ estado_envio: d.estado_envio })) })],
     [MARCAR, ([id, estado, motivo, fecha]) => {
       const d = tabla.find((x) => x.id_campana_destinatario === id);
       Object.assign(d, { estado_envio: estado, motivo, fecha_envio: fecha || d.fecha_envio });
@@ -227,6 +228,7 @@ beforeEach(() => {
     enviarCorreo: jest.fn(async () => ({ delivered: true })),
     enviarWhatsapp: jest.fn(async () => ({ ok: true })),
     whatsappActivo: jest.fn(() => true),
+    esperar: jest.fn(async () => {}),
   };
   campanasRouter.setDeps(deps);
   jest.spyOn(console, 'error').mockImplementation(() => {});
@@ -1011,7 +1013,7 @@ describe('POST /api/admin/campanas/:id/ejecutar: send a campaign now', () => {
     expect(llamadas(/UPDATE campana SET estado = 'ENVIADA'/)).toHaveLength(0);
   });
 
-  test('should roll back the record of the delivery and answer 503 DB_UNREACHABLE when it cannot be saved', async () => {
+  test('should roll back the record of the delivery and tell the admin when it cannot be saved', async () => {
     // Arrange: el correo a Ana (que lo acepto) sale, pero su constancia no se puede guardar
     responder(
       laCampana(filas([CAMPANA])),
@@ -1030,9 +1032,20 @@ describe('POST /api/admin/campanas/:id/ejecutar: send a campaign now', () => {
 
     // Assert
     expect(r.status).toBe(503);
-    expect(r.body).toEqual({ error: 'No pudimos ejecutar la campaña.', code: 'DB_UNREACHABLE' });
+    expect(r.body.code).toBe('CONSTANCIA_NO_GUARDADA');
+    expect(r.body.error).toMatch(/Ana.* salió, pero no se pudo guardar la constancia: sigue PENDIENTE y un reintento puede repetirlo/);
     expect(deps.enviarCorreo).toHaveBeenCalledTimes(1);
-    expect(transacciones()).toEqual(['BEGIN', 'COMMIT', 'release', 'BEGIN', 'ROLLBACK', 'release']);
+    // El correo salio: la constancia se intenta en su transaccion y, por el
+    // #111, otras tres veces aparte antes de rendirse. Nunca se marca FALLIDO.
+    expect(transacciones()).toEqual([
+      'BEGIN', 'COMMIT', 'release',
+      'BEGIN', 'ROLLBACK',
+      'BEGIN', 'ROLLBACK', 'release',
+      'BEGIN', 'ROLLBACK', 'release',
+      'BEGIN', 'ROLLBACK', 'release',
+      'ROLLBACK', 'release',
+    ]);
+    expect(llamadas(/INSERT INTO envio_mensaje/)).toHaveLength(4);
     expect(llamadas(/UPDATE campana_destinatario/)).toHaveLength(0);
   });
 });

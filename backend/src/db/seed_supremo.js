@@ -4,22 +4,36 @@
  * Crea (o resetea) una cuenta SUPREMA con acceso ilimitado a todos los gimnasios.
  *
  * - email:    santicosalamanca@gmail.com (parametrizable)
- * - password: SantiagoSupremo2026!
+ * - password: OBLIGATORIA, minimo 12 caracteres. No hay contrasena por defecto:
+ *             el repositorio es publico y una por defecto dejaria la cuenta con
+ *             una clave conocida cada vez que alguien corre el script.
  * - gym:      FitLoyalty Supremo (trial = NULL)
  * - El usuario se crea como ADMINISTRADOR con gimnasio sin trial.
  * - Es idempotente: corre el script 2 veces y queda igual.
  *
- * Uso:
- *   node src/db/seed_supremo.js
- *   node src/db/seed_supremo.js correo@gmail.com miPassword "Gimnasio X"
+ * Uso (la contrasena va por variable de entorno para que no quede en el
+ * historial de la terminal; sin la variable, se acepta como segundo argumento):
+ *   Bash:       SUPREMO_PASSWORD='...' node src/db/seed_supremo.js
+ *   PowerShell: $env:SUPREMO_PASSWORD='...'; node src/db/seed_supremo.js
+ * Con otro correo u otro gimnasio, el segundo argumento va con un guion:
+ *   SUPREMO_PASSWORD='...' node src/db/seed_supremo.js correo@gmail.com - "Gimnasio X"
+ * (no uses "" vacio: Windows PowerShell lo descarta y corre los argumentos).
  */
 require('dotenv').config();
 const bcrypt = require('bcryptjs');
-const pool = require('./db');
 
+const MIN_PASSWORD = 12;
 const EMAIL = (process.argv[2] || 'santicosalamanca@gmail.com').toLowerCase().trim();
-const PASSWORD = process.argv[3] || 'SantiagoSupremo2026!';
+const PASSWORD = process.env.SUPREMO_PASSWORD || process.argv[3] || '';
 const GYM_NAME = process.argv[4] || 'FitLoyalty Supremo';
+
+if (PASSWORD.trim().length < MIN_PASSWORD) {
+  console.error(`[seed_supremo] Falta la contrasena (minimo ${MIN_PASSWORD} caracteres).`);
+  console.error("   Uso: SUPREMO_PASSWORD='...' node src/db/seed_supremo.js [email] [-] [gimnasio]");
+  process.exit(1);
+}
+
+const pool = require('./db');
 
 async function ensureRole(client, name) {
   const { rows } = await client.query(
@@ -108,7 +122,7 @@ async function run() {
 
     console.log('\n[seed_supremo] OK. Credenciales del admin supremo:');
     console.log(`   Email:    ${EMAIL}`);
-    console.log(`   Password: ${PASSWORD}`);
+    console.log('   Password: la que pasaste (no se imprime).');
     console.log(`   Gym ID:   ${gymId}`);
     console.log(`   Trial:    NULL (ilimitado, sin suscripcion)`);
     console.log(`   Rol:      ADMINISTRADOR (id_rol=1)`);

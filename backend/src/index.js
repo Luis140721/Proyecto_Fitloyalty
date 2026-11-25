@@ -21,6 +21,7 @@ const cors    = require('cors');
 const rateLimit = require('express-rate-limit');
 const pool    = require('./db/db');
 const { applyMigrations } = require('./db/migrate');
+const { conexionPerdida } = require('./lib/conexion');
 const { notFound, errorHandler } = require('./middleware/errorHandler');
 const asyncHandler = require('./lib/asyncHandler');
 const { AppError } = require('./lib/errors');
@@ -168,6 +169,9 @@ async function iniciar() {
     await applyMigrations();
   } catch (err) {
     console.error('[migrate] Migraciones pendientes o con error:', err.message);
+    // Si se corto la conexion no se sigue con el esquema a medias: el proceso
+    // termina y Render lo reinicia, que vuelve a intentar las migraciones.
+    if (conexionPerdida(err)) return process.exit(1);
   }
 
   // QR dinamico: en produccion sin QR_DINAMICO_SECRET no se puede exigir
