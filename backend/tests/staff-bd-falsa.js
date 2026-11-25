@@ -35,6 +35,10 @@ function crearBdFalsa() {
     const dueno = gym.id_dueno ?? (admins.length ? Math.min(...admins) : null);
     return u.id_usuario === dueno;
   };
+  // creadorVigente() de staff.js: quien la creo sigue siendo admin activo del gimnasio.
+  const conCreador = (i, sql) => (/AS creador_vigente/.test(sql)
+    ? { ...i, creador_vigente: bd.usuarios.some((u) => u.id_usuario === i.id_usuario_creador && u.id_gimnasio === i.id_gimnasio && u.activo && u.id_rol === 1) }
+    : i);
   const filaPersonal = (u) => ({ id_usuario: u.id_usuario, nombre: u.nombre, email: u.email, id_rol: u.id_rol, activo: u.activo, rol: rolNombre(u.id_rol), es_dueno: esDueno(u) });
 
   async function query(sql, params = []) {
@@ -64,8 +68,15 @@ function crearBdFalsa() {
       const u = bd.usuarios.find((x) => x.id_usuario === params[0] && x.id_gimnasio === params[1]);
       return { rows: u ? [{ id_usuario: u.id_usuario, id_rol: u.id_rol, activo: u.activo, es_dueno: esDueno(u) }] : [] };
     }
-    const cambio = sql.match(/^\s*UPDATE usuario SET ([\s\S]+?)\s+WHERE id_usuario = \$(\d+) AND id_gimnasio = \$(\d+)/);
+    const cambio = sql.match(/UPDATE usuario SET ([\s\S]+?)\s+WHERE id_usuario = \$(\d+) AND id_gimnasio = \$(\d+)/);
     if (cambio) {
+      // PATCH que desactiva o quita el rol de admin: revoca en la misma sentencia lo pendiente que creo.
+      const revoca = sql.match(/^\s*WITH invitaciones_revocadas AS \(\s*UPDATE invitacion_staff SET fecha_revocado = NOW\(\)\s+WHERE id_usuario_creador = \$(\d+) AND id_gimnasio = \$(\d+)\s+AND fecha_aceptacion IS NULL AND fecha_revocado IS NULL\s*\)/);
+      if (revoca) {
+        for (const i of bd.invitaciones) {
+          if (i.id_usuario_creador === params[revoca[1] - 1] && i.id_gimnasio === params[revoca[2] - 1] && !i.fecha_aceptacion && !i.fecha_revocado) i.fecha_revocado = new Date();
+        }
+      }
       const u = bd.usuarios.find((x) => x.id_usuario === params[cambio[2] - 1] && x.id_gimnasio === params[cambio[3] - 1]);
       if (!u) return { rows: [] };
       for (const [, columna, n] of cambio[1].matchAll(/(\w+) = \$(\d+)/g)) u[columna] = params[n - 1];
@@ -95,10 +106,10 @@ function crearBdFalsa() {
     }
     if (/FROM invitacion_staff i\s+INNER JOIN gimnasio g/.test(sql)) {
       const inv = bd.invitaciones.find((i) => i.token_hash === params[0]);
-      return { rows: inv ? [{ ...inv, gym_nombre: delGimnasio(inv.id_gimnasio)[0].nombre }] : [] };
+      return { rows: inv ? [{ ...conCreador(inv, sql), gym_nombre: delGimnasio(inv.id_gimnasio)[0].nombre }] : [] };
     }
     if (/FROM invitacion_staff\s+WHERE token_hash = \$1\s+FOR UPDATE/.test(sql)) {
-      return { rows: bd.invitaciones.filter((i) => i.token_hash === params[0]) };
+      return { rows: bd.invitaciones.filter((i) => i.token_hash === params[0]).map((i) => conCreador(i, sql)) };
     }
     if (/INSERT INTO usuario/.test(sql)) {
       const columnas = sql.match(/INSERT INTO usuario \(([^)]+)\)/)[1].split(',').map((c) => c.trim());

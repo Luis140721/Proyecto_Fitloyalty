@@ -63,10 +63,14 @@ async function ensureResetTable() {
   `);
 }
 
+/** Guarda el codigo y, en la misma sentencia, anula los anteriores: solo sirve el ultimo. */
 async function storeResetCode(id_usuario, code, ttlMinutes = 15) {
   const expires = new Date(Date.now() + ttlMinutes * 60000);
   await pool.query(
-    `INSERT INTO password_reset (id_usuario, code, expires_at) VALUES ($1, $2, $3)`,
+    `WITH anteriores AS (
+       UPDATE password_reset SET used = TRUE WHERE id_usuario = $1 AND used = FALSE
+     )
+     INSERT INTO password_reset (id_usuario, code, expires_at) VALUES ($1, $2, $3)`,
     [id_usuario, code, expires]
   );
 }

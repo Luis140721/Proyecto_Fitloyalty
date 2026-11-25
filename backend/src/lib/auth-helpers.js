@@ -9,9 +9,11 @@
  *   - Solo leen variables de entorno para firmar tokens (JWT_SECRET,
  *     JWT_EXPIRES_IN, RESET_TOKEN_EXPIRES).
  *   - No abren conexiones ni escriben en BD.
- *   - Solo dependen de `jsonwebtoken` para firmar/verificar tokens.
+ *   - Solo dependen de `jsonwebtoken` para firmar/verificar tokens y de
+ *     `crypto` (Node) para el código de recuperación.
  */
 
+const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -63,13 +65,12 @@ function normEmail(email) {
 }
 
 /**
- * Devuelve un código OTP numérico de 6 dígitos como string.
- *  - Usa Math.random (NO criptográficamente seguro) — suficiente para un OTP
- *    de 6 dígitos con expiración de 15 min y un solo uso.
- *  - Centralizado aquí para poder mockearlo en tests si fuera necesario.
+ * Devuelve un código OTP numérico de 6 dígitos como string, de un generador
+ * criptográfico: el siguiente código no se puede deducir de los anteriores.
+ * Centralizado aquí para poder mockearlo en tests si fuera necesario.
  */
 function random6() {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  return crypto.randomInt(100000, 1000000).toString();
 }
 
 /**
