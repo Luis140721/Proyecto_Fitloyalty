@@ -730,7 +730,7 @@ export default function MiembrosPage() {
   const generarWhatsAppLink = () => {
     if (!createdMember) return '';
     // Limpiar el número de teléfono: remover espacios, guiones, paréntesis y el signo +
-    const telefono = createdMember.telefono.replace(/[\s\-\(\)\+]/g, '');
+    const telefono = createdMember.telefono.replace(/[\s\-()+]/g, '');
     const mensaje = encodeURIComponent(
       `Hola ${createdMember.nombre}, bienvenido/a a tu gimnasio. Este es tu código de acceso personal. Muéstralo en la entrada cada vez que vengas.`
     );

@@ -59,7 +59,7 @@ function resolveChromiumPath() {
             // Fallo silencioso: el marker dice una cosa, el disco otra.
             console.warn('[WhatsApp] Chrome full esperado en', p, 'pero NO existe en disco. Probando chrome-headless-shell...');
         }
-    } catch (e) {
+    } catch {
         // puppeteer no instalado
     }
 
@@ -82,7 +82,7 @@ function resolveChromiumPath() {
                 }
             }
         }
-    } catch (e) {
+    } catch {
         // ignorar
     }
 
@@ -262,10 +262,6 @@ async function sendWhatsAppText(telefono, texto) {
  */
 function isWhatsAppReady() {
     return ENABLED && !!client && isReady;
-}
-
-function isWhatsAppModuleEnabled() {
-    return ENABLED;
 }
 
 module.exports = {

@@ -1,13 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 import { api } from '../api';
 import { useAuth } from '../context/AuthContext';
-import EmptyState from '../components/EmptyState';
 import PageTransition from '../components/PageTransition';
 import Ripple from '../components/Ripple';
 import { armarPayloadCheckin } from '../lib/checkin';
 
-const COP = (n) => '$' + Number(n || 0).toLocaleString('es-CO');
 
 // Vibration API helper — silencioso si no esta disponible.
 function vibrate(pattern) {
@@ -278,11 +276,6 @@ export default function CheckinPage() {
 
   const registrarRipple = Ripple({ opacity: 0.35 });
 
-  const seenIds = useMemo(() => {
-    const set = new Set();
-    recent.forEach((c) => set.add(c.id_checkin));
-    return set;
-  }, [recent]);
 
   return (
     <PageTransition>
@@ -471,7 +464,7 @@ export default function CheckinPage() {
             aria-labelledby="checkin-ingresos-titulo"
             style={{ padding: '8px 24px 24px', display: 'flex', flexDirection: 'column', gap: 12 }}
           >
-            {recent.map((c, idx) => {
+            {recent.map((c) => {
               const denied = c.advertencia || c.denegado;
               return (
                 <div role="listitem" className={`checkin-tile ${denied ? 'checkin-tile--denied' : ''}`} key={c.id_checkin}>

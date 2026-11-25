@@ -38,6 +38,9 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Comprobar sintaxis de src/
         run: find src -name '*.js' -print0 | xargs -0 -n1 node --check
+      # T6, item 14: el linter no puede tener errores (los avisos no fallan).
+      - name: Linter (ESLint)
+        run: pnpm lint
       # Las pruebas simulan la base de datos y los envios (WhatsApp, correo): no
       # necesitan servicios ni secretos. RQNF-07. `pnpm test` mide la cobertura y
       # falla si baja del coverageThreshold de jest.config.js.
@@ -67,6 +70,9 @@ jobs:
           cache: pnpm
           cache-dependency-path: frontend/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
+      # T6, item 14: el linter no puede tener errores (los avisos no fallan).
+      - name: Linter (ESLint)
+        run: pnpm lint
       # Antes del build: si la cobertura baja de los thresholds de vite.config.js,
       # el job falla sin gastar tiempo en compilar.
       - name: Pruebas con cobertura y umbral
