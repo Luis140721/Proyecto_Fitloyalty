@@ -558,6 +558,8 @@ export default function MiembrosPage() {
       urlSinFicha.current = sinFicha.toString();
       setSearchParams(sinFicha, { replace: true });
     });
+    // Solo depende de la URL: openEdit y setSearchParams son nuevas en cada render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
   // Cargar configuración del gimnasio
