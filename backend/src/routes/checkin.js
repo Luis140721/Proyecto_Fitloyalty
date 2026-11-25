@@ -41,7 +41,7 @@ function decryptQrCode(encrypted) {
     let decrypted = decipher.update(encryptedText, 'hex', 'utf8');
     decrypted += decipher.final('utf8');
     return decrypted;
-  } catch (e) {
+  } catch {
     return encrypted;
   }
 }
@@ -119,7 +119,8 @@ router.post(
   asyncHandler(async (req, res) => {
     const parsed = parse(checkinSchema, req.body);
     if (!parsed.ok) throw new AppError(parsed.status, parsed.error, 'VALIDATION_ERROR', { issues: parsed.issues });
-    let { codigo, documento, metodo, observacion } = parsed.data;
+    const { documento, observacion } = parsed.data;
+    let { codigo, metodo } = parsed.data;
     const gymId = req.user.gymId;
 
     // QR dinamico de la app (FLD<id>T<8 digitos>): se reconoce antes de
@@ -183,7 +184,7 @@ router.post(
             try {
               const decrypted = decryptQrCode(m.codigo_qr);
               return decrypted === codigo;
-            } catch (e) {
+            } catch {
               return false;
             }
           });
