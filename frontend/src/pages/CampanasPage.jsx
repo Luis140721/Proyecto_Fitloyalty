@@ -205,6 +205,8 @@ export default function CampanasPage() {
       await cargar();
       if (r.pendientes > 0 || r.omitidos > 0) await verDestinatarios(c);
     } catch (err) {
+      // El envío se detuvo a mitad: la lista tiene que mostrar lo que alcanzó a salir.
+      if (err.code === 'CONSTANCIA_NO_GUARDADA') await cargar();
       setError(err.message || 'No se pudo enviar la campaña.');
     }
   };

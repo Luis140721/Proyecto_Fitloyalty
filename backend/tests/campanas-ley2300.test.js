@@ -491,6 +491,26 @@ describe('constancia de un mensaje que ya salio (#111)', () => {
     expect(d.enviarWhatsapp).toHaveBeenCalledTimes(1);
   });
 
+  // La fecha de la constancia es la que usa la frecuencia de la Ley 2300.
+  test('la constancia del reintento lleva la fecha del envio', async () => {
+    const bd = crearBase({ miembros: [ANA], comerciales: { 1: SOLO_WA }, fallasConstancia: 2 });
+    const d = deps({ esperar: jest.fn(async () => { legal.establecerReloj(() => co('2026-11-17 11:30')); }) });
+
+    await ejecutarCampana(bd.pool, { idCampana: 5, gymId: 1, usuarioId: 8 }, d);
+
+    expect(bd.envios.map((e) => e.fecha)).toEqual([MARTES]);
+  });
+
+  test('sin `esperar` en las dependencias, espera de verdad medio segundo antes del segundo reintento', async () => {
+    const bd = crearBase({ miembros: [ANA], comerciales: { 1: SOLO_WA }, fallasConstancia: 2 });
+    const inicio = Date.now();
+
+    const r = await ejecutarCampana(bd.pool, { idCampana: 5, gymId: 1, usuarioId: 8 }, deps({ esperar: undefined }));
+
+    expect(r).toMatchObject({ enviados: 1 });
+    expect(Date.now() - inicio).toBeGreaterThanOrEqual(450);
+  });
+
   test('si no se logra guardar, el destinatario queda PENDIENTE y el error dice que un reintento puede repetirlo', async () => {
     const bd = crearBase({ miembros: [ANA], comerciales: { 1: SOLO_WA }, fallasConstancia: 4 });
 

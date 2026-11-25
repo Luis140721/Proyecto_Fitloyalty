@@ -21,7 +21,11 @@ test('should log the lost connection instead of ending the process when a client
 
   // Sin oyente, emit('error') lanza: es lo que tumbaba el proceso.
   expect(() => cliente.emit('error', new Error('Connection terminated unexpectedly'))).not.toThrow();
-  expect(registro).toHaveBeenCalledWith('[DB] Se perdió una conexión en uso:', 'Connection terminated unexpectedly');
+  expect(() => cliente.emit('error', new Error('otra vez'))).not.toThrow();
+  expect(registro.mock.calls).toEqual([
+    ['[DB] Se perdió una conexión:', 'Connection terminated unexpectedly'],
+    ['[DB] Se perdió una conexión:', 'otra vez'],
+  ]);
   expect(() => pool.emit('error', new Error('ociosa'))).not.toThrow();
   registro.mockRestore();
 });

@@ -44,7 +44,9 @@
  * alcanzo a procesar quedan PENDIENTE. reanudarCampana los vuelve a pasar por
  * el paso 2 (lo usan el boton "Reintentar" del panel y el scheduler). Como
  * cada destinatario se bloquea y se revisa su estado dentro de la
- * transaccion, dos reintentos a la vez no le escriben dos veces a nadie.
+ * transaccion, dos reintentos a la vez no le escriben dos veces a nadie. La
+ * excepcion es un mensaje que salio y cuya constancia no se pudo guardar: sigue
+ * PENDIENTE y se puede repetir (ver constanciaDeEnvioRealizado).
  *
  * El texto admite variables: {nombre}, {primer_nombre}, {gimnasio},
  * {dias_sin_venir} y {fecha_vencimiento}.

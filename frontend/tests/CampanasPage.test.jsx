@@ -554,6 +554,24 @@ describe('CampanasPage: enviar y cancelar una campaña', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(texto);
   });
 
+  // #111: el envio se detuvo a mitad. La lista tiene que mostrar lo que alcanzo a salir.
+  test.each([
+    ['reload', 'CONSTANCIA_NO_GUARDADA', 2],
+    ['not reload', 'DB_UNREACHABLE', 1],
+  ])('should %s the list when Enviar ahora fails with %s', async (_accion, code, veces) => {
+    // Arrange
+    const message = 'El mensaje de Ana salió, pero no se pudo guardar la constancia: sigue PENDIENTE y un reintento puede repetirlo.';
+    mockPost = vi.fn(async () => { throw { message, code }; });
+    const { user } = abrirCampanas();
+
+    // Act
+    await user.click(boton('Enviar ahora', await tarjeta('Te extrañamos')));
+
+    // Assert
+    expect(await screen.findByRole('alert')).toHaveTextContent(message);
+    expect(mockGet.mock.calls.filter(([url]) => url === '/admin/campanas')).toHaveLength(veces);
+  });
+
   test('should cancel the campaign and reload the list when the admin confirms', async () => {
     // Arrange
     const { user } = abrirCampanas();

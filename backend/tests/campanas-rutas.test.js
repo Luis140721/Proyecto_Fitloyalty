@@ -1013,7 +1013,7 @@ describe('POST /api/admin/campanas/:id/ejecutar: send a campaign now', () => {
     expect(llamadas(/UPDATE campana SET estado = 'ENVIADA'/)).toHaveLength(0);
   });
 
-  test('should roll back the record of the delivery and answer 503 DB_UNREACHABLE when it cannot be saved', async () => {
+  test('should roll back the record of the delivery and tell the admin when it cannot be saved', async () => {
     // Arrange: el correo a Ana (que lo acepto) sale, pero su constancia no se puede guardar
     responder(
       laCampana(filas([CAMPANA])),
@@ -1032,7 +1032,8 @@ describe('POST /api/admin/campanas/:id/ejecutar: send a campaign now', () => {
 
     // Assert
     expect(r.status).toBe(503);
-    expect(r.body).toEqual({ error: 'No pudimos ejecutar la campaña.', code: 'DB_UNREACHABLE' });
+    expect(r.body.code).toBe('CONSTANCIA_NO_GUARDADA');
+    expect(r.body.error).toMatch(/Ana.* salió, pero no se pudo guardar la constancia: sigue PENDIENTE y un reintento puede repetirlo/);
     expect(deps.enviarCorreo).toHaveBeenCalledTimes(1);
     // El correo salio: la constancia se intenta en su transaccion y, por el
     // #111, otras tres veces aparte antes de rendirse. Nunca se marca FALLIDO.

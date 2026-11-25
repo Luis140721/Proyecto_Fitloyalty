@@ -50,7 +50,7 @@ pool.on('error', (err) => {
 // o el job puedan manejarlo (#111).
 pool.on('connect', (client) => {
   client.on('error', (err) => {
-    console.error('[DB] Se perdió una conexión en uso:', err.message);
+    console.error('[DB] Se perdió una conexión:', err.message);
   });
 });
 
