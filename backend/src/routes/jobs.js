@@ -5,6 +5,9 @@
  * automaticos. Pensado para pruebas y para "correr ya" sin esperar
  * al cron diario.
  *
+ * Todos tocan solo el gimnasio del administrador que los llama (RQNF-05).
+ * Los que recorren todos los gimnasios son los del cron (jobs/scheduler.js).
+ *
  *   POST /api/jobs/expiracion/run
  *     body opcional: { "dryRun": true }  -> solo cuenta candidatos
  *     devuelve:       summary con conteos + detalle
@@ -15,37 +18,38 @@
  *
  *   POST /api/jobs/abandono/run
  *     body opcional: { "dryRun": true }  -> calcula las alertas sin guardarlas
- *     Solo evalua el gimnasio del administrador que lo llama.
  */
 
 const express = require('express');
 const { authenticate, authorize } = require('../middleware/auth');
 const asyncHandler = require('../lib/asyncHandler');
-const { runJob, miembrosPorVencer } = require('../jobs/expiracion');
+const { AppError } = require('../lib/errors');
+const { runJob, miembrosPorVencer, diasDeVentana } = require('../jobs/expiracion');
 const { runJob: runAbandono } = require('../jobs/abandono');
-const pool = require('../db/db');
 
 const router = express.Router();
 
-// Solo admin del gimnasio (o cualquier admin si lo corren los profes)
-// pueden disparar el job manualmente. NO se expone al cliente.
+// Sin gimnasio no se corre nada: en los jobs, gymId vacio quiere decir "todos".
+function exigirGimnasio(req, res, next) {
+    if (!req.user.gymId) return next(new AppError(403, 'Usuario sin gimnasio asignado', 'NO_GYM'));
+    return next();
+}
+
+// Solo el admin del gimnasio puede disparar los jobs. NO se exponen al cliente.
+router.use(authenticate, authorize('admin'), exigirGimnasio);
+
 router.post(
     '/expiracion/run',
-    authenticate,
-    authorize('admin'),
     asyncHandler(async (req, res) => {
         const dryRun = Boolean(req.body && req.body.dryRun);
-        const summary = await runJob({ dryRun });
+        const summary = await runJob({ gymId: req.user.gymId, dryRun });
         res.json(summary);
     })
 );
 
-// Alertas de abandono (RQF-08): "correr ya" para el gimnasio del administrador,
-// sin esperar a las 8:00. Solo toca su propio gimnasio.
+// Alertas de abandono (RQF-08): "correr ya", sin esperar a las 8:00.
 router.post(
     '/abandono/run',
-    authenticate,
-    authorize('admin'),
     asyncHandler(async (req, res) => {
         const dryRun = Boolean(req.body && req.body.dryRun);
         const resumen = await runAbandono({ gymId: req.user.gymId, dryRun });
@@ -55,16 +59,9 @@ router.post(
 
 router.get(
     '/expiracion/preview',
-    authenticate,
-    authorize('admin'),
     asyncHandler(async (req, res) => {
-        // Calcula dias max desde config de gyms
-        const cfg = await pool.query(
-            `SELECT COALESCE(MAX(dias_aviso_vencimiento), 3) AS max_dias
-               FROM gimnasio WHERE activo = TRUE`
-        );
-        const dias = Math.min(parseInt(cfg.rows[0].max_dias || 3, 10) || 3, 30);
-        const candidatos = await miembrosPorVencer(dias);
+        const dias = await diasDeVentana(req.user.gymId);
+        const candidatos = await miembrosPorVencer(dias, req.user.gymId);
         res.json({ dias, total: candidatos.length, candidatos });
     })
 );
