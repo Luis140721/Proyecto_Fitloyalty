@@ -222,6 +222,62 @@ async function registrarEntrega(client, { campana, gymId, destinatario, estado, 
 }
 
 /**
+ * Constancia de un mensaje que YA salio (#111). Va aparte del envio: si
+ * fallara guardar la constancia, el mensaje no puede quedar FALLIDO (el admin lo
+ * reenviaria a mano) ni PENDIENTE (el reintento o el scheduler lo volverian a
+ * mandar). Con PostgreSQL, ademas, un error deja la transaccion abortada y ya
+ * no se podia guardar nada en ella.
+ *
+ * Primero intenta en la transaccion de `client` y la confirma. Si falla, la
+ * deshace y reintenta en conexiones nuevas; si el destinatario ya figura como
+ * ENVIADO (otro proceso), no escribe otra vez. Si no lo logra, lanza
+ * CONSTANCIA_NO_GUARDADA para que la campana se detenga y no siga escribiendo
+ * con la base caida.
+ */
+const REINTENTOS_CONSTANCIA = 2;
+
+async function constanciaDeEnvioRealizado(pool, client, base) {
+  try {
+    await registrarEntrega(client, { ...base, estado: 'ENVIADO' });
+    await client.query('COMMIT');
+    return;
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error(`[campanas] El mensaje a ${base.destinatario.id_miembro} salio, pero fallo su constancia; se reintenta aparte:`, err.code, err.message);
+  }
+  let ultimo = null;
+  for (let intento = 0; intento < REINTENTOS_CONSTANCIA; intento += 1) {
+    let otro = null;
+    try {
+      otro = await pool.connect();
+      await otro.query('BEGIN');
+      const { rows } = await otro.query(
+        `SELECT estado_envio FROM campana_destinatario
+          WHERE id_campana_destinatario = $1 FOR UPDATE`,
+        [base.destinatario.id_campana_destinatario]
+      );
+      if (!rows[0] || rows[0].estado_envio !== 'ENVIADO') {
+        await registrarEntrega(otro, { ...base, estado: 'ENVIADO' });
+      }
+      await otro.query('COMMIT');
+      return;
+    } catch (err) {
+      ultimo = err;
+      if (otro) await otro.query('ROLLBACK').catch(() => {});
+    } finally {
+      if (otro) otro.release();
+    }
+  }
+  const error = new Error(
+    `El mensaje a ${base.destinatario.nombre || `el miembro ${base.destinatario.id_miembro}`} salió, `
+    + 'pero no se pudo guardar la constancia. No lo reenvíes: revisa la base de datos y vuelve a intentar la campaña.'
+  );
+  error.code = 'CONSTANCIA_NO_GUARDADA';
+  error.cause = ultimo;
+  throw error;
+}
+
+/**
  * Procesa los destinatarios PENDIENTE de una campana ya ejecutada (paso 2).
  * `deps`: { canalDelGimnasio, enviarCorreo(to, asunto, texto) -> {delivered},
  *           enviarWhatsapp(telefono, texto), whatsappActivo() -> bool }.
@@ -284,11 +340,14 @@ async function entregarPendientes(pool, { campana, gymId, usuarioId }, deps) {
             ok = !!(envio && envio.delivered);
           } catch (_) { ok = false; }
         }
-        await registrarEntrega(client, {
-          ...base, estado: ok ? 'ENVIADO' : 'FALLIDO', motivo: ok ? null : (d.email ? 'ERROR_ENVIO' : 'SIN_CORREO'),
-        });
+        if (ok) {
+          await constanciaDeEnvioRealizado(pool, client, base);
+          r.enviados += 1;
+          continue;
+        }
+        await registrarEntrega(client, { ...base, estado: 'FALLIDO', motivo: d.email ? 'ERROR_ENVIO' : 'SIN_CORREO' });
         await client.query('COMMIT');
-        if (ok) r.enviados += 1; else r.fallidos += 1;
+        r.fallidos += 1;
         continue;
       }
 
@@ -300,11 +359,10 @@ async function entregarPendientes(pool, { campana, gymId, usuarioId }, deps) {
         r.fallidos += 1;
         continue;
       }
+      // El envio y su constancia van en try separados (#111): un error al
+      // guardar la constancia de un mensaje que salio no lo vuelve FALLIDO.
       try {
         await deps.enviarWhatsapp(telefono, texto);
-        await registrarEntrega(client, { ...base, estado: 'ENVIADO' });
-        await client.query('COMMIT');
-        r.enviados += 1;
       } catch (err) {
         // Si el cliente no esta listo no tiene sentido seguir intentando: el
         // resto queda PENDIENTE para enviarlo a mano desde el panel.
@@ -317,7 +375,10 @@ async function entregarPendientes(pool, { campana, gymId, usuarioId }, deps) {
           await client.query('COMMIT');
           r.fallidos += 1;
         }
+        continue;
       }
+      await constanciaDeEnvioRealizado(pool, client, base);
+      r.enviados += 1;
     } catch (err) {
       await client.query('ROLLBACK').catch(() => {});
       throw err;
