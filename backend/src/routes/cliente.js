@@ -32,6 +32,7 @@
 const express = require('express');
 const bcrypt  = require('bcryptjs');
 const { z }   = require('zod');
+const { largoEnCaracteres } = require('../lib/validators');
 
 const pool = require('../db/db');
 const { authenticate, requireClient } = require('../middleware/auth');
@@ -163,15 +164,26 @@ router.get('/me', asyncHandler(async (req, res) => {
 // Editar SOLO los campos que un cliente tiene sentido editar.
 // Nunca deja tocar documento, codigo_qr, ni campos de gestion interna.
 // ---------------------------------------------------------------------------
+// Los topes son los de las columnas de miembro (iguales en Neon y en las
+// migraciones): email VARCHAR(150), contacto_emergencia VARCHAR(100),
+// objetivo VARCHAR(50), telefono_emergencia VARCHAR(20). Antes el esquema
+// dejaba pasar mas, la BD respondia 22001 y el miembro veia un 503 (#89).
+// Se mide con largoEnCaracteres, que cuenta igual que PostgreSQL (un emoji es
+// un caracter, no dos). direccion, condiciones y alergias son TEXT.
+const cabe = (n, campo) => z.string({ invalid_type_error: `${campo} debe ser texto.` })
+  .refine((v) => largoEnCaracteres(v) <= n, { message: `${campo} admite máximo ${n} caracteres.` });
+
 const updateMeSchema = z.object({
   telefono:            z.string().regex(/^[3]\d{9}$/, 'Telefono debe ser 10 digitos y empezar por 3').optional(),
-  email:               z.string().email('Correo invalido').optional().or(z.literal('')),
-  direccion:           z.string().max(200).optional(),
-  contacto_emergencia: z.string().max(120).optional(),
-  telefono_emergencia: z.string().max(20).optional(),
-  condiciones_medicas: z.string().max(2000).optional(),
-  alergias:            z.string().max(500).optional(),
-  objetivo:            z.string().max(200).optional(),
+  email:               z.string().email('Correo invalido')
+    .refine((v) => largoEnCaracteres(v) <= 150, { message: 'El correo admite máximo 150 caracteres.' })
+    .optional().or(z.literal('')),
+  direccion:           cabe(200, 'La dirección').optional(),
+  contacto_emergencia: cabe(100, 'El contacto de emergencia').optional(),
+  telefono_emergencia: cabe(20, 'El teléfono de emergencia').optional(),
+  condiciones_medicas: cabe(2000, 'Las condiciones médicas').optional(),
+  alergias:            cabe(500, 'Las alergias').optional(),
+  objetivo:            cabe(50, 'El objetivo').optional(),
   nivel_experiencia:   z.enum(['PRINCIPIANTE', 'INTERMEDIO', 'AVANZADO']).optional(),
 });
 
