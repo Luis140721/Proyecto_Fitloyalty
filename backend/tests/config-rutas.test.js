@@ -110,6 +110,22 @@ describe('GET /api/admin/config', () => {
 
 // ---------------------------------------------------------------------------
 describe('PUT /api/admin/config', () => {
+  // Defecto #88: las columnas son INTEGER y un decimal llegaba a la BD (503).
+  test.each([
+    ['dias_prueba', 2.5, 'Los días de prueba deben ser un número entero.'],
+    ['dias_recordatorio_default', 1.5, 'Los días de recordatorio deben ser un número entero.'],
+    ['dias_prueba', 91, 'Los días de prueba no pueden ser más de 90.'],
+    ['dias_recordatorio_default', 0, 'Los días de recordatorio deben ser al menos 1.'],
+  ])('should answer 400 in Spanish without writing when %s is %s', async (campo, valor, mensaje) => {
+    // Act
+    const r = await pedir('put', '/admin/config').send({ [campo]: valor });
+
+    // Assert
+    expect(r.status).toBe(400);
+    expect(r.body).toMatchObject({ error: mensaje, code: 'VALIDATION_ERROR' });
+    expect(llamadas(/config_gimnasio/)).toHaveLength(0);
+  });
+
   test('should save the prices sent, also the NUMERIC text PostgreSQL returns, on the configuration of the gym', async () => {
     // Arrange
     responder(
@@ -355,21 +371,63 @@ describe('/api/admin/hitos: the gamification milestones', () => {
     expect(llamadas(/hito_gamificacion/)).toHaveLength(0);
   });
 
-  // DEFECTO (sin corregir, zona de Santiago): hitoSchema no tiene mensajes
-  // propios y el admin ve el texto de zod en ingles. HitosConfig.jsx tiene
-  // noValidate y muestra err.message, asi que una meta en 0 o vacia (Number('')
-  // es 0) muestra «Number must be greater than or equal to 1». Queda como fallo
-  // esperado hasta que se corrija la incidencia #88:
+  // Defecto #88: el esquema de hitos no tenia mensajes propios y el admin veia
+  // el texto de zod en ingles (HitosConfig.jsx muestra err.message). Corregido.
   // https://github.com/Luis140721/Proyecto_Fitloyalty/issues/88
-  // Cuando el esquema de hitos explique el error en espanol, este test pasa y
-  // test.failing lo marca en rojo: hay que quitarle el .failing.
-  test.failing('should explain in Spanish why the milestone is not valid when the admin sends a goal of 0', async () => {
+  test('should explain in Spanish why the milestone is not valid when the admin sends a goal of 0', async () => {
     // Act
     const r = await pedir('post', '/admin/hitos').send({ ...NUEVO, valor_objetivo: 0 });
 
     // Assert
     expect(r.status).toBe(400);
+    expect(r.body.error).toBe('La meta debe ser de al menos 1.');
     expect(r.body.error).not.toMatch(/must be|expected|invalid|required/i);
+  });
+
+  test.each([
+    ['a decimal goal', { valor_objetivo: 2.5 }, 'La meta debe ser un número entero.'],
+    ['a goal that is not a number', { valor_objetivo: 'diez' }, 'La meta debe ser un número.'],
+    ['a goal above the limit', { valor_objetivo: 10001 }, 'La meta no puede ser mayor que 10000.'],
+    ['an empty name', { nombre: '   ' }, 'Escribe el nombre del hito.'],
+    ['an unknown type', { tipo_hito: 'OTRO' }, 'El tipo de hito debe ser RACHA o TOTAL_ASISTENCIAS.'],
+    ['a message that is too long', { mensaje: 'x'.repeat(301) }, 'El mensaje no puede tener más de 300 caracteres.'],
+  ])('should answer in Spanish without writing when the admin sends %s', async (_caso, cambio, mensaje) => {
+    // Act
+    const r = await pedir('post', '/admin/hitos').send({ ...NUEVO, ...cambio });
+
+    // Assert
+    expect(r.status).toBe(400);
+    expect(r.body).toMatchObject({ error: mensaje, code: 'VALIDATION_ERROR' });
+    expect(llamadas(/hito_gamificacion/)).toHaveLength(0);
+  });
+
+  test('should answer in Spanish when the goal is missing on POST', async () => {
+    // Arrange
+    const { valor_objetivo: _sinMeta, ...sinMeta } = NUEVO;
+
+    // Act
+    const r = await pedir('post', '/admin/hitos').send(sinMeta);
+
+    // Assert
+    expect(r.status).toBe(400);
+    expect(r.body.error).toBe('Escribe la meta del hito.');
+  });
+
+  // Defecto #88: un id no numerico llegaba a PostgreSQL como NaN y daba 503.
+  test.each([
+    ['PUT', 'put', 'abc', { nombre: 'Otro' }],
+    ['PUT', 'put', '2.5', { nombre: 'Otro' }],
+    ['PUT', 'put', '0', { nombre: 'Otro' }],
+    ['DELETE', 'delete', 'abc', undefined],
+    ['DELETE', 'delete', '-3', undefined],
+  ])('should answer 400 on %s without touching the database when the id is %s', async (_m, metodo, id, cuerpo) => {
+    // Act
+    const r = await pedir(metodo, `/admin/hitos/${id}`).send(cuerpo);
+
+    // Assert
+    expect(r.status).toBe(400);
+    expect(r.body).toEqual({ error: 'El id del hito no es válido.', code: 'VALIDATION_ERROR' });
+    expect(llamadas(/hito_gamificacion/)).toHaveLength(0);
   });
 
   test.each([
