@@ -48,7 +48,8 @@ flowchart LR
     LIB --> BRE
     LIB --> WA
     UP -- "GET /api/healthz cada 5 min" --> RUT
-    BRE -. "correos: invitaciones,<br/>recuperación, QR nuevo, campañas" .-> ADM
+    BRE -. "correos: invitaciones<br/>y recuperación" .-> ADM
+    BRE -. "correos: QR nuevo<br/>y campañas" .-> MIE
     WA -. "avisos, contrato y campañas" .-> MIE
 ```
 
@@ -80,7 +81,7 @@ flowchart TB
 | Tareas programadas | `node-cron` | Avisos de vencimiento (09:00 y 14:00), alertas de abandono (08:00) y envío de campañas programadas (cada 10 min) | `backend/src/jobs/` |
 | Base de datos | PostgreSQL (Neon en producción) | Gimnasios, usuarios, miembros, membresías, check-ins, retos, campañas y autorizaciones. Las migraciones se registran en `schema_migrations` | `backend/migrations/`, `ConsultasDB/` |
 | Correo | Brevo (API HTTPS) | Invitaciones al equipo, recuperación de contraseña, QR del miembro nuevo y campañas por correo | `backend/src/lib/email.js` |
-| WhatsApp | `whatsapp-web.js` con Chromium | Avisos de vencimiento, contrato y campañas por WhatsApp. Render no tiene Chrome: allí el panel abre el chat con el texto listo (`wa.me`) y deja la constancia | `backend/src/lib/whatsapp.js` |
+| WhatsApp | `whatsapp-web.js` con Chromium | Avisos de vencimiento, contrato y campañas por WhatsApp. Render no tiene Chrome: allí el panel abre el chat con el texto listo (`wa.me`) para campañas, avisos y la lista de miembros, y deja la constancia. El contrato queda con el envío fallido y el miembro lo ve en la app | `backend/src/lib/whatsapp.js` |
 | Monitoreo | UptimeRobot y `.github/workflows/availability-monitor.yml` | Revisa `GET /api/healthz` cada 5 minutos (RQNF-02). Esa ruta no toca la base | [Evidencia](../evidencias/rqnf-02-disponibilidad.md) |
 
 ### Capas del backend
@@ -94,7 +95,7 @@ Petición → CORS → express.json → rate limit (login, recuperación, cuenta
 
 - **Multi-gimnasio:** las rutas del personal y de la app trabajan con el gimnasio o el miembro del JWT (`backend/tests/aislamiento.test.js` y `jobs-por-gimnasio.test.js`, RQNF-05). Solo las tareas programadas recorren todos los gimnasios. Un recurso de otro gimnasio responde 404, como si no existiera (por ejemplo, `backend/tests/acceso-bloqueado.test.js`).
 - **Dos tipos de token:** el del personal (`role: admin` o `receptionist`) y el del miembro (`role: cliente`, con `idMiembro`). El del miembro entra a `/api/cliente/*` (y a `GET /api/billing/trial-status` y `POST /api/auth/logout`, que no tienen datos de otros); con el del personal, las de la app responden 403 `CLIENT_ONLY` (`requireClient`).
-- **Errores:** casi todas las respuestas de error tienen la forma `{ error, code }` (`backend/src/middleware/errorHandler.js`). Las del contrato (`admin-contrato.js`) son `{ ok: false, error }`, sin `code`.
+- **Errores:** casi todas las respuestas de error tienen la forma `{ error, code }` (`backend/src/middleware/errorHandler.js`). Las del contrato (`admin-contrato.js`) son `{ ok: false, error }`, sin `code` (menos el 409 `CONTRACT_INCOMPLETE`).
 
 ## 3. Flujos principales
 
@@ -156,7 +157,7 @@ sequenceDiagram
 
 **Antes de empezar:**
 - **Necesita la release de `develop` a `main` y el despliegue en Render y Vercel.** La release 3 no tiene, entre otros, la contraseña de la app en el panel, los mensajes comerciales con la Ley 2300, `/api/cliente/preferencias` ni `/api/baja`. Antes de esa release, la demo se hace en local.
-- Hacerla en un gimnasio de demostración, nunca con miembros reales. En local, `seed_dev.js` crea el gimnasio y su administrador (ver [Usuarios de prueba](../../README.md#usuarios-de-prueba)); los miembros se crean en el paso 3.
+- Hacerla en un gimnasio de demostración, nunca con miembros reales. En local, `seed_dev.js` crea el gimnasio y su administrador (ver [Usuarios de prueba](../../README.md#usuarios-de-prueba)), no miembros: los de prueba se crean antes y el de la app, en el paso 3.
 - Despertar el backend de Render 5 minutos antes: abrir `https://fitloyalty-api.onrender.com/api/health` y esperar `{"status":"ok"}`.
 - Tener la app instalada en el celular y conectada a internet la primera vez, para que cargue el QR.
 - El paso 12 solo envía dentro del horario que permite la Ley 2300: de lunes a viernes de 7:00 a. m. a 7:00 p. m. y los sábados de 8:00 a. m. a 3:00 p. m., nunca domingos ni festivos (`backend/src/lib/contacto-legal.js`). Fuera de ese horario la campaña queda programada para la siguiente franja, sin destinatarios todavía.
@@ -164,7 +165,7 @@ sequenceDiagram
 - Crear antes al menos dos miembros: uno que acepte mensajes comerciales por los dos canales (con correo) y otro que no acepte, para que en el paso 12 se vean los dos resultados.
 - Ponerle al miembro de la app un celular de 10 dígitos que empiece por 3 y que no tenga otro miembro, y una **«Contraseña de la app»** (en el alta o en su ficha). Sin contraseña, la app no deja entrar (403 `PASSWORD_NOT_SET`).
 - El paso 14 necesita `QR_DINAMICO_SECRET` en el servidor. Sin él (tampoco está en `docker-compose.yml`), «Exigir QR dinámico» sale deshabilitado.
-- **Plan B:** si falla internet o Render, correr todo en local con `docker compose up` ([Arranque rápido](../../README.md#arranque-rápido-con-docker-recomendado)). En local no salen correos (sin `BREVO_API_KEY`) ni WhatsApp automático, y la app instalada apunta a Render: hay que construirla con `API_URL` local o usar `adb reverse` por USB (ver `fitloyalty_cliente/README.md`).
+- **Plan B:** si falla internet o Render, correr todo en local con `docker compose up` ([Arranque rápido](../../README.md#arranque-rápido-con-docker-recomendado)). En local no salen correos (sin `BREVO_API_KEY`) ni WhatsApp automático, y la app instalada apunta a Render: hay que construirla con `API_URL` local y usar `adb reverse tcp:3001 tcp:3001` por USB (ver `fitloyalty_cliente/README.md`). El enlace de baja del paso 13 sale como `http://localhost:5173/baja/…`: se abre en el computador, o en el celular con `adb reverse tcp:5173 tcp:5173`.
 
 | # | Paso (quién) | Qué se muestra | Resultado esperado | Requisito |
 |---|---|---|---|---|
@@ -179,7 +180,7 @@ sequenceDiagram
 | 9 | Congelar la membresía del miembro e intentar otro check-in (panel) | Bloqueo de acceso | No registra el ingreso, muestra la membresía congelada y aparece el aviso de acceso bloqueado en notificaciones | Congelar y acceso bloqueado |
 | 10 | Descongelar. En la app: asistencia y logros (celular) | Gamificación | Aparece el ingreso del paso 7, los puntos y los hitos con su porcentaje. La racha se ve en el check-in | Gamificación |
 | 11 | Retos → Crear reto «3 asistencias» e inscribir (panel). En la app: Retos → ver el progreso (celular) | Retos | El reto aparece en la app con su progreso | Retos (RQF-12) |
-| 12 | Campañas → Nueva campaña al segmento «Nuevos» por WhatsApp → Ejecutar (panel) | Campañas y Ley 2300 | Los que aceptaron WhatsApp quedan PENDIENTE y pasan a ENVIADO con el botón «WhatsApp» (con WhatsApp activo en el servidor, ENVIADO directo); los demás, OMITIDO con su motivo | Campañas (RQF-10) |
+| 12 | Campañas → Nueva campaña al segmento «Nuevos» por WhatsApp → «Enviar ahora» (panel) | Campañas y Ley 2300 | Los que aceptaron WhatsApp quedan PENDIENTE y pasan a ENVIADO con el botón «WhatsApp» (con WhatsApp activo en el servidor, ENVIADO directo); los demás, OMITIDO con su motivo | Campañas (RQF-10) |
 | 13 | Abrir el enlace de baja del mensaje y pulsar el botón (celular) | Darse de baja | El miembro deja de recibir mensajes comerciales; en la app se ve en «Más → Mensajes del gimnasio» | Ley 2300, art. 5 |
 | 14 | Configuración → días de aviso, umbrales de abandono y «Exigir QR dinámico» (panel) | Configuración del gimnasio | Se guardan los cambios | Configuración |
 | 15 | Cerrar con el CI de un PR y la página de UptimeRobot (navegador) | Calidad y disponibilidad | Los jobs en verde y la disponibilidad medida (confirmar el mismo día si hubo caídas en el horario operativo, 5:00 a 22:00) | Pruebas y RQNF-02 |

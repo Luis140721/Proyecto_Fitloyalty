@@ -16,7 +16,7 @@
 
 - **Formato:** JSON en el cuerpo y en la respuesta (`Content-Type: application/json`). La exportación del dashboard responde CSV.
 - **CORS:** solo acepta los orígenes de la lista `FRONTEND_URL`, separados por coma (en producción, el panel de Vercel); otro origen responde 403 `CORS_BLOCKED`. Las peticiones sin origen (la app, Postman, curl) pasan.
-- **Zona horaria:** el dashboard, los retos, los segmentos, las campañas y las tareas programadas usan la hora de Colombia (`America/Bogota`). El vencimiento del plan en el check-in se compara con la fecha del servidor (UTC en Render).
+- **Zona horaria:** en el dashboard, los ingresos, las horas pico y los nuevos del mes, y además los retos, los segmentos, las campañas y las tareas programadas, usan la hora de Colombia (`America/Bogota`). Los vencimientos (check-in y tarjetas del dashboard), el riesgo y los cobros se comparan con la fecha del servidor (UTC en Render).
 
 ### Autenticación
 
@@ -42,7 +42,7 @@ Casi todas las respuestas de error tienen la misma forma:
 { "error": "Mensaje para mostrar al usuario", "code": "CODIGO_ESTABLE", "details": { "issues": [] } }
 ```
 
-`details` aparece en la mayoría de los errores de validación, con la lista de campos que fallaron según el esquema `zod` de la ruta, y también en `CONTACTO_NO_PERMITIDO`, `FUERA_DE_HORARIO`, `CONTRACT_INCOMPLETE` y `REPRESENTANTE_REQUERIDO`. Excepciones: las rutas del contrato responden `{ ok: false, error }` sin `code`, `seed-supremo` no trae `code` y el 503 de `/api/health` no trae `error`.
+`details` aparece en la mayoría de los errores de validación, con la lista de campos que fallaron según el esquema `zod` de la ruta, y también en `CONTACTO_NO_PERMITIDO`, `FUERA_DE_HORARIO`, `CONTRACT_INCOMPLETE` y `REPRESENTANTE_REQUERIDO`. Excepciones: las rutas del contrato responden `{ ok: false, error }` sin `code` (menos el 409 `CONTRACT_INCOMPLETE`), `seed-supremo` no trae `code` y el 503 de `/api/health` no trae `error`.
 
 | Estado | Códigos comunes | Cuándo |
 |---|---|---|
@@ -244,7 +244,7 @@ Todas, menos el login, exigen el token del miembro (📱). Cada consulta filtra 
 | POST | `/api/cliente/login` | 🌐 Inicio de sesión: `telefono` (10 dígitos, empieza por 3), `password` (mín. 6). Devuelve el token del miembro y su gimnasio |
 | POST | `/api/cliente/logout` | Cierre de sesión (la app borra el token) |
 | GET | `/api/cliente/me` | Datos del miembro |
-| PUT | `/api/cliente/me` | Edita solo `telefono`, `email`, `direccion`, `contacto_emergencia`, `telefono_emergencia`, `condiciones_medicas`, `alergias`, `objetivo` y `nivel_experiencia`. Un texto vacío no cambia el dato (el correo vacío lo quita). Sin la autorización de datos sensibles, condiciones y alergias quedan en NULL. No deja tocar el documento ni el QR |
+| PUT | `/api/cliente/me` | Edita solo `telefono`, `email`, `direccion`, `contacto_emergencia`, `telefono_emergencia`, `condiciones_medicas`, `alergias`, `objetivo` y `nivel_experiencia`. Un texto vacío no cambia el dato (el correo vacío lo quita; `telefono` o `nivel_experiencia` vacíos responden 400, y si todo llega vacío, 400 `EMPTY_UPDATE`). Si manda condiciones o alergias sin la autorización de datos sensibles, las dos quedan en NULL. No deja tocar el documento ni el QR |
 | GET | `/api/cliente/qr` | QR fijo, los datos para calcular el QR dinámico sin internet (secreto, paso de 30 s y hora del servidor) y `solo_dinamico`, que dice si el gimnasio exige el dinámico |
 | GET | `/api/cliente/membresia` | Plan vigente |
 | GET | `/api/cliente/asistencia` | Últimos ingresos. Consulta: `limit` (1 a 100, 20 por defecto) |
