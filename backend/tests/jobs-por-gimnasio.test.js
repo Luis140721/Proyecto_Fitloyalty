@@ -44,8 +44,16 @@ const DIAS = { 7: 5, 8: 20 }; // dias_aviso_vencimiento de cada gimnasio
 /** Parametros de la consulta de miembros por vencer. */
 const parametros = () => mockQuery.mock.calls.find(([sql]) => sql.includes('FROM miembro m'))[1];
 
+// Lo que pidio el job de abandono: los parametros de cada consulta que filtra.
+let abandono;
 /** Base falsa: aplica el filtro por gimnasio solo si el SQL lo trae. */
 function responder(sql, params = []) {
+  if (/fecha_registro\)::date\)::int AS dias/.test(sql)) {
+    const gym = /AND m\.id_gimnasio = \$1/.test(sql) ? params[0] : null;
+    abandono.candidatos.push(params);
+    return [7, 8].filter((g) => gym === null || g === gym).map((g) => ({ id_miembro: g * 10, id_gimnasio: g, dias: 1, amarilla: 7, roja: 15 }));
+  }
+  if (/FROM alerta_abandono\s+WHERE estado = 'PENDIENTE'/.test(sql)) { abandono.pendientes.push(params); return []; }
   if (/^(BEGIN|COMMIT|ROLLBACK)$/.test(sql) || sql.includes('pg_advisory_xact_lock')) return [];
   if (sql.includes('MAX(dias_aviso_vencimiento)')) {
     const gym = /id_gimnasio = \$1/.test(sql) ? params[0] : null;
@@ -75,6 +83,7 @@ beforeEach(() => {
   legal.establecerReloj(() => new Date('2026-11-17T10:00:00-05:00'));
   mockQuery.mockReset().mockImplementation(async (sql, params) => ({ rows: responder(sql, params) }));
   mockEnviar.mockReset().mockResolvedValue(undefined);
+  abandono = { candidatos: [], pendientes: [] };
 });
 afterEach(() => { process.env = ENV_ORIGINAL; });
 
@@ -111,6 +120,30 @@ describe('POST /api/jobs/expiracion/run', () => {
     expect(r.body).toEqual(expect.objectContaining({ dryRun: true, encontrados: 1, enviados: 1 }));
     expect(r.body.detalle.map((d) => d.id)).toEqual([70]);
     expect(mockEnviar).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /api/jobs/abandono/run', () => {
+  test('should evaluate and write only the gym in the token', async () => {
+    const r = await llamar('post', '/api/jobs/abandono/run').send({});
+
+    expect(r.status).toBe(200);
+    expect(r.body.evaluados).toBe(1);
+    expect(abandono.candidatos).toEqual([[7]]);
+    expect(abandono.pendientes).toEqual([[7]]);
+  });
+});
+
+describe('the gym of the body or the URL', () => {
+  test.each([
+    ['get', '/api/jobs/expiracion/preview?gymId=8', (r) => r.body.candidatos.map((m) => m.id_gimnasio)],
+    ['post', '/api/jobs/expiracion/run', (r) => r.body.detalle.map((d) => (d.id === 70 ? 7 : 8))],
+    ['post', '/api/jobs/abandono/run', () => abandono.candidatos.map(([g]) => g)],
+  ])('should be ignored by %s %s', async (metodo, ruta, gimnasios) => {
+    const r = await llamar(metodo, ruta).send({ gymId: 8, id_gimnasio: 8, dryRun: true });
+
+    expect(r.status).toBe(200);
+    expect(gimnasios(r)).toEqual([7]);
   });
 });
 
