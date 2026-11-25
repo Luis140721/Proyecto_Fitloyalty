@@ -157,6 +157,8 @@ class _EditarPerfilScreenState extends State<EditarPerfilScreen> {
             TextFormField(
               controller: _emailCtrl,
               keyboardType: TextInputType.emailAddress,
+              // Mismos topes que las columnas de miembro en el servidor (#89).
+              maxLength: 150,
               decoration: const InputDecoration(
                 labelText: 'Correo (opcional)',
                 prefixIcon: Icon(Icons.alternate_email),
@@ -171,6 +173,7 @@ class _EditarPerfilScreenState extends State<EditarPerfilScreen> {
             const SizedBox(height: 12),
             TextFormField(
               controller: _direccionCtrl,
+              maxLength: 200,
               decoration: const InputDecoration(
                 labelText: 'Direccion',
                 prefixIcon: Icon(Icons.location_on_outlined),
@@ -182,6 +185,7 @@ class _EditarPerfilScreenState extends State<EditarPerfilScreen> {
             _seccion('CONTACTO DE EMERGENCIA'),
             TextFormField(
               controller: _contactoCtrl,
+              maxLength: 100,
               decoration: const InputDecoration(
                 labelText: 'Nombre del contacto',
                 prefixIcon: Icon(Icons.contact_phone_outlined),
@@ -211,6 +215,7 @@ class _EditarPerfilScreenState extends State<EditarPerfilScreen> {
             ),
             TextFormField(
               controller: _condicionesCtrl,
+              maxLength: 2000,
               decoration: const InputDecoration(
                 labelText: 'Condiciones medicas',
                 helperText: 'Lesiones, alergias medicamentosas, enfermedades',
@@ -221,6 +226,7 @@ class _EditarPerfilScreenState extends State<EditarPerfilScreen> {
             const SizedBox(height: 12),
             TextFormField(
               controller: _alergiasCtrl,
+              maxLength: 500,
               decoration: const InputDecoration(
                 labelText: 'Alergias',
                 prefixIcon: Icon(Icons.sick_outlined),
@@ -232,6 +238,7 @@ class _EditarPerfilScreenState extends State<EditarPerfilScreen> {
             _seccion('ENTRENAMIENTO'),
             TextFormField(
               controller: _objetivoCtrl,
+              maxLength: 50,
               decoration: const InputDecoration(
                 labelText: 'Objetivo',
                 helperText: 'Bajar de peso, hipertrofia, resistencia, etc.',
