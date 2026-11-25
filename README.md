@@ -211,6 +211,10 @@ Proyecto_FitLoyalty/
 
 ## API
 
+> **Documentación completa:** [`docs/api/API.md`](docs/api/API.md) tiene las 94 rutas, con quién puede usarlas,
+> qué reciben, qué responden y sus errores. Aquí queda solo un resumen. La arquitectura y el guion de la
+> demo están en [`docs/arquitectura/ARQUITECTURA.md`](docs/arquitectura/ARQUITECTURA.md).
+
 Base: `http://localhost:3001/api` (o `/api` a través de nginx en el puerto 5173).
 
 La autenticación es **JWT vía cabecera** `Authorization: Bearer <token>`.
