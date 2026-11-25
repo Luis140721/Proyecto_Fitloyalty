@@ -12,6 +12,7 @@ describe('conexionPerdida', () => {
     [{ code: '08006', message: 'x' }],
     [{ code: 'ECONNRESET', message: 'read ECONNRESET' }],
     [{ message: 'Connection terminated unexpectedly' }],
+    [{ message: 'Connection terminated due to connection timeout' }],
     [{ message: 'Client has encountered a connection error and is not queryable' }],
   ])('should be true for %j', (err) => {
     expect(conexionPerdida(err)).toBe(true);
@@ -20,6 +21,7 @@ describe('conexionPerdida', () => {
   test.each([
     [{ code: '42P01', message: 'relation "x" does not exist' }],
     [{ code: 'ECONNREFUSED', message: 'connect ECONNREFUSED 127.0.0.1:5432' }],
+    [{ code: 'ENOTFOUND', message: 'getaddrinfo ENOTFOUND base.invalida' }],
     [{ message: 'syntax error' }],
     [{}],
     [null],

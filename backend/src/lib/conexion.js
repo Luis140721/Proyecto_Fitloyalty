@@ -2,8 +2,8 @@
  * lib/conexion.js
  *
  * conexionPerdida(err): true si lo que fallo fue la conexion con PostgreSQL (se
- * corto o el servidor la cerro), no la consulta. Que no se pueda abrir una
- * conexion (ECONNREFUSED, ENOTFOUND, ETIMEDOUT) no cuenta.
+ * corto, el servidor la cerro o se agoto el tiempo para abrirla), no la consulta.
+ * Que el servidor la rechace (ECONNREFUSED) o no exista (ENOTFOUND) no cuenta.
  */
 const CODIGOS = new Set([
   '57P01', '57P02', // el servidor cerro la conexion
