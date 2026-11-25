@@ -3,7 +3,7 @@
 | Dato | Valor |
 |---|---|
 | Ítem de la lista T6 | 5: «Diagrama de arquitectura actualizado; demo end-to-end del sistema completo» |
-| Código revisado | `develop` @ `483654e` (2026-11-25) |
+| Código revisado | `develop` @ `1f28949` (2026-11-25) |
 | Documentos relacionados | [Documentación de la API](../api/API.md) · [Mapa de la base de datos](SCHEMA_MAP.md) · [ADR 0001: QR dinámico](../decisiones/0001-qr-dinamico-del-miembro.md) · [Pruebas](../pruebas/README.md) |
 
 ## 1. Diagrama de arquitectura
@@ -47,9 +47,9 @@ flowchart LR
     LIB -- "pg (pool)" --> PG
     LIB --> BRE
     LIB --> WA
-    UP -- "GET /api/health cada 5 min" --> RUT
-    BRE -. "correos: invitaciones, contrato,<br/>recuperación, avisos" .-> ADM
-    WA -. "avisos y campañas" .-> MIE
+    UP -- "GET /api/healthz cada 5 min" --> RUT
+    BRE -. "correos: invitaciones,<br/>recuperación, QR nuevo, campañas" .-> ADM
+    WA -. "avisos, contrato y campañas" .-> MIE
 ```
 
 ### Ambientes
@@ -78,23 +78,23 @@ flowchart TB
 | App del miembro | Flutter | Inicio de sesión con teléfono, QR dinámico, membresía, asistencia, logros, retos, mensajes, autorizaciones y contrato | `fitloyalty_cliente/` |
 | API REST | Node 24, Express 4, `pg`, `zod`, `jsonwebtoken`, `bcryptjs` | Única puerta a los datos. Valida la entrada, autentica con JWT y aplica los roles y el periodo de prueba | `backend/src/` |
 | Tareas programadas | `node-cron` | Avisos de vencimiento (09:00 y 14:00), alertas de abandono (08:00) y envío de campañas programadas (cada 10 min) | `backend/src/jobs/` |
-| Base de datos | PostgreSQL (Neon en producción) | Gimnasios, usuarios, miembros, membresías, check-ins, retos, campañas, autorizaciones y auditoría. Las migraciones se registran en `schema_migrations` | `backend/migrations/`, `ConsultasDB/` |
-| Correo | Brevo (API HTTPS) | Invitaciones al equipo, recuperación de contraseña, contrato y avisos | `backend/src/lib/email.js` |
-| WhatsApp | `whatsapp-web.js` con Chromium | Avisos al miembro y campañas por WhatsApp | `backend/src/lib/whatsapp.js` |
-| Monitoreo | UptimeRobot y `.github/workflows/availability-monitor.yml` | Revisa `GET /api/health` cada 5 minutos (RQNF-02) | [Evidencia](../evidencias/rqnf-02-disponibilidad.md) |
+| Base de datos | PostgreSQL (Neon en producción) | Gimnasios, usuarios, miembros, membresías, check-ins, retos, campañas y autorizaciones. Las migraciones se registran en `schema_migrations` | `backend/migrations/`, `ConsultasDB/` |
+| Correo | Brevo (API HTTPS) | Invitaciones al equipo, recuperación de contraseña, QR del miembro nuevo y campañas por correo | `backend/src/lib/email.js` |
+| WhatsApp | `whatsapp-web.js` con Chromium | Avisos de vencimiento, contrato y campañas por WhatsApp. Render no tiene Chrome: allí el panel abre el chat con el texto listo (`wa.me`) y deja la constancia | `backend/src/lib/whatsapp.js` |
+| Monitoreo | UptimeRobot y `.github/workflows/availability-monitor.yml` | Revisa `GET /api/healthz` cada 5 minutos (RQNF-02). Esa ruta no toca la base | [Evidencia](../evidencias/rqnf-02-disponibilidad.md) |
 
 ### Capas del backend
 
 ```
-Petición → CORS → rate limit (login, recuperación, baja) → express.json
+Petición → CORS → express.json → rate limit (login, recuperación, cuenta, baja)
         → authenticate (JWT) → authorize(roles) → requireActiveTrial
         → ruta (routes/) → validación zod → lógica (lib/) → pool pg → PostgreSQL
         → errorHandler: { error, code } con 400 / 401 / 403 / 404 / 409 / 429 / 500
 ```
 
-- **Multi-gimnasio:** cada consulta filtra por el `gymId` que viene en el JWT (`backend/tests/aislamiento.test.js`, RQNF-05). Un recurso de otro gimnasio responde 404, como si no existiera (por ejemplo, `backend/tests/acceso-bloqueado.test.js`).
-- **Dos tipos de token:** el del personal (`role: admin` o `receptionist`) y el del miembro (`role: cliente`, con `idMiembro`). El del miembro solo entra a `/api/cliente/*`; con el del personal esas rutas responden 403 `CLIENT_ONLY` (`requireClient`).
-- **Errores uniformes:** todas las respuestas de error tienen la forma `{ error, code }` (`backend/src/middleware/errorHandler.js`).
+- **Multi-gimnasio:** las rutas del personal y de la app trabajan con el gimnasio o el miembro del JWT (`backend/tests/aislamiento.test.js` y `jobs-por-gimnasio.test.js`, RQNF-05). Solo las tareas programadas recorren todos los gimnasios. Un recurso de otro gimnasio responde 404, como si no existiera (por ejemplo, `backend/tests/acceso-bloqueado.test.js`).
+- **Dos tipos de token:** el del personal (`role: admin` o `receptionist`) y el del miembro (`role: cliente`, con `idMiembro`). El del miembro entra a `/api/cliente/*` (y a `GET /api/billing/trial-status` y `POST /api/auth/logout`, que no tienen datos de otros); con el del personal, las de la app responden 403 `CLIENT_ONLY` (`requireClient`).
+- **Errores:** casi todas las respuestas de error tienen la forma `{ error, code }` (`backend/src/middleware/errorHandler.js`). Las del contrato (`admin-contrato.js`) son `{ ok: false, error }`, sin `code`.
 
 ## 3. Flujos principales
 
@@ -142,10 +142,12 @@ sequenceDiagram
             A->>D: estado_envio = ENVIADO
         else No aceptó, no autorizó el canal o ya se le escribió (frecuencia)
             A->>D: estado_envio = OMITIDO y su motivo
-        else Fuera del horario permitido
+        else Se cerró la franja en medio del envío
             A->>D: sigue PENDIENTE (sale en la siguiente franja)
         end
     end
+    Note over P,A: Si se ejecuta fuera del horario: 202, no se crea ningún destinatario<br/>y la campaña queda programada para la siguiente franja
+    Note over A,W: Sin WhatsApp en el servidor (Render), los que se pueden contactar quedan PENDIENTE<br/>y el panel los envía uno a uno con el botón «WhatsApp»
 ```
 
 ## 4. Guion de la demo de principio a fin
@@ -153,33 +155,36 @@ sequenceDiagram
 **Duración:** unos 10 minutos. **Quién la hace:** una persona en el computador (panel) y otra con el celular (app).
 
 **Antes de empezar:**
-- Hacerla en un gimnasio de demostración, nunca con miembros reales. En local se crea con `seed_dev.js` (ver [Usuarios de prueba](../../README.md#usuarios-de-prueba)).
+- **Necesita la release de `develop` a `main` y el despliegue en Render y Vercel.** La release 3 no tiene, entre otros, la contraseña de la app en el panel, los mensajes comerciales con la Ley 2300, `/api/cliente/preferencias` ni `/api/baja`. Antes de esa release, la demo se hace en local.
+- Hacerla en un gimnasio de demostración, nunca con miembros reales. En local, `seed_dev.js` crea el gimnasio y su administrador (ver [Usuarios de prueba](../../README.md#usuarios-de-prueba)); los miembros se crean en el paso 3.
 - Despertar el backend de Render 5 minutos antes: abrir `https://fitloyalty-api.onrender.com/api/health` y esperar `{"status":"ok"}`.
 - Tener la app instalada en el celular y conectada a internet la primera vez, para que cargue el QR.
-- El paso 12 solo envía dentro del horario que permite la Ley 2300: de lunes a viernes de 7:00 a. m. a 7:00 p. m. y los sábados de 8:00 a. m. a 3:00 p. m., nunca domingos ni festivos (`backend/src/lib/contacto-legal.js`). Fuera de ese horario los destinatarios quedan PENDIENTE y salen en la siguiente franja.
-- Para el paso 12, la sesión de WhatsApp del servidor debe estar vinculada. Si no lo está, hacer la campaña por correo (Brevo).
-- Crear antes al menos dos miembros: uno que acepte mensajes comerciales por WhatsApp y otro que no, para que en el paso 12 se vean los dos resultados.
-- **Plan B:** si falla internet o Render, correr todo en local con `docker compose up` ([Arranque rápido](../../README.md#arranque-rápido-con-docker-recomendado)).
+- El paso 12 solo envía dentro del horario que permite la Ley 2300: de lunes a viernes de 7:00 a. m. a 7:00 p. m. y los sábados de 8:00 a. m. a 3:00 p. m., nunca domingos ni festivos (`backend/src/lib/contacto-legal.js`). Fuera de ese horario la campaña queda programada para la siguiente franja, sin destinatarios todavía.
+- Para el paso 12 en Render (sin Chrome), los que aceptaron WhatsApp quedan PENDIENTE y se envían con el botón «WhatsApp» de la lista, que abre el chat y los pasa a ENVIADO. Para mostrarlo por correo, el miembro debe tener correo y haber aceptado los dos canales: quien solo aceptó WhatsApp queda OMITIDO (`CANAL_NO_AUTORIZADO`).
+- Crear antes al menos dos miembros: uno que acepte mensajes comerciales por los dos canales (con correo) y otro que no acepte, para que en el paso 12 se vean los dos resultados.
+- Ponerle al miembro de la app un celular de 10 dígitos que empiece por 3 y que no tenga otro miembro, y una **«Contraseña de la app»** (en el alta o en su ficha). Sin contraseña, la app no deja entrar (403 `PASSWORD_NOT_SET`).
+- El paso 14 necesita `QR_DINAMICO_SECRET` en el servidor. Sin él (tampoco está en `docker-compose.yml`), «Exigir QR dinámico» sale deshabilitado.
+- **Plan B:** si falla internet o Render, correr todo en local con `docker compose up` ([Arranque rápido](../../README.md#arranque-rápido-con-docker-recomendado)). En local no salen correos (sin `BREVO_API_KEY`) ni WhatsApp automático, y la app instalada apunta a Render: hay que construirla con `API_URL` local o usar `adb reverse` por USB (ver `fitloyalty_cliente/README.md`).
 
 | # | Paso (quién) | Qué se muestra | Resultado esperado | Requisito |
 |---|---|---|---|---|
 | 1 | Abrir el panel e iniciar sesión como administrador (panel) | Login con JWT | Entra al dashboard. Con una contraseña equivocada sale «Credenciales incorrectas»; después de 5 intentos en un minuto, «Demasiados intentos» (429) | Autenticación |
 | 2 | Dashboard (panel) | Métricas, horas pico y exportar a CSV | Las cifras del gimnasio de demo; descarga del CSV | Dashboard |
-| 3 | Miembros → Nuevo miembro (panel) | Formulario con plan, pago y autorizaciones (términos, datos, mensajes comerciales y canales) | Se crea el miembro con su QR. Sin aceptar términos, el formulario no deja guardar | Miembros, Ley 1581 y Ley 2300 |
+| 3 | Miembros → Nuevo miembro (panel) | Formulario con plan, pago, «Contraseña de la app» y autorizaciones (términos, datos, mensajes comerciales y canales) | Se crea el miembro con su QR. Sin aceptar términos, el formulario no deja guardar | Miembros, Ley 1581 y Ley 2300 |
 | 4 | Equipo → Invitar recepcionista (panel) | Invitación por correo con Brevo | La invitación queda pendiente y llega el correo | Equipo |
-| 5 | Iniciar sesión en la app con el teléfono del miembro (celular) | Inicio, membresía y QR | Se ve el plan vigente y el QR, que cambia cada 30 s | App del miembro |
-| 6 | Poner el celular en modo avión y abrir el QR (celular) | QR dinámico sin internet | El código sigue cambiando sin red | QR dinámico (ADR 0001) |
-| 7 | Check-in → escanear el QR (panel) | Registro del ingreso | «Ingreso registrado» y el ingreso en la lista de últimos check-ins | Check-in (módulo crítico) |
-| 8 | Repetir el check-in con una foto del QR tomada hace más de un minuto (panel) | Seguridad del QR | Lo rechaza con «QR vencido» (400 `QR_DINAMICO_VENCIDO`) | Check-in |
+| 5 | Iniciar sesión en la app con el teléfono del miembro y la contraseña del paso 3 (celular) | Inicio, membresía y QR | Se ve el plan vigente y el QR, que cambia cada 30 s | App del miembro |
+| 6 | Con la app abierta, poner el celular en modo avión y ver el QR (celular) | QR dinámico sin internet | El código sigue cambiando sin red (la app no guarda el QR: no hay que cerrarla antes) | QR dinámico (ADR 0001) |
+| 7 | Check-in → escanear el QR (panel) | Registro del ingreso | «Ingreso registrado» y el ingreso en «Ingresos de hoy» | Check-in (módulo crítico) |
+| 8 | Repetir el check-in con una foto del QR tomada hace más de 2 minutos (panel) | Seguridad del QR | Lo rechaza con «Este QR ya venció…» (400 `QR_DINAMICO_VENCIDO`). El código sirve entre 60 y 90 s: si aún vale, sale «ya registró su ingreso» | Check-in |
 | 9 | Congelar la membresía del miembro e intentar otro check-in (panel) | Bloqueo de acceso | No registra el ingreso, muestra la membresía congelada y aparece el aviso de acceso bloqueado en notificaciones | Congelar y acceso bloqueado |
-| 10 | Descongelar. En la app: asistencia y logros (celular) | Gamificación | Aparece el ingreso del paso 7 y el avance de la racha | Gamificación |
+| 10 | Descongelar. En la app: asistencia y logros (celular) | Gamificación | Aparece el ingreso del paso 7, los puntos y los hitos con su porcentaje. La racha se ve en el check-in | Gamificación |
 | 11 | Retos → Crear reto «3 asistencias» e inscribir (panel). En la app: Retos → ver el progreso (celular) | Retos | El reto aparece en la app con su progreso | Retos (RQF-12) |
-| 12 | Campañas → Nueva campaña al segmento «Nuevos» por WhatsApp → Ejecutar (panel) | Campañas y Ley 2300 | Los que aceptaron WhatsApp quedan ENVIADO; los demás, OMITIDO con su motivo | Campañas (RQF-10) |
-| 13 | Abrir el enlace de baja del mensaje (celular) | Darse de baja | El miembro deja de recibir mensajes comerciales; en la app, Preferencias lo muestra | Ley 2300, art. 5 |
+| 12 | Campañas → Nueva campaña al segmento «Nuevos» por WhatsApp → Ejecutar (panel) | Campañas y Ley 2300 | Los que aceptaron WhatsApp quedan PENDIENTE y pasan a ENVIADO con el botón «WhatsApp» (con WhatsApp activo en el servidor, ENVIADO directo); los demás, OMITIDO con su motivo | Campañas (RQF-10) |
+| 13 | Abrir el enlace de baja del mensaje y pulsar el botón (celular) | Darse de baja | El miembro deja de recibir mensajes comerciales; en la app se ve en «Más → Mensajes del gimnasio» | Ley 2300, art. 5 |
 | 14 | Configuración → días de aviso, umbrales de abandono y «Exigir QR dinámico» (panel) | Configuración del gimnasio | Se guardan los cambios | Configuración |
-| 15 | Cerrar con el CI de un PR y la página de UptimeRobot (navegador) | Calidad y disponibilidad | Los jobs en verde y el registro sin caídas | Pruebas y RQNF-02 |
+| 15 | Cerrar con el CI de un PR y la página de UptimeRobot (navegador) | Calidad y disponibilidad | Los jobs en verde y la disponibilidad medida (confirmar el mismo día si hubo caídas en el horario operativo, 5:00 a 22:00) | Pruebas y RQNF-02 |
 
-**Qué decir al cerrar (20 segundos):** el mismo backend atiende al panel y a la app, todo pasa por una sola API con JWT y roles, cada gimnasio solo ve sus datos, y el sistema se prueba en cada PR con pruebas unitarias, de integración, de componentes, end-to-end y la colección de Postman.
+**Qué decir al cerrar (20 segundos):** el mismo backend atiende al panel y a la app, todo pasa por una sola API con JWT y roles, cada gimnasio solo ve sus datos, y el sistema se prueba en cada PR con el linter y pruebas unitarias, de integración, de componentes y end-to-end. La colección de Postman se corre a mano con Newman.
 
 ## 5. Cómo actualizar este documento
 
