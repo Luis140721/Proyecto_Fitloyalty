@@ -56,7 +56,7 @@ Casi todas las respuestas de error tienen la misma forma:
 | 413 | `PAYLOAD_TOO_LARGE` | Cuerpo demasiado grande |
 | 429 | `RATE_LIMITED` | Se pasó el límite de intentos (tabla siguiente) |
 | 500 | `INTERNAL_ERROR` | Error no controlado. En producción no muestra el detalle |
-| 503 | `DB_UNREACHABLE` | La base de datos no respondió |
+| 503 | `DB_UNREACHABLE`, `CONSTANCIA_NO_GUARDADA` | La base de datos no respondió, o un mensaje de campaña salió y no se pudo guardar su constancia |
 
 ### Límites de intentos (por IP)
 
@@ -218,8 +218,8 @@ Todas: 👑 y ⏳.
 | GET | `/api/admin/campanas/segmento` | Cuenta a quién llegaría. Consulta: `segmento`, `dias?` |
 | POST | `/api/admin/campanas` | Crea una campaña: `nombre` (3 a 150), `segmento`, `dias?` (0 a 365), `canal` (`WHATSAPP` por defecto o `EMAIL`), `id_plantilla?` o `mensaje?`, `tipo_disparo` (`MANUAL` o `PROGRAMADO`), `fecha_programada?` |
 | PUT | `/api/admin/campanas/:id` | Edita una campaña |
-| POST | `/api/admin/campanas/:id/ejecutar` | Envía la campaña ahora. Cada destinatario queda `ENVIADO`, `FALLIDO`, `OMITIDO` con su motivo (ver abajo) o `PENDIENTE` si es por WhatsApp y el servidor no lo tiene. Fuera del horario permitido responde 202: no crea destinatarios y la campaña queda programada para la siguiente franja |
-| POST | `/api/admin/campanas/:id/reintentar` | Reintenta los destinatarios que siguen PENDIENTE (por ejemplo, si se cerró la franja horaria) |
+| POST | `/api/admin/campanas/:id/ejecutar` | Envía la campaña ahora. Cada destinatario queda `ENVIADO`, `FALLIDO`, `OMITIDO` con su motivo (ver abajo) o `PENDIENTE` si es por WhatsApp y el servidor no lo tiene. Fuera del horario permitido responde 202: no crea destinatarios y la campaña queda programada para la siguiente franja. Si un mensaje sale y no se puede guardar su constancia, la campaña se detiene y responde 503 `CONSTANCIA_NO_GUARDADA`: ese destinatario sigue `PENDIENTE` y un reintento puede repetirle el mensaje (#111) |
+| POST | `/api/admin/campanas/:id/reintentar` | Reintenta los destinatarios que siguen PENDIENTE (por ejemplo, si se cerró la franja horaria). Puede responder el mismo 503 `CONSTANCIA_NO_GUARDADA` |
 | POST | `/api/admin/campanas/:id/cancelar` | Cancela la campaña |
 | GET | `/api/admin/campanas/:id/destinatarios` | Destinatarios con su estado y motivo |
 | POST | `/api/admin/campanas/:id/destinatarios/:idMiembro/enviado` | Deja constancia de un envío hecho a mano, con el texto que se le mostró al administrador |
