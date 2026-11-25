@@ -54,7 +54,7 @@ const MIN_PASSWORD_SUPREMO = 12;
 
 router.post('/seed-supremo', requireAdminToken, asyncHandler(async (req, res) => {
   const password = typeof req.body?.password === 'string' ? req.body.password : '';
-  if (password.length < MIN_PASSWORD_SUPREMO) {
+  if (password.trim().length < MIN_PASSWORD_SUPREMO) {
     return res.status(400).json({
       error: `La contrasena es obligatoria y debe tener al menos ${MIN_PASSWORD_SUPREMO} caracteres.`,
     });

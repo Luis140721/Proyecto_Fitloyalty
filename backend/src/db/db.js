@@ -45,4 +45,13 @@ pool.on('error', (err) => {
   console.error('[DB] Error inesperado en el pool de conexiones:', err.message);
 });
 
+// El pool solo vigila las conexiones ociosas. Si se corta una que esta en uso,
+// el cliente emite 'error' y, sin oyente, tumba el proceso antes de que la ruta
+// o el job puedan manejarlo (#111).
+pool.on('connect', (client) => {
+  client.on('error', (err) => {
+    console.error('[DB] Se perdió una conexión en uso:', err.message);
+  });
+});
+
 module.exports = pool;

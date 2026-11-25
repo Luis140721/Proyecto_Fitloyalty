@@ -228,6 +228,7 @@ beforeEach(() => {
     enviarCorreo: jest.fn(async () => ({ delivered: true })),
     enviarWhatsapp: jest.fn(async () => ({ ok: true })),
     whatsappActivo: jest.fn(() => true),
+    esperar: jest.fn(async () => {}),
   };
   campanasRouter.setDeps(deps);
   jest.spyOn(console, 'error').mockImplementation(() => {});
@@ -1034,15 +1035,16 @@ describe('POST /api/admin/campanas/:id/ejecutar: send a campaign now', () => {
     expect(r.body).toEqual({ error: 'No pudimos ejecutar la campaña.', code: 'DB_UNREACHABLE' });
     expect(deps.enviarCorreo).toHaveBeenCalledTimes(1);
     // El correo salio: la constancia se intenta en su transaccion y, por el
-    // #111, otras dos veces aparte antes de rendirse. Nunca se marca FALLIDO.
+    // #111, otras tres veces aparte antes de rendirse. Nunca se marca FALLIDO.
     expect(transacciones()).toEqual([
       'BEGIN', 'COMMIT', 'release',
       'BEGIN', 'ROLLBACK',
       'BEGIN', 'ROLLBACK', 'release',
       'BEGIN', 'ROLLBACK', 'release',
+      'BEGIN', 'ROLLBACK', 'release',
       'ROLLBACK', 'release',
     ]);
-    expect(llamadas(/INSERT INTO envio_mensaje/)).toHaveLength(3);
+    expect(llamadas(/INSERT INTO envio_mensaje/)).toHaveLength(4);
     expect(llamadas(/UPDATE campana_destinatario/)).toHaveLength(0);
   });
 });

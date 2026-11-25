@@ -11,6 +11,8 @@
  *    anota cada consulta, para revisar el hash que se guarda.
  *  - bcrypt es el real.
  */
+const path = require('path');
+const { spawnSync } = require('child_process');
 const express = require('express');
 const request = require('supertest');
 const bcrypt = require('bcryptjs');
@@ -77,6 +79,7 @@ describe('POST /api/admin/seed-supremo', () => {
     ['sin contrasena', { email: 'x@y.com' }],
     ['con contrasena corta', { password: 'corta123' }],
     ['con contrasena que no es texto', { password: 123456789012345 }],
+    ['con contrasena de solo espacios', { password: ' '.repeat(12) }],
   ])('%s responde 400 y no toca la base', async (_caso, body) => {
     const res = await pedir(body);
     expect(res.status).toBe(400);
@@ -108,5 +111,51 @@ describe('POST /api/admin/seed-supremo', () => {
 
     const insert = mockLlamadas.find((l) => /INSERT INTO usuario/.test(l.sql));
     expect(await bcrypt.compare(CLAVE, insert.params[3])).toBe(true);
+  });
+});
+
+// El script, en un proceso aparte. DATABASE_URL apunta a un puerto cerrado: si
+// llega a conectarse, falla ahi. Nunca a una base de verdad.
+describe('seed_supremo.js', () => {
+  const correr = (args, entorno = {}) => {
+    const r = spawnSync(process.execPath, [path.join(__dirname, '..', 'src', 'db', 'seed_supremo.js'), ...args], {
+      encoding: 'utf8',
+      timeout: 20000,
+      env: { ...process.env, SUPREMO_PASSWORD: '', DATABASE_URL: 'postgres://nadie:nada@127.0.0.1:1/nada', DB_SSL: 'false', ...entorno },
+    });
+    return { codigo: r.status, salida: `${r.stdout}${r.stderr}` };
+  };
+  const CLAVE = 'una-clave-larga-1';
+
+  test.each([
+    ['nothing is given', [], {}],
+    ['the placeholder is given without the variable', ['a@b.co', '-', 'Gimnasio X'], {}],
+    ['the password is short', [], { SUPREMO_PASSWORD: 'corta1' }],
+    ['the password is only spaces', [], { SUPREMO_PASSWORD: ' '.repeat(20) }],
+  ])('should stop before connecting when %s', (_caso, args, entorno) => {
+    const { codigo, salida } = correr(args, entorno);
+
+    expect(codigo).toBe(1);
+    expect(salida).toContain('Falta la contrasena');
+    expect(salida).not.toContain('Creando cuenta');
+  });
+
+  test.each([
+    ['the variable and the placeholder', ['a@b.co', '-', 'Gimnasio X'], { SUPREMO_PASSWORD: CLAVE }],
+    ['only the arguments', ['a@b.co', CLAVE, 'Gimnasio X'], {}],
+  ])('should use the email and the gym of the arguments with %s, without showing the password', (_caso, args, entorno) => {
+    const { codigo, salida } = correr(args, entorno);
+
+    expect(salida).toContain('Creando cuenta suprema: a@b.co en "Gimnasio X"');
+    expect(salida).not.toContain(CLAVE);
+    expect(codigo).not.toBe(0); // no hay base
+  });
+
+  // Windows PowerShell 5.1 descarta "" y corre los argumentos: el nombre del
+  // gimnasio quedaba de contrasena aunque la variable estuviera puesta.
+  test('should keep the password of the variable when the arguments were shifted', () => {
+    const { salida } = correr(['a@b.co', 'Gimnasio de prueba largo'], { SUPREMO_PASSWORD: 'corta1' });
+
+    expect(salida).toContain('Falta la contrasena');
   });
 });

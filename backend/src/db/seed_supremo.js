@@ -12,22 +12,24 @@
  * - Es idempotente: corre el script 2 veces y queda igual.
  *
  * Uso (la contrasena va por variable de entorno para que no quede en el
- * historial de la terminal; tambien se acepta como segundo argumento):
- *   SUPREMO_PASSWORD='...' node src/db/seed_supremo.js
- *   SUPREMO_PASSWORD='...' node src/db/seed_supremo.js correo@gmail.com "" "Gimnasio X"
- *   node src/db/seed_supremo.js correo@gmail.com miPasswordLarga "Gimnasio X"
+ * historial de la terminal; sin la variable, se acepta como segundo argumento):
+ *   Bash:       SUPREMO_PASSWORD='...' node src/db/seed_supremo.js
+ *   PowerShell: $env:SUPREMO_PASSWORD='...'; node src/db/seed_supremo.js
+ * Con otro correo u otro gimnasio, el segundo argumento va con un guion:
+ *   SUPREMO_PASSWORD='...' node src/db/seed_supremo.js correo@gmail.com - "Gimnasio X"
+ * (no uses "" vacio: Windows PowerShell lo descarta y corre los argumentos).
  */
 require('dotenv').config();
 const bcrypt = require('bcryptjs');
 
 const MIN_PASSWORD = 12;
 const EMAIL = (process.argv[2] || 'santicosalamanca@gmail.com').toLowerCase().trim();
-const PASSWORD = process.argv[3] || process.env.SUPREMO_PASSWORD || '';
+const PASSWORD = process.env.SUPREMO_PASSWORD || process.argv[3] || '';
 const GYM_NAME = process.argv[4] || 'FitLoyalty Supremo';
 
-if (PASSWORD.length < MIN_PASSWORD) {
+if (PASSWORD.trim().length < MIN_PASSWORD) {
   console.error(`[seed_supremo] Falta la contrasena (minimo ${MIN_PASSWORD} caracteres).`);
-  console.error("   Uso: SUPREMO_PASSWORD='...' node src/db/seed_supremo.js [email] [\"\"] [gimnasio]");
+  console.error("   Uso: SUPREMO_PASSWORD='...' node src/db/seed_supremo.js [email] [-] [gimnasio]");
   process.exit(1);
 }
 

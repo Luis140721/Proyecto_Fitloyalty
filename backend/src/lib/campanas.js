@@ -224,19 +224,24 @@ async function registrarEntrega(client, { campana, gymId, destinatario, estado, 
 /**
  * Constancia de un mensaje que YA salio (#111). Va aparte del envio: si
  * fallara guardar la constancia, el mensaje no puede quedar FALLIDO (el admin lo
- * reenviaria a mano) ni PENDIENTE (el reintento o el scheduler lo volverian a
- * mandar). Con PostgreSQL, ademas, un error deja la transaccion abortada y ya
- * no se podia guardar nada en ella.
+ * reenviaria a mano). Con PostgreSQL, ademas, un error deja la transaccion
+ * abortada y ya no se podia guardar nada en ella.
  *
  * Primero intenta en la transaccion de `client` y la confirma. Si falla, la
- * deshace y reintenta en conexiones nuevas; si el destinatario ya figura como
- * ENVIADO (otro proceso), no escribe otra vez. Si no lo logra, lanza
- * CONSTANCIA_NO_GUARDADA para que la campana se detenga y no siga escribiendo
- * con la base caida.
+ * deshace y reintenta en conexiones nuevas: enseguida, y si la base sigue sin
+ * responder, despues de cada espera. Si el destinatario ya figura como ENVIADO
+ * (otro proceso), no escribe otra vez.
+ *
+ * Si no lo logra, lanza CONSTANCIA_NO_GUARDADA para que la campana se detenga y
+ * no siga escribiendo con la base caida. Ese destinatario queda PENDIENTE: el
+ * mensaje salio, asi que un reintento puede repetirlo (entrega "al menos una
+ * vez", docs/evidencias/rqnf-16-ley-2300.md, «Límites y riesgos»).
  */
-const REINTENTOS_CONSTANCIA = 2;
+const ESPERAS_CONSTANCIA_MS = [0, 500, 3000];
+const esperarMs = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
 
 async function constanciaDeEnvioRealizado(pool, client, base) {
+  const esperar = base.deps.esperar || esperarMs;
   try {
     await registrarEntrega(client, { ...base, estado: 'ENVIADO' });
     await client.query('COMMIT');
@@ -246,7 +251,8 @@ async function constanciaDeEnvioRealizado(pool, client, base) {
     console.error(`[campanas] El mensaje a ${base.destinatario.id_miembro} salio, pero fallo su constancia; se reintenta aparte:`, err.code, err.message);
   }
   let ultimo = null;
-  for (let intento = 0; intento < REINTENTOS_CONSTANCIA; intento += 1) {
+  for (const ms of ESPERAS_CONSTANCIA_MS) {
+    if (ms > 0) await esperar(ms);
     let otro = null;
     try {
       otro = await pool.connect();
@@ -270,7 +276,7 @@ async function constanciaDeEnvioRealizado(pool, client, base) {
   }
   const error = new Error(
     `El mensaje a ${base.destinatario.nombre || `el miembro ${base.destinatario.id_miembro}`} salió, `
-    + 'pero no se pudo guardar la constancia. No lo reenvíes: revisa la base de datos y vuelve a intentar la campaña.'
+    + 'pero no se pudo guardar la constancia: sigue PENDIENTE y un reintento puede repetirlo. Revisa la base de datos antes de reintentar la campaña.'
   );
   error.code = 'CONSTANCIA_NO_GUARDADA';
   error.cause = ultimo;

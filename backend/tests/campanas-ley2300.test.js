@@ -107,19 +107,35 @@ function crearBase({ canal = 'WHATSAPP', estado = 'PROGRAMADA', miembros, comerc
   // transaccion queda abortada y todo falla con 25P02 hasta el ROLLBACK.
   // `fallasConstancia`: cuantas veces falla guardar la constancia de un
   // ENVIADO (un corte breve de la BD), para el defecto #111.
+  // Lo que no se confirma con COMMIT se pierde (ROLLBACK, o soltar la conexion).
+  // `otroProceso` corre una vez despues de un ROLLBACK: otro proceso que escribe
+  // y confirma entre la falla y el reintento.
   bd.fallasConstancia = fallasConstancia;
+  const foto = () => ({ destinatarios: bd.destinatarios.map((d) => ({ ...d })), envios: bd.envios.map((e) => ({ ...e })), estado: bd.campana.estado });
+  const deshacer = (f) => { bd.destinatarios = f.destinatarios; bd.envios = f.envios; bd.campana.estado = f.estado; };
   bd.pool = {
     query,
     connect: async () => {
       let abortada = false;
+      let antes = null;
+      const terminar = () => {
+        if (antes) deshacer(antes);
+        antes = null;
+        abortada = false;
+        const otro = bd.otroProceso;
+        bd.otroProceso = null;
+        if (otro) otro();
+      };
       return {
-        release: () => {},
+        release: () => { if (antes) terminar(); },
         query: async (sql, params = []) => {
           const s = sql.replace(/\s+/g, ' ').trim();
+          if (s === 'ROLLBACK') { bd.log.push(s); terminar(); return { rows: [] }; }
           if (abortada) {
-            if (s === 'ROLLBACK') { abortada = false; return { rows: [] }; }
             throw Object.assign(new Error('current transaction is aborted'), { code: '25P02' });
           }
+          if (s === 'BEGIN') antes = foto();
+          if (s === 'COMMIT') antes = null;
           try {
             if (/^INSERT INTO envio_mensaje/.test(s) && params[7] === 'ENVIADO' && bd.fallasConstancia > 0) {
               bd.fallasConstancia -= 1;
@@ -142,6 +158,7 @@ const deps = (extra = {}) => ({
   enviarCorreo: jest.fn(async () => ({ delivered: true })),
   enviarWhatsapp: jest.fn(async () => {}),
   whatsappActivo: () => true,
+  esperar: jest.fn(async () => {}), // sin esperar de verdad entre reintentos de la constancia
   ...extra,
 });
 
@@ -434,6 +451,54 @@ describe('constancia de un mensaje que ya salio (#111)', () => {
     expect(r).toMatchObject({ enviados: 1, fallidos: 0 });
     expect(bd.destinatarios[0].estado_envio).toBe('ENVIADO');
     expect(d.enviarCorreo).toHaveBeenCalledTimes(1);
+  });
+
+  test('la constancia que se guarda en el reintento queda confirmada, sin repetirla', async () => {
+    const bd = crearBase({ miembros: [ANA, BETO], comerciales: { 1: SOLO_WA, 2: SOLO_WA }, fallasConstancia: 1 });
+    const d = deps();
+
+    const r = await ejecutarCampana(bd.pool, { idCampana: 5, gymId: 1, usuarioId: 8 }, d);
+
+    expect(r).toMatchObject({ enviados: 2, pendientes: 0 });
+    expect(bd.envios.map((e) => [e.id_miembro, e.estado])).toEqual([[1, 'ENVIADO'], [2, 'ENVIADO']]);
+    expect(bd.destinatarios.map((x) => x.estado_envio)).toEqual(['ENVIADO', 'ENVIADO']);
+  });
+
+  test('si otro proceso ya dejo la constancia, el reintento no la escribe otra vez', async () => {
+    const bd = crearBase({ miembros: [ANA], comerciales: { 1: SOLO_WA }, fallasConstancia: 1 });
+    bd.otroProceso = () => {
+      bd.destinatarios[0].estado_envio = 'ENVIADO';
+      bd.envios.push({ id_miembro: 1, id_campana: 5, estado: 'ENVIADO', fecha: MARTES });
+    };
+
+    await ejecutarCampana(bd.pool, { idCampana: 5, gymId: 1, usuarioId: 8 }, deps());
+
+    expect(bd.envios).toHaveLength(1);
+  });
+
+  test.each([
+    [1, []],
+    [2, [500]],
+    [3, [500, 3000]],
+  ])('reintenta enseguida y solo espera si la base sigue fallando (%i fallas)', async (fallasConstancia, esperas) => {
+    const bd = crearBase({ miembros: [ANA], comerciales: { 1: SOLO_WA }, fallasConstancia });
+    const d = deps();
+
+    const r = await ejecutarCampana(bd.pool, { idCampana: 5, gymId: 1, usuarioId: 8 }, d);
+
+    expect(r).toMatchObject({ enviados: 1, pendientes: 0 });
+    expect(d.esperar.mock.calls.map(([ms]) => ms)).toEqual(esperas);
+    expect(d.enviarWhatsapp).toHaveBeenCalledTimes(1);
+  });
+
+  test('si no se logra guardar, el destinatario queda PENDIENTE y el error dice que un reintento puede repetirlo', async () => {
+    const bd = crearBase({ miembros: [ANA], comerciales: { 1: SOLO_WA }, fallasConstancia: 4 });
+
+    await expect(ejecutarCampana(bd.pool, { idCampana: 5, gymId: 1, usuarioId: 8 }, deps()))
+      .rejects.toThrow(/Ana.*sigue PENDIENTE y un reintento puede repetirlo/);
+
+    expect(bd.destinatarios[0].estado_envio).toBe('PENDIENTE');
+    expect(bd.envios).toEqual([]);
   });
 
   test('si la constancia no se puede guardar, la campana se detiene y no le escribe a nadie mas', async () => {
