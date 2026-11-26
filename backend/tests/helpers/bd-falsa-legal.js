@@ -98,7 +98,8 @@ function crearBdFalsa() {
       return { rows: g ? [{ nombre: g.nombre }] : [] };
     }
 
-    // Alta: duplicados y QR
+    // Alta y edicion: duplicados (con sus candados) y QR
+    if (/pg_advisory_xact_lock\(hashtext\('miembro_(documento|correo)'\)/i.test(s)) return { rows: [] };
     if (/SELECT id_miembro FROM miembro WHERE id_gimnasio = \$1 AND documento = \$2 AND activo = TRUE/i.test(s)) {
       return { rows: [...bd.miembros.values()].filter((m) => m.id_gimnasio === params[0] && m.documento === params[1] && m.activo) };
     }

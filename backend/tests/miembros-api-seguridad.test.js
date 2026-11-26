@@ -32,6 +32,7 @@ async function mockEjecutar(sql, params = []) {
   mockLlamadas.push({ sql, params });
   if (/SELECT id_gimnasio, activo, trial_ends_at FROM gimnasio/.test(sql)) return { rows: [mockGimnasio] };
   if (/^\s*(BEGIN|COMMIT|ROLLBACK)\s*$/.test(sql)) return { rows: [] };
+  if (/pg_advisory_xact_lock/.test(sql)) return { rows: [] };
   for (const [patron, respuesta] of mockReglas) if (patron.test(sql)) return respuesta(params, sql);
   throw new Error('Consulta inesperada: ' + sql.trim().slice(0, 80));
 }

@@ -23,6 +23,7 @@ const pool    = require('../db/db');
 const { authenticate, authorize } = require('../middleware/auth');
 const asyncHandler = require('../lib/asyncHandler');
 const { AppError } = require('../lib/errors');
+const { exigirSinDuplicados, exigirSinDuplicadosAlEditar, puedeDuplicar, errorDeDuplicado } = require('../lib/miembro-duplicado');
 const { requireActiveTrial } = require('../lib/trial');
 const { z } = require('zod');
 const { formatZodError, largoEnCaracteres } = require('../lib/validators');
@@ -740,20 +741,6 @@ router.post(
     const gymId = req.user.gymId;
 
     try {
-      const { rows: dupDoc } = await pool.query(
-        'SELECT id_miembro FROM miembro WHERE id_gimnasio = $1 AND documento = $2 AND activo = TRUE',
-        [gymId, data.documento]
-      );
-      if (dupDoc.length > 0) throw new AppError(409, 'Ya existe un miembro activo con ese documento.', 'MEMBER_DOC_TAKEN');
-
-      if (data.email) {
-        const { rows: dupMail } = await pool.query(
-          'SELECT id_miembro FROM miembro WHERE id_gimnasio = $1 AND LOWER(email) = $2 AND activo = TRUE',
-          [gymId, data.email.toLowerCase()]
-        );
-        if (dupMail.length > 0) throw new AppError(409, 'Ya existe un miembro activo con ese correo.', 'MEMBER_EMAIL_TAKEN');
-      }
-
       let codigo_qr;
       for (let i = 0; i < 5; i += 1) {
         const candidate = genQrCode(gymId);
@@ -791,6 +778,7 @@ router.post(
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
+        await exigirSinDuplicados(client, gymId, data);
         const result = await client.query(
           `INSERT INTO miembro (
             id_gimnasio, nombre, tipo_documento, documento, fecha_nacimiento, genero,
@@ -869,9 +857,8 @@ router.post(
       } catch (dbErr) {
         await client.query('ROLLBACK').catch(() => {});
         if (dbErr instanceof AppError) throw dbErr;
-        if (dbErr.code === '23505') {
-          throw new AppError(409, 'Ya existe un miembro con ese documento, correo o código en este gimnasio (puede estar desactivado).', 'MEMBER_DUPLICATED');
-        }
+        const repetido = errorDeDuplicado(dbErr);
+        if (repetido) throw repetido;
         console.error('[POST /admin/miembros] Error al guardar el miembro:', dbErr);
         // 503 como el resto del API cuando la BD falla (#92); develop decia 500.
         throw new AppError(503, 'No pudimos crear el miembro. Intenta de nuevo.', 'DB_UNREACHABLE');
@@ -1071,6 +1058,7 @@ router.put(
       try {
         client = await pool.connect();
         await client.query('BEGIN');
+        if (puedeDuplicar(parsed.data)) await exigirSinDuplicadosAlEditar(client, { id, gymId: req.user.gymId, d: parsed.data });
         const r = await actualizarConAutorizaciones(client, {
           id, gymId: req.user.gymId, usuario: req.user.id || null, d: parsed.data,
         });
@@ -1093,6 +1081,8 @@ router.put(
       } catch (err) {
         if (client) await client.query('ROLLBACK').catch(() => {});
         if (err instanceof AppError) throw err;
+        const repetido = errorDeDuplicado(err);
+        if (repetido) throw repetido;
         console.error('[PUT /admin/miembros/:id] Error:', err.message);
         throw new AppError(503, 'No pudimos actualizar el miembro. Intenta de nuevo.', 'DB_UNREACHABLE');
       } finally {
@@ -1124,8 +1114,16 @@ router.put(
     params.push(req.user.gymId);
     const gymIdx = params.length;
 
+    // RQF-03: si cambia el documento o el correo, la busqueda de duplicados y el
+    // UPDATE van en la misma transaccion. Para lo demas basta el UPDATE.
+    let client;
     try {
-      const { rows } = await pool.query(
+      if (puedeDuplicar(parsed.data)) {
+        client = await pool.connect();
+        await client.query('BEGIN');
+        await exigirSinDuplicadosAlEditar(client, { id, gymId: req.user.gymId, d: parsed.data });
+      }
+      const { rows } = await (client || pool).query(
         `UPDATE miembro SET ${campos.join(', ')}
          WHERE id_miembro = $${idIdx} AND id_gimnasio = $${gymIdx}
          RETURNING id_miembro, nombre, documento, telefono, email, codigo_qr, qr_imagen,
@@ -1134,11 +1132,17 @@ router.put(
         params
       );
       if (rows.length === 0) throw new AppError(404, 'Miembro no encontrado', 'MEMBER_NOT_FOUND');
+      if (client) await client.query('COMMIT');
       return res.json({ message: 'Miembro actualizado.', miembro: rows[0] });
     } catch (err) {
+      if (client) await client.query('ROLLBACK').catch(() => {});
       if (err instanceof AppError) throw err;
+      const repetido = errorDeDuplicado(err);
+      if (repetido) throw repetido;
       console.error('[PUT /admin/miembros/:id] Error:', err.message);
       throw new AppError(503, 'No pudimos actualizar el miembro. Intenta de nuevo.', 'DB_UNREACHABLE');
+    } finally {
+      if (client) client.release();
     }
   })
 );

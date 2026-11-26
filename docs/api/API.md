@@ -51,7 +51,7 @@ Casi todas las respuestas de error tienen la misma forma:
 | 402 | `TRIAL_EXPIRED` | Venció el periodo de prueba del gimnasio |
 | 403 | `FORBIDDEN`, `CLIENT_ONLY`, `ACCOUNT_DISABLED` (en el login), `NO_GYM`, `CORS_BLOCKED` | El rol no alcanza, el token es de otro tipo, la cuenta está desactivada o el origen no está permitido |
 | 404 | `NOT_FOUND`, `MEMBER_NOT_FOUND` | No existe, o es de otro gimnasio (no se distingue a propósito) |
-| 409 | `CONTACTO_NO_PERMITIDO`, `QR_DINAMICO_SIN_SECRETO` | Choca con una regla de negocio (por ejemplo, la Ley 2300) |
+| 409 | `CONTACTO_NO_PERMITIDO`, `QR_DINAMICO_SIN_SECRETO`, `MEMBER_DOC_TAKEN`, `MEMBER_EMAIL_TAKEN` | Choca con una regla de negocio (por ejemplo, la Ley 2300) |
 | 410 | `INVITE_ALREADY_ACCEPTED`, `INVITE_REVOKED`, `INVITE_EXPIRED` | La invitación al equipo ya no sirve |
 | 413 | `PAYLOAD_TOO_LARGE` | Cuerpo demasiado grande |
 | 429 | `RATE_LIMITED` | Se pasó el límite de intentos (tabla siguiente) |
@@ -104,7 +104,7 @@ Reglas de la contraseña en el registro y en la recuperación: al menos 6 caract
 | POST | `/api/admin/miembros` | 🧾 | ⏳ | Crea el miembro, su plan, su QR y sus autorizaciones. Ver cuerpo abajo |
 | GET | `/api/admin/miembros/lookup` | 🧾 | ⏳ | Búsqueda rápida para el check-in: `codigo` (QR) o `documento` |
 | GET | `/api/admin/miembros/:id` | 🧾 | ⏳ | Detalle del miembro |
-| PUT | `/api/admin/miembros/:id` | 🧾 | ⏳ | Actualiza los datos personales, de salud, la contraseña de la app y las autorizaciones (todos opcionales), más `activo`, `ciudad` y `codigo_pais_telefono`. No cambia el plan, los pagos, `acepto_terminos` ni `autorizo_datos`: esos campos se ignoran |
+| PUT | `/api/admin/miembros/:id` | 🧾 | ⏳ | Actualiza los datos personales, de salud, la contraseña de la app y las autorizaciones (todos opcionales), más `activo`, `ciudad` y `codigo_pais_telefono`. No cambia el plan, los pagos, `acepto_terminos` ni `autorizo_datos`: esos campos se ignoran. Si otro miembro activo ya tiene el documento o el correo nuevos, 409 `MEMBER_DOC_TAKEN` o `MEMBER_EMAIL_TAKEN` (también al reactivarlo) |
 | DELETE | `/api/admin/miembros/:id` | 👑 | ⏳ | Baja lógica: el miembro queda inactivo |
 | DELETE | `/api/admin/miembros/:id/permanent` | 👑 | ⏳ | Borra al miembro de forma permanente |
 | GET | `/api/admin/miembros/:id/plan` | 🧾 | ⏳ | Plan vigente del miembro |
