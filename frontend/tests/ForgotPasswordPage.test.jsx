@@ -92,7 +92,7 @@ describe('ForgotPasswordPage: pedir el codigo', () => {
 
     // Assert
     const aviso = screen.getByText(/Modo demo:/).closest('[role="status"]');
-    expect(aviso).toHaveTextContent('Tu código es 482913 (visible porque Resend no pudo entregar)');
+    expect(aviso).toHaveTextContent('Tu código es 482913 (visible porque el correo no se pudo enviar)');
   });
 });
 

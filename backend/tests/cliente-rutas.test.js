@@ -254,9 +254,9 @@ describe('PUT /api/cliente/me: what the member can edit', () => {
     expect(update.params).toEqual(['3109876543', 'ana.ruiz@example.com', 'AVANZADO', 41, 7]);
   });
 
-  test('should save the empty email without looking for duplicates when the member clears it', async () => {
+  test('should save no email (NULL) without looking for duplicates when the member clears it', async () => {
     // Arrange
-    responder(actualizado({ email: '' }));
+    responder(actualizado({ email: null }));
 
     // Act
     const r = await pedir('put', '/me').send({ email: '' });
@@ -264,7 +264,7 @@ describe('PUT /api/cliente/me: what the member can edit', () => {
     // Assert
     expect(r.status).toBe(200);
     expect(llamadas(/SELECT 1 FROM miembro/)).toHaveLength(0);
-    expect(llamadas(/UPDATE miembro SET/)[0].params).toEqual(['', 41, 7]);
+    expect(llamadas(/UPDATE miembro SET/)[0].params).toEqual([null, 41, 7]);
   });
 
   test('should answer 409 EMAIL_TAKEN without updating when another active member of the gym has that email', async () => {
@@ -291,6 +291,67 @@ describe('PUT /api/cliente/me: what the member can edit', () => {
     expect(r.status).toBe(400);
     expect(r.body).toEqual({ error: mensaje, code: 'VALIDATION_ERROR' });
     expect(mockLlamadas).toHaveLength(0);
+  });
+
+  // Defecto #89: el esquema dejaba pasar textos mas largos que las columnas de
+  // miembro; la BD respondia 22001 y el miembro veia un 503.
+  // https://github.com/Luis140721/Proyecto_Fitloyalty/issues/89
+  test.each([
+    ['contacto_emergencia', 101, 'El contacto de emergencia admite máximo 100 caracteres.'],
+    ['objetivo', 51, 'El objetivo admite máximo 50 caracteres.'],
+    ['telefono_emergencia', 21, 'El teléfono de emergencia admite máximo 20 caracteres.'],
+    ['direccion', 201, 'La dirección admite máximo 200 caracteres.'],
+    ['alergias', 501, 'Las alergias admite máximo 500 caracteres.'],
+  ])('should answer 400 without touching the database when %s has %s characters', async (campo, largo, mensaje) => {
+    // Act
+    const r = await pedir('put', '/me').send({ [campo]: 'a'.repeat(largo) });
+
+    // Assert
+    expect(r.status).toBe(400);
+    expect(r.body).toEqual({ error: mensaje, code: 'VALIDATION_ERROR' });
+    expect(mockLlamadas).toHaveLength(0);
+  });
+
+  test('should answer 400 without touching the database when the email is longer than 150 characters', async () => {
+    // Arrange: 151 caracteres con un correo valido (cada parte del dominio < 64)
+    const email = `ana@${'a'.repeat(60)}.${'b'.repeat(60)}.${'c'.repeat(22)}.co`;
+
+    // Act
+    const r = await pedir('put', '/me').send({ email });
+
+    // Assert
+    expect(email).toHaveLength(151);
+    expect(r.status).toBe(400);
+    expect(r.body).toEqual({ error: 'El correo admite máximo 150 caracteres.', code: 'VALIDATION_ERROR' });
+    expect(mockLlamadas).toHaveLength(0);
+  });
+
+  test.each([
+    ['contacto_emergencia', 100],
+    ['objetivo', 50],
+  ])('should save %s when it has exactly %s characters, the size of the column', async (campo, largo) => {
+    // Arrange
+    responder(actualizado());
+
+    // Act
+    const r = await pedir('put', '/me').send({ [campo]: 'a'.repeat(largo) });
+
+    // Assert
+    expect(r.status).toBe(200);
+    expect(llamadas(/UPDATE miembro SET/)[0].params[0]).toHaveLength(largo);
+  });
+
+  test('should count an emoji as one character, like PostgreSQL, so a goal that fits is saved', async () => {
+    // Arrange: 50 caracteres, pero 51 unidades UTF-16
+    responder(actualizado());
+    const objetivo = `${'a'.repeat(49)}💪`;
+
+    // Act
+    const r = await pedir('put', '/me').send({ objetivo });
+
+    // Assert
+    expect(objetivo.length).toBe(51);
+    expect(r.status).toBe(200);
   });
 
   test('should answer 400 EMPTY_UPDATE when only fields the member cannot edit are sent', async () => {

@@ -75,15 +75,15 @@ test.describe('doble envio', () => {
   });
 
   // Dos peticiones al mismo tiempo con el mismo documento, como dos recepcionistas
-  // registrando a la misma persona. El navegador ya no manda dos (tests de arriba),
-  // pero el backend revisa el documento y despues inserta, sin bloqueo ni
-  // restriccion unica. Mandarlas juntas desde el test no basta: la ventana entre
-  // revisar e insertar es de una o dos consultas, y con la suite en paralelo a
-  // veces llegaban una detras de otra y el test.fail() pasaba, lo que hace fallar
-  // la suite. Por eso la BD retiene los INSERT de un gimnasio propio hasta que las
-  // dos peticiones estan esperando (una condicion, no un tiempo) y entonces las
-  // suelta. Queda como fallo esperado hasta que se corrija la incidencia #87.
-  test.fail('should keep a single member when two requests create the same document at the same time', {
+  // registrando a la misma persona. El navegador ya no manda dos (tests de arriba);
+  // el backend busca el documento e inserta en una transaccion, con un candado por
+  // documento (incidencia #87). Mandarlas juntas desde el test no basta: sin el
+  // candado la ventana entre buscar e insertar es de una o dos consultas, y con la
+  // suite en paralelo a veces llegaban una detras de otra. Por eso la BD retiene
+  // los INSERT de un gimnasio propio hasta que las dos peticiones estan esperando
+  // (una condicion, no un tiempo) y entonces las suelta. Fue un fallo esperado
+  // (test.fail) hasta que se corrigio.
+  test('should keep a single member when two requests create the same document at the same time', {
     annotation: { type: 'issue', description: 'https://github.com/Luis140721/Proyecto_Fitloyalty/issues/87' },
   }, async ({ request }) => {
     // Arrange: un gimnasio solo para este test, con sus altas retenidas antes del INSERT
@@ -92,7 +92,7 @@ test.describe('doble envio', () => {
     const retencion = await retenerAltasDelGimnasio(gimnasio.id);
     let estados;
     try {
-      // Act: las dos revisan el documento (no hay nadie) y quedan esperando para insertar
+      // Act: una espera para insertar y la otra espera el candado del documento
       const altas = [enviarAlta(request, datos, gimnasio.cabeceras), enviarAlta(request, datos, gimnasio.cabeceras)];
       await expect.poll(() => retencion.esperando()).toBe(2);
       await retencion.soltar();

@@ -3,6 +3,14 @@ import { api } from '../api';
 import PageTransition from '../components/PageTransition';
 import Modal from '../components/Modal';
 import IconoWhatsapp from '../components/IconoWhatsapp';
+import { abrirWhatsappAutorizado, MOTIVOS_CONTACTO, TEXTO_HORARIO } from '../lib/contactoWhatsapp';
+
+const ESTADO_DESTINATARIO = {
+  ENVIADO: { texto: 'Enviado', cls: 'badge badge--ok' },
+  FALLIDO: { texto: 'Falló', cls: 'badge badge--err' },
+  PENDIENTE: { texto: 'Por enviar', cls: 'badge badge--warn' },
+  OMITIDO: { texto: 'Omitido', cls: 'badge' },
+};
 
 /**
  * Campañas de mensajes (RQF-10).
@@ -15,6 +23,14 @@ import IconoWhatsapp from '../components/IconoWhatsapp';
  *    correo sale sola. Por WhatsApp sale sola si el servidor tiene WhatsApp
  *    conectado; si no, queda pendiente y aquí se envía uno a uno con el botón
  *    de WhatsApp, que deja constancia del envío.
+ *
+ * RQNF-16 (Ley 2300 de 2023): solo la reciben quienes aceptaron mensajes
+ * comerciales por ese canal; los demás quedan «Omitido» con el motivo. Fuera
+ * del horario permitido, «Enviar ahora» la deja programada para el siguiente
+ * horario y la pantalla lo dice. El botón de WhatsApp pide permiso al servidor
+ * antes de abrir el chat (un doble clic no duplica la constancia), y
+ * «Reintentar» vuelve a procesar los pendientes que dejó un envío
+ * interrumpido.
  */
 
 const ESTADOS = {
@@ -69,6 +85,8 @@ export default function CampanasPage() {
   const [nuevaPlantilla, setNuevaPlantilla] = useState(plantillaVacia);
   const [detalle, setDetalle] = useState(null); // { campana, destinatarios }
   const [enviados, setEnviados] = useState(() => new Set());
+  const [abriendo, setAbriendo] = useState(null); // id del destinatario cuyo WhatsApp se esta pidiendo
+  const [horario, setHorario] = useState(null);   // RQNF-16: { permitido, siguiente_texto }
 
   const cargar = async () => {
     try {
@@ -78,6 +96,7 @@ export default function CampanasPage() {
       ]);
       setCampanas(c.campanas || []);
       setSegmentos(c.segmentos || []);
+      setHorario(c.horario || null);
       setPlantillas(p.plantillas || []);
     } catch (err) {
       setError(err.message || 'No se pudieron cargar las campañas.');
@@ -169,17 +188,46 @@ export default function CampanasPage() {
     }
   };
 
+  // #111: el envío se detuvo a mitad. El aviso va primero, porque recargar puede
+  // tardar; se repite porque cargar() lo pisa si también falla.
+  const mostrarFalloDeEnvio = async (err, porDefecto) => {
+    const texto = err.message || porDefecto;
+    setError(texto);
+    if (err.code !== 'CONSTANCIA_NO_GUARDADA') return;
+    await cargar();
+    setError(texto);
+  };
+
   const ejecutar = async (c) => {
     if (!window.confirm(`¿Enviar ahora «${c.nombre}»? Se calcula el segmento en este momento.`)) return;
     setError(''); setInfo('');
     try {
       const { data } = await api.post(`/admin/campanas/${c.id_campana}/ejecutar`);
+      // RQNF-16: fuera de horario el servidor no la envía y la deja programada.
+      if (data.programada) {
+        setInfo(data.message);
+        await cargar();
+        return;
+      }
       const r = data.resumen;
-      setInfo(`«${c.nombre}»: ${r.destinatarios} destinatarios · ${r.enviados} enviados · ${r.pendientes} por enviar a mano · ${r.fallidos} fallidos.`);
+      setInfo(`«${c.nombre}»: ${r.destinatarios} destinatarios · ${r.enviados} enviados · ${r.pendientes} por enviar a mano · ${r.fallidos} fallidos · ${r.omitidos || 0} omitidos por la Ley 2300.`
+        + (r.cerroFranja ? ' Se cerró el horario permitido: los pendientes salen en la siguiente franja.' : ''));
       await cargar();
-      if (r.pendientes > 0) await verDestinatarios(c);
+      if (r.pendientes > 0 || r.omitidos > 0) await verDestinatarios(c);
     } catch (err) {
-      setError(err.message || 'No se pudo enviar la campaña.');
+      await mostrarFalloDeEnvio(err, 'No se pudo enviar la campaña.');
+    }
+  };
+
+  // Vuelve a procesar los PENDIENTE (envío interrumpido o franja cerrada).
+  const reintentar = async (c) => {
+    setError(''); setInfo('');
+    try {
+      const { data } = await api.post(`/admin/campanas/${c.id_campana}/reintentar`);
+      setInfo(`«${c.nombre}»: ${data.message}`);
+      await cargar();
+    } catch (err) {
+      await mostrarFalloDeEnvio(err, 'No se pudo reintentar la campaña.');
     }
   };
 
@@ -193,18 +241,36 @@ export default function CampanasPage() {
     }
   };
 
-  // WhatsApp a mano: abre wa.me con el texto y deja constancia (envio_mensaje).
+  /**
+   * WhatsApp a mano. RQNF-16: primero se deja la constancia (envio_mensaje) y
+   * el servidor revisa la Ley 2300 con la fila bloqueada; solo si lo deja se
+   * abre wa.me con el texto que devuelve (con el enlace de baja). Un doble
+   * clic no abre dos chats ni duplica la constancia.
+   */
   const enviarWhatsapp = async (d) => {
-    window.open(`https://wa.me/${d.telefono}?text=${encodeURIComponent(d.mensaje)}`, '_blank', 'noopener,noreferrer');
-    setEnviados((prev) => new Set(prev).add(d.id_miembro));
+    if (abriendo) return;
+    setAbriendo(d.id_campana_destinatario);
+    setError('');
+    const id = detalle.campana.id_campana;
+    let duplicado = false;
+    const r = await abrirWhatsappAutorizado(async () => {
+      const { data } = await api.post(`/admin/campanas/${id}/destinatarios/${d.id_miembro}/enviado`, {});
+      duplicado = data.duplicado;
+      if (duplicado) throw Object.assign(new Error('Ese envío ya estaba registrado.'), { code: 'DUPLICADO' });
+      return `https://wa.me/${data.telefono || d.telefono}?text=${encodeURIComponent(data.mensaje || d.mensaje)}`;
+    });
+    if (r.ok) setEnviados((prev) => new Set(prev).add(d.id_miembro));
+    else if (!duplicado) {
+      setError(r.error?.code === 'CONTACTO_NO_PERMITIDO'
+        ? `No se abrió WhatsApp: ${r.error.message}`
+        : (r.error?.message || 'No se pudo dejar constancia del envío; no se abrió WhatsApp.'));
+    }
     try {
-      await api.post(`/admin/campanas/${detalle.campana.id_campana}/destinatarios/${d.id_miembro}/enviado`, { mensaje: d.mensaje });
-      const { data } = await api.get(`/admin/campanas/${detalle.campana.id_campana}/destinatarios`);
+      const { data } = await api.get(`/admin/campanas/${id}/destinatarios`);
       setDetalle(data);
       cargar();
-    } catch (err) {
-      setError(err.message || 'Se abrió WhatsApp, pero no se pudo dejar constancia del envío.');
-    }
+    } catch (_) { /* la lista se refresca al volver a abrirla */ }
+    setAbriendo(null);
   };
 
   const crearPlantilla = async (e) => {
@@ -251,6 +317,15 @@ export default function CampanasPage() {
           <span>{info}</span>
         </div>
       )}
+      {/* RQNF-16: el horario de la Ley 2300, para que nadie se sorprenda. */}
+      <div className={`alert ${horario && !horario.permitido ? 'alert-warning' : 'alert-info'}`} role="status" style={{ marginBottom: 16 }}>
+        <span className="material-symbols-outlined icon">schedule</span>
+        <span>
+          {horario && !horario.permitido
+            ? `Ahora no se pueden enviar mensajes: la Ley 2300 de 2023 solo lo permite ${TEXTO_HORARIO}. Si pulsas «Enviar ahora», la campaña queda programada para el ${horario.siguiente_texto}`
+            : `Las campañas solo salen ${TEXTO_HORARIO}, y solo a quienes aceptaron mensajes comerciales por ese canal (Ley 2300 de 2023).`}
+        </span>
+      </div>
 
       <section className="chart-card anim-scale-in" style={{ maxWidth: 900 }}>
         <header className="chart-card__head">
@@ -258,7 +333,7 @@ export default function CampanasPage() {
             <h3>{editando ? 'Editar campaña' : 'Nueva campaña'}</h3>
             <p>
               {previa
-                ? `Hoy la recibirían ${previa.total} ${previa.total === 1 ? 'miembro' : 'miembros'} (${previa.con_telefono} con teléfono, ${previa.con_correo} con correo).`
+                ? `En el segmento hay ${previa.total} ${previa.total === 1 ? 'miembro' : 'miembros'}; aceptaron mensajes comerciales por ${form.canal === 'EMAIL' ? 'correo' : 'WhatsApp'} ${form.canal === 'EMAIL' ? (previa.aceptan_correo ?? 0) : (previa.aceptan_whatsapp ?? 0)}. Solo a ellos les llega.`
                 : 'Elige a quién va dirigida.'}
             </p>
           </div>
@@ -364,7 +439,7 @@ export default function CampanasPage() {
                     {c.fecha_ejecucion ? ` · enviada ${c.fecha_ejecucion.replace('T', ' ')}` : ''}
                   </small>
                   {c.estado === 'ENVIADA' && (
-                    <small>{c.destinatarios} destinatarios · {c.enviados} enviados · {c.pendientes} por enviar · {c.fallidos} fallidos</small>
+                    <small>{c.destinatarios} destinatarios · {c.enviados} enviados · {c.pendientes} por enviar · {c.fallidos} fallidos · {c.omitidos || 0} omitidos (Ley 2300)</small>
                   )}
                 </div>
                 <div className="tarjeta-fila__acciones">
@@ -384,6 +459,12 @@ export default function CampanasPage() {
                   {c.estado === 'ENVIADA' && (
                     <button type="button" className="btn btn-ghost" onClick={() => verDestinatarios(c)}>
                       <span className="material-symbols-outlined icon">group</span> Destinatarios
+                    </button>
+                  )}
+                  {c.estado === 'ENVIADA' && c.pendientes > 0 && (
+                    <button type="button" className="btn btn-ghost" onClick={() => reintentar(c)}
+                      title="Vuelve a procesar los pendientes de un envío que se interrumpió">
+                      <span className="material-symbols-outlined icon">replay</span> Reintentar
                     </button>
                   )}
                 </div>
@@ -443,28 +524,31 @@ export default function CampanasPage() {
         {detalle && detalle.destinatarios.length === 0 && <p>Nadie cayó en el segmento cuando se envió.</p>}
         {detalle && detalle.destinatarios.length > 0 && (
           <div className="lista-tarjetas">
-            {detalle.destinatarios.map((d) => (
-              <div key={d.id_campana_destinatario} className="tarjeta-fila">
-                <div className="tarjeta-fila__texto">
-                  <strong>{d.nombre}</strong>{' '}
-                  <span className={d.estado_envio === 'ENVIADO' ? 'badge badge--ok' : d.estado_envio === 'FALLIDO' ? 'badge badge--err' : 'badge badge--warn'}>
-                    {d.estado_envio === 'ENVIADO' ? 'Enviado' : d.estado_envio === 'FALLIDO' ? 'Falló' : 'Por enviar'}
-                  </span>
-                  <small>{d.mensaje}</small>
-                </div>
-                {detalle.campana.canal === 'WHATSAPP' && d.estado_envio !== 'ENVIADO' && (
-                  <div className="tarjeta-fila__acciones">
-                    {d.telefono ? (
-                      <button type="button" className="btn btn-ghost" onClick={() => enviarWhatsapp(d)}>
-                        <IconoWhatsapp /> {enviados.has(d.id_miembro) ? 'Abierto' : 'WhatsApp'}
-                      </button>
-                    ) : (
-                      <small>Sin teléfono</small>
-                    )}
+            {detalle.destinatarios.map((d) => {
+              const est = ESTADO_DESTINATARIO[d.estado_envio] || ESTADO_DESTINATARIO.PENDIENTE;
+              return (
+                <div key={d.id_campana_destinatario} className="tarjeta-fila" style={{ opacity: d.estado_envio === 'OMITIDO' ? 0.7 : 1 }}>
+                  <div className="tarjeta-fila__texto">
+                    <strong>{d.nombre}</strong>{' '}
+                    <span className={est.cls}>{est.texto}</span>
+                    {d.motivo && <small><strong>{MOTIVOS_CONTACTO[d.motivo] || d.motivo}</strong></small>}
+                    {d.estado_envio !== 'OMITIDO' && <small style={{ whiteSpace: 'pre-line' }}>{d.mensaje}</small>}
                   </div>
-                )}
-              </div>
-            ))}
+                  {detalle.campana.canal === 'WHATSAPP' && ['PENDIENTE', 'FALLIDO'].includes(d.estado_envio) && (
+                    <div className="tarjeta-fila__acciones">
+                      {d.telefono ? (
+                        <button type="button" className="btn btn-ghost" onClick={() => enviarWhatsapp(d)}
+                          disabled={abriendo === d.id_campana_destinatario}>
+                          <IconoWhatsapp /> {abriendo === d.id_campana_destinatario ? 'Revisando…' : enviados.has(d.id_miembro) ? 'Abierto' : 'WhatsApp'}
+                        </button>
+                      ) : (
+                        <small>Sin teléfono</small>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </Modal>

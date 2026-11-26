@@ -2,7 +2,12 @@
  * lib/autorizaciones.js
  *
  * RQNF-17: autorizaciones del miembro y representante legal de los menores
- * (Ley 1581 de 2012, arts. 5, 6 y 7; Decreto 1377 de 2013, arts. 6, 7 y 12).
+ * (Ley 1581 de 2012, arts. 5, 6 y 7; Decreto 1377 de 2013, arts. 6, 7 y 12,
+ * compilados en el Decreto 1074 de 2015, arts. 2.2.2.25.2.3, 2.2.2.25.2.4 y
+ * 2.2.2.25.2.9). RQNF-16: la aceptacion de mensajes comerciales (Ley 2300 de
+ * 2023, art. 5) es el tipo MENSAJES_COMERCIALES, con sus canales (art. 2) en
+ * canales_autorizados (migracion 017); la leen y la guardan
+ * lib/contacto-miembro.js y las rutas de preferencias.
  *
  * Lo usan el alta y la edicion del panel (routes/miembros.js) y la app del
  * miembro (routes/cliente.js), para que las dos digan lo mismo y guarden la
@@ -24,9 +29,34 @@
  */
 const { z } = require('zod');
 
-const VERSION_AUTORIZACIONES = 'v1';
+// v2 (RQNF-16 y ajustes del #102): el texto del representante deja constancia
+// de que escucho al menor (Decreto 1377, art. 12; Decreto 1074, art.
+// 2.2.2.25.2.9) y se agrega el de mensajes comerciales. Los demas textos no
+// cambian; se copian de la v1 para que cada fila tenga su texto exacto.
+const VERSION_AUTORIZACIONES = 'v2';
 
 const TIPOS = ['TERMINOS', 'TRATAMIENTO_DATOS', 'DATOS_SENSIBLES', 'REPRESENTANTE_MENOR', 'MENSAJES_COMERCIALES'];
+
+const TEXTOS_V1 = {
+  TERMINOS:
+    'Acepto el contrato de membresía del gimnasio, que me informa el precio total, la forma de pago, la vigencia, '
+    + 'las condiciones de renovación, congelamiento y terminación, y el canal de peticiones, quejas y reclamos. '
+    + 'Recibo una copia por WhatsApp y la puedo ver en la app.',
+  TRATAMIENTO_DATOS:
+    'Autorizo al gimnasio, como responsable, a tratar mis datos personales (identificación, contacto, plan, pagos '
+    + 'e ingresos) para gestionar mi membresía, controlar el acceso y avisarme sobre mi plan, según su política de '
+    + 'tratamiento de datos. Puedo conocer, actualizar, rectificar y suprimir mis datos y revocar esta autorización '
+    + '(Ley 1581 de 2012).',
+  DATOS_SENSIBLES:
+    'Autorizo de forma expresa al gimnasio a tratar mis datos de salud (condiciones médicas, lesiones y alergias) '
+    + 'solo para cuidar mi seguridad durante el entrenamiento. Sé que son datos sensibles, que no estoy obligado(a) '
+    + 'a autorizar su tratamiento ni a entregarlos y que mi membresía no depende de ello. Puedo revocar esta '
+    + 'autorización en cualquier momento desde la app o en recepción, y entonces esos datos se borran.',
+  REPRESENTANTE_MENOR:
+    'Como representante legal del menor, autorizo el tratamiento de sus datos personales y acepto el contrato en '
+    + 'su nombre, respetando su interés superior y sus derechos fundamentales. Si se marca la autorización de datos '
+    + 'sensibles, la doy también como su representante.',
+};
 
 /** Textos que se le muestran al titular, por version. */
 const TEXTOS = {
@@ -34,25 +64,21 @@ const TEXTOS = {
     TERMINOS: 'Acepto los términos y condiciones del gimnasio.',
     TRATAMIENTO_DATOS: 'Autorizo el uso de mis datos para fines administrativos y de contacto.',
   },
-  v1: {
-    TERMINOS:
-      'Acepto el contrato de membresía del gimnasio, que me informa el precio total, la forma de pago, la vigencia, '
-      + 'las condiciones de renovación, congelamiento y terminación, y el canal de peticiones, quejas y reclamos. '
-      + 'Recibo una copia por WhatsApp y la puedo ver en la app.',
-    TRATAMIENTO_DATOS:
-      'Autorizo al gimnasio, como responsable, a tratar mis datos personales (identificación, contacto, plan, pagos '
-      + 'e ingresos) para gestionar mi membresía, controlar el acceso y avisarme sobre mi plan, según su política de '
-      + 'tratamiento de datos. Puedo conocer, actualizar, rectificar y suprimir mis datos y revocar esta autorización '
-      + '(Ley 1581 de 2012).',
-    DATOS_SENSIBLES:
-      'Autorizo de forma expresa al gimnasio a tratar mis datos de salud (condiciones médicas, lesiones y alergias) '
-      + 'solo para cuidar mi seguridad durante el entrenamiento. Sé que son datos sensibles, que no estoy obligado(a) '
-      + 'a autorizar su tratamiento ni a entregarlos y que mi membresía no depende de ello. Puedo revocar esta '
-      + 'autorización en cualquier momento desde la app o en recepción, y entonces esos datos se borran.',
+  v1: TEXTOS_V1,
+  v2: {
+    ...TEXTOS_V1,
     REPRESENTANTE_MENOR:
       'Como representante legal del menor, autorizo el tratamiento de sus datos personales y acepto el contrato en '
-      + 'su nombre, respetando su interés superior y sus derechos fundamentales. Si se marca la autorización de datos '
-      + 'sensibles, la doy también como su representante.',
+      + 'su nombre, respetando su interés superior y sus derechos fundamentales. Antes de autorizar escuché al menor '
+      + 'y tuve en cuenta su opinión según su madurez, autonomía y capacidad para entender el asunto. Si se marca la '
+      + 'autorización de datos sensibles o la de mensajes comerciales, la doy también como su representante.',
+    MENSAJES_COMERCIALES:
+      'Acepto recibir del gimnasio mensajes comerciales y de publicidad (promociones, campañas y mensajes para que '
+      + 'vuelva a entrenar) por los canales que marco: WhatsApp, correo o los dos. Sé que no estoy obligado(a) a '
+      + 'aceptarlos y que mi membresía no depende de ello. Solo me escribirán de lunes a viernes de 7:00 a. m. a '
+      + '7:00 p. m. y los sábados de 8:00 a. m. a 3:00 p. m., nunca los domingos ni los festivos, no más de una vez '
+      + 'al día ni por varios canales en la misma semana. Puedo cancelarlos en cualquier momento desde la app, con el '
+      + 'enlace que va al final de cada mensaje comercial o en recepción (Ley 2300 de 2023).',
   },
 };
 
@@ -163,7 +189,7 @@ async function leerVigentes(db, idMiembro, gymId) {
   const { rows } = await db.query(
     `SELECT DISTINCT ON (a.tipo)
             a.id_autorizacion, a.tipo, a.otorgada, a.version_texto, a.canal, a.fecha, a.detalle,
-            u.nombre AS registrada_por
+            a.canales_autorizados, u.nombre AS registrada_por
        FROM autorizacion_miembro a
        LEFT JOIN usuario u ON u.id_usuario = a.registrada_por
       WHERE a.id_miembro = $1 AND a.id_gimnasio = $2
@@ -179,7 +205,7 @@ async function leerVigentes(db, idMiembro, gymId) {
 async function leerHistorial(db, idMiembro, gymId, limite = 100) {
   const { rows } = await db.query(
     `SELECT a.id_autorizacion, a.tipo, a.otorgada, a.version_texto, a.canal, a.fecha, a.detalle,
-            u.nombre AS registrada_por
+            a.canales_autorizados, u.nombre AS registrada_por
        FROM autorizacion_miembro a
        LEFT JOIN usuario u ON u.id_usuario = a.registrada_por
       WHERE a.id_miembro = $1 AND a.id_gimnasio = $2
@@ -195,19 +221,23 @@ function otorgada(vigentes, tipo) {
   return Boolean(vigentes && vigentes[tipo] && vigentes[tipo].otorgada);
 }
 
-/** Agrega una fila al historial. Devuelve la fila creada. */
+/**
+ * Agrega una fila al historial. Devuelve la fila creada. `canales` solo se
+ * usa en MENSAJES_COMERCIALES (WHATSAPP y/o EMAIL, migracion 017).
+ */
 async function registrarAutorizacion(db, {
   idMiembro, gymId, tipo, otorgada: valor, canal, registradaPor = null, detalle = null,
-  version = VERSION_AUTORIZACIONES,
+  version = VERSION_AUTORIZACIONES, canales = null,
 }) {
   if (!TIPOS.includes(tipo)) throw new Error(`Tipo de autorizacion desconocido: ${tipo}`);
   const { rows } = await db.query(
     `INSERT INTO autorizacion_miembro
-       (id_miembro, id_gimnasio, tipo, otorgada, version_texto, canal, registrada_por, detalle)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-     RETURNING id_autorizacion, tipo, otorgada, version_texto, canal, fecha`,
+       (id_miembro, id_gimnasio, tipo, otorgada, version_texto, canal, registrada_por, detalle, canales_autorizados)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::varchar(20)[])
+     RETURNING id_autorizacion, tipo, otorgada, version_texto, canal, fecha, canales_autorizados`,
     [idMiembro, gymId, tipo, Boolean(valor), version, canal, registradaPor,
-     detalle ? JSON.stringify(detalle) : null]
+     detalle ? JSON.stringify(detalle) : null,
+     Array.isArray(canales) && canales.length > 0 ? canales : null]
   );
   return rows[0];
 }
@@ -226,6 +256,7 @@ function resumenAutorizaciones(vigentes, historial) {
     registrada_por: r.registrada_por || null,
     texto: textoAutorizacion(r.tipo, r.version_texto),
     detalle: r.detalle || null,
+    canales: Array.isArray(r.canales_autorizados) ? r.canales_autorizados : null,
   });
   const resumen = {};
   for (const tipo of TIPOS) resumen[tipo] = vigentes[tipo] ? conTexto(vigentes[tipo]) : null;

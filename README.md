@@ -17,6 +17,7 @@ Proyecto formativo — **SENA, TG. Análisis y Desarrollo de Software, Ficha 322
 - [Estructura del proyecto](#estructura-del-proyecto)
 - [API](#api)
 - [Base de datos](#base-de-datos)
+- [Pruebas](#pruebas)
 - [Correo transaccional (Brevo)](#correo-transaccional-brevo)
 - [Ramas](#ramas)
 - [Documentación](docs/README.md)
@@ -137,7 +138,7 @@ Ninguno de los dos archivos `.env` se versiona — están cubiertos por `.gitign
 |-----------------------|:-----------:|-------------|-------------|
 | `BREVO_API_KEY`       | no          | —           | API key v3 de Brevo (`xkeysib-…`). **Sin ella no se envía ningún correo** |
 | `MAIL_FROM`           | no          | `FitLoyalty <fitloyaltysaas@gmail.com>` | Remitente, formato `Nombre <correo>` |
-| `SHOW_DEV_CODE_IN_UI` | no          | `false`     | Expone el código de recuperación en la respuesta HTTP. Solo para demos |
+| `SHOW_DEV_CODE_IN_UI` | no          | `false`     | Muestra el código de recuperación en pantalla. Solo para demos en un equipo local: tiene efecto únicamente con `NODE_ENV=development` o `test` |
 
 ### Frontend
 
@@ -209,6 +210,10 @@ Proyecto_FitLoyalty/
 ---
 
 ## API
+
+> **Documentación completa:** [`docs/api/API.md`](docs/api/API.md) tiene las 94 rutas, con quién puede usarlas,
+> qué reciben, qué responden y sus errores. Aquí queda solo un resumen. La arquitectura y el guion de la
+> demo están en [`docs/arquitectura/ARQUITECTURA.md`](docs/arquitectura/ARQUITECTURA.md).
 
 Base: `http://localhost:3001/api` (o `/api` a través de nginx en el puerto 5173).
 
@@ -342,6 +347,35 @@ En PowerShell, el segundo comando es
 
 ---
 
+## Pruebas
+
+El proceso completo está en [`docs/pruebas/`](docs/pruebas/README.md): plan de pruebas,
+matriz de casos, colección Postman, reporte de ejecución y registro de defectos.
+
+| Nivel | Herramienta | Comando (desde la raíz) | Resultado del 2026-11-23 |
+|---|---|---|---|
+| Unitarias backend | Jest + Supertest | `pnpm --dir backend test` | 1.343 pasan · cobertura 92,4 % (umbral en `jest.config.js`) |
+| Integración con BD real | Jest + PostgreSQL 16 | ver [Pruebas de integración](#pruebas-de-integración-bd-real) | 272 pasan (71 de ellas también corren en la fila anterior) |
+| Componentes frontend | Vitest + Testing Library + MSW | `pnpm --dir frontend test` | 895 pasan · cobertura 87,3 % |
+| End-to-end | Playwright (Chromium) | `pnpm --dir e2e run db:up` y `pnpm --dir e2e test` | 44 pasan |
+| API (matriz de casos) | Postman + Newman | ver [docs/pruebas/postman](docs/pruebas/postman/README.md) | 29 de 29 casos (el 2026-11-22 falló CP-12 → defecto D-10, #117, ya corregido) |
+
+En total, 2.512 pruebas distintas, y pasan todas. El conteo está en el
+[reporte](docs/pruebas/reporte-ejecucion-2026-11-22.md#resumen); el bloque para
+repetirlo todo, en el [plan, sección 8](docs/pruebas/plan-de-pruebas.md#8-cómo-repetir-las-pruebas).
+
+- **Módulo crítico:** el check-in. Cobertura de `backend/src/routes/checkin.js` 97,6 % y de
+  `frontend/src/pages/CheckinPage.jsx` 97,7 %.
+- **Ambiente de pruebas separado:** todo lo que usa base de datos corre contra `db-test`
+  (`127.0.0.1:5433`, datos en memoria), nunca contra la base de desarrollo (5432) ni producción.
+- **En el CI** (`.github/workflows/tests.yml`) corren los jobs `backend`, `frontend`,
+  `integracion` y `e2e` en cada push y PR; la cobertura no puede bajar del umbral.
+- **Defectos:** se registran como issues con la etiqueta `bug`, una de severidad y una de estado
+  ([criterios y registro](docs/pruebas/defectos.md)). El commit que corrige un defecto lo
+  referencia: `fix(modulo): ... (cierra #N)`.
+
+---
+
 ## Correo transaccional (Brevo)
 
 El envío usa la **API HTTPS de Brevo**, no SMTP, porque el plan gratuito de Render
@@ -357,8 +391,11 @@ MAIL_FROM=FitLoyalty <tucorreo@tudominio.com>
 y reinicia el backend: `docker compose up -d backend`.
 
 **Sin `BREVO_API_KEY` los correos no se envían.** El sistema cae a "modo consola":
-registra el mensaje en el log y devuelve el código de recuperación dentro de la
-respuesta HTTP para que la interfaz pueda mostrarlo.
+deja en el log a quién iba el correo y su asunto, sin enviarlo. El código de
+recuperación **no** viaja en la respuesta HTTP. Fuera de desarrollo (`NODE_ENV`
+distinto de `development` o `test`) los números de 4 cifras o más del asunto salen tapados, porque el
+asunto del correo de recuperación lleva el código. Para ensayar la recuperación sin
+correo, usa el modo demo de `SHOW_DEV_CODE_IN_UI` (ver la nota de abajo).
 
 Verifica que funciona pidiendo un restablecimiento y mirando el log:
 
@@ -373,12 +410,15 @@ docker compose logs backend | grep EMAIL
 | `Enviado OK: <id>`               | Correo entregado |
 | `Error Brevo: Status code: 401`  | La clave es inválida o expiró |
 
-> ⚠️ **`SHOW_DEV_CODE_IN_UI`**: cuando el envío falla, la API incluye el código de
-> recuperación en la respuesta HTTP aunque esta variable esté en `false`. Es útil
-> para demostrar el flujo sin dominio verificado, pero significa que **cualquiera
-> podría restablecer una contraseña ajena si el correo deja de funcionar**. Antes de
-> exponer el servicio a usuarios reales, configura `BREVO_API_KEY` y elimina ese
-> fallback en `backend/src/routes/auth.js`.
+> ⚠️ **`SHOW_DEV_CODE_IN_UI`**: muestra el código de recuperación en pantalla
+> para ensayar el flujo sin correo. Solo funciona con `SHOW_DEV_CODE_IN_UI=true` y
+> `NODE_ENV=development` (o `test`); si `NODE_ENV` falta o trae otro valor, cuenta como
+> producción. Con `docker compose`, `NODE_ENV` vale `production` por defecto: para el
+> modo demo pon `NODE_ENV=development` y `SHOW_DEV_CODE_IN_UI=true` en tu `.env`. En
+> producción el código llega únicamente por correo: si el envío falla, la persona ve
+> el mensaje de siempre y el servidor deja el motivo en el log. (Antes, si el correo fallaba, el código salía en la respuesta
+> aunque la variable estuviera en `false`, y cualquiera que conociera un correo del
+> panel podía cambiarle la contraseña).
 
 ---
 

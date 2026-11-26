@@ -44,12 +44,22 @@ async function ensureRole(client, name) {
 // POST /api/admin/seed-supremo
 // Crea o resetea una cuenta admin sin suscripcion (trial_ends_at = NULL).
 //
-// Body opcional: { email, password, gymName, ownerName }
-// Default: { email: santicosalamanca@gmail.com, password: SantiagoSupremo2026!,
-//           gymName: FitLoyalty Supremo, ownerName: Santiago Salamanca }
+// Body: { password, email?, gymName?, ownerName? }
+// password es OBLIGATORIA (minimo 12 caracteres): no hay contrasena por defecto,
+// porque el repositorio es publico y una por defecto dejaria la cuenta con una
+// clave conocida. La respuesta no devuelve la contrasena.
+// Defaults: { email: santicosalamanca@gmail.com, gymName: FitLoyalty Supremo,
+//             ownerName: Santiago Salamanca }
+const MIN_PASSWORD_SUPREMO = 12;
+
 router.post('/seed-supremo', requireAdminToken, asyncHandler(async (req, res) => {
+  const password = typeof req.body?.password === 'string' ? req.body.password : '';
+  if (password.trim().length < MIN_PASSWORD_SUPREMO) {
+    return res.status(400).json({
+      error: `La contrasena es obligatoria y debe tener al menos ${MIN_PASSWORD_SUPREMO} caracteres.`,
+    });
+  }
   const email = (req.body?.email || 'santicosalamanca@gmail.com').toLowerCase().trim();
-  const password = req.body?.password || 'SantiagoSupremo2026!';
   const gymName = req.body?.gymName || 'FitLoyalty Supremo';
   const ownerName = req.body?.ownerName || 'Santiago Salamanca';
 
@@ -125,7 +135,7 @@ router.post('/seed-supremo', requireAdminToken, asyncHandler(async (req, res) =>
     return res.json({
       ok: true,
       message: created ? 'Cuenta suprema creada.' : 'Cuenta suprema actualizada.',
-      credentials: { email, password, gymName, ownerName },
+      credentials: { email, gymName, ownerName },
       ids: { id_usuario: userId, id_gimnasio: gymId, id_rol: adminRol },
       trial_ends_at: null,
       plan: 'ilimitado',

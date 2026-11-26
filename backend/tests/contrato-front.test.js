@@ -479,3 +479,27 @@ describe('GET /api/auth/accept-invite/:token (AcceptInvitePage)', () => {
     esErrorQueMuestraElFront(r, 404, 'INVITE_NOT_FOUND');
   });
 });
+
+// ---------------------------------------------------------------------------
+// BajaMensajesPage (RQNF-16, Ley 2300): el enlace publico con que termina cada
+// mensaje comercial. La pagina carga con el GET y da de baja con el POST del
+// boton; los dos pasan por el mismo limite, 20 solicitudes por minuto por IP.
+// ---------------------------------------------------------------------------
+describe('GET /api/baja/:token (BajaMensajesPage)', () => {
+  const pedirBaja = (ip) => request(app).get('/api/baja/enlace-de-prueba').set('X-Forwarded-For', ip);
+
+  test('should answer 429 with error and code RATE_LIMITED when the twenty-first request arrives within a minute', async () => {
+    // Arrange: veinte solicitudes desde la misma IP (el enlace no es valido: se cortan con 404, sin base)
+    const ip = ipNueva();
+    for (let i = 0; i < 20; i += 1) await pedirBaja(ip).expect(404);
+
+    // Act
+    const r = await pedirBaja(ip);
+
+    // Assert: sin `code`, buildError le pasa null a la pantalla
+    esErrorQueMuestraElFront(r, 429, 'RATE_LIMITED');
+    expect(r.body).toEqual({ error: 'Demasiadas solicitudes. Intenta de nuevo en un minuto.', code: 'RATE_LIMITED' });
+    expect(r.headers['ratelimit-limit']).toBe('20');
+    expect(mockQuery).not.toHaveBeenCalled();
+  });
+});

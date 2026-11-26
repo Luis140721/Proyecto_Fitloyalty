@@ -262,9 +262,9 @@ describeConBd('restricciones de gimnasio, usuario y miembro', () => {
   describe('miembro', () => {
     const INSERTAR = 'INSERT INTO miembro (id_gimnasio, nombre, documento, codigo_qr) VALUES ($1, $2, $3, $4)';
 
-    // Lo que la BD NO impide: no hay UNIQUE (id_gimnasio, documento). El unico
-    // freno es el SELECT previo de POST /admin/miembros, y dos altas a la vez con
-    // el mismo documento pasan las dos.
+    // Lo que la BD de las migraciones NO impide: no hay UNIQUE (id_gimnasio,
+    // documento). El freno es lib/miembro-duplicado.js (#87), que se prueba en
+    // miembro-duplicado.test.js.
     test('la BD acepta dos miembros activos con el mismo documento en el mismo gimnasio', async () => {
       const gym = await crearGimnasio(tx.cliente);
       const documento = documentoUnico();

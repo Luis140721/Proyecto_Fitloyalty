@@ -117,6 +117,7 @@ const resetPasswordSchema = z
   );
 
 module.exports = {
+  largoEnCaracteres,
   formatZodError,
   emailSchema,
   passwordSchema,

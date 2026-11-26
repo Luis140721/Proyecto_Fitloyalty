@@ -39,6 +39,16 @@ const inviteSchema = z.object({
 // de usuario.rol en Neon solo acepta estos dos).
 const ID_ROL = { ADMINISTRADOR: 1, RECEPCIONISTA: 2 };
 
+/**
+ * La invitacion (tabla o alias `t`) solo sirve mientras quien la creo siga
+ * siendo administrador activo de ese gimnasio: si no, un administrador
+ * desactivado volveria a entrar con una invitacion que el mismo hizo.
+ */
+const creadorVigente = (t) => `EXISTS (
+                SELECT 1 FROM usuario u
+                 WHERE u.id_usuario = ${t}.id_usuario_creador AND u.id_gimnasio = ${t}.id_gimnasio
+                   AND u.activo = TRUE AND u.id_rol = ${ID_ROL.ADMINISTRADOR}) AS creador_vigente`;
+
 const updateStaffSchema = z.object({
   nombre: z.string().trim()
     .min(2, 'El nombre debe tener al menos 2 caracteres')
@@ -397,6 +407,8 @@ router.get(
 //     rol ningun admin.
 //   - Un usuario desactivado no puede iniciar sesion (auth.js responde 403) ni
 //     recuperar la contrasena; GET /api/auth/me le responde 404.
+//   - Al desactivar o bajar de rol a un administrador se revocan, en la misma
+//     sentencia, las invitaciones pendientes que el creo.
 // ---------------------------------------------------------------------------
 router.patch(
   '/admin/staff/:id',
@@ -449,10 +461,18 @@ router.patch(
     if (activo !== undefined) set('activo', activo);
     params.push(id, gymId);
 
+    const revocaInvitaciones = (quitaAdmin || desactiva)
+      ? `WITH invitaciones_revocadas AS (
+           UPDATE invitacion_staff SET fecha_revocado = NOW()
+            WHERE id_usuario_creador = $${params.length - 1} AND id_gimnasio = $${params.length}
+              AND fecha_aceptacion IS NULL AND fecha_revocado IS NULL
+         ) `
+      : '';
+
     let actualizado;
     try {
       const { rows } = await pool.query(
-        `UPDATE usuario SET ${sets.join(', ')}
+        `${revocaInvitaciones}UPDATE usuario SET ${sets.join(', ')}
           WHERE id_usuario = $${params.length - 1} AND id_gimnasio = $${params.length}
           RETURNING id_usuario, nombre, email, id_rol, activo, ${ROL_EXPR}, ${ES_DUENO_EXPR}`,
         params
@@ -482,7 +502,8 @@ router.get('/auth/accept-invite/:token', asyncHandler(async (req, res) => {
     const { rows } = await pool.query(
       `SELECT i.email, i.nombre, i.rol_asignado, i.fecha_expiracion,
               i.fecha_aceptacion, i.fecha_revocado,
-              g.nombre AS gym_nombre
+              g.nombre AS gym_nombre,
+              ${creadorVigente('i')}
          FROM invitacion_staff i
          INNER JOIN gimnasio g ON g.id_gimnasio = i.id_gimnasio
         WHERE i.token_hash = $1`,
@@ -495,7 +516,7 @@ router.get('/auth/accept-invite/:token', asyncHandler(async (req, res) => {
   }
   if (!inv) throw new AppError(404, 'Invitacion no encontrada', 'INVITE_NOT_FOUND');
   if (inv.fecha_aceptacion) throw new AppError(410, 'Esta invitacion ya fue aceptada.', 'INVITE_ALREADY_ACCEPTED');
-  if (inv.fecha_revocado)   throw new AppError(410, 'Esta invitacion fue revocada.', 'INVITE_REVOKED');
+  if (inv.fecha_revocado || inv.creador_vigente === false) throw new AppError(410, 'Esta invitacion fue revocada.', 'INVITE_REVOKED');
   if (new Date(inv.fecha_expiracion) < new Date()) throw new AppError(410, 'Esta invitacion expiro.', 'INVITE_EXPIRED');
   return res.json({
     email: inv.email,
@@ -521,7 +542,8 @@ router.post('/auth/accept-invite', asyncHandler(async (req, res) => {
 
     const { rows } = await client.query(
       `SELECT id_invitacion, id_gimnasio, email, nombre, rol_asignado,
-              fecha_expiracion, fecha_aceptacion, fecha_revocado
+              fecha_expiracion, fecha_aceptacion, fecha_revocado,
+              ${creadorVigente('invitacion_staff')}
          FROM invitacion_staff
         WHERE token_hash = $1
         FOR UPDATE`,
@@ -536,7 +558,7 @@ router.post('/auth/accept-invite', asyncHandler(async (req, res) => {
       await client.query('ROLLBACK');
       throw new AppError(410, 'Esta invitacion ya fue aceptada.', 'INVITE_ALREADY_ACCEPTED');
     }
-    if (inv.fecha_revocado) {
+    if (inv.fecha_revocado || inv.creador_vigente === false) {
       await client.query('ROLLBACK');
       throw new AppError(410, 'Esta invitacion fue revocada.', 'INVITE_REVOKED');
     }

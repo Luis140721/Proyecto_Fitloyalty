@@ -83,7 +83,7 @@ describe('CheckinPage: el historial', () => {
     // Assert
     expect(await screen.findByText('Ana Pérez')).toBeInTheDocument();
     expect(screen.getByText('QR · 1020304050')).toBeInTheDocument();
-    expect(mockGet).toHaveBeenCalledWith('/admin/checkin', { params: { limit: 20 } });
+    expect(mockGet).toHaveBeenCalledWith('/admin/checkin', { params: { dia: 'hoy', limit: 200 } });
   });
 
   test('should show the API error when the history cannot be loaded', async () => {

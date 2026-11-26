@@ -7,7 +7,7 @@ No es la app del dueño/recepcionista (eso sigue siendo la web React en `Proyect
 
 ## Que hace
 
-- Login con **codigo del gimnasio + documento + PIN de 4 digitos**
+- Login con **teléfono + contraseña** (10 dígitos que empiezan por 3, y la contraseña que el gimnasio le asigna desde el panel). La pantalla también pide el código o NIT del gimnasio, que hoy el backend no usa.
 - Pantalla **Inicio**: KPIs rapidos (visitas hoy, este mes, puntos, total)
 - Pantalla **Mi QR**: el codigo QR del miembro para escanear en recepcion (con vista en pantalla completa + zoom)
 - Pantalla **Mi plan**: membresia vigente con fechas, estado de pago, valor, dias restantes
@@ -36,7 +36,8 @@ Igual que el `Store_Pro_Ss` de la profe para que el codigo sea consistente:
 
 ```
 FitLoyalty_Cliente/
-├── assets/.env                       # API_URL, APP_NAME
+├── assets/.env.example               # plantilla: copiala como assets/.env (no se sube)
+├── assets/.env                       # API_URL, APP_NAME (lo crea cada uno)
 ├── lib/
 │   ├── main.dart                     # entry + MultiProvider + SplashGate
 │   └── cliente/
@@ -53,6 +54,37 @@ FitLoyalty_Cliente/
 
 ---
 
+## Construir el instalador (.apk) desde un clon
+
+Necesitas Flutter estable (Dart 3.13.2 o superior), JDK 17 o superior (viene con Android Studio) y el SDK de
+Android con sus licencias aceptadas (`flutter doctor --android-licenses`). Desde `fitloyalty_cliente/`:
+
+```powershell
+# 1. Configuracion (no se sube al repositorio; la app no compila sin este archivo)
+# (el mismo comando sirve en PowerShell, Linux y Mac)
+cp assets/.env.example assets/.env
+# La plantilla apunta a PRODUCCION. Para otro servidor, edita API_URL en assets/.env (ver los ejemplos del archivo).
+
+# 2. Dependencias e instalador
+flutter pub get
+flutter build apk --release
+```
+
+El instalador queda en `build/app/outputs/flutter-apk/app-release.apk`. Pasalo al celular (USB o Drive), permite
+«instalar apps de origen desconocido» y ábrelo. El `.apk` de release va firmado con la clave de depuración de cada
+PC: si ya tenías instalada la app construida en otro PC, desinstálala primero.
+
+- Si Flutter dice «Your project's Android Gradle Plugin version (9.1.0) is lower than Flutter's minimum supported
+  version», agrega `--android-skip-build-dependency-validation` al `flutter build apk` (pasa con Flutter 3.50 o más).
+- **Ojo con la versión del servidor:** la app de `develop` trae funciones que producción (la rama `main`) todavía no tiene,
+  como las preferencias de mensajes comerciales («Más»), y producción tampoco tiene todavía el campo «Contraseña de la
+  app» del panel (#122). Hasta la próxima versión, para probarlas usa un backend local.
+- Los íconos (`android/app/src/main/res/mipmap-*/ic_launcher.png`) están en el repositorio y salen del logo de
+  `frontend/src/assets/logo-icon-purple.svg`. El `.gitignore` ignora los demás `.png` (menos los de
+  `docs/evidencias/capturas/rqnf-06/`).
+
+---
+
 ## Como correrlo en local (celular por USB)
 
 ### 1. Backend arriba
@@ -66,7 +98,7 @@ npm run dev
 ```
 
 La API escucha en `http://localhost:3001` y aplica las migraciones al arrancar.
-La nueva migración `004_cliente_pin.sql` agrega `pin_hash`, `pin_set_at`, `app_acceso` y un indice a la tabla `miembro` — corre sola, no hay que hacer nada.
+Las migraciones `004_cliente_pin.sql` (agrega `app_acceso` y el antiguo `pin_hash`) y `005_cliente_password.sql` (agrega `password_hash` y `password_set_at`) preparan la tabla `miembro` para la app — corren solas, no hay que hacer nada.
 
 Verifica con:
 ```powershell
@@ -82,17 +114,19 @@ adb devices
 adb reverse tcp:3001 tcp:3001
 ```
 
-Esto hace que cuando la app en el celular pida `http://localhost:3001`, llegue a tu PC.
+Esto hace que cuando la app en el celular pida `http://localhost:3001`, llegue a tu PC. Para que la app use ese
+servidor local y **no producción**, crea `assets/.env` con `API_URL=http://localhost:3001/api` (copia
+`assets/.env.example` y cambia esa línea: la plantilla apunta a producción).
 
-### 3. Crear un miembro con PIN desde el panel web
+### 3. Asignar la contraseña de la app desde el panel web
 
-El admin asigna el PIN al miembro desde el panel React:
+El miembro entra a la app con su **teléfono** y una **contraseña** que le asigna el gimnasio desde el panel React:
 
-1. Panel web FitLoyalty → Miembros → Nuevo / Editar
-2. En el campo nuevo **PIN (4 digitos)** escribe el PIN que le vas a dar al miembro
+1. Panel web FitLoyalty → Miembros → **Nuevo miembro** (paso 1, «Datos personales») o la **ficha** del miembro (clic en su fila)
+2. En **Contraseña de la app** escribe la contraseña que le vas a dar (mínimo 6 caracteres)
 3. Guarda
 
-> Si ya tienes miembros creados sin PIN, editalos y agregaselo. Mientras `pin_hash` sea NULL no podran entrar a la app.
+> La ficha dice si el miembro ya tiene contraseña («Ya tiene contraseña para la app» o «Aún no tiene contraseña»). Si se deja el campo vacío, no se cambia. El teléfono debe tener 10 dígitos y empezar por 3, porque es lo que pide el login de la app; si no, la ficha lo advierte. Mientras `password_hash` sea NULL, el miembro no puede entrar a la app.
 
 ### 4. Correr la app Flutter
 
@@ -102,13 +136,16 @@ flutter pub get
 flutter run
 ```
 
+Si Flutter 3.50 o más se queja de la versión del Android Gradle Plugin, usa
+`flutter run --android-skip-build-dependency-validation`.
+
 ### 5. Probar el flujo
 
 1. La app abre el splash y valida si ya hay sesion guardada
 2. Si no, te manda al login:
-   - **Codigo del gimnasio**: el NIT o el nombre exacto del gimnasio (probalos ambos si uno no anda)
-   - **Documento**: la cedula del miembro SIN puntos
-   - **PIN**: los 4 digitos que le asignaste
+   - **Código o NIT del gimnasio**: la app lo pide (`login_screen.dart`), pero hoy el backend no lo usa: busca al miembro solo por el teléfono. Escribe el NIT o el nombre del gimnasio.
+   - **Teléfono**: el celular del miembro, 10 dígitos que empiezan por 3 (sin el +57)
+   - **Contraseña**: la que le asignaste en el panel (paso 3)
 3. Si todo esta bien, llegas a la pantalla **Inicio** con tus KPIs
 
 ---
@@ -129,7 +166,7 @@ Todos bajo `/api/cliente`:
 
 | Metodo | Ruta             | Que hace                                                   |
 |--------|------------------|------------------------------------------------------------|
-| POST   | `/login`         | documento + PIN → JWT de cliente (30 dias)                 |
+| POST   | `/login`         | telefono + contrasena → JWT de cliente (30 dias)           |
 | GET    | `/me`            | perfil del miembro autenticado                             |
 | PUT    | `/me`            | actualizar telefono, email, direccion, emergencia, salud   |
 | GET    | `/qr`            | codigo + imagen base64 del QR                              |
@@ -150,10 +187,12 @@ Rate limit: 10 intentos de login por minuto por IP (mas permisivo que el panel a
 | Archivo                                                              | Cambio                                                                  |
 |----------------------------------------------------------------------|-------------------------------------------------------------------------|
 | `backend/migrations/004_cliente_pin.sql`                             | **NUEVO** — agrega `pin_hash`, `pin_set_at`, `app_acceso` a `miembro`   |
+| `backend/migrations/005_cliente_password.sql`                        | **NUEVO** — agrega `password_hash` y `password_set_at`: el login pasa de PIN a contraseña |
 | `backend/src/middleware/auth.js`                                     | agrega `requireClient` para validar JWT de miembro                       |
 | `backend/src/lib/auth-helpers.js`                                    | agrega `generarTokenCliente` y `miembroSeguro`                          |
 | `backend/src/routes/cliente.js`                                      | **NUEVO** — los 9 endpoints de arriba                                  |
-| `backend/src/routes/miembros.js`                                     | schemas `create` y `update` aceptan `pin` + `app_acceso`; INSERT y UPDATE hashean el PIN con bcrypt |
+| `backend/src/routes/miembros.js`                                     | schemas `create` y `update` aceptan `password` (mínimo 6) + `app_acceso`; INSERT y UPDATE la guardan con bcrypt en `password_hash`; la ficha (`GET /admin/miembros/:id`) solo dice `password_asignada` |
+| `frontend/src/pages/MiembrosPage.jsx`                                | campo **Contraseña de la app** en el alta y en la ficha (reglas en `frontend/src/lib/contrasenaApp.js`) |
 | `backend/src/index.js`                                               | monta `/api/cliente` + rate limit de login del cliente                  |
 
 Ninguna ruta existente cambio de firma: lo que ya tenias (panel admin, check-ins, dashboard) sigue funcionando igual.
@@ -186,5 +225,5 @@ node -c backend/src/routes/miembros.js
 - HTTPS obligatorio (Flutter permite HTTP en dev; para Play Store hay que migrar a HTTPS)
 - Implementar `refresh token` (hoy el JWT vence a los 30 dias y hay que volver a loguearse)
 - Notificaciones push (FCM) para avisar al miembro cuando su plan vence
-- Pantalla de "Recuperar PIN" via OTP al email del miembro (hoy solo el admin lo puede resetear)
-- Versionar la migracion 004 con datos seed de PIN por defecto para miembros existentes si asi lo decides
+- Pantalla de "Recuperar contraseña" via OTP al email del miembro (hoy solo el panel la puede cambiar)
+- Asignar contraseñas a los miembros existentes que todavía no tienen (hoy se hace uno por uno desde su ficha)

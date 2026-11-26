@@ -15,8 +15,12 @@ import Modal from '../components/Modal';
 import Ripple from '../components/Ripple';
 import {
   RepresentanteCampos, CasillaAutorizacion, CasillaDatosSensibles, HistorialAutorizaciones,
+  CasillaMensajesComerciales,
 } from '../components/AutorizacionesMiembro';
+import { abrirWhatsappAutorizado } from '../lib/contactoWhatsapp';
+import { aplicarCambio } from '../lib/formularioMiembro';
 import { esMenor, edadEnAnios, isoADate, erroresRepresentante } from '../lib/autorizaciones';
+import { avisoContrasenaFicha, errorContrasenaApp, telefonoSirveParaApp } from '../lib/contrasenaApp';
 import QRCode from 'qrcode';
 
 // CampoFecha usa locale="es": sin registrarlo, el calendario sale en ingles.
@@ -151,6 +155,9 @@ const empty = {
   telefono: '',
   email: '',
   direccion: '',
+  // RQF-15: contrasena de la app del miembro (lib/contrasenaApp.js). Es
+  // opcional: vacia, el alta no la asigna y la ficha no cambia la que haya.
+  password: '',
   // Salud y emergencia
   contacto_emergencia: '',
   telefono_emergencia: '',
@@ -186,6 +193,9 @@ const empty = {
   representante_parentesco: '',
   representante_telefono: '',
   autoriza_representante: false,
+  // RQNF-16: mensajes comerciales (opcional, apagado por defecto).
+  acepta_mensajes_comerciales: false,
+  canales_comerciales: [],
   activo: true
 };
 
@@ -199,8 +209,46 @@ const CAMPOS_REPRESENTANTE = [
  * representante. Sin autorizacion de datos sensibles no se mandan condiciones
  * medicas ni alergias; si no es menor, no se manda representante.
  */
+// Lo que una persona escribe, elige o marca en el alta. Lo demas (fechas,
+// estado del pago, valor sugerido del plan) lo calcula el formulario solo y no
+// cuenta como borrador.
+const CAMPOS_DEL_BORRADOR = [
+  'nombre', 'tipo_documento', 'documento', 'fecha_nacimiento', 'genero', 'telefono', 'email', 'direccion',
+  'password',
+  'contacto_emergencia', 'telefono_emergencia', 'condiciones_medicas', 'alergias',
+  'tipo_plan', 'valor_pagado', 'metodo_pago', 'referencia_pago', 'activar_recordatorio',
+  'objetivo', 'nivel_experiencia', 'observaciones',
+  ...CAMPOS_REPRESENTANTE,
+  'acepto_terminos', 'autorizo_datos', 'autorizo_datos_sensibles', 'autoriza_representante',
+  'acepta_mensajes_comerciales', 'canales_comerciales',
+];
+
+/** true si en el alta hay algo distinto de como viene el formulario en blanco. */
+function hayBorrador(f) {
+  const comparable = (v) => (Array.isArray(v) ? v.join(',') : String(v ?? '').trim());
+  return CAMPOS_DEL_BORRADOR.some((k) => comparable(f[k]) !== comparable(empty[k]));
+}
+
+// RQNF-17: marca de «no se sabe que quedo en el servidor» para un dato de salud.
+const NO_SE_SABE = Symbol('no se sabe');
+
+/** Dos textos de la ficha son el mismo dato: null, undefined y '' cuentan igual. */
+function mismoTexto(a, b) {
+  return String(a ?? '').trim() === String(b ?? '').trim();
+}
+
+/** RQNF-16: true si la aceptacion comercial de `a` y la de `b` son la misma decision. */
+function mismaDecisionComercial(a, b) {
+  const canales = (x) => [...(x.canales_comerciales || [])].sort().join(',');
+  return Boolean(a.acepta_mensajes_comerciales) === Boolean(b.acepta_mensajes_comerciales)
+    && canales(a) === canales(b);
+}
+
 function payloadLegal(f, menor) {
   const p = { autorizo_datos_sensibles: Boolean(f.autorizo_datos_sensibles) };
+  // RQNF-16: aceptacion de mensajes comerciales y sus canales.
+  p.acepta_mensajes_comerciales = Boolean(f.acepta_mensajes_comerciales);
+  p.canales_comerciales = p.acepta_mensajes_comerciales ? (f.canales_comerciales || []) : [];
   if (!p.autorizo_datos_sensibles) {
     p.condiciones_medicas = '';
     p.alergias = '';
@@ -224,11 +272,16 @@ const FILTROS = [
   { id: 'todos',  label: 'Todos' },
   { id: 'al-dia', label: 'Al día' },
   { id: 'vence',  label: 'Vence pronto' },
+  { id: 'vence30', label: 'Vence en 30 días' },
   { id: 'vencido',label: 'Vencido' },
   { id: 'riesgo', label: 'En riesgo' },
   { id: 'congelado', label: 'Congelado' },
   { id: 'desactivados', label: 'Desactivados' },
 ];
+
+/** La ventana de «Próximos vencimientos» del Dashboard: de hoy a 30 dias, sin congeladas. */
+const venceEn30 = (m) => !m.congelada && m.dias_para_vencer != null
+  && m.dias_para_vencer >= 0 && m.dias_para_vencer <= 30;
 
 // Nota: el antiguo statusChip() se reemplazo por el componente <BadgeEstado />.
 
@@ -262,7 +315,7 @@ function formularioVacio() {
 }
 
 export default function MiembrosPage() {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   // Miembros a los que ya se les escribio en esta sesion, para marcar el boton.
   const [contactados, setContactados] = useState(() => new Set());
   // Si el chat se abrio pero el envio no quedo registrado (RQF-09).
@@ -276,7 +329,36 @@ export default function MiembrosPage() {
   const [editForm, setEditForm] = useState(empty);
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState('');
+  // RQF-15: error del campo «Contraseña de la app» de la ficha, y el campo,
+  // para llevar ahi a la persona si el error no esta a la vista.
+  const [errorClaveEdit, setErrorClaveEdit] = useState('');
+  const campoClaveFicha = useRef(null);
   const [editLoading, setEditLoading] = useState(false);
+  // La ficha solo se guarda con el registro completo ya cargado: antes de eso
+  // el formulario es la fila de la lista, y guardarla vaciaba campos y
+  // registraba una revocacion (datos sensibles, mensajes comerciales) que
+  // nadie decidio. RQNF-16 y RQNF-17.
+  const [editCompleto, setEditCompleto] = useState(false);
+  // RQNF-16: la aceptacion comercial tal como llego con el registro. Solo se
+  // manda al guardar si el personal la cambio en esta ficha: si viajara
+  // siempre, guardar otro campo despues de que el miembro se diera de baja
+  // (por el enlace o la app, con la ficha abierta) registraria una aceptacion
+  // que nadie decidio.
+  const comercialesCargados = useRef(null);
+  // RQNF-17: lo mismo con la autorizacion de datos sensibles y los datos de
+  // salud, tal como llegaron con el registro. El miembro puede revocarla desde
+  // la app: si viajara siempre, guardar otro campo con la ficha abierta la
+  // volveria a registrar y devolveria los datos de salud que se borraron.
+  const sensiblesCargados = useRef(null);
+  // Cual ficha se pidio de ultima: la respuesta de una anterior no pisa la actual.
+  const fichaPedida = useRef(0);
+  // De que miembro es la ficha en pantalla (null si no hay ninguna abierta).
+  const fichaMiembro = useRef(null);
+  // Para no abrir la ficha de la URL encima del alta a medio llenar.
+  const altaAbierta = useRef(false);
+  useEffect(() => { altaAbierta.current = open; }, [open]);
+  // La URL sin ?ficha que esta pagina acaba de poner: no es una busqueda nueva.
+  const urlSinFicha = useRef(null);
   const [editQr, setEditQr] = useState('');      // imagen del QR en el detalle
   // RQNF-17: autorizaciones del miembro que se edita (vigentes e historial).
   const [autorizacionesEdit, setAutorizacionesEdit] = useState(null);
@@ -293,6 +375,14 @@ export default function MiembrosPage() {
   const [motivoCongelar, setMotivoCongelar] = useState('');
   const [congelando, setCongelando] = useState(false);
   const [qrCopiado, setQrCopiado] = useState(false);
+  // «Copiado» vuelve a «Copiar código» a los 2 s; el timer se cancela al
+  // cerrar la ficha o salir de la pagina.
+  const avisoQrCopiado = useRef(null);
+  const montada = useRef(true);
+  useEffect(() => {
+    montada.current = true;
+    return () => { montada.current = false; clearTimeout(avisoQrCopiado.current); };
+  }, []);
   const [enviandoContrato, setEnviandoContrato] = useState(false);
   const [editInfo, setEditInfo] = useState('');
   const [error, setError] = useState('');
@@ -336,6 +426,8 @@ export default function MiembrosPage() {
       if (!tel) e.telefono = 'Escribe el teléfono.';
       else if (tel.length !== 10) e.telefono = `Debe tener 10 dígitos (escribiste ${tel.length}).`;
       if (f.email?.trim() && !EMAIL_RE.test(f.email.trim())) e.email = 'Este correo no tiene un formato válido.';
+      const errorClave = errorContrasenaApp(f.password);
+      if (errorClave) e.password = errorClave;
       if (!fechaValida(f.fecha_nacimiento)) e.fecha_nacimiento = 'Fecha incompleta o inexistente. Usa DD/MM/AAAA.';
       else if (f.fecha_nacimiento && textoAFecha(f.fecha_nacimiento) > new Date()) {
         e.fecha_nacimiento = 'La fecha de nacimiento no puede ser futura.';
@@ -426,6 +518,7 @@ export default function MiembrosPage() {
       if (carga !== ultimaCargaRef.current) return;
       setItems(data.miembros);
       setErrorCarga('');
+      return data.miembros;
     } catch (err) {
       if (carga !== ultimaCargaRef.current) return;
       setErrorCarga(err.message || 'Error al cargar miembros.');
@@ -437,12 +530,36 @@ export default function MiembrosPage() {
   /*
    * Los avisos de la campana llevan a esta pantalla con ?q=<nombre>. Se
    * respeta esa busqueda en la carga inicial para caer directo en el miembro
-   * del aviso en vez de en la lista completa.
+   * del aviso en vez de en la lista completa. El Dashboard llega ademas con
+   * ?filtro=<id de FILTROS> («Ver todos») o ?ficha=<id del miembro> (la fila).
    */
   useEffect(() => {
+    const esSoloSinFicha = urlSinFicha.current === searchParams.toString();
+    urlSinFicha.current = null;
+    if (esSoloSinFicha) return;
     const inicial = searchParams.get('q') || '';
-    if (inicial) setQ(inicial);
-    load(inicial);
+    setQ(inicial); // la caja dice lo mismo que se busco: si no, un filtro repetia la busqueda vieja
+    const pedido = searchParams.get('filtro');
+    const filtroInicial = FILTROS.some((f) => f.id === pedido) ? pedido : 'todos';
+    setFiltro(filtroInicial); // tambien al llegar desde la campana: otro filtro podria esconder al miembro del aviso
+    const idFicha = Number(searchParams.get('ficha')) || null;
+    const fichaAntes = fichaPedida.current;
+    load(inicial, filtroInicial === 'desactivados').then((miembros) => {
+      // Sin lista (fallo, la reemplazo otra o la persona salio) no se toca nada.
+      if (!idFicha || !miembros || !montada.current) return;
+      const m = miembros.find((x) => x.id_miembro === idFicha);
+      // Se respeta lo que la persona tenga abierto: otra ficha (o que abrio y
+      // cerro mientras cargaba la lista) o un alta a medio llenar.
+      const libre = fichaMiembro.current === null && fichaPedida.current === fichaAntes && !altaAbierta.current;
+      if (m && libre) openEdit(m);
+      // La ficha se abre una vez: al volver atras o recargar no se abre sola.
+      const sinFicha = new URLSearchParams(searchParams);
+      sinFicha.delete('ficha');
+      urlSinFicha.current = sinFicha.toString();
+      setSearchParams(sinFicha, { replace: true });
+    });
+    // Solo depende de la URL: openEdit y setSearchParams son nuevas en cada render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
   // Cargar configuración del gimnasio
@@ -535,8 +652,6 @@ export default function MiembrosPage() {
 
   // Manejar cambios en campos que afectan cálculos automáticos
   const handleFormChange = (field, value) => {
-    const newForm = { ...form, [field]: value };
-
     // Al escribir se retira el error de ESE campo, no el del formulario entero.
     setFormErrors((prev) => {
       if (!prev[field]) return prev;
@@ -546,30 +661,10 @@ export default function MiembrosPage() {
       return sig;
     });
 
-    /*
-     * Al cambiar el plan se propone el precio que el gimnasio tenga
-     * configurado. Solo si hay uno de verdad: el valor llega como cadena
-     * ("0.00"), y una cadena vacia de contenido sigue siendo "verdadera" en
-     * JavaScript, asi que un `if (valor)` a secas ponia el precio en cero y
-     * borraba lo que el usuario habia escrito.
-     */
-    if (field === 'tipo_plan' && gymConfig) {
-      const sugerido = Number(gymConfig[`plan_${String(value).toLowerCase()}_valor`]);
-      if (Number.isFinite(sugerido) && sugerido > 0) {
-        newForm.valor_total = String(Math.round(sugerido));
-      }
-    }
-    
-    // Si cambian valores de pago, recalcular estado
-    if (field === 'valor_total' || field === 'valor_pagado') {
-      const estadoPago = determinarEstadoPago(
-        field === 'valor_total' ? value : form.valor_total,
-        field === 'valor_pagado' ? value : form.valor_pagado
-      );
-      newForm.estado_pago = estadoPago;
-    }
-    
-    setForm(newForm);
+    // Sobre el formulario ANTERIOR (setForm con funcion): dos cambios en el
+    // mismo evento se suman y no se pisan. El precio sugerido por plan y el
+    // estado del pago siguen igual (lib/formularioMiembro.js).
+    setForm((prev) => aplicarCambio(prev, field, value, { gymConfig, estadoPago: determinarEstadoPago }));
   };
 
   const onSubmit = async (e) => {
@@ -601,6 +696,9 @@ export default function MiembrosPage() {
     try {
       const payload = { ...form };
       if (!payload.email) delete payload.email;
+      // RQF-15: sin contrasena de la app, el miembro queda sin ella (se la
+      // pueden asignar despues en su ficha).
+      if (!payload.password) delete payload.password;
       // RQNF-17: el representante solo viaja si es menor; sin autorizacion
       // de datos sensibles no viajan condiciones medicas ni alergias.
       for (const k of [...CAMPOS_REPRESENTANTE, 'autoriza_representante']) delete payload[k];
@@ -667,7 +765,7 @@ export default function MiembrosPage() {
   const generarWhatsAppLink = () => {
     if (!createdMember) return '';
     // Limpiar el número de teléfono: remover espacios, guiones, paréntesis y el signo +
-    const telefono = createdMember.telefono.replace(/[\s\-\(\)\+]/g, '');
+    const telefono = createdMember.telefono.replace(/[\s\-()+]/g, '');
     const mensaje = encodeURIComponent(
       `Hola ${createdMember.nombre}, bienvenido/a a tu gimnasio. Este es tu código de acceso personal. Muéstralo en la entrada cada vez que vengas.`
     );
@@ -684,15 +782,32 @@ export default function MiembrosPage() {
    * para poder mostrarla junto al formulario.
    */
   const openEdit = async (m) => {
+    const pedido = ++fichaPedida.current;
+    fichaMiembro.current = m.id_miembro;
     setEditing(m);
     setEditError('');
+    setErrorClaveEdit('');
+    setEditInfo(''); // el «Contrato enviado al…» era de la ficha anterior
     setEditQr('');
     // Precarga con lo que ya tenemos para que el modal abra sin espera.
     setEditForm({ ...empty, ...m, activo: m.activo !== false });
+    setEditCompleto(false);
+    comercialesCargados.current = null;
+    sensiblesCargados.current = null;
+    // El plan, las congelaciones y el «Copiado» son de la ficha anterior.
+    setPlanForm(null);
+    setPlanMsg(''); setPlanError('');
+    setCongelaciones([]);
+    setMotivoCongelar('');
+    clearTimeout(avisoQrCopiado.current);
+    setQrCopiado(false);
     setEditLoading(true);
     try {
       const { data } = await api.get(`/admin/miembros/${m.id_miembro}`);
-      const full = data.miembro || m;
+      if (pedido !== fichaPedida.current) return; // ya se abrio otra ficha o se cerro esta
+      // Sin el registro no hay ficha completa: no se guarda sobre la fila de la lista.
+      if (!data.miembro) throw new Error('No pudimos cargar los datos completos del miembro.');
+      const full = data.miembro;
       setEditing(full);
       setEditForm({
         ...empty,
@@ -704,25 +819,44 @@ export default function MiembrosPage() {
         ...Object.fromEntries(CAMPOS_REPRESENTANTE.map((k) => [k, full[k] || ''])),
         autorizo_datos_sensibles: Boolean(full.autorizo_datos_sensibles),
         autoriza_representante: false,
+        acepta_mensajes_comerciales: Boolean(full.acepta_mensajes_comerciales),
+        canales_comerciales: full.canales_comerciales || [],
       });
       setAutorizacionesEdit(data.autorizaciones || null);
+      comercialesCargados.current = {
+        acepta_mensajes_comerciales: Boolean(full.acepta_mensajes_comerciales),
+        canales_comerciales: full.canales_comerciales || [],
+      };
+      sensiblesCargados.current = {
+        autorizo_datos_sensibles: Boolean(full.autorizo_datos_sensibles),
+        condiciones_medicas: full.condiciones_medicas,
+        alergias: full.alergias,
+      };
+      setEditCompleto(true);
       if (full.codigo_qr) {
-        try { setEditQr(await QRCode.toDataURL(full.codigo_qr)); }
-        catch (_) { /* si falla el dibujo, igual mostramos el codigo en texto */ }
+        try {
+          const imagen = await QRCode.toDataURL(full.codigo_qr);
+          if (pedido === fichaPedida.current) setEditQr(imagen);
+        } catch (_) { /* si falla el dibujo, igual mostramos el codigo en texto */ }
       }
-      await cargarPlan(m.id_miembro);
+      if (pedido !== fichaPedida.current) return;
+      await cargarPlan(m.id_miembro, pedido);
     } catch (err) {
+      if (pedido !== fichaPedida.current) return;
       setEditError(err.message || 'No pudimos cargar los datos completos del miembro.');
     } finally {
-      setEditLoading(false);
+      if (pedido === fichaPedida.current) setEditLoading(false);
     }
   };
 
   /** Trae el plan vigente del miembro y lo pasa al formato del formulario. */
-  const cargarPlan = async (idMiembro) => {
+  const cargarPlan = async (idMiembro, pedido = fichaPedida.current) => {
     setPlanError(''); setPlanMsg('');
     try {
       const { data } = await api.get(`/admin/miembros/${idMiembro}/plan`);
+      // El plan de una ficha que ya no esta en pantalla no se muestra en otra:
+      // «Guardar plan» lo guardaria en el miembro equivocado.
+      if (pedido !== fichaPedida.current) return;
       const p = data.plan;
       setPlanForm({
         tipo_plan: p?.tipo_plan || 'MENSUAL',
@@ -739,6 +873,7 @@ export default function MiembrosPage() {
       });
       setCongelaciones(data.congelaciones || []);
     } catch (err) {
+      if (pedido !== fichaPedida.current) return;
       setPlanError('No pudimos cargar el plan de este miembro.');
       setPlanForm(null);
       setCongelaciones([]);
@@ -755,20 +890,34 @@ export default function MiembrosPage() {
       && !window.confirm('¿Congelar la membresía? Mientras esté congelada no contará como vencida y, al descongelarla, el vencimiento se correrá los días que estuvo congelada.')) {
       return;
     }
+    // La ficha desde la que se pulso: si la respuesta llega con la ficha de
+    // otro miembro en pantalla (o sin ficha), ni el plan ni el aviso caen ahi.
+    // Si es la de este mismo miembro, reabierta, si se entera.
+    const pedido = fichaPedida.current;
+    const idMiembro = editing.id_miembro;
+    const nombre = editing.nombre;
+    const enPantalla = () => pedido === fichaPedida.current || fichaMiembro.current === idMiembro;
     setPlanError(''); setPlanMsg('');
     setCongelando(true);
     try {
       const { data } = await api.post(
-        `/admin/miembros/${editing.id_miembro}/${accion}`,
+        `/admin/miembros/${idMiembro}/${accion}`,
         accion === 'congelar' ? { motivo: motivoCongelar.trim() } : {}
       );
-      setMotivoCongelar('');
-      // El aviso va despues de recargar: cargarPlan limpia planMsg al empezar.
-      await cargarPlan(editing.id_miembro);
-      setPlanMsg(data.message || (accion === 'congelar' ? 'Membresía congelada.' : 'Membresía descongelada.'));
+      if (enPantalla()) {
+        if (pedido === fichaPedida.current) setMotivoCongelar('');
+        // El aviso va despues de recargar: cargarPlan limpia planMsg al empezar.
+        await cargarPlan(idMiembro);
+        if (enPantalla()) {
+          setPlanMsg(data.message || (accion === 'congelar' ? 'Membresía congelada.' : 'Membresía descongelada.'));
+        }
+      }
       await load(q, filtro === 'desactivados');
     } catch (err) {
-      setPlanError(err.message || 'No pudimos cambiar el congelamiento.');
+      const motivo = err.message || 'No pudimos cambiar el congelamiento.';
+      if (enPantalla()) setPlanError(motivo);
+      // Sin su ficha en pantalla, el error va al aviso de la pagina: no se pierde.
+      else setError(`No se pudo ${accion === 'congelar' ? 'congelar' : 'descongelar'} la membresía de ${nombre}: ${motivo}`);
     } finally {
       setCongelando(false);
     }
@@ -811,9 +960,14 @@ export default function MiembrosPage() {
       return setPlanError('Lo pagado no puede superar el valor del plan.');
     }
 
+    // Igual que al congelar: la respuesta solo vale para la ficha de ese miembro.
+    const pedido = fichaPedida.current;
+    const idMiembro = editing.id_miembro;
+    const nombre = editing.nombre;
+    const enPantalla = () => pedido === fichaPedida.current || fichaMiembro.current === idMiembro;
     setPlanGuardando(true);
     try {
-      await api.put(`/admin/miembros/${editing.id_miembro}/plan`, {
+      await api.put(`/admin/miembros/${idMiembro}/plan`, {
         tipo_plan: planForm.tipo_plan,
         fecha_inicio: convertToISODate(planForm.fecha_inicio),
         fecha_fin: convertToISODate(planForm.fecha_fin),
@@ -823,11 +977,16 @@ export default function MiembrosPage() {
         referencia_pago: planForm.referencia_pago || '',
         proxima_fecha_cobro: convertToISODate(calcularProximaFechaCobro(planForm.fecha_fin)),
       });
-      await cargarPlan(editing.id_miembro);
-      setPlanMsg('Plan actualizado.');
+      if (enPantalla()) {
+        await cargarPlan(idMiembro);
+        if (enPantalla()) setPlanMsg('Plan actualizado.');
+      }
       await load(q, filtro === 'desactivados');
     } catch (err) {
-      setPlanError(err.message || 'No pudimos guardar el plan.');
+      const motivo = err.message || 'No pudimos guardar el plan.';
+      if (enPantalla()) setPlanError(motivo);
+      // Sin su ficha en pantalla, el error va al aviso de la pagina: no se pierde.
+      else setError(`No se guardó el plan de ${nombre}: ${motivo}`);
     } finally {
       setPlanGuardando(false);
     }
@@ -843,24 +1002,27 @@ export default function MiembrosPage() {
     e.stopPropagation();                 // no abrir la ficha al mismo tiempo
     const w = m.whatsapp;
     if (!w?.telefono) return;
-    window.open(
-      `https://wa.me/${w.telefono}?text=${encodeURIComponent(w.mensaje || '')}`,
-      '_blank',
-      'noopener,noreferrer'
-    );
-    setContactados((prev) => new Set(prev).add(m.id_miembro));
     setAvisoEnvio('');
-    try {
-      // mensaje: el texto que se abrio en WhatsApp (va a mensaje_copiado).
-      await api.post('/admin/notificaciones/enviado', {
+    // RQNF-16 (Ley 2300 de 2023): se registra antes de abrir el chat; el
+    // servidor revisa el horario, la frecuencia y, si es de retencion, que el
+    // miembro haya aceptado mensajes comerciales. Si no, no se abre.
+    const r = await abrirWhatsappAutorizado(async () => {
+      // mensaje: el texto que se abre en WhatsApp (va a mensaje_copiado).
+      const { data } = await api.post('/admin/notificaciones/enviado', {
         idMiembro: m.id_miembro,
         canal: 'WHATSAPP',
         tipo: w.motivo,
         mensaje: w.mensaje,
+        antesDeAbrir: true,
       });
-    } catch (_) {
-      // El mensaje ya se abrio; solo se avisa que no quedo registrado.
-      setAvisoEnvio(`Se abrió WhatsApp, pero no pudimos registrar el envío a ${m.nombre}.`);
+      return `https://wa.me/${w.telefono}?text=${encodeURIComponent(data.mensaje || w.mensaje || '')}`;
+    });
+    if (r.ok) {
+      setContactados((prev) => new Set(prev).add(m.id_miembro));
+    } else {
+      setAvisoEnvio(r.error?.code === 'CONTACTO_NO_PERMITIDO'
+        ? `No se abrió WhatsApp: ${r.error.message}`
+        : `No se abrió WhatsApp porque no pudimos registrar el envío a ${m.nombre}. Intenta de nuevo.`);
     }
   };
 
@@ -892,11 +1054,16 @@ export default function MiembrosPage() {
   const copiarCodigoQr = async () => {
     const codigo = editing?.codigo_qr;
     if (!codigo) return;
+    const pedido = fichaPedida.current;
     try {
       await navigator.clipboard.writeText(codigo);
+      // La persona salio, cerro la ficha o abrio otra mientras se copiaba.
+      if (!montada.current || pedido !== fichaPedida.current) return;
       setQrCopiado(true);
-      setTimeout(() => setQrCopiado(false), 2000);
+      clearTimeout(avisoQrCopiado.current);
+      avisoQrCopiado.current = setTimeout(() => setQrCopiado(false), 2000);
     } catch (_) {
+      if (!montada.current || pedido !== fichaPedida.current) return;
       setEditError('Tu navegador bloqueó el portapapeles. Copia el código a mano.');
     }
   };
@@ -909,6 +1076,7 @@ export default function MiembrosPage() {
    */
   const enviarContratoPorWhatsapp = async () => {
     if (!editing?.id_miembro || enviandoContrato) return;
+    const pedido = fichaPedida.current;
     setEnviandoContrato(true);
     setEditError('');
     try {
@@ -916,6 +1084,7 @@ export default function MiembrosPage() {
         `/admin/miembros/${editing.id_miembro}/contrato/enviar`,
         { version: 'v1' }
       );
+      if (pedido !== fichaPedida.current) return; // la respuesta llego con otra ficha, o sin ficha
       const data = r.data || r;
       if (data.exito) {
         setEditInfo(`Contrato enviado al ${data.telefono}.`);
@@ -932,6 +1101,7 @@ export default function MiembrosPage() {
         );
       }
     } catch (err) {
+      if (pedido !== fichaPedida.current) return;
       setEditError(err.response?.data?.error || err.message || 'No se pudo enviar el contrato.');
     } finally {
       setEnviandoContrato(false);
@@ -940,6 +1110,11 @@ export default function MiembrosPage() {
 
   const closeEdit = () => {
     if (editSaving) return;
+    fichaPedida.current += 1; // una respuesta que llegue tarde ya no aplica
+    fichaMiembro.current = null;
+    clearTimeout(avisoQrCopiado.current);
+    setEditCompleto(false);
+    setEditLoading(false);
     setEditing(null);
     setPlanForm(null);
     setPlanMsg(''); setPlanError('');
@@ -947,6 +1122,7 @@ export default function MiembrosPage() {
     setMotivoCongelar('');
     setEditForm(empty);
     setEditError('');
+    setErrorClaveEdit('');
     setEditInfo('');
     setEditQr('');
     setQrCopiado(false);
@@ -955,9 +1131,24 @@ export default function MiembrosPage() {
 
   const onSaveEdit = async (e) => {
     e.preventDefault();
-    if (!editing) return;
+    if (!editing || !editCompleto) return;
     setEditError('');
+    // RQF-15: una contrasena de la app muy corta no se envia; el backend la
+    // rechazaria con un 400 y la persona no sabria cual campo arreglar.
+    const errorClave = errorContrasenaApp(editForm.password);
+    if (errorClave) {
+      setErrorClaveEdit(errorClave);
+      // «Guardar cambios» esta en el pie del modal: si la persona bajo por la
+      // ficha, el campo y su aviso pueden haber quedado fuera de la vista.
+      campoClaveFicha.current?.focus();
+      campoClaveFicha.current?.scrollIntoView?.({ block: 'center' });
+      return;
+    }
     setEditSaving(true);
+    // Si este guardado llevaba la decision comercial y falla en el cliente,
+    // el servidor pudo haberla aplicado (un corte por tiempo, por ejemplo).
+    let llevabaComerciales = false;
+    let llevabaSensibles = [];
     try {
       /* Solo se envian los campos que el backend acepta actualizar. El
          formulario arrastra claves del objeto `empty` (plan, pagos...) que
@@ -973,13 +1164,48 @@ export default function MiembrosPage() {
       for (const k of EDITABLES) {
         if (editForm[k] !== undefined) payload[k] = editForm[k];
       }
+      // RQF-15: la contrasena de la app solo viaja si se escribio una; vacia,
+      // el backend conserva la que el miembro tenga.
+      if (editForm.password) payload.password = editForm.password;
       // Un correo vacio se envia tal cual: el backend lo guarda como null
       // (updateSchema de routes/miembros.js). Si se quitara del payload, borrar
       // el correo en la ficha no tendria efecto y el viejo seguiria guardado.
       // RQNF-17: autorizacion de datos sensibles (desmarcarla la revoca y
       // borra esos datos) y representante legal si es menor.
       Object.assign(payload, payloadLegal(editForm, menorEdit));
+      // RQNF-16: sin cambios en la aceptacion comercial, no viaja (ver comercialesCargados).
+      if (comercialesCargados.current && mismaDecisionComercial(payload, comercialesCargados.current)) {
+        delete payload.acepta_mensajes_comerciales;
+        delete payload.canales_comerciales;
+      }
+      // RQNF-17: sin cambios en la autorizacion de datos sensibles, no viaja; y
+      // cada dato de salud solo viaja si cambio (ver sensiblesCargados), tambien
+      // cuando la autorizacion si cambia: al otorgarla el servidor conserva lo
+      // que haya, y al revocarla lo borra todo. Si solo cambian datos de salud,
+      // van sin la autorizacion y el servidor decide con la vigente.
+      const sensibles = sensiblesCargados.current;
+      if (sensibles) {
+        if (Boolean(payload.autorizo_datos_sensibles) === sensibles.autorizo_datos_sensibles) {
+          delete payload.autorizo_datos_sensibles;
+        }
+        for (const k of ['condiciones_medicas', 'alergias']) {
+          if (sensibles[k] !== NO_SE_SABE && mismoTexto(payload[k], sensibles[k])) delete payload[k];
+        }
+      }
+      llevabaComerciales = 'acepta_mensajes_comerciales' in payload;
+      llevabaSensibles = ['autorizo_datos_sensibles', 'condiciones_medicas', 'alergias'].filter((k) => k in payload);
       const { data: guardado } = await api.put(`/admin/miembros/${editing.id_miembro}`, payload);
+      fichaPedida.current += 1; // lo que llegue tarde de esta ficha ya no aplica
+      fichaMiembro.current = null;
+      setEditLoading(false);
+      setEditInfo('');
+      clearTimeout(avisoQrCopiado.current);
+      setQrCopiado(false);
+      setPlanForm(null);
+      setPlanMsg(''); setPlanError('');
+      setCongelaciones([]);
+      setMotivoCongelar('');
+      setEditCompleto(false);
       setEditing(null);
       setEditForm(empty);
       setEditQr('');
@@ -987,10 +1213,62 @@ export default function MiembrosPage() {
       setInfo(guardado?.message || 'Miembro actualizado.');
       load(q);
     } catch (err) {
+      // Si el servidor rechazo el guardado (400 a 499), no aplico nada: lo
+      // cargado sigue valiendo. Con cualquier otro fallo (sin conexion, corte
+      // por tiempo, 5xx) ya no se sabe que quedo en el servidor.
+      const rechazado = err.status >= 400 && err.status < 500;
+      if (!rechazado) {
+        // El siguiente guardado manda la decision que haya en pantalla, aunque
+        // sea igual a como llego.
+        if (llevabaComerciales) comercialesCargados.current = null;
+        // Lo mismo con los datos sensibles. Si el guardado llevaba la
+        // autorizacion, se olvida todo; si solo llevaba textos de salud, se
+        // olvidan esos textos y la autorizacion sigue sin viajar.
+        if (llevabaSensibles.includes('autorizo_datos_sensibles')) {
+          sensiblesCargados.current = null;
+        } else if (llevabaSensibles.length > 0 && sensiblesCargados.current) {
+          sensiblesCargados.current = {
+            ...sensiblesCargados.current,
+            ...Object.fromEntries(llevabaSensibles.map((k) => [k, NO_SE_SABE])),
+          };
+        }
+      }
       setEditError(err.message || 'No se pudo actualizar.');
     } finally {
       setEditSaving(false);
     }
+  };
+
+  /** Deja el asistente del alta en blanco: de un miembro al siguiente no pasa nada. */
+  const reiniciarAlta = () => {
+    setForm(formularioVacio());
+    setFormErrors({});
+    setError(''); // «Revisa los campos marcados…» o el error del servidor eran del alta anterior
+    setActiveSection('personales');
+  };
+
+  /** Abre el alta, siempre en blanco y con la fecha de hoy. */
+  const abrirAlta = () => {
+    reiniciarAlta();
+    setOpen(true);
+  };
+
+  /**
+   * Cierra el alta sin crear al miembro y descarta lo escrito. Los datos y las
+   * autorizaciones (contrato, tratamiento de datos, datos sensibles, mensajes
+   * comerciales) son de la persona que se estaba registrando: si quedaran en el
+   * formulario, el siguiente miembro podria salir con autorizaciones que no dio.
+   */
+  const cerrarAlta = () => {
+    // Con el miembro creandose no se cierra: se crearia igual, y su respuesta
+    // caeria sobre el alta que hubiera abierta en ese momento.
+    if (submitting) return;
+    if (hayBorrador(form)
+      && !window.confirm('¿Cerrar sin crear el miembro? Se descarta lo que escribiste: el siguiente registro empieza en blanco.')) {
+      return;
+    }
+    reiniciarAlta();
+    setOpen(false);
   };
 
   const filtrados = useMemo(() => {
@@ -999,6 +1277,7 @@ export default function MiembrosPage() {
     return items.filter((m) => {
       if (filtro === 'al-dia')    return !m.vencido && !m.vencePronto && !m.enRiesgo && !m.congelada;
       if (filtro === 'vence')     return !!m.vencePronto;
+      if (filtro === 'vence30')   return venceEn30(m);
       if (filtro === 'vencido')   return !!m.vencido;
       if (filtro === 'riesgo')    return !!m.enRiesgo;
       if (filtro === 'congelado') return !!m.congelada;
@@ -1010,6 +1289,7 @@ export default function MiembrosPage() {
     todos: items.filter(m => m.activo).length,
     'al-dia': items.filter((m) => m.activo && !m.vencido && !m.vencePronto && !m.enRiesgo && !m.congelada).length,
     vence: items.filter((m) => m.activo && m.vencePronto).length,
+    vence30: items.filter((m) => m.activo && venceEn30(m)).length,
     vencido: items.filter((m) => m.activo && m.vencido).length,
     riesgo: items.filter((m) => m.activo && m.enRiesgo).length,
     congelado: items.filter((m) => m.activo && m.congelada).length,
@@ -1037,7 +1317,7 @@ export default function MiembrosPage() {
       titulo="Sin miembros que mostrar"
       descripcion="No hay miembros que coincidan con el filtro actual."
       ctaLabel="Nuevo miembro"
-      onCta={() => setOpen(true)}
+      onCta={() => { if (!open) abrirAlta(); }}
     />
   );
 
@@ -1055,12 +1335,8 @@ export default function MiembrosPage() {
           </button>
           <button
             className="btn btn-primary"
-            onClick={() => setOpen((o) => {
-              /* Al abrir, refresca la fecha de inicio por si la pestana
-                 llevaba horas abierta y ya cambio el dia. */
-              if (!o) setForm((f) => ({ ...f, fecha_inicio: hoyEnTexto() }));
-              return !o;
-            })}
+            onClick={() => (open ? cerrarAlta() : abrirAlta())}
+            disabled={open && submitting}
           >
             <span className="material-symbols-outlined icon" aria-hidden="true">{open ? 'close' : 'person_add'}</span>
             {open ? 'Cerrar' : 'Nuevo miembro'}
@@ -1230,6 +1506,29 @@ export default function MiembrosPage() {
                       aria-invalid={formErrors.email ? 'true' : undefined}
                     />
                     <ErrorCampo msg={formErrors.email} />
+                  </label>
+                </div>
+                {/* RQF-15: el miembro entra a la app con su telefono y esta contrasena. */}
+                <div className="auth-form-row">
+                  <label className="field" style={{ flex: 1 }}>
+                    <span id="etiqueta-clave-alta" className="field-label">Contraseña de la app</span>
+                    <input
+                      className={`field-input${formErrors.password ? ' field-input--error' : ''}`}
+                      type="password"
+                      autoComplete="new-password"
+                      value={form.password}
+                      onChange={(e) => handleFormChange('password', e.target.value)}
+                      placeholder="Opcional, mínimo 6 caracteres"
+                      aria-invalid={formErrors.password ? 'true' : undefined}
+                      aria-labelledby="etiqueta-clave-alta"
+                      aria-describedby="ayuda-clave-alta"
+                    />
+                    <ErrorCampo msg={formErrors.password} />
+                    <span id="ayuda-clave-alta" className="field-hint">
+                      Con su teléfono y esta contraseña el miembro entra a la app FitLoyalty. Si la dejas vacía, se la puedes asignar después en su ficha.
+                      {form.password && !telefonoSirveParaApp(form.telefono)
+                        && ' Con este teléfono no podrá entrar: la app pide 10 dígitos que empiecen por 3.'}
+                    </span>
                   </label>
                 </div>
                 <div className="auth-form-row">
@@ -1548,6 +1847,14 @@ export default function MiembrosPage() {
                   Datos sensibles (salud): {form.autorizo_datos_sensibles ? 'autorizados' : 'no autorizados'}.
                   {' '}Es opcional y se marca en «Salud y emergencia».
                 </p>
+                {/* RQNF-16: opcional; solo si el miembro lo acepta en ese momento. */}
+                <CasillaMensajesComerciales
+                  checked={form.acepta_mensajes_comerciales}
+                  onChange={(v) => handleFormChange('acepta_mensajes_comerciales', v)}
+                  canales={form.canales_comerciales}
+                  onCanales={(v) => handleFormChange('canales_comerciales', v)}
+                  menor={menorAlta}
+                />
               </div>
             )}
 
@@ -1779,15 +2086,36 @@ export default function MiembrosPage() {
                     <dd><code>{m.codigo_qr}</code></dd>
                   </div>
                 </dl>
+                {/* Las acciones de la tabla: aqui no hay fila que tocar, asi que la ficha lleva boton
+                    (un miembro desactivado se reactiva en ella, con «Miembro activo»). */}
                 <footer className="miembro-card__actions">
                   <button
-                    className="btn btn-ghost btn-sm"
-                    onClick={() => askDeactivate(m)}
-                    aria-label={`Desactivar a ${m.nombre}`}
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => openEdit(m)}
+                    aria-label={`Ver ficha de ${m.nombre}`}
                   >
-                    <span className="material-symbols-outlined icon" aria-hidden="true">person_remove</span>
-                    Desactivar
+                    <span className="material-symbols-outlined icon" aria-hidden="true">badge</span>
+                    Ver ficha
                   </button>
+                  {m.activo ? (
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => askDeactivate(m)}
+                      aria-label={`Desactivar a ${m.nombre}`}
+                    >
+                      <span className="material-symbols-outlined icon" aria-hidden="true">person_remove</span>
+                      Desactivar
+                    </button>
+                  ) : (
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => askDelete(m)}
+                      aria-label={`Eliminar permanentemente a ${m.nombre}`}
+                    >
+                      <span className="material-symbols-outlined icon" aria-hidden="true">delete_forever</span>
+                      Eliminar
+                    </button>
+                  )}
                 </footer>
               </CardGlass>
             );
@@ -1819,7 +2147,7 @@ export default function MiembrosPage() {
               form="miembros-edit-form"
               className="btn btn-primary ripple-host"
               onClick={guardarRipple}
-              disabled={editSaving}
+              disabled={editSaving || !editCompleto}
             >
               <span className="material-symbols-outlined icon" aria-hidden="true">save</span>
               {editSaving ? 'Guardando...' : 'Guardar cambios'}
@@ -1892,6 +2220,11 @@ export default function MiembrosPage() {
           {editLoading && (
             <p className="field-hint" style={{ marginBottom: 12 }}>
               Cargando los datos completos del miembro…
+            </p>
+          )}
+          {editing && !editLoading && !editCompleto && (
+            <p className="field-hint" role="status" style={{ marginBottom: 12 }}>
+              No se cargaron los datos completos del miembro, así que no se pueden guardar cambios. Cierra la ficha y vuelve a abrirla.
             </p>
           )}
 
@@ -2118,6 +2451,36 @@ export default function MiembrosPage() {
               />
             </label>
           </div>
+          {/* RQF-15: la ficha solo sabe si ya hay contrasena de la app (password_asignada), nunca cual es. */}
+          <div className="auth-form-row">
+            <label className="field" style={{ flex: 1 }}>
+              <span id="etiqueta-clave-ficha" className="field-label">Contraseña de la app</span>
+              <input
+                ref={campoClaveFicha}
+                className={`field-input${errorClaveEdit ? ' field-input--error' : ''}`}
+                aria-labelledby="etiqueta-clave-ficha"
+                type="password"
+                autoComplete="new-password"
+                value={editForm.password || ''}
+                onChange={(e) => {
+                  const valor = e.target.value;
+                  setErrorClaveEdit('');
+                  setEditForm((f) => ({ ...f, password: valor }));
+                }}
+                placeholder={editing?.password_asignada ? 'Escribe una nueva solo si quieres cambiarla' : 'Mínimo 6 caracteres'}
+                aria-invalid={errorClaveEdit ? 'true' : undefined}
+                aria-describedby="ayuda-clave-ficha"
+              />
+              <ErrorCampo msg={errorClaveEdit} />
+              <span id="ayuda-clave-ficha" className="field-hint">
+                {avisoContrasenaFicha({
+                  passwordAsignada: editing?.password_asignada,
+                  appAcceso: editing?.app_acceso,
+                  telefono: editForm.telefono,
+                })}
+              </span>
+            </label>
+          </div>
           <div className="auth-form-row">
             <label className="field">
               <span className="field-label">Tipo de documento</span>
@@ -2256,6 +2619,18 @@ export default function MiembrosPage() {
               />
             </label>
           </div>
+          {/* RQNF-16 (Ley 2300 de 2023): el interruptor de mensajes comerciales.
+              Apagarlo y guardar da de baja al miembro; queda en el historial. */}
+          <CasillaMensajesComerciales
+            checked={editForm.acepta_mensajes_comerciales}
+            onChange={(v) => setEditForm((f) => ({ ...f, acepta_mensajes_comerciales: v }))}
+            canales={editForm.canales_comerciales}
+            onCanales={(v) => setEditForm((f) => ({ ...f, canales_comerciales: v }))}
+            menor={menorEdit}
+            aviso={editing?.acepta_mensajes_comerciales && !editForm.acepta_mensajes_comerciales
+              ? 'Al guardar, el miembro deja de recibir campañas y mensajes de retención. Queda constancia en el historial.'
+              : null}
+          />
           <details style={{ marginBottom: 8 }}>
             <summary className="field-label" style={{ cursor: 'pointer' }}>Historial de autorizaciones</summary>
             <HistorialAutorizaciones historial={autorizacionesEdit?.historial} />

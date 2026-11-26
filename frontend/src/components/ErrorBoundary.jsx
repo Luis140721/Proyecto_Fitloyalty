@@ -47,7 +47,7 @@ export default class ErrorBoundary extends Component {
             No te preocupes, tu informacion esta a salvo. Puedes recargar la pagina
             o volver al inicio e intentar de nuevo.
           </p>
-          {process.env.NODE_ENV !== 'production' && this.state.error && (
+          {!import.meta.env.PROD && this.state.error && (
             <pre className="error-boundary__stack">
               {String(this.state.error && this.state.error.message)}
               {'\n\n'}

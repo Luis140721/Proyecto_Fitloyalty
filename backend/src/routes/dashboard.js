@@ -70,7 +70,7 @@ function enHoraLocal(columna) {
   return `((${columna}) AT TIME ZONE current_setting('TimeZone')) AT TIME ZONE '${ZONA_GIMNASIO}'`;
 }
 
-/** Inicio del dia ('day') o de la semana ('week', desde el lunes) de Colombia, menos N dias. */
+/** Inicio del dia ('day'), de la semana ('week', desde el lunes) o del mes ('month') de Colombia, menos N dias. */
 function inicioLocal(unidad, diasAtras = 0) {
   return `((date_trunc('${unidad}', now() AT TIME ZONE '${ZONA_GIMNASIO}') - INTERVAL '${diasAtras} days')`
     + ` AT TIME ZONE '${ZONA_GIMNASIO}') AT TIME ZONE current_setting('TimeZone')`;
@@ -162,8 +162,11 @@ router.get(
     const gymId = req.user.gymId;
 
     try {
+      // nuevos_mes: los que se registraron este mes (mes de Colombia) y siguen activos.
       const totalMiembros = await pool.query(
-        'SELECT COUNT(*)::int AS total FROM miembro WHERE id_gimnasio = $1 AND activo = TRUE',
+        `SELECT COUNT(*)::int AS total,
+                COUNT(*) FILTER (WHERE fecha_registro >= ${inicioLocal('month')})::int AS nuevos_mes
+           FROM miembro WHERE id_gimnasio = $1 AND activo = TRUE`,
         [gymId]
       );
       // Mismo corte que "Hoy" en las horas pico: el dia de Colombia.
@@ -207,12 +210,12 @@ router.get(
         [gymId]
       );
 
-      // enRiesgoList: top 4 miembros sin ir 15+ dias (o nunca), con monto del ultimo plan.
-      // Si no tienen membresia, se usa 89900 como plan default (basico mensual).
+      // enRiesgoList: top 4 miembros sin ir 15+ dias (o nunca), con monto del ultimo plan
+      // (null si no tiene plan: no se inventa un valor).
       const enRiesgoList = await pool.query(
         `SELECT m.nombre::text AS nombre,
                 (CURRENT_DATE - MAX(c.fecha_hora)::date)::int AS dias_sin,
-                COALESCE(p.valor_total, 89900)::int AS monto
+                p.valor_total::int AS monto
            FROM miembro m
            LEFT JOIN checkin c ON c.id_miembro = m.id_miembro
            LEFT JOIN LATERAL (
@@ -258,11 +261,12 @@ router.get(
         [gymId]
       );
 
+      // Solo los de hoy: la tarjeta dice "Los ultimos check-ins del dia".
       const recientes = await pool.query(
         `SELECT c.id_checkin, c.fecha_hora, c.metodo, m.nombre, m.codigo_qr
            FROM checkin c
            INNER JOIN miembro m ON m.id_miembro = c.id_miembro
-          WHERE c.id_gimnasio = $1
+          WHERE c.id_gimnasio = $1 AND c.fecha_hora >= ${inicioLocal('day')}
           ORDER BY c.fecha_hora DESC LIMIT 8`,
         [gymId]
       );
@@ -307,6 +311,7 @@ router.get(
 
       return res.json({
         totalMiembros: total,
+        nuevosMes: totalMiembros.rows[0].nuevos_mes,
         checkinsHoy: checkinsHoy.rows[0].total,
         vencen7: vencen7.rows[0].total,
         retention,

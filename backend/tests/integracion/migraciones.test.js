@@ -32,6 +32,25 @@ describeConBd('migraciones contra la BD de pruebas', () => {
     expect(await aplicadas()).toEqual(expect.arrayContaining(archivos));
   });
 
+  // RQNF-05: los indices de ConsultasDB (el esquema de produccion) tambien en
+  // una base creada solo con las migraciones (021).
+  test('quedan los indices de produccion, con sus columnas', async () => {
+    const sql = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'ConsultasDB', 'Query_Inicial_Crear_Tablas.sql'), 'utf8');
+    const deProduccion = [...sql.matchAll(/^CREATE INDEX (\w+) ON (\w+)\s*\(([^)]+)\)/gm)]
+      .map(([, nombre, tabla, columnas]) => ({ nombre, tabla, columnas: columnas.replace(/\s+/g, ' ').trim() }));
+    const { rows } = await pool.query(
+      "SELECT indexname, tablename, indexdef FROM pg_indexes WHERE schemaname = 'public' AND indexname = ANY($1)",
+      [deProduccion.map((i) => i.nombre)],
+    );
+    const enLaBase = Object.fromEntries(rows.map((r) => [r.indexname, r]));
+
+    expect(deProduccion.length).toBeGreaterThanOrEqual(15);
+    for (const { nombre, tabla, columnas } of deProduccion) {
+      expect(enLaBase[nombre]).toMatchObject({ tablename: tabla });
+      expect(enLaBase[nombre].indexdef.replace(/\s+/g, ' ')).toContain(`(${columnas})`);
+    }
+  });
+
   test('aplicarlas otra vez no repite ninguna', async () => {
     const { applyMigrations } = require('../../src/db/migrate');
     const antes = await aplicadas();

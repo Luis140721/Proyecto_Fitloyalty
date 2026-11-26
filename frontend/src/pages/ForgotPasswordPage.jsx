@@ -231,7 +231,7 @@ export default function ForgotPasswordPage() {
                 <br />
                 Tu código es <code className="dev-code">{devCodeShown}</code>
                 {devCodeReason === 'demo-mode' && <> (visible porque el backend está en modo demo)</>}
-                {devCodeReason !== 'demo-mode' && <> (visible porque Resend no pudo entregar)</>}
+                {devCodeReason !== 'demo-mode' && <> (visible porque el correo no se pudo enviar)</>}
               </div>
             </div>
           )}

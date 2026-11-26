@@ -1,13 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 import { api } from '../api';
 import { useAuth } from '../context/AuthContext';
-import EmptyState from '../components/EmptyState';
 import PageTransition from '../components/PageTransition';
 import Ripple from '../components/Ripple';
 import { armarPayloadCheckin } from '../lib/checkin';
 
-const COP = (n) => '$' + Number(n || 0).toLocaleString('es-CO');
 
 // Vibration API helper — silencioso si no esta disponible.
 function vibrate(pattern) {
@@ -62,17 +60,20 @@ export default function CheckinPage() {
   // que la que ya esta en pantalla.
   const ultimaCargaPedidaRef = useRef(0);
   const cargaEnPantallaRef = useRef(0);
+  // Para decir "Aún no hay ingresos hoy" solo despues de la primera carga buena.
+  const [historialCargado, setHistorialCargado] = useState(false);
 
   const loadRecent = async () => {
     const carga = ++ultimaCargaPedidaRef.current;
     try {
-      const { data } = await api.get('/admin/checkin', { params: { limit: 20 } });
+      const { data } = await api.get('/admin/checkin', { params: { dia: 'hoy', limit: 200 } });
       if (carga < cargaEnPantallaRef.current) return false;
       cargaEnPantallaRef.current = carga;
       const next = data.checkins || [];
       const previousIds = knownIdsRef.current;
       const newOnTop = next.length > 0 && previousIds.size > 0 && !previousIds.has(next[0].id_checkin);
       setRecent(next);
+      setHistorialCargado(true);
       if (previousIds.size === 0) {
         next.forEach((c) => previousIds.add(c.id_checkin));
       }
@@ -278,11 +279,6 @@ export default function CheckinPage() {
 
   const registrarRipple = Ripple({ opacity: 0.35 });
 
-  const seenIds = useMemo(() => {
-    const set = new Set();
-    recent.forEach((c) => set.add(c.id_checkin));
-    return set;
-  }, [recent]);
 
   return (
     <PageTransition>
@@ -465,13 +461,19 @@ export default function CheckinPage() {
               <span className="checkin-feed__live anim-pulse">EN VIVO</span>
             </div>
           </div>
-          {/* Lista con nombre: el lector de pantalla la anuncia como "Ingresos de hoy" y cuenta las filas. */}
+          {historialCargado && recent.length === 0 && (
+            <p style={{ padding: '0 24px 12px', color: 'var(--on-surface-variant)' }}>Aún no hay ingresos hoy.</p>
+          )}
+          {/* Lista con nombre: el lector de pantalla la anuncia como "Ingresos de hoy" y cuenta las filas.
+              Con muchos ingresos se desplaza por dentro (tabIndex para hacerlo con el teclado; el aro
+              de foco va hacia adentro porque la tarjeta recorta lo que se sale). */}
           <div
             role="list"
             aria-labelledby="checkin-ingresos-titulo"
-            style={{ padding: '8px 24px 24px', display: 'flex', flexDirection: 'column', gap: 12 }}
+            tabIndex={recent.length > 0 ? 0 : undefined}
+            style={{ padding: '8px 24px 24px', display: 'flex', flexDirection: 'column', gap: 12, maxHeight: '70vh', overflowY: 'auto', outlineOffset: -2 }}
           >
-            {recent.map((c, idx) => {
+            {recent.map((c) => {
               const denied = c.advertencia || c.denegado;
               return (
                 <div role="listitem" className={`checkin-tile ${denied ? 'checkin-tile--denied' : ''}`} key={c.id_checkin}>

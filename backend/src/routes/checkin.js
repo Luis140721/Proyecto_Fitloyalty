@@ -15,6 +15,7 @@ const { registrarAccesoBloqueado } = require('../lib/accesos');
 const { calcularGamificacion } = require('../lib/gamificacion');
 const { actualizarRetos, mensajeRetos } = require('../lib/retos');
 const { leerToken, codigoValido } = require('../lib/qr-dinamico');
+const { INICIO_HOY } = require('../lib/segmentos');
 const { z } = require('zod');
 const { formatZodError } = require('../lib/validators');
 
@@ -40,7 +41,7 @@ function decryptQrCode(encrypted) {
     let decrypted = decipher.update(encryptedText, 'hex', 'utf8');
     decrypted += decipher.final('utf8');
     return decrypted;
-  } catch (e) {
+  } catch {
     return encrypted;
   }
 }
@@ -118,7 +119,8 @@ router.post(
   asyncHandler(async (req, res) => {
     const parsed = parse(checkinSchema, req.body);
     if (!parsed.ok) throw new AppError(parsed.status, parsed.error, 'VALIDATION_ERROR', { issues: parsed.issues });
-    let { codigo, documento, metodo, observacion } = parsed.data;
+    const { documento, observacion } = parsed.data;
+    let { codigo, metodo } = parsed.data;
     const gymId = req.user.gymId;
 
     // QR dinamico de la app (FLD<id>T<8 digitos>): se reconoce antes de
@@ -182,7 +184,7 @@ router.post(
             try {
               const decrypted = decryptQrCode(m.codigo_qr);
               return decrypted === codigo;
-            } catch (e) {
+            } catch {
               return false;
             }
           });
@@ -316,6 +318,7 @@ router.post(
 
 // ---------------------------------------------------------------------------
 // GET /api/admin/checkin  (historial reciente)
+//   ?dia=hoy -> solo los ingresos de hoy (dia de Colombia): "Ingresos de hoy"
 // ---------------------------------------------------------------------------
 router.get(
   '/admin/checkin',
@@ -325,6 +328,7 @@ router.get(
   asyncHandler(async (req, res) => {
     const gymId = req.user.gymId;
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
+    const soloHoy = req.query.dia === 'hoy' ? `AND c.fecha_hora >= ${INICIO_HOY}` : '';
 
     try {
       const { rows } = await pool.query(
@@ -332,7 +336,7 @@ router.get(
                 m.id_miembro, m.nombre, m.documento, m.codigo_qr
          FROM checkin c
          INNER JOIN miembro m ON m.id_miembro = c.id_miembro
-         WHERE c.id_gimnasio = $1
+         WHERE c.id_gimnasio = $1 ${soloHoy}
          ORDER BY c.fecha_hora DESC
          LIMIT ${limit}`,
         [gymId]

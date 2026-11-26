@@ -32,6 +32,7 @@
 const express = require('express');
 const bcrypt  = require('bcryptjs');
 const { z }   = require('zod');
+const { largoEnCaracteres } = require('../lib/validators');
 
 const pool = require('../db/db');
 const { authenticate, requireClient } = require('../middleware/auth');
@@ -162,16 +163,37 @@ router.get('/me', asyncHandler(async (req, res) => {
 // PUT /api/cliente/me
 // Editar SOLO los campos que un cliente tiene sentido editar.
 // Nunca deja tocar documento, codigo_qr, ni campos de gestion interna.
+//
+// La app abre estos campos vacios (no los recibe) y los manda todos al guardar:
+// un texto vacio quiere decir "no lo cambie", no "borrelo". Sin esto, cambiar
+// solo el telefono borraba la direccion, el contacto de emergencia y los datos
+// de salud. El correo si llega lleno: vacio quiere decir que no tiene, y se
+// guarda NULL ('' chocaria con el de otro miembro sin correo).
 // ---------------------------------------------------------------------------
+const VACIO_ES_SIN_CAMBIO = [
+  'direccion', 'contacto_emergencia', 'telefono_emergencia', 'condiciones_medicas', 'alergias', 'objetivo',
+];
+
+// Los topes son los de las columnas de miembro (iguales en Neon y en las
+// migraciones): email VARCHAR(150), contacto_emergencia VARCHAR(100),
+// objetivo VARCHAR(50), telefono_emergencia VARCHAR(20). Antes el esquema
+// dejaba pasar mas, la BD respondia 22001 y el miembro veia un 503 (#89).
+// Se mide con largoEnCaracteres, que cuenta igual que PostgreSQL (un emoji es
+// un caracter, no dos). direccion, condiciones y alergias son TEXT.
+const cabe = (n, campo) => z.string({ invalid_type_error: `${campo} debe ser texto.` })
+  .refine((v) => largoEnCaracteres(v) <= n, { message: `${campo} admite máximo ${n} caracteres.` });
+
 const updateMeSchema = z.object({
   telefono:            z.string().regex(/^[3]\d{9}$/, 'Telefono debe ser 10 digitos y empezar por 3').optional(),
-  email:               z.string().email('Correo invalido').optional().or(z.literal('')),
-  direccion:           z.string().max(200).optional(),
-  contacto_emergencia: z.string().max(120).optional(),
-  telefono_emergencia: z.string().max(20).optional(),
-  condiciones_medicas: z.string().max(2000).optional(),
-  alergias:            z.string().max(500).optional(),
-  objetivo:            z.string().max(200).optional(),
+  email:               z.string().email('Correo invalido')
+    .refine((v) => largoEnCaracteres(v) <= 150, { message: 'El correo admite máximo 150 caracteres.' })
+    .optional().or(z.literal('')),
+  direccion:           cabe(200, 'La dirección').optional(),
+  contacto_emergencia: cabe(100, 'El contacto de emergencia').optional(),
+  telefono_emergencia: cabe(20, 'El teléfono de emergencia').optional(),
+  condiciones_medicas: cabe(2000, 'Las condiciones médicas').optional(),
+  alergias:            cabe(500, 'Las alergias').optional(),
+  objetivo:            cabe(50, 'El objetivo').optional(),
   nivel_experiencia:   z.enum(['PRINCIPIANTE', 'INTERMEDIO', 'AVANZADO']).optional(),
 });
 
@@ -181,6 +203,12 @@ router.put('/me', asyncHandler(async (req, res) => {
     throw new AppError(400, parsed.error.issues[0].message, 'VALIDATION_ERROR');
   }
   const data = parsed.data;
+  // RQNF-17: cuenta que la app los mande, aunque vengan vacios (ver descartarSensiblesSinAutorizacion).
+  const mandaSalud = data.condiciones_medicas !== undefined || data.alergias !== undefined;
+  for (const campo of VACIO_ES_SIN_CAMBIO) {
+    if (data[campo] !== undefined && data[campo].trim() === '') delete data[campo];
+  }
+  if (data.email === '') data.email = null;
   if (Object.keys(data).length === 0) {
     throw new AppError(400, 'No hay campos para actualizar.', 'EMPTY_UPDATE');
   }
@@ -200,7 +228,7 @@ router.put('/me', asyncHandler(async (req, res) => {
 
   // RQNF-17: sin la autorizacion de datos sensibles no se guardan
   // condiciones medicas ni alergias (quedan en NULL).
-  const sensiblesDescartados = await descartarSensiblesSinAutorizacion(idMiembro, gymId, data);
+  const sensiblesDescartados = mandaSalud && await descartarSensiblesSinAutorizacion(idMiembro, gymId, data);
 
   const campos = [];
   const params = [];
@@ -630,12 +658,11 @@ const { armarContrato, registrarEntregaApp } = require('../lib/contrato');
  * true si se descarto algo que el miembro escribio.
  */
 async function descartarSensiblesSinAutorizacion(idMiembro, gymId, data) {
-  if (data.condiciones_medicas === undefined && data.alergias === undefined) return false;
   const vigentes = await leerAutorizacionesVigentes(pool, idMiembro, gymId);
   if (autorizacionOtorgada(vigentes, 'DATOS_SENSIBLES')) return false;
   const escribio = Boolean((data.condiciones_medicas || '').trim() || (data.alergias || '').trim());
-  if (data.condiciones_medicas !== undefined) data.condiciones_medicas = null;
-  if (data.alergias !== undefined) data.alergias = null;
+  data.condiciones_medicas = null;
+  data.alergias = null;
   return escribio;
 }
 
