@@ -168,18 +168,22 @@ describeConBd('miembros duplicados contra la BD de pruebas (#87)', () => {
     expect(await activosCon('documento', a.documento)).toBe(1);
   });
 
-  test('en otro gimnasio si puede haber un miembro con el mismo documento', async () => {
-    const a = await crear();
+  test('en otro gimnasio si puede haber un miembro con el mismo documento y el mismo correo', async () => {
     const otro = (await crearGimnasio(pool)).id_gimnasio;
+    const documento = documentoUnico();
+    const email = correo();
     try {
-      await pool.query("INSERT INTO miembro (id_gimnasio, nombre, documento, codigo_qr) VALUES ($1, 'Otra', $2, $3)", [otro, documentoUnico(), unico('QR')]);
-      await pool.query('UPDATE miembro SET documento = $2 WHERE id_gimnasio = $1', [otro, a.documento]);
+      await pool.query("INSERT INTO miembro (id_gimnasio, nombre, documento, email, codigo_qr) VALUES ($1, 'Otra', $2, $3, $4)", [otro, documento, email, unico('QR')]);
       const b = await crear();
 
-      const r = await editar(b.id_miembro, { documento: `${documentoUnico()}` });
+      const nuevo = await alta({ documento: `${documento}`.slice(0, 20), email: email.toUpperCase() });
+      const editado = await editar(b.id_miembro, { documento: `${documentoUnico()}`, email: correo() });
+      const conElDelOtro = await editar(b.id_miembro, { email: `${unico('x')}@fitloyalty.test` });
 
-      expect(r.status).toBe(200);
-      expect(await activosCon('documento', a.documento)).toBe(1);
+      expect(nuevo.status).toBe(201);
+      expect(editado.status).toBe(200);
+      expect(conElDelOtro.status).toBe(200);
+      expect(await activosCon('documento', documento)).toBe(1);
     } finally {
       await pool.query('DELETE FROM miembro WHERE id_gimnasio = $1', [otro]);
       await pool.query('DELETE FROM gimnasio WHERE id_gimnasio = $1', [otro]);

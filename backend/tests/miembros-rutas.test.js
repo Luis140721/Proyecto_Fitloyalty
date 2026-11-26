@@ -589,7 +589,7 @@ describe('GET /api/admin/miembros/:id: the member detail', () => {
 describe('PUT /api/admin/miembros/:id: editing a member', () => {
   // La fila que ya esta guardada: la lee el control de duplicados (RQF-03).
   const GUARDADO = { documento: '1020304050', email: 'ana@vieja.co', activo: true };
-  const FILA_GUARDADA = /SELECT documento, email, activo FROM miembro WHERE id_miembro = \$1 AND id_gimnasio = \$2 FOR UPDATE/;
+  const FILA_GUARDADA = /SELECT documento, email, activo FROM miembro WHERE id_miembro = \$1 AND id_gimnasio = \$2 FOR NO KEY UPDATE/;
   const actualizar = (respuesta = (p) => ({ rows: [{ id_miembro: p[p.length - 2] }] })) => responder(
     [FILA_GUARDADA, filas([GUARDADO])],
     [/SELECT id_miembro FROM miembro/, filas([])],
@@ -654,7 +654,7 @@ describe('PUT /api/admin/miembros/:id: editing a member', () => {
 
     // Assert
     expect(r.status).toBe(200);
-    const orden = mockLlamadas.map(({ sql }) => sql).filter((sql) => /^(BEGIN|COMMIT)$|advisory|FOR UPDATE|SELECT id_miembro FROM miembro|UPDATE miembro/.test(sql));
+    const orden = mockLlamadas.map(({ sql }) => sql).filter((sql) => /^(BEGIN|COMMIT)$|advisory|FOR NO KEY UPDATE|SELECT id_miembro FROM miembro|UPDATE miembro/.test(sql));
     expect(orden).toHaveLength(8);
     expect(orden[0]).toBe('BEGIN');
     expect(orden[1]).toMatch(FILA_GUARDADA);
@@ -781,7 +781,7 @@ describe('PUT /api/admin/miembros/:id: editing a member', () => {
 
     // Assert
     expect(update().params).toEqual([null, 88, 7]);
-    expect(llamadas(/BEGIN|advisory|FOR UPDATE/)).toHaveLength(0);
+    expect(llamadas(/BEGIN|advisory|FOR (NO KEY )?UPDATE/)).toHaveLength(0);
     expect(update().enTransaccion).toBe(false);
   });
 

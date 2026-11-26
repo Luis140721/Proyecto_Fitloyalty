@@ -54,7 +54,8 @@ const puedeDuplicar = (d) => d.documento !== undefined || Boolean(d.email) || d.
  */
 async function exigirSinDuplicadosAlEditar(client, { id, gymId, d }) {
   const { rows } = await client.query(
-    'SELECT documento, email, activo FROM miembro WHERE id_miembro = $1 AND id_gimnasio = $2 FOR UPDATE',
+    // FOR NO KEY UPDATE: basta para el UPDATE y no frena a quien solo apunta al miembro (check-in, planes).
+    'SELECT documento, email, activo FROM miembro WHERE id_miembro = $1 AND id_gimnasio = $2 FOR NO KEY UPDATE',
     [id, gymId]
   );
   if (rows.length === 0) throw new AppError(404, 'Miembro no encontrado', 'MEMBER_NOT_FOUND');
