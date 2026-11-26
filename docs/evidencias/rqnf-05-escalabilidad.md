@@ -1,7 +1,7 @@
 # RQNF-05: varios gimnasios sin perder rendimiento
 
 **Requisito:** «La arquitectura SaaS debe soportar el registro de múltiples gimnasios (multitenancy) sin degradación del rendimiento, permitiendo incorporar nuevos establecimientos sin modificaciones en el código base.»
-**Fecha de la medición:** 2026-11-25 · **Código:** `develop` @ `e4da07a`, más la migración 021 de esta rama.
+**Fecha de la medición:** 2026-11-25 · **Código:** la tabla «antes» con el backend de `develop` @ `799eb60`; la tabla «con la 021», con `develop` @ `e4da07a` más la migración 021 (#138). Entre los dos commits solo entró el #137, que cambia el alta y la edición de miembros y los avisos de vencimiento; nada de lo que se mide aquí.
 **Resultado:** cumple con los índices de producción. Al pasar de 1 a 50 gimnasios en la misma base, los tiempos de un gimnasio casi no cambian. Con una base creada solo con las migraciones de antes, sí se degradaban; la migración 021 lo corrige.
 
 ## Qué pide y qué se mide
@@ -53,17 +53,17 @@ Es la base de Docker, la de pruebas o una instalación nueva. No tenía los índ
 | 10 | 21,9 | 13,8 | 38,4 | 8,1 | 92,3 |
 | 50 | 28,2 | 16,0 | 44,0 | 12,9 | 723,3 |
 
-Registro de un gimnasio nuevo: 82 ms de p95 con 10 gimnasios y 88 ms con 50. El primero de la corrida tardó 199 ms, porque incluye el arranque. Es casi todo el `bcrypt` de la contraseña.
+Registro de un gimnasio nuevo: 82 ms de p95 con 10 gimnasios y 88 ms con 50. Con 1 hubo una sola muestra, de 199 ms, que incluye el arranque.
 
-0 errores en todas las corridas. Las tablas completas (promedio, p50, p95 y máximo) están en la salida del script.
+0 errores en las peticiones de todas las corridas. En las dos del «antes», el borrado del final falló por una llave foránea que esa versión del script no tenía en cuenta; las bases eran desechables y se borraron enteras. Las tablas completas (promedio, p50, p95 y máximo) están en la salida del script.
 
 ## Lectura
 
-- **Con los índices, no hay degradación.** Con 50 veces más datos en la base, el check-in, la lista y el dashboard de un gimnasio tardan lo mismo. Las consultas filtran por `id_gimnasio` o por el miembro y los índices llevan directo a sus filas.
+- **Con los índices, no hay degradación.** Con 50 veces más datos en la base, el check-in, la lista y el dashboard de un gimnasio tardan casi lo mismo (el dashboard, de 39 a 44 ms). Las consultas filtran por `id_gimnasio` o por el miembro y los índices llevan directo a sus filas.
 - **Sin ellos, sí la había.** La lista de miembros y el dashboard buscaban el último ingreso de cada miembro recorriendo todos los ingresos de la base: pasaron de 58 ms a 1,6 s. Con los 50 dashboards a la vez, 12 s.
-- **Producción ya los tenía.** Su base se creó con `ConsultasDB/Query_Inicial_Crear_Tablas.sql`, que los trae. La migración 021 usa los mismos nombres y columnas con `IF NOT EXISTS`: en producción no hace nada, y en las demás bases los crea. La prueba `backend/tests/integracion/migraciones.test.js` comprueba que, después de las migraciones, están todos los índices de ese archivo.
-- **Lo que no sube con los gimnasios:** el registro de un gimnasio tarda lo mismo con 1 que con 50.
-- **Los 50 dashboards a la vez** tardan más (723 ms de p95) que uno solo (44 ms). No es por los datos: el servidor atiende la base con 10 conexiones (el valor por defecto del pool de `pg`) y las 50 peticiones hacen fila. Con 10 a la vez fueron 92 ms. Es carga simultánea, no tamaño de la base, y sigue por debajo de 1 s.
+- **Producción ya los tenía.** Su base se creó con `ConsultasDB/Query_Inicial_Crear_Tablas.sql`, que los trae. La migración 021 usa los mismos nombres y columnas con `IF NOT EXISTS`: en producción no hace nada, y en las demás bases los crea. La prueba `backend/tests/integracion/migraciones.test.js` comprueba que, después de las migraciones, están los 15 `CREATE INDEX` de ese archivo. Las restricciones únicas que ese archivo declara dentro de las tablas (por ejemplo, `miembro (id_gimnasio, documento)`) siguen sin estar en las migraciones: no afectan el rendimiento y quedan en la deuda técnica.
+- **El registro de un gimnasio** tarda lo mismo con 10 que con 50 (82 y 88 ms).
+- **Los 50 dashboards a la vez** tardan más (723 ms de p95) que uno solo (44 ms). Probablemente no es por los datos: el servidor atiende la base con 10 conexiones (el valor por defecto del pool de `pg`), cada dashboard hace 6 consultas seguidas y las 50 peticiones hacen fila. Con 10 a la vez fueron 92 ms, aunque con 10 gimnasios en la base, así que la causa no quedó aislada. En todo caso sigue por debajo de 1 s.
 
 ## Límites de esta medición
 
