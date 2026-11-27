@@ -7,12 +7,12 @@
   },
   "servers": [
     {
-      "url": "https://fitloyalty-api.onrender.com/api",
-      "description": "Producción (Render)"
-    },
-    {
       "url": "http://localhost:3001/api",
       "description": "Local, sin Docker"
+    },
+    {
+      "url": "https://fitloyalty-api.onrender.com/api",
+      "description": "Producción (Render)"
     }
   ],
   "security": [
@@ -415,6 +415,11 @@
             "personal": []
           }
         ],
+        "x-roles": [
+          "admin",
+          "receptionist"
+        ],
+        "x-prueba-gratis": false,
         "responses": {
           "200": {
             "description": "Perfil.",
@@ -473,6 +478,11 @@
             "miembro": []
           }
         ],
+        "x-roles": [
+          "admin",
+          "receptionist"
+        ],
+        "x-prueba-gratis": false,
         "responses": {
           "200": {
             "description": "Sesión cerrada.",
@@ -767,6 +777,11 @@
             "personal": []
           }
         ],
+        "x-roles": [
+          "admin",
+          "receptionist"
+        ],
+        "x-prueba-gratis": false,
         "requestBody": {
           "required": true,
           "content": {
@@ -1085,6 +1100,11 @@
             "personal": []
           }
         ],
+        "x-roles": [
+          "admin",
+          "receptionist"
+        ],
+        "x-prueba-gratis": true,
         "parameters": [
           {
             "name": "page",
@@ -1194,6 +1214,11 @@
             "personal": []
           }
         ],
+        "x-roles": [
+          "admin",
+          "receptionist"
+        ],
+        "x-prueba-gratis": true,
         "requestBody": {
           "required": true,
           "content": {
@@ -1529,6 +1554,11 @@
             "personal": []
           }
         ],
+        "x-roles": [
+          "admin",
+          "receptionist"
+        ],
+        "x-prueba-gratis": true,
         "parameters": [
           {
             "name": "codigo",
@@ -1620,6 +1650,11 @@
             "personal": []
           }
         ],
+        "x-roles": [
+          "admin",
+          "receptionist"
+        ],
+        "x-prueba-gratis": true,
         "parameters": [
           {
             "name": "id",
@@ -1701,6 +1736,11 @@
             "personal": []
           }
         ],
+        "x-roles": [
+          "admin",
+          "receptionist"
+        ],
+        "x-prueba-gratis": true,
         "parameters": [
           {
             "name": "id",
@@ -1967,6 +2007,10 @@
             "personal": []
           }
         ],
+        "x-roles": [
+          "admin"
+        ],
+        "x-prueba-gratis": true,
         "parameters": [
           {
             "name": "id",
@@ -2047,6 +2091,10 @@
             "personal": []
           }
         ],
+        "x-roles": [
+          "admin"
+        ],
+        "x-prueba-gratis": true,
         "parameters": [
           {
             "name": "id",
@@ -2127,6 +2175,11 @@
             "personal": []
           }
         ],
+        "x-roles": [
+          "admin",
+          "receptionist"
+        ],
+        "x-prueba-gratis": true,
         "parameters": [
           {
             "name": "id",
@@ -2201,6 +2254,11 @@
             "personal": []
           }
         ],
+        "x-roles": [
+          "admin",
+          "receptionist"
+        ],
+        "x-prueba-gratis": true,
         "parameters": [
           {
             "name": "id",
@@ -2357,6 +2415,10 @@
             "personal": []
           }
         ],
+        "x-roles": [
+          "admin"
+        ],
+        "x-prueba-gratis": true,
         "parameters": [
           {
             "name": "id",
@@ -2482,6 +2544,10 @@
             "personal": []
           }
         ],
+        "x-roles": [
+          "admin"
+        ],
+        "x-prueba-gratis": true,
         "parameters": [
           {
             "name": "id",
@@ -2581,6 +2647,10 @@
             "personal": []
           }
         ],
+        "x-roles": [
+          "admin"
+        ],
+        "x-prueba-gratis": false,
         "parameters": [
           {
             "name": "id",
@@ -2703,6 +2773,10 @@
             "personal": []
           }
         ],
+        "x-roles": [
+          "admin"
+        ],
+        "x-prueba-gratis": false,
         "parameters": [
           {
             "name": "id",
@@ -2811,6 +2885,10 @@
             "personal": []
           }
         ],
+        "x-roles": [
+          "admin"
+        ],
+        "x-prueba-gratis": false,
         "parameters": [
           {
             "name": "id",
@@ -2895,6 +2973,11 @@
             "personal": []
           }
         ],
+        "x-roles": [
+          "admin",
+          "receptionist"
+        ],
+        "x-prueba-gratis": true,
         "requestBody": {
           "required": true,
           "content": {
@@ -3046,6 +3129,11 @@
             "personal": []
           }
         ],
+        "x-roles": [
+          "admin",
+          "receptionist"
+        ],
+        "x-prueba-gratis": true,
         "parameters": [
           {
             "name": "limit",
@@ -3121,6 +3209,11 @@
             "personal": []
           }
         ],
+        "x-roles": [
+          "admin",
+          "receptionist"
+        ],
+        "x-prueba-gratis": false,
         "responses": {
           "200": {
             "description": "Asistencia.",
@@ -3186,6 +3279,11 @@
             "personal": []
           }
         ],
+        "x-roles": [
+          "admin",
+          "receptionist"
+        ],
+        "x-prueba-gratis": false,
         "parameters": [
           {
             "name": "page",
@@ -3273,6 +3371,10 @@
             "personal": []
           }
         ],
+        "x-roles": [
+          "admin"
+        ],
+        "x-prueba-gratis": true,
         "responses": {
           "200": {
             "description": "Equipo.",
@@ -3322,6 +3424,10 @@
             "personal": []
           }
         ],
+        "x-roles": [
+          "admin"
+        ],
+        "x-prueba-gratis": true,
         "parameters": [
           {
             "name": "id",
@@ -3440,6 +3546,10 @@
             "personal": []
           }
         ],
+        "x-roles": [
+          "admin"
+        ],
+        "x-prueba-gratis": true,
         "requestBody": {
           "required": true,
           "content": {
@@ -3554,6 +3664,10 @@
             "personal": []
           }
         ],
+        "x-roles": [
+          "admin"
+        ],
+        "x-prueba-gratis": true,
         "responses": {
           "200": {
             "description": "Invitaciones; `pendiente` dice cuáles siguen vigentes.",
@@ -3603,6 +3717,10 @@
             "personal": []
           }
         ],
+        "x-roles": [
+          "admin"
+        ],
+        "x-prueba-gratis": true,
         "parameters": [
           {
             "name": "id",
@@ -3692,6 +3810,10 @@
             "personal": []
           }
         ],
+        "x-roles": [
+          "admin"
+        ],
+        "x-prueba-gratis": true,
         "responses": {
           "200": {
             "description": "Métricas.",
@@ -3801,6 +3923,10 @@
             "personal": []
           }
         ],
+        "x-roles": [
+          "admin"
+        ],
+        "x-prueba-gratis": true,
         "parameters": [
           {
             "name": "periodo",
@@ -3907,6 +4033,10 @@
             "personal": []
           }
         ],
+        "x-roles": [
+          "admin"
+        ],
+        "x-prueba-gratis": true,
         "responses": {
           "200": {
             "description": "Archivo CSV (`fitloyalty-export-AAAA-MM-DD.csv`).",
@@ -3954,6 +4084,10 @@
             "personal": []
           }
         ],
+        "x-roles": [
+          "admin"
+        ],
+        "x-prueba-gratis": false,
         "responses": {
           "200": {
             "description": "Diagnóstico.",
@@ -3997,6 +4131,10 @@
             "personal": []
           }
         ],
+        "x-roles": [
+          "admin"
+        ],
+        "x-prueba-gratis": true,
         "responses": {
           "200": {
             "description": "Configuración.",
@@ -4041,6 +4179,10 @@
             "personal": []
           }
         ],
+        "x-roles": [
+          "admin"
+        ],
+        "x-prueba-gratis": true,
         "requestBody": {
           "required": true,
           "content": {
@@ -4182,6 +4324,10 @@
             "personal": []
           }
         ],
+        "x-roles": [
+          "admin"
+        ],
+        "x-prueba-gratis": true,
         "responses": {
           "200": {
             "description": "Hitos.",
@@ -4227,6 +4373,10 @@
             "personal": []
           }
         ],
+        "x-roles": [
+          "admin"
+        ],
+        "x-prueba-gratis": true,
         "requestBody": {
           "required": true,
           "content": {
@@ -4337,6 +4487,10 @@
             "personal": []
           }
         ],
+        "x-roles": [
+          "admin"
+        ],
+        "x-prueba-gratis": true,
         "parameters": [
           {
             "name": "id",
@@ -4461,6 +4615,10 @@
             "personal": []
           }
         ],
+        "x-roles": [
+          "admin"
+        ],
+        "x-prueba-gratis": true,
         "parameters": [
           {
             "name": "id",
@@ -4540,6 +4698,11 @@
             "miembro": []
           }
         ],
+        "x-roles": [
+          "admin",
+          "receptionist"
+        ],
+        "x-prueba-gratis": false,
         "responses": {
           "200": {
             "description": "Estado del periodo de prueba.",
@@ -4612,6 +4775,10 @@
             "personal": []
           }
         ],
+        "x-roles": [
+          "admin"
+        ],
+        "x-prueba-gratis": false,
         "requestBody": {
           "required": false,
           "content": {
@@ -4674,6 +4841,10 @@
             "personal": []
           }
         ],
+        "x-roles": [
+          "admin"
+        ],
+        "x-prueba-gratis": false,
         "responses": {
           "200": {
             "description": "Candidatos.",
@@ -4733,6 +4904,10 @@
             "personal": []
           }
         ],
+        "x-roles": [
+          "admin"
+        ],
+        "x-prueba-gratis": false,
         "requestBody": {
           "required": false,
           "content": {
@@ -4789,7 +4964,7 @@
         ],
         "operationId": "cuentaSuprema",
         "summary": "Mantenimiento: crea o resetea la cuenta suprema",
-        "description": "**Acceso:** 🛠️ Cabecera `X-Admin-Token`.\n\nGimnasio sin periodo de prueba y su administrador. Es idempotente. La respuesta no devuelve la contraseña. Los errores de esta ruta no traen `code`.",
+        "description": "**Acceso:** 🛠️ Cabecera `X-Admin-Token`.\n\nGimnasio sin periodo de prueba y su administrador. Es idempotente. La respuesta no devuelve la contraseña. Los errores 400, 401 y 503 no traen `code`; el 500 trae en `code` el código de PostgreSQL y en `detail` su mensaje.",
         "security": [
           {
             "adminToken": []
@@ -4904,7 +5079,7 @@
             }
           },
           "500": {
-            "description": "Falló la creación; trae el código y el detalle de PostgreSQL.",
+            "description": "Falló la creación: `code` trae el código de PostgreSQL y `detail`, su mensaje.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4939,6 +5114,11 @@
             "personal": []
           }
         ],
+        "x-roles": [
+          "admin",
+          "receptionist"
+        ],
+        "x-prueba-gratis": false,
         "responses": {
           "200": {
             "description": "Avisos.",
@@ -4993,6 +5173,11 @@
             "personal": []
           }
         ],
+        "x-roles": [
+          "admin",
+          "receptionist"
+        ],
+        "x-prueba-gratis": false,
         "parameters": [
           {
             "name": "id",
@@ -5070,6 +5255,11 @@
             "personal": []
           }
         ],
+        "x-roles": [
+          "admin",
+          "receptionist"
+        ],
+        "x-prueba-gratis": false,
         "parameters": [
           {
             "name": "id",
@@ -5147,6 +5337,11 @@
             "personal": []
           }
         ],
+        "x-roles": [
+          "admin",
+          "receptionist"
+        ],
+        "x-prueba-gratis": false,
         "requestBody": {
           "required": true,
           "content": {
@@ -5287,6 +5482,10 @@
             "personal": []
           }
         ],
+        "x-roles": [
+          "admin"
+        ],
+        "x-prueba-gratis": true,
         "responses": {
           "200": {
             "description": "Retos.",
@@ -5334,6 +5533,10 @@
             "personal": []
           }
         ],
+        "x-roles": [
+          "admin"
+        ],
+        "x-prueba-gratis": true,
         "requestBody": {
           "required": true,
           "content": {
@@ -5452,6 +5655,10 @@
             "personal": []
           }
         ],
+        "x-roles": [
+          "admin"
+        ],
+        "x-prueba-gratis": true,
         "parameters": [
           {
             "name": "id",
@@ -5596,6 +5803,10 @@
             "personal": []
           }
         ],
+        "x-roles": [
+          "admin"
+        ],
+        "x-prueba-gratis": true,
         "parameters": [
           {
             "name": "id",
@@ -5674,6 +5885,10 @@
             "personal": []
           }
         ],
+        "x-roles": [
+          "admin"
+        ],
+        "x-prueba-gratis": true,
         "parameters": [
           {
             "name": "id",
@@ -5760,6 +5975,10 @@
             "personal": []
           }
         ],
+        "x-roles": [
+          "admin"
+        ],
+        "x-prueba-gratis": true,
         "parameters": [
           {
             "name": "id",
@@ -5851,6 +6070,10 @@
             "personal": []
           }
         ],
+        "x-roles": [
+          "admin"
+        ],
+        "x-prueba-gratis": true,
         "parameters": [
           {
             "name": "id",
@@ -5959,6 +6182,10 @@
             "personal": []
           }
         ],
+        "x-roles": [
+          "admin"
+        ],
+        "x-prueba-gratis": true,
         "responses": {
           "200": {
             "description": "Plantillas.",
@@ -6014,6 +6241,10 @@
             "personal": []
           }
         ],
+        "x-roles": [
+          "admin"
+        ],
+        "x-prueba-gratis": true,
         "requestBody": {
           "required": true,
           "content": {
@@ -6111,6 +6342,10 @@
             "personal": []
           }
         ],
+        "x-roles": [
+          "admin"
+        ],
+        "x-prueba-gratis": true,
         "parameters": [
           {
             "name": "id",
@@ -6224,6 +6459,10 @@
             "personal": []
           }
         ],
+        "x-roles": [
+          "admin"
+        ],
+        "x-prueba-gratis": true,
         "parameters": [
           {
             "name": "id",
@@ -6302,6 +6541,10 @@
             "personal": []
           }
         ],
+        "x-roles": [
+          "admin"
+        ],
+        "x-prueba-gratis": true,
         "responses": {
           "200": {
             "description": "Campañas.",
@@ -6367,6 +6610,10 @@
             "personal": []
           }
         ],
+        "x-roles": [
+          "admin"
+        ],
+        "x-prueba-gratis": true,
         "requestBody": {
           "required": true,
           "content": {
@@ -6504,6 +6751,10 @@
             "personal": []
           }
         ],
+        "x-roles": [
+          "admin"
+        ],
+        "x-prueba-gratis": true,
         "parameters": [
           {
             "name": "segmento",
@@ -6624,6 +6875,10 @@
             "personal": []
           }
         ],
+        "x-roles": [
+          "admin"
+        ],
+        "x-prueba-gratis": true,
         "parameters": [
           {
             "name": "id",
@@ -6779,6 +7034,10 @@
             "personal": []
           }
         ],
+        "x-roles": [
+          "admin"
+        ],
+        "x-prueba-gratis": true,
         "parameters": [
           {
             "name": "id",
@@ -6907,6 +7166,10 @@
             "personal": []
           }
         ],
+        "x-roles": [
+          "admin"
+        ],
+        "x-prueba-gratis": true,
         "parameters": [
           {
             "name": "id",
@@ -7011,6 +7274,10 @@
             "personal": []
           }
         ],
+        "x-roles": [
+          "admin"
+        ],
+        "x-prueba-gratis": true,
         "parameters": [
           {
             "name": "id",
@@ -7099,6 +7366,10 @@
             "personal": []
           }
         ],
+        "x-roles": [
+          "admin"
+        ],
+        "x-prueba-gratis": true,
         "parameters": [
           {
             "name": "id",
@@ -7188,6 +7459,10 @@
             "personal": []
           }
         ],
+        "x-roles": [
+          "admin"
+        ],
+        "x-prueba-gratis": true,
         "parameters": [
           {
             "name": "id",

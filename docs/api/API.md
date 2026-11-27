@@ -7,7 +7,7 @@
 | Rutas documentadas | 94: las 92 rutas distintas de los routers de `backend/src/routes/` y las 2 de salud de `backend/src/index.js`. `GET /api/admin/diagnostics` está definida en `staff.js` y en `dashboard.js`; responde la de `staff.js`, que se monta primero |
 | Cómo se sacó la lista | Cargando cada router de Express y leyendo su pila de rutas y middlewares, no a mano. Si se agrega una ruta, se agrega aquí en el mismo PR. |
 | Relacionados | [Arquitectura](../arquitectura/ARQUITECTURA.md) · [Colección Postman con tests](../pruebas/postman/README.md) · [Matriz de casos](../pruebas/matriz-casos-prueba.md) |
-| OpenAPI | [`openapi.json`](openapi.json): las mismas 94 rutas en OpenAPI 3.0.3 (Swagger). Para verla, pega su contenido en https://editor.swagger.io o ábrela en VS Code con la extensión OpenAPI (Swagger) Editor. `backend/tests/openapi-rutas.test.js` falla si deja de coincidir con las rutas del código |
+| OpenAPI | [`openapi.json`](openapi.json): las mismas 94 rutas en OpenAPI 3.0.3 (Swagger). Para verla, pega su contenido en https://editor.swagger.io o ábrela en VS Code con la extensión OpenAPI (Swagger) Editor. Cada operación del personal dice su rol (`x-roles`) y si exige la prueba gratis (`x-prueba-gratis`). `backend/tests/openapi-rutas.test.js` falla si deja de coincidir con el código: las rutas, el acceso, el rol de `authorize()` o `requireActiveTrial` |
 
 ## 1. Datos generales
 
@@ -43,7 +43,7 @@ Casi todas las respuestas de error tienen la misma forma:
 { "error": "Mensaje para mostrar al usuario", "code": "CODIGO_ESTABLE", "details": { "issues": [] } }
 ```
 
-`details` aparece en la mayoría de los errores de validación, con la lista de campos que fallaron según el esquema `zod` de la ruta, y también en `CONTACTO_NO_PERMITIDO`, `FUERA_DE_HORARIO`, `CONTRACT_INCOMPLETE` y `REPRESENTANTE_REQUERIDO`. Excepciones: las rutas del contrato responden `{ ok: false, error }` sin `code` (menos el 409 `CONTRACT_INCOMPLETE`), `seed-supremo` no trae `code` y el 503 de `/api/health` no trae `error`.
+`details` aparece en la mayoría de los errores de validación, con la lista de campos que fallaron según el esquema `zod` de la ruta, y también en `CONTACTO_NO_PERMITIDO`, `FUERA_DE_HORARIO`, `CONTRACT_INCOMPLETE` y `REPRESENTANTE_REQUERIDO`. Excepciones: las rutas del contrato responden `{ ok: false, error }` sin `code` (menos el 409 `CONTRACT_INCOMPLETE`), `seed-supremo` no trae `code` (menos el 500, que trae en `code` el código de PostgreSQL y en `detail` su mensaje) y el 503 de `/api/health` no trae `error`.
 
 | Estado | Códigos comunes | Cuándo |
 |---|---|---|
@@ -91,7 +91,7 @@ Casi todas las respuestas de error tienen la misma forma:
 | POST | `/api/auth/forgot-password` | 🌐 | `email` | Envía por correo un código de recuperación de 15 minutos y anula los anteriores. Responde igual exista o no el correo |
 | POST | `/api/auth/verify-reset-code` | 🌐 | `email`, `code` | Valida el código y devuelve `resetToken` para cambiar la contraseña |
 | POST | `/api/auth/reset-password` | 🌐 | `password` y `resetToken` (o `email` y `code`) | Cambia la contraseña |
-| DELETE | `/api/auth/account` | 🔑 | `password`, `reason?` (hasta 1000) | Elimina el gimnasio completo y sus datos. Solo el dueño, confirmando su contraseña: otro admin recibe `403 NOT_OWNER`, quien no es admin `403 NOT_ADMIN` y una contraseña equivocada, `403 WRONG_PASSWORD`. Sin gimnasio en el token, `400 NO_GYM`; si el gimnasio ya no existe, `404 GYM_NOT_FOUND`; si el borrado falla, `500 DELETE_FAILED` |
+| DELETE | `/api/auth/account` | 🔑 | `password`, `reason?` (hasta 1000) | Elimina el gimnasio completo y sus datos. Solo el dueño, confirmando su contraseña: otro admin recibe `403 NOT_OWNER`, quien no es admin `403 NOT_ADMIN` y una contraseña equivocada, `403 WRONG_PASSWORD`. Sin gimnasio en el token, `400 NO_GYM`; si el usuario o el gimnasio ya no existen, `404 USER_NOT_FOUND` o `404 GYM_NOT_FOUND`; si el borrado falla, `500 DELETE_FAILED` |
 | GET | `/api/auth/accept-invite/:token` | 🌐 | — | Muestra los datos de una invitación al equipo antes de aceptarla. Solo sirve mientras quien la creó siga siendo administrador activo del gimnasio |
 | POST | `/api/auth/accept-invite` | 🌐 | `token`, `password` (mín. 6), `nombre?` | Crea la cuenta del invitado |
 
