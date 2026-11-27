@@ -7,6 +7,7 @@
 | Rutas documentadas | 94: las 92 rutas distintas de los routers de `backend/src/routes/` y las 2 de salud de `backend/src/index.js`. `GET /api/admin/diagnostics` está definida en `staff.js` y en `dashboard.js`; responde la de `staff.js`, que se monta primero |
 | Cómo se sacó la lista | Cargando cada router de Express y leyendo su pila de rutas y middlewares, no a mano. Si se agrega una ruta, se agrega aquí en el mismo PR. |
 | Relacionados | [Arquitectura](../arquitectura/ARQUITECTURA.md) · [Colección Postman con tests](../pruebas/postman/README.md) · [Matriz de casos](../pruebas/matriz-casos-prueba.md) |
+| OpenAPI | [`openapi.json`](openapi.json): las mismas 94 rutas en OpenAPI 3.0.3 (Swagger). Para verla, pega su contenido en https://editor.swagger.io o ábrela en VS Code con la extensión OpenAPI (Swagger) Editor. `backend/tests/openapi-rutas.test.js` falla si deja de coincidir con las rutas del código |
 
 ## 1. Datos generales
 
