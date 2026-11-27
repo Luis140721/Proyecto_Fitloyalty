@@ -7,6 +7,7 @@
 | Rutas documentadas | 94: las 92 rutas distintas de los routers de `backend/src/routes/` y las 2 de salud de `backend/src/index.js`. `GET /api/admin/diagnostics` está definida en `staff.js` y en `dashboard.js`; responde la de `staff.js`, que se monta primero |
 | Cómo se sacó la lista | Cargando cada router de Express y leyendo su pila de rutas y middlewares, no a mano. Si se agrega una ruta, se agrega aquí en el mismo PR. |
 | Relacionados | [Arquitectura](../arquitectura/ARQUITECTURA.md) · [Colección Postman con tests](../pruebas/postman/README.md) · [Matriz de casos](../pruebas/matriz-casos-prueba.md) |
+| OpenAPI | [`openapi.json`](openapi.json): las mismas 94 rutas en OpenAPI 3.0.3 (Swagger). Para verla, pega su contenido en https://editor.swagger.io o ábrela en VS Code con la extensión OpenAPI (Swagger) Editor. Cada operación del personal dice su rol (`x-roles`) y si exige la prueba gratis (`x-prueba-gratis`). `backend/tests/openapi-rutas.test.js` falla si deja de coincidir con el código: las rutas, el acceso, el rol de `authorize()` o `requireActiveTrial` |
 
 ## 1. Datos generales
 
@@ -42,7 +43,7 @@ Casi todas las respuestas de error tienen la misma forma:
 { "error": "Mensaje para mostrar al usuario", "code": "CODIGO_ESTABLE", "details": { "issues": [] } }
 ```
 
-`details` aparece en la mayoría de los errores de validación, con la lista de campos que fallaron según el esquema `zod` de la ruta, y también en `CONTACTO_NO_PERMITIDO`, `FUERA_DE_HORARIO`, `CONTRACT_INCOMPLETE` y `REPRESENTANTE_REQUERIDO`. Excepciones: las rutas del contrato responden `{ ok: false, error }` sin `code` (menos el 409 `CONTRACT_INCOMPLETE`), `seed-supremo` no trae `code` y el 503 de `/api/health` no trae `error`.
+`details` aparece en la mayoría de los errores de validación, con la lista de campos que fallaron según el esquema `zod` de la ruta, y también en `CONTACTO_NO_PERMITIDO`, `FUERA_DE_HORARIO`, `CONTRACT_INCOMPLETE` y `REPRESENTANTE_REQUERIDO`. Excepciones: las rutas del contrato responden `{ ok: false, error }` sin `code` (menos el 409 `CONTRACT_INCOMPLETE`), `seed-supremo` no trae `code` (menos el 500, que trae en `code` el código de PostgreSQL y en `detail` su mensaje) y el 503 de `/api/health` no trae `error`.
 
 | Estado | Códigos comunes | Cuándo |
 |---|---|---|
@@ -90,7 +91,7 @@ Casi todas las respuestas de error tienen la misma forma:
 | POST | `/api/auth/forgot-password` | 🌐 | `email` | Envía por correo un código de recuperación de 15 minutos y anula los anteriores. Responde igual exista o no el correo |
 | POST | `/api/auth/verify-reset-code` | 🌐 | `email`, `code` | Valida el código y devuelve `resetToken` para cambiar la contraseña |
 | POST | `/api/auth/reset-password` | 🌐 | `password` y `resetToken` (o `email` y `code`) | Cambia la contraseña |
-| DELETE | `/api/auth/account` | 🔑 | `password` | Elimina el gimnasio completo y sus datos. Solo el dueño, confirmando su contraseña: otro admin recibe `403 NOT_OWNER` y una contraseña equivocada, `403 WRONG_PASSWORD` |
+| DELETE | `/api/auth/account` | 🔑 | `password`, `reason?` (hasta 1000) | Elimina el gimnasio completo y sus datos. Solo el dueño, confirmando su contraseña: otro admin recibe `403 NOT_OWNER`, quien no es admin `403 NOT_ADMIN` y una contraseña equivocada, `403 WRONG_PASSWORD`. Sin gimnasio en el token, `400 NO_GYM`; si el usuario o el gimnasio ya no existen, `404 USER_NOT_FOUND` o `404 GYM_NOT_FOUND`; si el borrado falla, `500 DELETE_FAILED` |
 | GET | `/api/auth/accept-invite/:token` | 🌐 | — | Muestra los datos de una invitación al equipo antes de aceptarla. Solo sirve mientras quien la creó siga siendo administrador activo del gimnasio |
 | POST | `/api/auth/accept-invite` | 🌐 | `token`, `password` (mín. 6), `nombre?` | Crea la cuenta del invitado |
 
@@ -107,7 +108,7 @@ Reglas de la contraseña en el registro y en la recuperación: al menos 6 caract
 | PUT | `/api/admin/miembros/:id` | 🧾 | ⏳ | Actualiza los datos personales, de salud, la contraseña de la app y las autorizaciones (todos opcionales), más `activo`, `ciudad` y `codigo_pais_telefono`. No cambia el plan, los pagos, `acepto_terminos` ni `autorizo_datos`: esos campos se ignoran. Si otro miembro activo ya tiene el documento o el correo nuevos, 409 `MEMBER_DOC_TAKEN` o `MEMBER_EMAIL_TAKEN` (también al reactivarlo) |
 | DELETE | `/api/admin/miembros/:id` | 👑 | ⏳ | Baja lógica: el miembro queda inactivo |
 | DELETE | `/api/admin/miembros/:id/permanent` | 👑 | ⏳ | Borra al miembro de forma permanente |
-| GET | `/api/admin/miembros/:id/plan` | 🧾 | ⏳ | Plan vigente del miembro |
+| GET | `/api/admin/miembros/:id/plan` | 🧾 | ⏳ | Plan vigente del miembro y sus congelaciones (`plan: null` si no tiene) |
 | PUT | `/api/admin/miembros/:id/plan` | 🧾 | ⏳ | Renueva o cambia el plan: `tipo_plan`, `fecha_inicio`, `fecha_fin`, `valor_total`, `valor_pagado`, `metodo_pago`, `referencia_pago?`, `proxima_fecha_cobro?` |
 | POST | `/api/admin/miembros/:id/congelar` | 👑 | ⏳ | Congela la membresía: `motivo?` (máx. 200), `fecha_inicio?` (AAAA-MM-DD) |
 | POST | `/api/admin/miembros/:id/descongelar` | 👑 | ⏳ | Descongela la membresía y corre la fecha de fin los días congelados |
@@ -178,7 +179,7 @@ Reglas de la contraseña en el registro y en la recuperación: al menos 6 caract
 | GET | `/api/billing/trial-status` | 🔑 | — | Estado del periodo de prueba (días restantes, vencido o no) |
 | POST | `/api/jobs/expiracion/run` | 👑 | — | Corre ya los avisos de vencimiento de su gimnasio. Cuerpo opcional: `{ dryRun: true }` para solo contar |
 | GET | `/api/jobs/expiracion/preview` | 👑 | — | Lista a quién se avisaría en su gimnasio, sin enviar |
-| POST | `/api/jobs/abandono/run` | 👑 | — | Corre ya las alertas de abandono del gimnasio |
+| POST | `/api/jobs/abandono/run` | 👑 | — | Corre ya las alertas de abandono del gimnasio. Cuerpo opcional: `{ dryRun: true }` para calcularlas sin guardarlas |
 | POST | `/api/admin/seed-supremo` | 🛠️ | — | Mantenimiento: crea o resetea la cuenta suprema. Exige `password` de al menos 12 caracteres y no la devuelve (desde el PR #125) |
 
 ### Notificaciones del panel
@@ -244,7 +245,7 @@ Todas, menos el login, exigen el token del miembro (📱). Cada consulta filtra 
 | POST | `/api/cliente/login` | 🌐 Inicio de sesión: `telefono` (10 dígitos, empieza por 3), `password` (mín. 6). Devuelve el token del miembro y su gimnasio |
 | POST | `/api/cliente/logout` | Cierre de sesión (la app borra el token) |
 | GET | `/api/cliente/me` | Datos del miembro |
-| PUT | `/api/cliente/me` | Edita solo `telefono`, `email`, `direccion`, `contacto_emergencia`, `telefono_emergencia`, `condiciones_medicas`, `alergias`, `objetivo` y `nivel_experiencia`. Un texto vacío no cambia el dato (el correo vacío lo quita; `telefono` o `nivel_experiencia` vacíos responden 400, y si todo llega vacío, 400 `EMPTY_UPDATE`). Si manda condiciones o alergias sin la autorización de datos sensibles, las dos quedan en NULL. No deja tocar el documento ni el QR |
+| PUT | `/api/cliente/me` | Edita solo `telefono`, `email`, `direccion`, `contacto_emergencia`, `telefono_emergencia`, `condiciones_medicas`, `alergias`, `objetivo` y `nivel_experiencia` (`direccion` hasta 200 caracteres). Un texto vacío no cambia el dato (el correo vacío lo quita; `telefono` o `nivel_experiencia` vacíos responden 400, y si todo llega vacío, 400 `EMPTY_UPDATE`). Si manda condiciones o alergias sin la autorización de datos sensibles, las dos quedan en NULL. No deja tocar el documento ni el QR |
 | GET | `/api/cliente/qr` | QR fijo, los datos para calcular el QR dinámico sin internet (secreto, paso de 30 s y hora del servidor) y `solo_dinamico`, que dice si el gimnasio exige el dinámico |
 | GET | `/api/cliente/membresia` | Plan vigente |
 | GET | `/api/cliente/asistencia` | Últimos ingresos. Consulta: `limit` (1 a 100, 20 por defecto) |
@@ -258,7 +259,7 @@ Todas, menos el login, exigen el token del miembro (📱). Cada consulta filtra 
 | PATCH | `/api/cliente/preferencias` | Cambia la aceptación: `aceptaComerciales?`, `canalesAutorizados?` (`WHATSAPP`, `EMAIL`) |
 | GET | `/api/cliente/autorizaciones` | Autorizaciones vigentes (términos, datos, datos sensibles) |
 | PATCH | `/api/cliente/autorizaciones/datos-sensibles` | Otorga o retira la autorización de datos sensibles: `otorgada` |
-| GET | `/api/cliente/contrato` | Contrato del miembro |
+| GET | `/api/cliente/contrato` | Contrato del miembro. Si al gimnasio le falta registrar el plan con su precio y forma de pago, `404 CONTRACT_INCOMPLETE` con `details.faltantes` |
 
 ## 3. Ejemplos
 
