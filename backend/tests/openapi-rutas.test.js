@@ -12,6 +12,17 @@
  * `requireClient` piden el token del miembro y la de `requireAdminToken`, la
  * cabecera X-Admin-Token.
  *
+ * En las rutas del personal compara tambien el rol (`x-roles` contra los
+ * authorize() de la ruta) y la prueba gratis (`x-prueba-gratis` contra
+ * requireActiveTrial). Asi falla si recepcion pasa a entrar a una ruta del
+ * administrador o si una ruta deja de revisar la prueba gratis.
+ *
+ * Un router.use() de un router sigue corriendo para los routers que se montan
+ * despues en el mismo prefijo: Express entra al router con cada peticion de su
+ * prefijo y, si ninguna ruta suya coincide, sigue con los siguientes. Por eso
+ * un router.use(authenticate) sin ruta en un router montado en /api cerraria
+ * /api/healthz, y aqui se ve como una ruta publica que pide token.
+ *
  * La especificacion es JSON y no YAML porque el backend no tiene un lector de
  * YAML entre sus dependencias (js-yaml solo llega como dependencia de eslint y
  * jest, y pnpm no lo deja cargar desde aqui).
@@ -23,7 +34,16 @@ jest.mock('../src/db/db', () => ({ query: jest.fn() }));
 
 const fs = require('fs');
 const path = require('path');
+const express = require('express');
 const { app } = require('../src/index');
+const { authorize } = require('../src/middleware/auth');
+const { requireActiveTrial } = require('../src/lib/trial');
+
+// authorize('admin') y requireActiveTrial(pool) devuelven funciones sin nombre;
+// se reconocen por su codigo fuente, que es el mismo en cada llamada.
+const FUENTE_AUTHORIZE = authorize('rol').toString();
+const FUENTE_PRUEBA_GRATIS = requireActiveTrial({}).toString();
+const ROLES_DEL_PERSONAL = ['admin', 'receptionist'];
 
 const SPEC = JSON.parse(fs.readFileSync(path.join(__dirname, '../../docs/api/openapi.json'), 'utf8'));
 // La URL de cada servidor de la especificacion ya termina en /api.
@@ -49,30 +69,48 @@ function prefijoDe(layer) {
 }
 
 /**
- * Rutas de la pila, en orden, con los middlewares que corren antes del handler:
- * los de la ruta y los de un use() anterior cuyo prefijo la cubre (por ejemplo
- * el router.use(authenticate, requireClient) de cliente.js, que va despues del
- * login y por eso no lo cubre).
+ * Rutas de la pila, en orden, con los middlewares que corren antes del handler
+ * (`cadena`, las capas de Express): los de la ruta y los de un use() anterior
+ * cuyo prefijo la cubre (por ejemplo el router.use(authenticate, requireClient)
+ * de cliente.js, que va despues del login y por eso no lo cubre). Los use() de
+ * un router siguen valiendo para lo que se monta despues de el.
  */
 function rutasDe(stack, base = '', heredados = []) {
   const rutas = [];
-  const usados = [...heredados];
+  let usados = [...heredados];
   for (const layer of stack) {
     if (layer.route) {
       const completa = base + layer.route.path;
-      const antes = usados.filter((u) => completa === u.prefijo || completa.startsWith(`${u.prefijo}/`) || u.prefijo === '');
-      const cadena = [...antes.map((u) => u.nombre), ...layer.route.stack.map((l) => l.name)];
+      const antes = usados.filter((u) => u.prefijo === '' || completa === u.prefijo || completa.startsWith(`${u.prefijo}/`));
+      const cadena = [...antes.map((u) => u.layer), ...layer.route.stack];
       for (const metodo of Object.keys(layer.route.methods)) {
         rutas.push({ metodo: metodo.toUpperCase(), completa, cadena });
       }
     } else if (layer.name === 'router' && layer.handle && layer.handle.stack) {
-      rutas.push(...rutasDe(layer.handle.stack, base + prefijoDe(layer), usados));
+      const dentro = rutasDe(layer.handle.stack, base + prefijoDe(layer), usados);
+      rutas.push(...dentro.rutas);
+      usados = dentro.usados;
     } else {
-      usados.push({ nombre: layer.name, prefijo: base + prefijoDe(layer) });
+      usados.push({ layer, prefijo: base + prefijoDe(layer) });
     }
   }
-  return rutas;
+  return { rutas, usados };
 }
+
+const nombres = (cadena) => cadena.map((l) => l.name);
+
+/** Roles del personal que pasan todos los authorize() de la cadena. */
+function rolesDelCodigo(cadena) {
+  const autorizaciones = cadena.filter((l) => l.handle.toString() === FUENTE_AUTHORIZE);
+  const resFalsa = { status() { return this; }, json() { return this; } };
+  return ROLES_DEL_PERSONAL.filter((rol) => autorizaciones.every((l) => {
+    let paso = false;
+    l.handle({ user: { role: rol } }, resFalsa, () => { paso = true; });
+    return paso;
+  }));
+}
+
+const exigePruebaGratis = (cadena) => cadena.some((l) => l.handle.toString() === FUENTE_PRUEBA_GRATIS);
 
 /** '/api/admin/miembros/:id/' -> '/admin/miembros/{id}', como en la especificacion. */
 function aRutaDeSpec(completa) {
@@ -83,9 +121,10 @@ function aRutaDeSpec(completa) {
 
 /** Acceso segun los middlewares del codigo. */
 function accesoDelCodigo(cadena) {
-  if (cadena.includes('requireAdminToken')) return 'X-Admin-Token';
-  if (cadena.includes('requireClient')) return 'token del miembro';
-  if (cadena.includes('authenticate')) return 'token';
+  const n = nombres(cadena);
+  if (n.includes('requireAdminToken')) return 'X-Admin-Token';
+  if (n.includes('requireClient')) return 'token del miembro';
+  if (n.includes('authenticate')) return 'token';
   return 'publica';
 }
 
@@ -102,7 +141,7 @@ function accesoDeLaSpec(operacion) {
 
 // Express responde con la primera ruta que coincide: una repetida mas abajo no
 // se usa nunca. Se queda la primera, igual que Express.
-const todas = rutasDe(app._router.stack).map((r) => ({ ...r, clave: `${r.metodo} ${aRutaDeSpec(r.completa)}` }));
+const todas = rutasDe(app._router.stack).rutas.map((r) => ({ ...r, clave: `${r.metodo} ${aRutaDeSpec(r.completa)}` }));
 const delCodigo = new Map();
 const repetidas = [];
 for (const r of todas) {
@@ -150,5 +189,92 @@ describe('docs/api/openapi.json frente a las rutas de Express', () => {
 
     // Assert
     expect(distintas).toEqual([]);
+  });
+
+  test('should give each staff operation the same roles in x-roles as the authorize() calls in the code', () => {
+    // Arrange: solo las rutas del personal (token del personal en el codigo)
+    const delPersonal = [...delCodigo.values()].filter((r) => deLaSpec.has(r.clave) && accesoDelCodigo(r.cadena) === 'token');
+
+    // Act
+    const distintas = delPersonal
+      .map((r) => ({ ruta: r.clave, codigo: rolesDelCodigo(r.cadena), spec: [...(deLaSpec.get(r.clave)['x-roles'] || [])].sort() }))
+      .filter((r) => JSON.stringify(r.codigo) !== JSON.stringify(r.spec));
+
+    // Assert
+    expect(delPersonal.length).toBeGreaterThan(0);
+    expect(distintas).toEqual([]);
+  });
+
+  test('should mark x-prueba-gratis exactly on the operations that check the free trial, each with its 402', () => {
+    // Act
+    const distintas = [...delCodigo.values()]
+      .filter((r) => deLaSpec.has(r.clave))
+      .map((r) => {
+        const op = deLaSpec.get(r.clave);
+        return { ruta: r.clave, codigo: exigePruebaGratis(r.cadena), spec: op['x-prueba-gratis'] === true, con402: Boolean(op.responses['402']) };
+      })
+      .filter((r) => r.codigo !== r.spec || (r.spec && !r.con402));
+
+    // Assert
+    expect(distintas).toEqual([]);
+  });
+});
+
+describe('recorrido de la pila de Express que usa esta prueba', () => {
+  function authenticate(_req, _res, next) { next(); }
+
+  test('should treat a path-less router.use(authenticate) as applying to the routers mounted after it', () => {
+    // Arrange: el error que cerraria /api/healthz
+    const conCandado = express.Router();
+    conCandado.use(authenticate);
+    conCandado.get('/privada', (_req, res) => res.end());
+    const publico = express.Router();
+    publico.get('/healthz', (_req, res) => res.end());
+    const appDePrueba = express();
+    appDePrueba.use('/api', conCandado);
+    appDePrueba.use('/api', publico);
+
+    // Act
+    const { rutas } = rutasDe(appDePrueba._router.stack);
+    const healthz = rutas.find((r) => r.completa === '/api/healthz');
+
+    // Assert
+    expect(accesoDelCodigo(healthz.cadena)).toBe('token');
+  });
+
+  test('should not apply a router.use() to the routes declared before it', () => {
+    // Arrange: como el login de cliente.js, que va antes del router.use
+    const router = express.Router();
+    router.post('/login', (_req, res) => res.end());
+    router.use(authenticate);
+    router.get('/me', (_req, res) => res.end());
+    const appDePrueba = express();
+    appDePrueba.use('/api/cliente', router);
+
+    // Act
+    const { rutas } = rutasDe(appDePrueba._router.stack);
+    const acceso = Object.fromEntries(rutas.map((r) => [r.completa, accesoDelCodigo(r.cadena)]));
+
+    // Assert
+    expect(acceso).toEqual({ '/api/cliente/login': 'publica', '/api/cliente/me': 'token' });
+  });
+
+  test('should read the roles of authorize() and recognize requireActiveTrial', () => {
+    // Arrange
+    const router = express.Router();
+    router.get('/solo-admin', authenticate, authorize('admin'), requireActiveTrial({}), (_req, res) => res.end());
+    router.get('/los-dos', authenticate, authorize('admin', 'receptionist'), (_req, res) => res.end());
+    const appDePrueba = express();
+    appDePrueba.use('/api', router);
+
+    // Act
+    const { rutas } = rutasDe(appDePrueba._router.stack);
+    const porRuta = Object.fromEntries(rutas.map((r) => [r.completa, { roles: rolesDelCodigo(r.cadena), prueba: exigePruebaGratis(r.cadena) }]));
+
+    // Assert
+    expect(porRuta).toEqual({
+      '/api/solo-admin': { roles: ['admin'], prueba: true },
+      '/api/los-dos': { roles: ['admin', 'receptionist'], prueba: false },
+    });
   });
 });
